@@ -49,7 +49,8 @@ Same dock as W1; the two tools are mutually exclusive tabs, not simultaneous dia
 │ Drain holes: 2                                 │
 │ Mode: ( ) Place  ( ) Move  ( ) Resize          │
 │ Diameter [4.0 __] mm                           │
-│ [ Suggest positions ]   (optional, from B5b)   │
+│ [ Suggest positions ]  (disabled until B5b;    │
+│    tooltip: "Needs trapped-resin analysis")    │
 │                                                │
 │ Preview is live; slicing happens on Apply.     │
 │ ┌────────────────────────────────────────────┐ │
@@ -61,8 +62,8 @@ Same dock as W1; the two tools are mutually exclusive tabs, not simultaneous dia
 Interaction spec:
 - Preview shows the hollowed interior with `SlaHollowInterior`; drain holes are `SlaDrainHole` rings oriented to the surface normal.
 - Parameter changes rebuild the preview in the background; the Apply button shows a busy state during rebuild. Cancelling leaves the last preview intact.
-- "Suggest positions" is hidden until M4.8 lands; the spec reserves the slot so the layout doesn't reflow.
-- Holes carry through to the sliced mesh only after Apply (M2.5 acceptance); until then the preview must be visibly disabled in the SLA toolbar sense too — the tool button shows the busy/disabled state, it does not disappear, since disabled and hidden are not equivalent (see journeys.md D).
+- "Suggest positions" is shown disabled with a tooltip until M4.8; there is no hidden state.
+- Holes affect the sliced mesh only after Apply (M2.5 acceptance); until then the preview is visibly marked as a preview, not a result.
 
 ## W3. Preview layer inspector (M5.6; journeys J1 step 7)
 
@@ -79,8 +80,8 @@ Left: existing 3D SLA viewer (clipping behavior per `SlaViewer::update_preview_r
 │  │  layer 341 / 1024            │  │  ░░░░░░░░░░░░░░░░░     │ │
 │  └──────────────────────────────┘  │  █ = cured pixels      │ │
 │  ┌ Layer slider ─────────────────┐ │      (SlaModelResin)   │ │
-│  │        ●──────────────────    │ │  chart fill: SlaLayerArea│ │
 │  │        ●──────────────────    │ │ └────────────────────────┘ │
+│  └───────────────────────────────┘  [x] Sync with 3D layer  │
 │  └───────────────────────────────┘  [x] Sync with 3D layer  │
 └────────────────────────────────────────────────────────────────┘
 ```
@@ -99,7 +100,7 @@ Sidebar section below the existing object list; visible when the active printer 
 ```
 ┌ Print summary ─────────────────────────────────┐
 │ Resin       84.2 ml          (M1.10 interactor)│
-│ Cost        6.10             bottles 0.7 used  │
+│ Cost        6.10             bottles 0.08 used │
 │ Layers      1024             height 102.4 mm   │
 │ Volume      model 61.0 · supports 14.2 · pad 9.0 ml │
 │                                                │
@@ -131,16 +132,16 @@ Opened from MaterialSelectionDialog (an "Import resin profile…" button in its 
 │ │                                        Exact  (AccentPrimary)│
 │ │ faded_layers    bottomLayerCount 40 → 20 (clamped to 3–20)││
 │ │                                        Approximated (Warning) │
-│ │ lift_speed      normalLayerLiftSpeed 30 mm/min → 0.5 mm/s ││
-│ │                                        Converted (AccentSecondary)│
-│ │ light_pwm       normalLightIntensityPWM 255 → 255         ││
-│ │                                        Exact  (AccentPrimary)│
+│ │ lift_speed      normalLayerLiftSpeed 30 mm/min —          ││
+│ │                                        Not applicable (Text) │
+│ │ light_pwm       normalLightIntensityPWM 255 —             ││
+│ │                                        Not applicable (Text) │
 │ │ lift_height     normalLayerLiftHeight —   Not applicable  ││
 │ │                                        (Text, disabled)   ││
 │ │ —               `custom_key_xyz` 42  report only, never   ││
 │ │                                        imported; Unknown  ││
 │ └──────────────────────────────────────────────────────────┘│
-│ 2 exact · 1 converted · 1 approximated · 1 n/a · 1 unknown   │
+│ 1 exact · 1 approximated · 3 n/a · 1 unknown                 │
 │ ┌──────────────────────────────────────────────────────────┐│
 │ │ Save        Save & select        Cancel                  ││
 │ └──────────────────────────────────────────────────────────┘│
