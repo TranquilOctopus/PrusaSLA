@@ -28,5 +28,5 @@ This repository is a fork of PrusaSlicer 3.0 (alpha) that is being turned into a
 - **Upstream mergeability:** don't delete FFF code. Hide it behind the SLA-first setting.
 - **Strings:** mark user-visible strings for translation with `L("…")` / `_u8L("…")`.
 - **Style:** follow `doc/CodeStyle.md` and apply `.clang-format` to the lines you change.
-- **Third-party content:** don't commit vendor resin or printer profiles, or models you don't have redistribution rights for. Real samples go in the gitignored `local-samples/`, and test fixtures are written from scratch. Don't bypass encryption in foreign file formats.
+- **Third-party content:** don't commit vendor resin or printer profiles, or models you don't have redistribution rights for. Real samples go in the gitignored `local-samples/`, and test fixtures are written from scratch. Don't bypass encryption in foreign file formats. For the M7 support research dataset, follow the research-only rules in ROADMAP.md M7: files stay in place, never leave this computer, are never opened in agent context, and only aggregate statistics are committed.
 - **Commits:** don't push, force-push or rewrite `master` or `sla/main` unless the person running the session asks.

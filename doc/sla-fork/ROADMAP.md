@@ -236,20 +236,30 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
 
 **Research-only rules**
 - **Nothing is ported.** The dataset is only for *learning rules*. PrusaSLA gets no reader for other slicers' project formats, and the data comes from the authoring slicer's own mesh export. Don't decode `.lys` or other protected project files.
-- **Files stay local.** Pre-supported files are usually commercially licensed. Raw files and per-model extracted data stay in the gitignored `local-samples/supports/`. Only aggregate statistics, the rulebook, and synthetic test shapes are committed.
+- **Personal-use license.** The current dataset is Factory Fortress Trench Crusade miniatures. Their Terms of Use grant a personal-use, single-computer license; forbid sharing, distribution and commercial or employer use; and allow modification only for personal use. So:
+  - **Files stay in place.** Leave them in the owner's own folder, referenced through a manifest. Don't copy them into the repo tree or into `local-samples/`.
+  - **Files never leave this computer.** No CI, cloud agents, uploads or file sharing.
+  - **Agents don't open mesh files** in their context. They run local analysis scripts and read only the aggregate output.
+  - **Only aggregate numbers are committed**, such as spacing, angles and diameters, never geometry or per-model contact lists. The rulebook, and synthetic test shapes made from scratch, can be committed.
+  - **It stays a personal research activity.** If this work is done for an employer, the owner must check the license first.
 
 - [ ] **M7.1** `[human]` Expert supporting interview. Record the answers in `doc/sla-fork/supports/expert-rules.md`, one numbered rule per practice. Cover: process order, tip sizes, density, surfaces never to support, orientation, structure/base style, and common auto-support failures. · M · needs —
-- [ ] **M7.2** `[human]` Export the research dataset from Lychee. For each supported scene, export in the **same position**:
-  - `presupported.stl`: the model with its supports
-  - `unsupported.stl`: the model only
-  - `supports.stl`: supports only, if Lychee allows it
+- [ ] **M7.2** `[human]` Prepare the research dataset. Factory Fortress Trench Crusade models, already supported by the studio in Lychee: each model folder has `Supported/` (a `.lys` scene plus the model with supports as one STL) and `Unsupported/` (the plain STL).
+  - **Download a starter set.** In File Explorer, right-click → "Always keep on this device" for 4–6 varied model folders (iCloud downloads time out from agent sessions). Suggested mix:
+    - a small detail part (e.g. `TCDM2009 Shocktroopers` heads)
+    - a weapon or arm
+    - a base or rock (`TCDM4003 Sorcerer` rock base)
+    - a full figure (`TCDM5004 Assassin`)
+    - a large model
+  - **Record the dataset** in `local-samples/supports/manifest.yaml` (gitignored). For each model: `supported_stl` and `unsupported_stl` paths into the iCloud folder, category, `supported_by: Factory Fortress`, license `personal-use (FF ToU)`, and print outcome if known. Also record the Lychee tip presets if visible when opening the `.lys` in Lychee.
 
-  Save them to `local-samples/supports/<model>/`, with a `manifest.yaml` recording: category, who supported it, printer/resin/layer height, the Lychee tip presets used (contact diameter and depth for light/medium/heavy), print outcome, and license note. Start with 3–5 models from different categories. · S · needs —
+  · S · needs —
 - [ ] **M7.3** Contact extraction script. · L → split · needs M7.2
-  - **Separate supports from the model:** use `supports.stl` when present; otherwise take the faces of the supported mesh that are more than ε from the model surface.
+  - **Check alignment:** confirm the supported STL contains the unsupported model at the same position (bounding boxes, plus matching triangles or nearest-surface distance). Report any pair that doesn't align.
+  - **Separate supports from the model:** drop triangles that match the unsupported model; if they don't match exactly, take faces of the supported mesh that are more than ε from the model surface.
   - **Describe each contact:** position, surface normal, contact diameter, penetration estimate, height above the plate, local overhang angle and curvature, and whether it serves a new island or local minimum (found by slicing the model mesh into layers).
   - **Record structure:** base/raft type and trunk and branch counts.
-  - **Outputs** (under `local-samples/`): `contacts.json`, plus a colored debug mesh for a quick check by eye.
+  - **Outputs** (under `local-samples/supports/out/`, gitignored and never committed): `contacts.json`, plus a colored debug mesh for a quick check by eye.
 
   Done when: a synthetic test shape with procedurally placed supports gives back every known contact within tolerance.
 - [ ] **M7.4** Rule mining across the dataset. Measure things like:
