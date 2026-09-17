@@ -60,7 +60,8 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
 - [x] **M1.1a** UX spec, part 1a: user journeys (import → orient → support → hollow → slice → inspect → export), a source-based audit of the active UI with file/line evidence, and a runtime audit checklist (R1–R10). Saved as `doc/sla-fork/ux/journeys.md`. · M · needs —
   Result: → 17b21a749a. No runtime behavior or screenshots verified; completion of the runtime audit is split into M1.1b.
 - [ ] **M1.1b** Runtime screen audit with an SLA printer selected, following the R1–R10 checklist in `ux/journeys.md`. Reconcile source findings with observed screens and finish the `ux/journeys.md` audit. · S · needs M0.1
-- [ ] **M1.2** UX spec, part 2: wireframes for the support tool, hollow tool, layer inspector, sidebar summary, and the resin import dialog (M3.10), using palette tokens only. · M · needs M1.1a
+- [x] **M1.2** UX spec, part 2: wireframes for the support tool, hollow tool, layer inspector, sidebar summary, and the resin import dialog (M3.10), using palette tokens only. · M · needs M1.1a
+  Result: → this commit. Text wireframes W1–W5 with interaction specs in [ux/wireframes.md](ux/wireframes.md); palette tokens only; open questions listed for M1.3 review.
 - [ ] **M1.3** `[human]` Review and approve the M1.1a/M1.1b and M1.2 spec. · S · needs M1.1b, M1.2
 - [ ] **M1.4** Palette sweep: move RGB literals in `App/` and `libvgcode` onto theme tokens. · M · needs M0.5
   Done when: a grep finds no RGB literals in `App/` outside `Theme.cpp`.
