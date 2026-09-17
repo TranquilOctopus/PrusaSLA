@@ -248,7 +248,7 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
   - **It stays a personal research activity.** If this work is done for an employer, the owner must check the license first.
 
 - [ ] **M7.1** `[human]` Expert supporting interview. Record the answers in `doc/sla-fork/supports/expert-rules.md`, one numbered rule per practice. Cover: process order, tip sizes, density, surfaces never to support, orientation, structure/base style, and common auto-support failures. · M · needs —
-- [ ] **M7.2** `[human]` Prepare the research dataset. Factory Fortress Trench Crusade models, already supported by the studio in Lychee: each model folder has `Supported/` (a `.lys` scene plus the model with supports as one STL) and `Unsupported/` (the plain STL).
+- [x] **M7.2** `[human]` Prepare the research dataset. Factory Fortress Trench Crusade models, already supported by the studio in Lychee: each model folder has `Supported/` (a `.lys` scene plus the model with supports as one STL) and `Unsupported/` (the plain STL).
   - **Download a starter set.** In File Explorer, right-click → "Always keep on this device" for 4–6 varied model folders (iCloud downloads time out from agent sessions). Suggested mix:
     - a small detail part (e.g. `TCDM2009 Shocktroopers` heads)
     - a weapon or arm
@@ -258,6 +258,7 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
   - **Record the dataset** in `local-samples/supports/manifest.yaml` (gitignored). For each model: `supported_stl` and `unsupported_stl` paths into the iCloud folder, category, `supported_by: Factory Fortress`, license `personal-use (FF ToU)`, and print outcome if known. Also record the Lychee tip presets if visible when opening the `.lys` in Lychee.
 
   · S · needs —
+  Result: 21 locally available pairs (6 figure bodies, 5 weapons, 5 heads, 2 arms, 1 base, 1 full figure, 1 mechanical part), all with Lychee scenes, recorded in the gitignored `local-samples/supports/manifest.yaml`. Tip presets and print outcomes are still open (optional). Alignment spot check: supported STLs are re-oriented and sometimes remeshed (see M7.3).
 - [ ] **M7.3** Contact extraction script. · L → split · needs M7.2
   - **Register the pair.** A check on 3 pairs (2026-09-17) found the supported STLs are **not** in the unsupported model's frame: they are rotated and moved into print orientation, and sometimes remeshed (one head had 31k triangles supported vs 260k unsupported). No triangles matched even at 0.01 mm. So:
     - Estimate the rigid transform (rotation + translation, no scale) from the unsupported model into the supported file: coarse alignment (principal axes plus the ambiguous flips, or feature-based global registration), then point-to-plane ICP on the model surface only, ignoring the support region as outliers.
