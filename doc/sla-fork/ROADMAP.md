@@ -28,7 +28,8 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
 - [ ] **M0.2** Baseline test run. · S · needs M0.1
   Build and run `sla_print_tests` and `slic3r-shared-tests`. Record pass, fail and skip counts, plus any tests that already fail, in `doc/sla-fork/baseline-tests.md`.
   Done when: the baseline file is committed. Already-failing tests are listed so later todos aren't blamed for them.
-- [ ] **M0.3** Git setup: add an `upstream` remote → `https://github.com/prusa3d/PrusaSlicer.git`, create the `sla/main` branch, and document the sync procedure in BUILD.md. · S · needs —
+- [x] **M0.3** Git setup: add an `upstream` remote → `https://github.com/prusa3d/PrusaSlicer.git`, create the `sla/main` branch, and document the sync procedure in BUILD.md. · S · needs —
+  Result: verified local upstream URL and sla/main creation from master; sync procedure documented in [BUILD.md](BUILD.md). No push or build; remote sync not executed.
 - [ ] **M0.4** Reserve config keys (PLAN A7). · M · needs M0.2
   Add hidden keys with no behavior change for everything planned below, **including the generic MSLA motion keys M3 needs**:
   - `lift_height`, `lift_speed`, `lift_height_2`, `lift_speed_2`
@@ -56,16 +57,19 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
 
 ## M1: Look, feel and SLA-first shell
 
-- [ ] **M1.1** UX spec, part 1: user journeys (import → orient → support → hollow → slice → inspect → export) and an audit of the current screens with an SLA printer selected. Save as `doc/sla-fork/ux/journeys.md`. · M · needs —
-- [ ] **M1.2** UX spec, part 2: wireframes for the support tool, hollow tool, layer inspector, sidebar summary, and the resin import dialog (M3.10), using palette tokens only. · M · needs M1.1
-- [ ] **M1.3** `[human]` Review and approve the M1.1 and M1.2 spec. · S · needs M1.2
+- [x] **M1.1a** UX spec, part 1a: user journeys (import → orient → support → hollow → slice → inspect → export), a source-based audit of the active UI with file/line evidence, and a runtime audit checklist (R1–R10). Saved as `doc/sla-fork/ux/journeys.md`. · M · needs —
+  Result: → 17b21a749a. No runtime behavior or screenshots verified; completion of the runtime audit is split into M1.1b.
+- [ ] **M1.1b** Runtime screen audit with an SLA printer selected, following the R1–R10 checklist in `ux/journeys.md`. Reconcile source findings with observed screens and finish the `ux/journeys.md` audit. · S · needs M0.1
+- [x] **M1.2** UX spec, part 2: wireframes for the support tool, hollow tool, layer inspector, sidebar summary, and the resin import dialog (M3.10), using palette tokens only. · M · needs M1.1a
+  Result: → this commit. Text wireframes W1–W5 with interaction specs in [ux/wireframes.md](ux/wireframes.md); palette tokens only; open questions listed for M1.3 review.
+- [ ] **M1.3** `[human]` Review and approve the M1.1a/M1.1b and M1.2 spec. · S · needs M1.1b, M1.2
 - [ ] **M1.4** Palette sweep: move RGB literals in `App/` and `libvgcode` onto theme tokens. · M · needs M0.5
   Done when: a grep finds no RGB literals in `App/` outside `Theme.cpp`.
 - [ ] **M1.5** Tune the warning and error colors, and verify light-theme icon recoloring (PLAN 2.1 rule 3). · S · needs M1.4
 - [ ] **M1.6** Bundle the Prusa SLA vendor presets into `resources/presets/prusa-research-sla/` and update `RepositoryManifest.json`. · M · needs M0.2
   Done when: a fresh profile can select the SL1S and its materials.
 - [ ] **M1.7** SLA-first app setting, on by default: the first run defaults to SLA and FFF-only UI is hidden. · M · needs M0.8, M1.6
-- [ ] **M1.8** SLA path in the welcome dialog, plus SLA hints and notifications. · M · needs M1.7, M1.3
+- [ ] **M1.8** SLA path in the welcome dialog, plus SLA hints and notifications. Also fix the “Export gcode to a file” tooltip for SLA (evidence: `ux/journeys.md` section H). · M · needs M1.7, M1.3
 - [ ] **M1.9** Toolbar icons (`resources/icons/sla_*.svg`) for support points, hollow, orient, inspector and resin import, following PLAN F7. · M · needs M1.3
 - [ ] **M1.10** Resin economics interactor: resin ml, cost and bottles per bed and per project (PLAN D4). · M · needs M0.11
 - [ ] **M1.11** SLA sidebar summary (PLAN F5). · M · needs M1.10, M1.3
