@@ -28,7 +28,8 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
 - [ ] **M0.2** Baseline test run. · S · needs M0.1
   Build and run `sla_print_tests` and `slic3r-shared-tests`. Record pass, fail and skip counts, plus any tests that already fail, in `doc/sla-fork/baseline-tests.md`.
   Done when: the baseline file is committed. Already-failing tests are listed so later todos aren't blamed for them.
-- [ ] **M0.3** Git setup: add an `upstream` remote → `https://github.com/prusa3d/PrusaSlicer.git`, create the `sla/main` branch, and document the sync procedure in BUILD.md. · S · needs —
+- [x] **M0.3** Git setup: add an `upstream` remote → `https://github.com/prusa3d/PrusaSlicer.git`, create the `sla/main` branch, and document the sync procedure in BUILD.md. · S · needs —
+  Result: verified local upstream URL and sla/main creation from master; sync procedure documented in [BUILD.md](BUILD.md). No push or build; remote sync not executed.
 - [ ] **M0.4** Reserve config keys (PLAN A7). · M · needs M0.2
   Add hidden keys with no behavior change for everything planned below, **including the generic MSLA motion keys M3 needs**:
   - `lift_height`, `lift_speed`, `lift_height_2`, `lift_speed_2`
