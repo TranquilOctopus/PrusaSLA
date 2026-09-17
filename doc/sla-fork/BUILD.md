@@ -1,8 +1,56 @@
 # PrusaSLA build and synchronization
 
-## Build bootstrap (M0.1 pending)
+## Build bootstrap (verified 2026-09-17)
 
-This file currently documents M0.3 only. A verified dependency prefix, configure/build commands, clean-checkout verification, and measured build times still need to be recorded by the person completing M0.1. Follow [../Build.md](../Build.md) for prerequisites. No dependency or application build was run during M0.3; CMake and MSVC were not on PATH, and `build-default` did not exist.
+### Tools
+
+- Visual Studio 2022 Community 17.14 with the "Desktop development with C++" workload (MSVC 14.44, Windows SDK 10.0.26100)
+- CMake 4.4.3 (on PATH as `C:\Program Files\CMake\bin`)
+
+### Environment
+
+**ALWAYS build from the "Developer PowerShell for VS 2022" (or run `Enter-VsDevShell`).** Otherwise `WindowsSdkDir`/`WindowsSDKVersion` are unset, `cmake/modules/WinSDK.cmake` finds no WinRT headers, and configure fails with:
+
+```
+SLIC3R_ENABLE_WIN10_MESH_REPAIR is ON, but the Windows WinRT headers could not be found
+```
+
+### Dependencies
+
+```powershell
+cmake -S deps -B deps/build -G "Visual Studio 17 2022" -A x64 -DDEP_DEBUG=OFF
+cmake --build deps/build --config Release -- /m:1 /nodeReuse:false
+```
+
+- `DEP_DEBUG` defaults to `ON` on Windows and triggers a second, hours-long Debug pass of every dependency that this project does not use; turn it off.
+- 48 of the 50 dependencies build on Windows (OpenCSG and OpenSSL are `EXCLUDE_FROM_ALL` there).
+- Took about 5 hours; installs into `deps/build/destdir/usr/local`.
+
+### Application
+
+```powershell
+$env:_CL_ = "/MP2"
+cmake --preset default -DSLIC3R_PCH=OFF -DSLIC3R_RELEASE_DEBUG_SYMBOLS=OFF -DCMAKE_PREFIX_PATH="<repo>/deps/build/destdir/usr/local"
+cmake --build build-default --target sla_print_tests --config Release -- /m:1 /nodeReuse:false
+cmake --build build-default --target slic3r-shared-tests --config Release -- /m:1 /nodeReuse:false
+```
+
+- `SLIC3R_PCH=OFF` is required: the `default` preset sets `SLIC3R_PCH=ON` and `CMakeLists.txt:18` hard-errors on MSVC ("SLIC3R_PCH was explicitly requested, but they are currently not supported on MSVC").
+- Memory: this machine has 8 GB RAM / 8 threads. Set `$env:_CL_ = "/MP2"` before building and pass `/m:1`. Full parallelism (18 `cl.exe` processes) exhausted RAM and failed OCCT's `TKSTEP` with `MSB4018 System.OutOfMemoryException`.
+- Disk: the dependency build plus an application build needs roughly 20 GB free. A `RelWithDebInfo` build filled the disk and failed with "error C2471: cannot update program database"; `Release` with `SLIC3R_RELEASE_DEBUG_SYMBOLS=OFF` is what we use. Safe to delete after a successful dependency build: `deps/build/builds`, `deps/build/_d` (if `DEP_DEBUG` was on), and `build-default`; never delete `deps/build/destdir`.
+
+### Build times (measured here)
+
+| Target | Time |
+|---|---|
+| `sla_print_tests` | 3h51m |
+| `slic3r-shared-tests` | 30m |
+| **Total** | **263 minutes** at `/MP2` |
+
+### Test binaries
+
+- `build-default\tests\sla_print\Release\sla_print_tests.exe`
+- `build-default\src\slic3r-shared\Release\slic3r-shared-tests.exe`
 
 ## Git setup
 

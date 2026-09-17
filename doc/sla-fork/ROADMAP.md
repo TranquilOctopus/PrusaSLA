@@ -22,12 +22,14 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
 
 ## M0: Foundation
 
-- [ ] **M0.1** `[human]` Build the dependencies once (this takes hours). Configure with `cmake --preset default`. · M · needs —
+- [x] **M0.1** `[human]` Build the dependencies once (this takes hours). Configure with `cmake --preset default`. · M · needs —
   Record in `doc/sla-fork/BUILD.md`: the deps prefix path, the configure and build commands for `sla_print_tests` and `slic3r-shared-tests`, and build times.
   Done when: `cmake --build build-default --target sla_print_tests --config RelWithDebInfo` works from a clean checkout by following BUILD.md.
-- [ ] **M0.2** Baseline test run. · S · needs M0.1
+  Result: verified build guide in [BUILD.md](BUILD.md); deps 5h, app 3h51m + 30m (263 min total at /MP2), Release build, 20 GB disk.
+- [x] **M0.2** Baseline test run. · S · needs M0.1
   Build and run `sla_print_tests` and `slic3r-shared-tests`. Record pass, fail and skip counts, plus any tests that already fail, in `doc/sla-fork/baseline-tests.md`.
   Done when: the baseline file is committed. Already-failing tests are listed so later todos aren't blamed for them.
+  Result: baseline recorded in [baseline-tests.md](baseline-tests.md); sla_print_tests 40 cases/12117 asserts pass, slic3r-shared-tests 444 cases/7573 asserts pass; no pre-existing failures.
 - [x] **M0.3** Git setup: add an `upstream` remote → `https://github.com/prusa3d/PrusaSlicer.git`, create the `sla/main` branch, and document the sync procedure in BUILD.md. · S · needs —
   Result: verified local upstream URL and sla/main creation from master; sync procedure documented in [BUILD.md](BUILD.md). No push or build; remote sync not executed.
 - [ ] **M0.4** Reserve config keys (PLAN A7). · M · needs M0.2
