@@ -270,6 +270,9 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
   - **Outputs** (under `local-samples/supports/out/`, gitignored and never committed): `contacts.json`, plus a colored debug mesh for a quick check by eye.
 
   Done when: a synthetic test shape with procedurally placed supports, then rotated, moved and remeshed, gives back the known transform and every known contact within tolerance.
+- [ ] **M7.3a** Synthetic test shape + registration: build a synthetic model (sphere-on-cube style) with procedurally placed supports from scratch, apply a known rigid transform (rotation + translation), remesh it, and write the registration routine (coarse principal-axes alignment with flip disambiguation, then point-to-plane ICP on the model surface ignoring supports) plus the residual report (RMS and 95th-percentile surface distance) and recovered print tilt. Verify the recovered transform matches the known one and residuals stay within tolerance. Code in `tools/support-research/` (Python, local venv). · M · needs M7.2
+- [ ] **M7.3b** Support separation: after registration, classify supported-mesh faces as model vs support by distance to the transformed model surface (ε threshold), robust to remeshing. Validate on the synthetic shape where the split is known. · M · needs M7.3a
+- [ ] **M7.3c** Contact description + outputs: for each contact record position, normal, contact diameter, penetration, height above plate, local overhang angle and curvature, island/local-minimum serving (via slicing the model mesh), base/raft and trunk/branch structure. Outputs `contacts.json` and a colored debug mesh under `local-samples/supports/out/` (gitignored). Done when the synthetic shape gives back every known contact within tolerance and the M7.3 "Done when" is fully satisfied. · M · needs M7.3b
 - [ ] **M7.4** Rule mining across the dataset. Measure things like:
   - Island and minimum coverage
   - Contact spacing against overhang angle
