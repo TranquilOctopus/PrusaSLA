@@ -32,3 +32,5 @@ CMakeUserPresets.json
 
 # PrusaSLA fork: private research/sample data, never committed
 /local-samples/
+tools/support-research/.venv/
+__pycache__/
