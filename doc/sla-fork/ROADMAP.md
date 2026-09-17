@@ -255,13 +255,16 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
 
   · S · needs —
 - [ ] **M7.3** Contact extraction script. · L → split · needs M7.2
-  - **Check alignment:** confirm the supported STL contains the unsupported model at the same position (bounding boxes, plus matching triangles or nearest-surface distance). Report any pair that doesn't align.
-  - **Separate supports from the model:** drop triangles that match the unsupported model; if they don't match exactly, take faces of the supported mesh that are more than ε from the model surface.
+  - **Register the pair.** A check on 3 pairs (2026-09-17) found the supported STLs are **not** in the unsupported model's frame: they are rotated and moved into print orientation, and sometimes remeshed (one head had 31k triangles supported vs 260k unsupported). No triangles matched even at 0.01 mm. So:
+    - Estimate the rigid transform (rotation + translation, no scale) from the unsupported model into the supported file: coarse alignment (principal axes plus the ambiguous flips, or feature-based global registration), then point-to-plane ICP on the model surface only, ignoring the support region as outliers.
+    - Report the residual (RMS and 95th-percentile surface distance) and the recovered print tilt. Reject pairs above tolerance.
+  - **Separate supports from the model:** after registration, take faces of the supported mesh farther than ε from the transformed model surface. Triangle-exact matching must not be assumed, because the model may be remeshed.
+  - **Record orientation:** the recovered rotation is itself data for the orientation rules (M7.4).
   - **Describe each contact:** position, surface normal, contact diameter, penetration estimate, height above the plate, local overhang angle and curvature, and whether it serves a new island or local minimum (found by slicing the model mesh into layers).
   - **Record structure:** base/raft type and trunk and branch counts.
   - **Outputs** (under `local-samples/supports/out/`, gitignored and never committed): `contacts.json`, plus a colored debug mesh for a quick check by eye.
 
-  Done when: a synthetic test shape with procedurally placed supports gives back every known contact within tolerance.
+  Done when: a synthetic test shape with procedurally placed supports, then rotated, moved and remeshed, gives back the known transform and every known contact within tolerance.
 - [ ] **M7.4** Rule mining across the dataset. Measure things like:
   - Island and minimum coverage
   - Contact spacing against overhang angle
