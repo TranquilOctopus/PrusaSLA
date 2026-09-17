@@ -34,3 +34,14 @@ CMakeUserPresets.json
 /local-samples/
 tools/support-research/.venv/
 __pycache__/
+
+# Artefacts written into the working directory by the test suites
+/Bad_polygon.svg
+/Halfcone.obj
+/Prism.obj
+/cube_hollowed.obj
+/disk*.stl
+/imgui.ini
+/pad_chull.svg
+/parallel_plates.obj
+/start_gcode_*_debug.txt
