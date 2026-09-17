@@ -58,6 +58,7 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
 ## M1: Look, feel and SLA-first shell
 
 - [ ] **M1.1** UX spec, part 1: user journeys (import → orient → support → hollow → slice → inspect → export) and an audit of the current screens with an SLA printer selected. Save as `doc/sla-fork/ux/journeys.md`. · M · needs —
+  Blocked: no runnable current desktop build or current SLA-selected screen captures are available for the screen audit; build-default is absent and CMake/MSVC are not on PATH. Supply a runnable current build or attributable screenshots and workflow observations. No runtime audit was verified; dependency builds require the human M0.1 step.
 - [ ] **M1.2** UX spec, part 2: wireframes for the support tool, hollow tool, layer inspector, sidebar summary, and the resin import dialog (M3.10), using palette tokens only. · M · needs M1.1
 - [ ] **M1.3** `[human]` Review and approve the M1.1 and M1.2 spec. · S · needs M1.2
 - [ ] **M1.4** Palette sweep: move RGB literals in `App/` and `libvgcode` onto theme tokens. · M · needs M0.5
