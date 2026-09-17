@@ -226,33 +226,57 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
 **Goal:** on typical models (miniatures, busts, functional parts), auto-generated supports print reliably and match what an experienced person would do. Someone experienced shouldn't *need* to hand-edit them, and cleanup should leave no scars on detailed or cosmetic surfaces.
 
 **Approach**
-1. Capture expert knowledge as explicit rules (M7.1).
-2. Build a benchmark from **paired files**: a pre-supported model and its unsupported equivalent (M7.2–M7.4).
-3. Score the generator against the expert supports (M7.5–M7.6).
-4. Improve the generator rule by rule, with every change scored (M7.7–M7.10).
-5. Confirm with real prints (M7.11).
+1. **Interview:** write down expert knowledge as explicit rules (M7.1).
+2. **Research dataset:** supported scenes made by an experienced person in another slicer (currently Lychee), exported as plain meshes by that slicer (M7.2).
+3. **Offline analysis:** scripts in `tools/support-research/` (Python, not part of the app build) extract every support contact (M7.3) and mine measurable rules from them (M7.4).
+4. **Rulebook:** interview rules and mined rules are merged and reviewed (M7.5).
+5. **Scoring:** the generator is scored against the expert supports, with a baseline first (M7.6, M7.7).
+6. **Implementation:** the generator is improved rule by rule, with every change scored, then tuned (M7.8–M7.11).
+7. **Confirmation:** real prints check the result (M7.12).
 
-**Dataset rules:** pre-supported files are usually commercially licensed. They stay in the gitignored `local-samples/supports/` and are **never committed**. Only aggregate scores and synthetic test cases go into the repo.
+**Research-only rules**
+- **Nothing is ported.** The dataset is only for *learning rules*. PrusaSLA gets no reader for other slicers' project formats, and the data comes from the authoring slicer's own mesh export. Don't decode `.lys` or other protected project files.
+- **Files stay local.** Pre-supported files are usually commercially licensed. Raw files and per-model extracted data stay in the gitignored `local-samples/supports/`. Only aggregate statistics, the rulebook, and synthetic test shapes are committed.
 
 - [ ] **M7.1** `[human]` Expert supporting interview. Record the answers in `doc/sla-fork/supports/expert-rules.md`, one numbered rule per practice. Cover: process order, tip sizes, density, surfaces never to support, orientation, structure/base style, and common auto-support failures. · M · needs —
-- [ ] **M7.2** `[human]` Provide the paired dataset: `local-samples/supports/<model>/{unsupported,presupported}.*`, plus a `manifest.yaml` per model with category, source, license note, printer/resin/layer height, whether both files share a coordinate frame, and whether it's known to print well. Start with 3–5 pairs covering different categories. · S · needs —
-- [ ] **M7.3** Dataset loader and alignment. Load each pair. If the files aren't in the same coordinate frame, register the unsupported mesh onto the pre-supported one (coarse alignment, then ICP). Report the alignment residual and reject pairs above tolerance. · M · needs M7.2, M0.2
-- [ ] **M7.4** Extract support contacts from pre-supported meshes. Separate support geometry from the model surface (by proximity to the unsupported mesh, or separate bodies when available). For each contact tip, record position, surface normal, tip diameter and penetration, plus the overhang or island it serves, and the base/raft type. Output `contacts.json` per model, stored under `local-samples/`. · L → split · needs M7.3
-- [ ] **M7.5** Support quality scorecard, added to the M0.13 harness:
-  - **Island recall:** the share of expert-supported local minima and islands that auto supports also cover.
-  - **Contact coverage:** the share of expert contacts with an auto contact within *r* mm.
-  - **Excess contacts:** auto contacts with no expert contact nearby.
-  - **Density error per region.**
-  - **Tip size distribution.**
-  - **Contacts on cosmetic surfaces.**
-  - **Support volume.**
-  - **Unsupported-point count** from the generator's own check.
+- [ ] **M7.2** `[human]` Export the research dataset from Lychee. For each supported scene, export in the **same position**:
+  - `presupported.stl`: the model with its supports
+  - `unsupported.stl`: the model only
+  - `supports.stl`: supports only, if Lychee allows it
 
-  · M · needs M7.4, M0.13
-- [ ] **M7.6** Baseline scorecard for the current generator (default and branching tree). Commit only the aggregate numbers to `doc/sla-fork/supports/baseline.md`. · S · needs M7.5
-- [ ] **M7.7** Turn the M7.1 rules into generator changes, one sub-todo per rule (`M7.7.<n>`). Each must raise the scorecard without regressing island recall. · L → split · needs M7.1, M7.6
-- [ ] **M7.8** Cosmetic surface awareness. Detect likely cosmetic surfaces (faces, fine detail, high-curvature upward regions). Let users paint "avoid supports here" regions that the generator respects. Connect this to the orientation objective (M4.11). · L → split · needs M7.1, M2.3
-- [ ] **M7.9** Size tips for each region: light tips on small detail, heavier tips where the load above is high (estimated from cross-section area and resin weight above the point), within printer and resin limits. · M · needs M7.6
-- [ ] **M7.10** Automated tuning. Search the generator parameters against the dataset scorecard, and promote the best settings to the default print presets, noting the trade-offs. · M · needs M7.7, M7.9
-- [ ] **M7.11** `[human]` Print validation. Print a set of models using auto supports only. Record the results in `doc/sla-fork/supports/print-log.md`: success, detached supports, failed islands, scars. Add failures as new M7 todos. · M · needs M7.10
-- [ ] **M7.12** *(optional research)* A learned contact predictor trained on the paired contacts, used only as a scoring hint for the rule-based generator. Only pursue it if M7.10 levels off. Inference must stay in C++ without heavy new dependencies. · L → split · needs M7.10
+  Save them to `local-samples/supports/<model>/`, with a `manifest.yaml` recording: category, who supported it, printer/resin/layer height, the Lychee tip presets used (contact diameter and depth for light/medium/heavy), print outcome, and license note. Start with 3–5 models from different categories. · S · needs —
+- [ ] **M7.3** Contact extraction script. · L → split · needs M7.2
+  - **Separate supports from the model:** use `supports.stl` when present; otherwise take the faces of the supported mesh that are more than ε from the model surface.
+  - **Describe each contact:** position, surface normal, contact diameter, penetration estimate, height above the plate, local overhang angle and curvature, and whether it serves a new island or local minimum (found by slicing the model mesh into layers).
+  - **Record structure:** base/raft type and trunk and branch counts.
+  - **Outputs** (under `local-samples/`): `contacts.json`, plus a colored debug mesh for a quick check by eye.
+
+  Done when: a synthetic test shape with procedurally placed supports gives back every known contact within tolerance.
+- [ ] **M7.4** Rule mining across the dataset. Measure things like:
+  - Island and minimum coverage
+  - Contact spacing against overhang angle
+  - Tip diameter against the area or volume it carries
+  - Density on flat undersides compared with edges and points
+  - Surfaces that are never touched
+  - Orientation and tilt angles
+
+  Write the result to `doc/sla-fork/supports/derived-rules.md`: each rule with aggregate evidence and a confidence level, and no per-model data. · M · needs M7.3
+- [ ] **M7.5** `[human]` Rulebook review. Merge the interview rules (M7.1) with the mined rules (M7.4) into `doc/sla-fork/supports/rulebook.md`. Mark each rule accepted, modified or rejected, with concrete thresholds. · M · needs M7.1, M7.4
+- [ ] **M7.6** Support quality scorecard. The benchmark harness writes the generator's support points and tip sizes to JSON, and a research script compares them with the expert contacts. Metrics:
+  - **Island recall**
+  - **Contact coverage** within *r* mm
+  - **Excess contacts**
+  - **Density error per region**
+  - **Tip size distribution**
+  - **Contacts on cosmetic surfaces**
+  - **Support volume**
+  - **Unsupported-point count**
+
+  · M · needs M7.3, M0.13
+- [ ] **M7.7** Baseline scorecard for the current generator (default and branching tree). Commit only the aggregate numbers to `doc/sla-fork/supports/baseline.md`. · S · needs M7.6
+- [ ] **M7.8** Implement the rulebook in the generator, one sub-todo per rule (`M7.8.<n>`). Each must raise the scorecard without regressing island recall, and add a synthetic regression shape to `tests/sla_print/`. · L → split · needs M7.5, M7.7
+- [ ] **M7.9** Cosmetic surface awareness. Detect likely cosmetic surfaces (faces, fine detail, high-curvature upward regions) using the thresholds in the rulebook. Let users paint "avoid supports here" regions that the generator respects. Connect this to the orientation objective (M4.11). · L → split · needs M7.5, M2.3
+- [ ] **M7.10** Size tips for each region, following the rulebook: light tips on small detail, heavier tips where the load above is high (estimated from cross-section area and resin weight above the point), within printer and resin limits. · M · needs M7.5, M7.7
+- [ ] **M7.11** Automated tuning. Search the generator parameters against the dataset scorecard, and promote the best settings to the default print presets, noting the trade-offs. · M · needs M7.8, M7.10
+- [ ] **M7.12** `[human]` Print validation. Print a set of models using auto supports only. Record the results in `doc/sla-fork/supports/print-log.md`: success, detached supports, failed islands, scars. Add failures as new M7 todos. · M · needs M7.11
+- [ ] **M7.13** *(optional research)* A learned contact predictor trained on the extracted contacts, used only as a scoring hint for the rule-based generator. Only pursue it if M7.11 levels off. Inference must stay in C++ without heavy new dependencies. · L → split · needs M7.11
