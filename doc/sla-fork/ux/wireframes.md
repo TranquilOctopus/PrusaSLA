@@ -15,7 +15,8 @@ Dialog docked beside the Plater canvas, `WindowBg` on `Slate900`-equivalent toke
 │ [ Auto-generate ]        Generates points for  │
 │                          the whole selection.  │
 │ Head diameter [0.4 __] mm                      │
-│ Density        |Light|Normal|Dense|            │
+│ Point density [50 __] %        (maps to        │
+│            support_points_density_relative)    │
 │                                                │
 │ Editing:  ( ) Add  ( ) Remove  ( ) Move        │
 │ [x] Show island markers   → SlaIslandWarning   │
@@ -31,7 +32,7 @@ Dialog docked beside the Plater canvas, `WindowBg` on `Slate900`-equivalent toke
 Interaction spec:
 - Canvas overlays: auto points rendered as `SlaSupportPointAuto` dots; manually placed as `SlaSupportPointManual` with a distinct outline (never hue-only — see PLAN 2.1 lightness rule). Islands drawn as `SlaIslandWarning` outlines with an icon; clicking one moves the camera to it.
 - Auto-generate runs through `GeneratedSupportPointsCache` with a progress state; the dialog disables editing until it finishes or is cancelled.
-- Apply commits points to the model and invalidates the support step only; Discard reverts to the last applied state. Both are disabled while a generation job runs.
+- Apply commits points to the model and triggers a re-slice of the affected steps; Discard reverts to the last applied state. Both are disabled while a generation job runs.
 - The header counter must distinguish manual from auto points so users can see what will persist (M2.2).
 - Clipping plane is local to this tool; leaving the tool restores the previous clip state.
 
@@ -61,7 +62,7 @@ Interaction spec:
 - Preview shows the hollowed interior with `SlaHollowInterior`; drain holes are `SlaDrainHole` rings oriented to the surface normal.
 - Parameter changes rebuild the preview in the background; the Apply button shows a busy state during rebuild. Cancelling leaves the last preview intact.
 - "Suggest positions" is hidden until M4.8 lands; the spec reserves the slot so the layout doesn't reflow.
-- Holes carry through to the sliced mesh only after Apply (M2.5 acceptance); until then the preview must be visually marked as preview, not result.
+- Holes carry through to the sliced mesh only after Apply (M2.5 acceptance); until then the preview must be visibly disabled in the SLA toolbar sense too — the tool button shows the busy/disabled state, it does not disappear, since disabled and hidden are not equivalent (see journeys.md D).
 
 ## W3. Preview layer inspector (M5.6; journeys J1 step 7)
 
@@ -76,8 +77,9 @@ Left: existing 3D SLA viewer (clipping behavior per `SlaViewer::update_preview_r
 │  │  (clipped to layer)          │  │  ░░░██░░░██░░░░░░░     │ │
 │  │                              │  │  pixel grid at zoom    │ │
 │  │  layer 341 / 1024            │  │  ░░░░░░░░░░░░░░░░░     │ │
-│  └──────────────────────────────┘  │  █ = cured area        │ │
-│  ┌ Layer slider ─────────────────┐ │  2D fill: SlaLayerArea │ │
+│  └──────────────────────────────┘  │  █ = cured pixels      │ │
+│  ┌ Layer slider ─────────────────┐ │      (SlaModelResin)   │ │
+│  │        ●──────────────────    │ │  chart fill: SlaLayerArea│ │
 │  │        ●──────────────────    │ │ └────────────────────────┘ │
 │  └───────────────────────────────┘  [x] Sync with 3D layer  │
 └────────────────────────────────────────────────────────────────┘
@@ -97,7 +99,7 @@ Sidebar section below the existing object list; visible when the active printer 
 ```
 ┌ Print summary ─────────────────────────────────┐
 │ Resin       84.2 ml          (M1.10 interactor)│
-│ Cost        $6.10            bottle: 30% left  │
+│ Cost        6.10             bottles 0.7 used  │
 │ Layers      1024             height 102.4 mm   │
 │ Volume      model 61.0 · supports 14.2 · pad 9.0 ml │
 │                                                │
@@ -119,17 +121,26 @@ Opened from MaterialSelectionDialog (an "Import resin profile…" button in its 
 ```
 ┌ Import resin profile ────────────────────────────────────────┐
 │ Source: chitubox.cfg · Chitubox 1.9 · 2026-09-17             │
-│ Suggested printer: Prusa SL1S  [ change ▾ ]                  │
+│ Target printer: [ Prusa SL1S ▾ ] (all SLA printers listed;   │
+│                  suggested one preselected)                  │
 │ Base material: [ Prusa Orange Resin ▾ ]  (inherits tilt etc.)│
 │ Preset name: [ Imported — Prusa Orange _________________ ]   │
 │                                                              │
 │ ┌ Mapping report ───────────────────────────────────────────┐│
-│ │ exposure_time        2.5 s          Exact       (AccentPrimary)│
-│ │ faded_layers      8 → 8 (clamped)   Approximated (Warning) │
-│ │ lift_height          —              Not applicable (Text)  │
-│ │ unknown_key `xyz`    kept in note   Unknown      (Text)    │
+│ │ exposure_time   normalExposureTime 2.5 s → 2.5 s          ││
+│ │                                        Exact  (AccentPrimary)│
+│ │ faded_layers    bottomLayerCount 40 → 20 (clamped to 3–20)││
+│ │                                        Approximated (Warning) │
+│ │ lift_speed      normalLayerLiftSpeed 30 mm/min → 0.5 mm/s ││
+│ │                                        Converted (AccentSecondary)│
+│ │ light_pwm       normalLightIntensityPWM 255 → 255         ││
+│ │                                        Exact  (AccentPrimary)│
+│ │ lift_height     normalLayerLiftHeight —   Not applicable  ││
+│ │                                        (Text, disabled)   ││
+│ │ —               `custom_key_xyz` 42  report only, never   ││
+│ │                                        imported; Unknown  ││
 │ └──────────────────────────────────────────────────────────┘│
-│ 21 mapped · 3 approximated · 4 not applicable · 1 unknown    │
+│ 2 exact · 1 converted · 1 approximated · 1 n/a · 1 unknown   │
 │ ┌──────────────────────────────────────────────────────────┐│
 │ │ Save        Save & select        Cancel                  ││
 │ └──────────────────────────────────────────────────────────┘│
@@ -137,16 +148,19 @@ Opened from MaterialSelectionDialog (an "Import resin profile…" button in its 
 ```
 
 Interaction spec:
-- Status badges use exactly the tokens in the M3 design table (AccentPrimary/AccentSecondary/Warning/Text-disabled); counts summarize so nothing is silently dropped.
+- Status badges use exactly the tokens in the M3 design table (AccentPrimary/AccentSecondary/Warning/Text-disabled); the summary counts show **all five statuses** (Exact, Converted, Approximated, Not applicable, Unknown) so nothing is silently dropped. Each row shows source key/value → target key/value.
+- Unknown keys are report-only: they never touch the material and are kept in the report for traceability. `material_source_note` records origin only (source app, file name, import date) — never mapped values or unknown keys.
+- The printer picker lists **all SLA printers**, with the printer suggested from source hints preselected; it never writes machine values into the material.
 - "Save" writes a user preset inheriting the base material and records `material_source_note`; "Save & select" additionally selects it. Name collisions prompt inline, preserving the report.
-- The printer picker only offers printers compatible with the source hints; suggestions never write machine values into the material.
+- The `faded_layers` clamp (3–20, per M3 mapping table) is shown with both values so approximations are auditable, e.g. `bottomLayerCount 40 → 20`.
 - Every status row is selectable to reveal the raw key/value in the note pane (traceability rule in M3 "Rules").
 
 ---
 
 ## Open questions for M1.3 review
 
-1. W1/W2 dock on the right beside the canvas vs. a floating panel — spec assumes right dock, matching existing gizmo dialogs.
-2. W3 2D panel default state: open on first SLA preview, or hidden until toggled?
-3. W4 placeholder values before M1.10/M4.9 land: show "—" or hide rows?
-4. W5 report length cap for very long foreign profiles (scroll vs. summary-only).
+1. W1/W2 as tabs inside one dock (spec's current assumption) vs. two separate toolbar tools — which is how the `ToolType::SlaSupportPoints` and `ToolType::SlaHollow` slots reserved in M0.7 should appear?
+2. W1/W2 dock on the right beside the canvas vs. a floating panel — spec assumes right dock, matching existing gizmo dialogs.
+3. W3 2D panel default state: open on first SLA preview, or hidden until toggled?
+4. W4 placeholder values before M1.10/M4.9 land: show "—" or hide rows?
+5. W5 report length cap for very long foreign profiles (scroll vs. summary-only).
