@@ -26,6 +26,17 @@ struct OutputFiles
     FileDataType type = FileDataType::other; // define type of the file data content
 };
 
+/// Reserved for M4.8/M5.8: per-print issue list (islands, cups, trapped resin, etc.)
+struct SlaIssue
+{
+    enum class Kind { Island, Cup, TrappedResin, Other };
+    Kind kind = Kind::Other;
+    size_t layer = 0;
+    Domain::ObjectID object_id{};
+    Domain::Vec3d position = Domain::Vec3d::Zero();
+    std::string note;
+};
+
 // MUST be in order of creation backend
 enum class ResultType
 {
@@ -95,6 +106,13 @@ struct SLAResultData
     Sla::OutputFiles files; // count files == slices.size()
     Domain::Images thumbnails;
     std::string project_name; // upload_job.upload_data.upload_path.filename()
+
+    // Reserved for M4.9: exposed area per layer in mm² (index = layer)
+    std::vector<float> layer_areas;
+    // Reserved for M4.9: estimated peel force per layer in N (index = layer)
+    std::vector<float> layer_peel_force;
+    // Reserved for M4.8/M5.8: print-level issue list (islands, cups, trapped resin, etc.)
+    std::vector<Sla::SlaIssue> issues;
 };
 
 // Result of slicing steps

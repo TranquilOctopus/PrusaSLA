@@ -1,3 +1,4 @@
+#include <type_traits>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
@@ -353,4 +354,23 @@ TEST_CASE_METHOD(SlicingFixture, "Update reinitializes the process if printer te
 
     CHECK(result_listener.result_recieved);
     CHECK(object_listener.object_recieved);
+}
+
+TEST_CASE("SLAResultData default construction has empty reserved fields", "[slicing][slaresult]") {
+    using Slic3r::Biz::Slicing::SLAResultData;
+    using Slic3r::Biz::Slicing::Sla::SlaIssue;
+
+    // SLAResultData has members without default constructors, so check the
+    // reserved fields by type; a default-constructed std::vector is empty.
+    static_assert(std::is_same_v<decltype(SLAResultData::layer_areas), std::vector<float>>);
+    static_assert(std::is_same_v<decltype(SLAResultData::layer_peel_force), std::vector<float>>);
+    static_assert(std::is_same_v<decltype(SLAResultData::issues), std::vector<SlaIssue>>);
+
+    // Verify the SlaIssue struct can be default-constructed
+    SlaIssue issue;
+    CHECK(issue.kind == SlaIssue::Kind::Other);
+    CHECK(issue.layer == 0);
+    CHECK(issue.object_id == Slic3r::Domain::ObjectID{});
+    CHECK(issue.position == Slic3r::Domain::Vec3d::Zero());
+    CHECK(issue.note.empty());
 }
