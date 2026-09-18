@@ -28,6 +28,16 @@ enum class Color
     SceneBgBottom,
     SceneBgErrorTop,
     SceneBgErrorBottom,
+    SlaModelResin,
+    SlaSupport,
+    SlaPad,
+    SlaSupportPointAuto,
+    SlaSupportPointManual,
+    SlaIslandWarning,
+    SlaDrainHole,
+    SlaHollowInterior,
+    SlaCupWarning,
+    SlaLayerArea,
     Transparent,
 };
 
