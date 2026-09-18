@@ -230,6 +230,8 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
 
 ## M7: Excellent auto-supports
 
+> **Parked (2026-09-18).** The priority is the regular support function: the support points tool (M2.1–M2.3) and support generation quality (M4.3–M4.5). M7.4 work in progress is on the unmerged branch `sla/M7.4-rule-mining`. Known issues there: tip width saturates at the search radius, and registration error (0.5–0.9 mm RMS) exceeds the contact gap, so most contacts are missed. Refine registration on the model-only vertices before detecting contacts.
+
 **Goal:** on typical models (miniatures, busts, functional parts), auto-generated supports print reliably and match what an experienced person would do. Someone experienced shouldn't *need* to hand-edit them, and cleanup should leave no scars on detailed or cosmetic surfaces.
 
 **Approach**
