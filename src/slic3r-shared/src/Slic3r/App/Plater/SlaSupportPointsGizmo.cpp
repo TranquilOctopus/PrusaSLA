@@ -233,7 +233,7 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
         const int density = static_cast<int>(value);
         if (m_selected_object_id.valid()) {
             Domain::Project& project = m_project_interactor.selected_project();
-            Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id);
+            Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
             if (model_object) {
                 m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SetPartSettingsValue);
                 auto result = model_object->object_settings_sla.find("support_points_density_relative");
@@ -328,7 +328,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     }
 
     const Domain::Project& project = m_project_interactor.project(project_id);
-    Domain::ModelObject* model_object = project.find_object_by_id(element.object_id);
+    const Domain::ModelObject* model_object = project.find_object_by_id(element.object_id);
     if (!model_object) {
         m_dialog->set_generate_enabled(false);
         m_dialog->set_apply_enabled(false);
@@ -382,7 +382,7 @@ void SlaSupportPointsGizmo::start_generation()
     }
 
     Domain::Project& project = m_project_interactor.selected_project();
-    Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id);
+    Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
     if (!model_object) {
         return;
     }
@@ -476,7 +476,7 @@ void SlaSupportPointsGizmo::apply_generated_points()
     }
 
     Domain::Project& project = m_project_interactor.selected_project();
-    Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id);
+    Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
     if (!model_object) {
         return;
     }
