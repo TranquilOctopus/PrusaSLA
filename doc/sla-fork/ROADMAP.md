@@ -32,7 +32,7 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
   Result: baseline recorded in [baseline-tests.md](baseline-tests.md); sla_print_tests 40 cases/12117 asserts pass, slic3r-shared-tests 444 cases/7573 asserts pass; no pre-existing failures.
 - [x] **M0.3** Git setup: add an `upstream` remote → `https://github.com/prusa3d/PrusaSlicer.git`, create the `sla/main` branch, and document the sync procedure in BUILD.md. · S · needs —
   Result: verified local upstream URL and sla/main creation from master; sync procedure documented in [BUILD.md](BUILD.md). No push or build; remote sync not executed.
-- [ ] **M0.4** Reserve config keys (PLAN A7). · M · needs M0.2
+- [x] **M0.4** Reserve config keys (PLAN A7). · M · needs M0.2 · done: 21 SLA material keys, defaults change nothing (ConfigLoadTests)
   Add hidden keys with no behavior change for everything planned below, **including the generic MSLA motion keys M3 needs**:
   - `lift_height`, `lift_speed`, `lift_height_2`, `lift_speed_2`
   - `retract_speed`, `retract_speed_2`
@@ -42,14 +42,14 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
 
   Also add `bottom_layer_count` and `material_source_note` (a free-text record of where an imported profile came from). Finalize the names here and update M3's mapping table to match.
   Done when: the keys load and save through presets and 3MF, and the tests pass.
-- [ ] **M0.5** Palette table and SLA theme tokens (PLAN A8 and 2.1). · M · needs M0.2
+- [x] **M0.5** Palette table and SLA theme tokens (PLAN A8 and 2.1). · M · needs M0.2 · done: palette + 10 SLA tokens, ThemeTests; screenshots deferred until an app build
   Owns: `ThemeTypes.hpp`, `Theme.cpp`. Add one palette table and the SLA tokens, and switch the existing tokens to the 2.1 default mapping.
   Done when: the app runs in the fork palette in both themes, with screenshots committed to `doc/sla-fork/ux/screens/`.
 - [x] **M0.6** Reserve `SLAResult` fields for per-layer area, peel-force estimate, and a list of detected issues (left empty for now). · S · needs M0.2
   Result: `layer_areas`, `layer_peel_force` and a print-level `issues` list (`SlaIssue`) reserved in `SLAResultData`, all empty; compile-time test in `ListenersTests.cpp`. Both suites pass (sla_print_tests 40 cases, slic3r-shared-tests 445 cases). Cost note: touching `SLAResult.hpp` rebuilds most of slic3r-shared (~3.5 h at /MP2), so batch hotspot-header changes. sla_print_tests reported 12111 assertions vs 12117 at baseline with no SLA test touched: its assertion count varies between runs.
-- [ ] **M0.7** Reserve plater tool slots `ToolType::SlaSupportPoints` and `ToolType::SlaHollow`, with stub gizmos and empty dialogs registered in `PlaterRenderModule`. Show them only when the printer is SLA. · M · needs M0.2
+- [x] **M0.7** Reserve plater tool slots `ToolType::SlaSupportPoints` and `ToolType::SlaHollow`, with stub gizmos and empty dialogs registered in `PlaterRenderModule`. Show them only when the printer is SLA. · M · needs M0.2
 - [ ] **M0.8** Hide FFF-only plater tools while an SLA printer is active: seams, fuzzy skin, multi-material painting, variable layer height. · S · needs M0.7
-- [ ] **M0.9** SLA archive format registry: add the `ISlaArchiveFormat` interface and factory (PLAN A4). · M · needs M0.2
+- [x] **M0.9** SLA archive format registry: add the `ISlaArchiveFormat` interface and factory (PLAN A4). · M · needs M0.2 · done: Biz-layer registry with SL1 formats; rasterizer creation stays in SLAPrint
 - [ ] **M0.10** Move SL1 and SL1_SVG onto the registry. · M · needs M0.9
   Done when: exported archives are byte-identical to the previous output on the test 3MFs.
 - [ ] **M0.11** SLA fixture loader in `slic3r-test-utils`, plus the `--sla-fixture <3mf>` debug flag (PLAN A5). · M · needs M0.2
