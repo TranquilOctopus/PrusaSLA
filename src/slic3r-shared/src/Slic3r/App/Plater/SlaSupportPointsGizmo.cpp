@@ -21,9 +21,10 @@ using namespace Slic3r::App::Yoga;
 using namespace Slic3r::Biz;
 using namespace Slic3r::Biz::Slicing;
 
-namespace Slic3r::App::Plater {
+using Slic3r::Domain::SlicingId;
+using Slic3r::Domain::ObjectID;
 
-namespace {
+namespace Slic3r::Biz {
 
 /**
  * @brief Requests generated support points for a model object from the cache or by requesting slicing.
@@ -203,7 +204,7 @@ private:
     ObjectID m_model_object_id;
 };
 
-} // namespace
+} // namespace Slic3r::Biz
 
 SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     PlaterScenePresenter& scene_presenter,
@@ -216,7 +217,7 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     m_dialog->set_title(_u8L("SLA Support Points"));
     m_dialog->set_shortcut("P");
 
-    m_support_points_request = std::make_unique<GeneratedSupportPointsRequest>(
+    m_support_points_request = std::make_unique<Biz::GeneratedSupportPointsRequest>(
         m_project_interactor.slicing_interactor(),
         m_project_interactor.status_cache(),
         m_project_interactor.generated_support_points_cache()
@@ -233,7 +234,10 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
             Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id);
             if (model_object) {
                 m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SetPartSettingsValue);
-                model_object->config.set("support_points_density_relative", density);
+                auto result = model_object->object_settings_sla.find("support_points_density_relative");
+                if (result.item) {
+                    result.item->set<int>(density);
+                }
                 this->start_generation();
             }
         }
@@ -287,6 +291,7 @@ void SlaSupportPointsGizmo::on_deactivated()
         m_generation_slicing_id.reset();
     }
     m_has_generated_points = false;
+    m_generated_support_points.reset();
     m_dialog->set_generate_enabled(false);
     m_dialog->set_apply_enabled(false);
     m_dialog->set_point_count(0);
@@ -302,6 +307,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
         m_generation_slicing_id.reset();
     }
     m_has_generated_points = false;
+    m_generated_support_points.reset();
 
     if (!enabled() || selection.elements.empty()) {
         m_dialog->set_generate_enabled(false);
@@ -352,7 +358,11 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     const SlicingId slicing_id{project_id, bed_ref.instance_id};
 
     // Update dialog with current density setting
-    const int density = model_object->config.get_int("support_points_density_relative", 100);
+    int density = 100;
+    auto result = model_object->object_settings_sla.find("support_points_density_relative");
+    if (result.item) {
+        density = result.item->get<int>();
+    }
     m_dialog->set_density(density);
 
     // Show existing manual support points count
@@ -369,7 +379,7 @@ void SlaSupportPointsGizmo::start_generation()
         return;
     }
 
-    const Domain::Project& project = m_project_interactor.selected_project();
+    Domain::Project& project = m_project_interactor.selected_project();
     Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id);
     if (!model_object) {
         return;
@@ -437,7 +447,7 @@ void SlaSupportPointsGizmo::on_generation_completed(std::optional<ObjectSupportP
         m_generated_support_points = *support_points;
         m_has_generated_points = true;
 
-        const ObjectSupportPoints& object_support_points = m_generated_support_points.get();
+        const ObjectSupportPoints& object_support_points = m_generated_support_points->get();
         size_t count = object_support_points.support_points.size();
 
         m_dialog->set_point_count(count);
@@ -445,6 +455,7 @@ void SlaSupportPointsGizmo::on_generation_completed(std::optional<ObjectSupportP
         m_dialog->set_generate_enabled(true);
     } else {
         m_has_generated_points = false;
+        m_generated_support_points.reset();
         m_dialog->set_point_count(0);
         m_dialog->set_apply_enabled(false);
         m_dialog->set_generate_enabled(true);
@@ -458,7 +469,7 @@ void SlaSupportPointsGizmo::on_generation_completed(std::optional<ObjectSupportP
 
 void SlaSupportPointsGizmo::apply_generated_points()
 {
-    if (!m_has_generated_points || !m_selected_object_id.valid()) {
+    if (!m_has_generated_points || !m_selected_object_id.valid() || !m_generated_support_points.has_value()) {
         return;
     }
 
@@ -468,7 +479,7 @@ void SlaSupportPointsGizmo::apply_generated_points()
         return;
     }
 
-    const ObjectSupportPoints& object_support_points = m_generated_support_points.get();
+    const ObjectSupportPoints& object_support_points = m_generated_support_points->get();
 
     // Convert generated support points to domain support points
     SLA::SupportPoints domain_points;
@@ -502,6 +513,7 @@ void SlaSupportPointsGizmo::apply_generated_points()
 void SlaSupportPointsGizmo::discard_generated_points()
 {
     m_has_generated_points = false;
+    m_generated_support_points.reset();
     m_generation_slicing_id.reset();
     m_dialog->set_apply_enabled(false);
     m_dialog->set_generate_enabled(true);

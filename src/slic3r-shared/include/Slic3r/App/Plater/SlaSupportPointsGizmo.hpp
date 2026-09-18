@@ -68,7 +68,7 @@ private:
     std::optional<Domain::SlicingId> m_generation_slicing_id;
     Domain::ObjectID m_selected_object_id;
     Domain::SelectionId m_selected_instance_id{Domain::INVALID_ID};
-    Biz::ObjectSupportPointsRef m_generated_support_points;
+    std::optional<Biz::ObjectSupportPointsRef> m_generated_support_points;
     bool m_has_generated_points = false;
     Scene::IGizmoController* m_gizmo_controller = nullptr;
 };
