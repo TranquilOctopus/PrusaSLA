@@ -197,7 +197,7 @@ private:
         Domain::SLA::SupportPoints world_points = *sla_object.support_points;
         Domain::SLA::SupportPoints mesh_points;
         mesh_points.reserve(world_points.size());
-        const Transform3f inv = sla_object.object_trafo.inverse().cast<float>();
+        const Domain::Transform3f inv = sla_object.object_trafo.inverse().cast<float>();
         for (const auto& sp : world_points) {
             Domain::SLA::SupportPoint mesh_sp = sp;
             mesh_sp.pos = inv * sp.pos;
