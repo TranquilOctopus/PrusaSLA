@@ -81,6 +81,7 @@ void Theme::initialize_dark_colors()
     };
     m_colors[Platform::Color::WindowBg]          = auto_entry(k_palette_slate900);
     m_colors[Platform::Color::WindowBgAlternate] = auto_entry(k_palette_slate700);
+    m_colors[Platform::Color::Control]           = auto_entry(k_palette_slate700);
 
     m_colors[Platform::Color::Scrollbar] = ColorEntry{
         ImColor(0.31f, 0.31f, 0.31f, 1.00f),
@@ -192,6 +193,7 @@ void Theme::initialize_light_colors()
     // WindowBg: Sage100 mixed 60% with white = #DFE4DC
     m_colors[Platform::Color::WindowBg]          = auto_entry_light(ImColor(0xDF, 0xE4, 0xDC));
     m_colors[Platform::Color::WindowBgAlternate] = auto_entry_light(k_palette_sage100);
+    m_colors[Platform::Color::Control]           = auto_entry_light(k_palette_sage100);
 
     // Scrollbar: visible dark greys on the light background; hover/active are darker
     m_colors[Platform::Color::Scrollbar] = ColorEntry{
