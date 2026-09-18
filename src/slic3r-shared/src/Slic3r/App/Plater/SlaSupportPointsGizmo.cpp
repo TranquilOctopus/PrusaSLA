@@ -3,6 +3,8 @@
 #include "Slic3r/App/Plater/PlaterScenePresenter.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
 
+using namespace Slic3r::Biz;
+
 namespace Slic3r::App::Plater {
 
 SlaSupportPointsGizmo::SlaSupportPointsGizmo(
