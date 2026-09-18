@@ -28,9 +28,9 @@ namespace Slic3r::Biz {
 
 /**
  * @brief Requests generated support points for a model object from the cache or by requesting slicing.
- * Pattern copied from PaintOnSupportsGizmo::GeneratedSupportPointsRequest.
+ * Pattern copied from PaintOnSupportsGizmo::SlaSupportPointsRequest.
  */
-class GeneratedSupportPointsRequest :
+class SlaSupportPointsRequest :
     public IGeneratedSupportPointsCacheChangedListener,
     public IStatusCacheChangedListener
 {
@@ -41,9 +41,9 @@ public:
             [](std::optional<ObjectSupportPointsRef>) {};
     };
 
-    GeneratedSupportPointsRequest() = delete;
+    SlaSupportPointsRequest() = delete;
 
-    GeneratedSupportPointsRequest(
+    SlaSupportPointsRequest(
         SlicingInteractor& slicing_interactor,
         StatusCache& status_cache,
         GeneratedSupportPointsCache& support_points_cache
@@ -53,7 +53,7 @@ public:
         m_support_points_cache(support_points_cache)
     {}
 
-    ~GeneratedSupportPointsRequest() override
+    ~SlaSupportPointsRequest() override
     {
         this->cancel();
     }
@@ -206,6 +206,8 @@ private:
 
 } // namespace Slic3r::Biz
 
+namespace Slic3r::App::Plater {
+
 SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     PlaterScenePresenter& scene_presenter,
     Biz::ProjectInteractor& project_interactor
@@ -217,7 +219,7 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     m_dialog->set_title(_u8L("SLA Support Points"));
     m_dialog->set_shortcut("P");
 
-    m_support_points_request = std::make_unique<Biz::GeneratedSupportPointsRequest>(
+    m_support_points_request = std::make_unique<Biz::SlaSupportPointsRequest>(
         m_project_interactor.slicing_interactor(),
         m_project_interactor.status_cache(),
         m_project_interactor.generated_support_points_cache()

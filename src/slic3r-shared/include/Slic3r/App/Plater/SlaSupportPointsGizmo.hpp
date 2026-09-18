@@ -17,7 +17,7 @@ class PlaterScenePresenter;
 
 namespace Slic3r::Biz {
 class ProjectInteractor;
-class GeneratedSupportPointsRequest;
+class SlaSupportPointsRequest;
 } // namespace Slic3r::Biz
 
 namespace Slic3r::App::Plater {
@@ -64,7 +64,7 @@ private:
     PlaterScenePresenter& m_scene_presenter;
     Biz::ProjectInteractor& m_project_interactor;
     std::unique_ptr<SlaSupportPointsDialog> m_dialog;
-    std::unique_ptr<Biz::GeneratedSupportPointsRequest> m_support_points_request;
+    std::unique_ptr<Biz::SlaSupportPointsRequest> m_support_points_request;
     std::optional<Domain::SlicingId> m_generation_slicing_id;
     Domain::ObjectID m_selected_object_id;
     Domain::SelectionId m_selected_instance_id{Domain::INVALID_ID};
