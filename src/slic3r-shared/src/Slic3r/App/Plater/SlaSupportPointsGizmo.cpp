@@ -371,7 +371,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     }
 
     const Domain::Project& project = m_project_interactor.project(project_id);
-    const Domain::ModelObject* model_object = project.find_object_by_id(element.object_id.id);
+    const Domain::ModelObject* model_object = project.find_object_by_id(element.object_id);
     if (!model_object) {
         m_dialog->set_generate_enabled(false);
         m_dialog->set_apply_enabled(false);
