@@ -280,7 +280,7 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
   Result: `separate_supports_scaled()` in `tools/support-research/separate.py`. Nearest-sample distance bounds the true distance from above, so a face is model as soon as that bound is below epsilon (no margin), while the support side needs a safety margin derived from the achieved sample spacing; only the band between is measured exactly. Sample count follows surface area with a cap, and scene faces are processed in chunks. Benchmarks (synthetic, in memory): 348k faces 1.3 s / 70 MB peak, 1.39M faces 3.7 s / 279 MB peak (process RSS 354 MB), 100% agreement with the known split and 400/400 faces identical to the exact method. 50 separation tests pass in 9.8 s, including sparse-sampling and chunking equivalence.
 - [x] **M7.3c** Contact description + outputs: for each contact record position, normal, contact diameter, penetration, height above plate, local overhang angle and curvature, island/local-minimum serving (via slicing the model mesh), base/raft and trunk/branch structure. Outputs `contacts.json` and a colored debug mesh under `local-samples/supports/out/` (gitignored). Done when the synthetic shape gives back every known contact within tolerance and the M7.3 "Done when" is fully satisfied. · M · needs M7.3b2
   Result: 13 tests pass in test_m73c.py; full support-research suite 75 tests pass in ~68 s. Synthetic cone tips (radius 0.6 mm, height 1.2 mm) yield measured diameter 1.2 mm (2×TIP_RADIUS), vertex_count ≥ 17 (all tip vertices in width_band), penetration ~0, overhang ~0°, serves_local_minimum=True. Contacts.json and debug mesh outputs verified.
-- [ ] **M7.4** Rule mining across the dataset. Measure things like:
+- [x] **M7.4** Rule mining across the dataset. Measure things like:
   - Island and minimum coverage
   - Contact spacing against overhang angle
   - Tip diameter against the area or volume it carries
@@ -289,6 +289,7 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
   - Orientation and tilt angles
 
   Write the result to `doc/sla-fork/supports/derived-rules.md`: each rule with aggregate evidence and a confidence level, and no per-model data. · M · needs M7.3
+  Result: 13/21 pairs processed (larger bodies fail registration at 0.9 inlier). 122 contacts analyzed. 9 rules derived with evidence/confidence in `derived-rules.md`. Key findings: tip diameter clusters at ~8.9 mm (Lychee default), near-zero penetration, contacts on near-vertical surfaces (94° mean overhang), local-minimum coverage only 1.6%, no diameter-overhang/height correlation. Added `mine_rules.py` + synthetic test `test_mine_rules.py`. Full test suite 76 pass.
 - [ ] **M7.5** `[human]` Rulebook review. Merge the interview rules (M7.1) with the mined rules (M7.4) into `doc/sla-fork/supports/rulebook.md`. Mark each rule accepted, modified or rejected, with concrete thresholds. · M · needs M7.1, M7.4
 - [ ] **M7.6** Support quality scorecard. The benchmark harness writes the generator's support points and tip sizes to JSON, and a research script compares them with the expert contacts. Metrics:
   - **Island recall**

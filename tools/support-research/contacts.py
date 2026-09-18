@@ -99,7 +99,7 @@ def describe_contacts(
     contact_gap: float = 0.35,
     cluster_radius: float = 1.5,
     minimum_radius: float = 2.0,
-    curvature_radius: float = 1.0,
+    curvature_radius: float | None = 1.0,
     width_band: float = 1.5,
 ) -> ContactReport:
     """Build a contact record for every place a support touches the model.
@@ -120,9 +120,11 @@ def describe_contacts(
     support_mask = np.asarray(support_mask, dtype=bool)
     if support_mask.shape != (len(supported_scene.faces),):
         raise ValueError("Support mask must have one entry per scene face")
-    if not np.isfinite([cluster_radius, minimum_radius, curvature_radius, width_band]).all() or min(
-        cluster_radius, minimum_radius, curvature_radius, width_band
+    if not np.isfinite([cluster_radius, minimum_radius, width_band]).all() or min(
+        cluster_radius, minimum_radius, width_band
     ) <= 0:
+        raise ValueError("Radii must be finite and positive")
+    if curvature_radius is not None and (not np.isfinite(curvature_radius) or curvature_radius <= 0):
         raise ValueError("Radii must be finite and positive")
 
     plate_z = float(supported_scene.vertices[:, 2].min()) if len(supported_scene.vertices) else 0.0
@@ -135,35 +137,72 @@ def describe_contacts(
     vertex_component = np.zeros(len(supports.vertices), dtype=np.int64)
     vertex_component[supports.faces.reshape(-1)] = np.repeat(face_component, 3)
 
-    # Support vertices close to the model surface, found against surface samples
-    # (upper bound), then confirmed exactly.
-    samples = _sample_surface_dense(model, min(max(len(model.faces) * 4, 5_000), 200_000),
-                                    np.random.default_rng(0))
+    # Sample the model surface densely and build a KD-tree for fast approximate queries.
+    # The nearest sample distance is an UPPER BOUND on the true surface distance.
+    rng = np.random.default_rng(0)
+    max_samples = 200_000
+    # Target sample spacing: contact_gap / 2, so the safety margin is ~contact_gap/2.
+    target_spacing = contact_gap / 2.0
+    area = float(np.asarray(model.area_faces, dtype=np.float64).sum())
+    if area <= 0:
+        raise ValueError("Mesh must have positive surface area")
+    sample_count = int(min(max(int(np.ceil(area / (target_spacing * target_spacing))), 5_000), max_samples))
+    samples = _sample_surface_dense(model, sample_count, rng)
     sample_tree = cKDTree(trimesh.transform_points(samples, transform))
+
+    # Safety margin from the *target* spacing (not empirical NN distance, which can be
+    # skewed by large faces). The true surface distance d <= nearest_sample_distance.
+    # The maximum overestimate is bounded by the sample spacing.
+    safety = target_spacing
+
+    # Approximate distances from all support vertices to the model surface.
     approx, _ = sample_tree.query(supports.vertices, k=1, workers=1)
-    band = contact_gap + width_band
-    candidates = np.flatnonzero(approx <= band + cluster_radius)
-    if not len(candidates):
-        return report
-    in_model_frame = _transform_centroids_to_model_frame(supports.vertices[candidates], transform)
-    closest, exact, faces = trimesh.proximity.closest_point(model, in_model_frame)
-    near_surface = exact <= band
-    touching = exact <= contact_gap
-    if not touching.any():
+
+    # Only vertices with approx <= contact_gap + safety CAN be within contact_gap of the surface.
+    # Run exact closest-point queries ONLY for this small set, in chunks to limit memory.
+    exact_candidates = np.flatnonzero(approx <= contact_gap + safety)
+    if not len(exact_candidates):
         return report
 
+    # Process exact queries in chunks to avoid memory issues
+    chunk_size = 100_000
+    closest_list = []
+    exact_list = []
+    faces_list = []
+    for start in range(0, len(exact_candidates), chunk_size):
+        chunk = exact_candidates[start : start + chunk_size]
+        in_model_frame = _transform_centroids_to_model_frame(supports.vertices[chunk], transform)
+        c, e, f = trimesh.proximity.closest_point(model, in_model_frame)
+        closest_list.append(c)
+        exact_list.append(e)
+        faces_list.append(f)
+    closest = np.vstack(closest_list)
+    exact = np.concatenate(exact_list)
+    faces = np.concatenate(faces_list)
+
+    # Vertices confirmed as touching the model surface.
+    touching_mask = exact <= contact_gap
+    if not touching_mask.any():
+        return report
+
+    touching_indices = exact_candidates[touching_mask]
+    touching_closest = closest[touching_mask]
+    touching_faces = faces[touching_mask]
+
     rotation = transform[:3, :3]
-    seed_indices = np.flatnonzero(touching)
-    labels = _cluster(supports.vertices[candidates[seed_indices]], cluster_radius)
+
+    # Cluster touching vertices into contacts.
+    labels = _cluster(supports.vertices[touching_indices], cluster_radius)
 
     # Build a KD-tree over all support vertices for efficient tip-width queries.
     support_tree = cKDTree(supports.vertices)
 
     for label in range(labels.max() + 1):
-        seeds = seed_indices[labels == label]
-        surface_model = closest[seeds]
+        seeds = np.flatnonzero(labels == label)
+        seed_indices = touching_indices[seeds]
+        surface_model = touching_closest[seeds]
         position_model = surface_model.mean(axis=0)
-        normal_model = model.face_normals[faces[seeds]].mean(axis=0)
+        normal_model = model.face_normals[touching_faces[seeds]].mean(axis=0)
         norm = np.linalg.norm(normal_model)
         if norm == 0:
             continue
@@ -171,22 +210,17 @@ def describe_contacts(
         position_scene = trimesh.transform_points(position_model[None], transform)[0]
         normal_scene = rotation @ normal_model
 
-# Tip width: support vertices within `reach` of the contact position,
+        # Tip width: support vertices within `reach` of the contact position,
         # converted to model frame, with depth along normal_model in [0, width_band].
-        # This measures the tip geometry just below the contact (along the support
-        # direction), independent of the contact_gap band used for seeding.
         reach = max(3.0 * cluster_radius, 2.0)
         nearby_idx = support_tree.query_ball_point(position_scene, reach)
         if not nearby_idx:
-            # Fallback: use seed vertices only.
-            nearby_vertices = supports.vertices[candidates[seeds]]
+            nearby_vertices = supports.vertices[seed_indices]
         else:
             nearby_vertices = supports.vertices[nearby_idx]
         in_model = _transform_centroids_to_model_frame(nearby_vertices, transform)
         offsets = in_model - position_model
-        # Depth along the normal (positive in the support direction, outside the model).
         depth_along_normal = offsets @ normal_model
-        # Keep vertices that are at or just outside the surface (depth >= 0) and within width_band.
         in_band = (depth_along_normal >= 0.0) & (depth_along_normal <= width_band)
         band_vertices = in_model[in_band]
         if len(band_vertices):
@@ -194,11 +228,9 @@ def describe_contacts(
             tangential = band_offsets - np.outer(band_offsets @ normal_model, normal_model)
             radii = np.linalg.norm(tangential, axis=1)
             diameter = float(2.0 * radii.max())
-            # Penetration: how far support reaches into the model (opposite to normal).
             depth_into = -depth_along_normal
             penetration = float(max(depth_into[in_band].max(), 0.0))
         else:
-            # Fallback to seed vertices (typically just the apex).
             seed_offsets = offsets
             tangential = seed_offsets - np.outer(seed_offsets @ normal_model, normal_model)
             radii = np.linalg.norm(tangential, axis=1)
@@ -211,14 +243,13 @@ def describe_contacts(
             trimesh.curvature.discrete_mean_curvature_measure(
                 model, position_model[None], curvature_radius
             )[0]
-        )
+        ) if curvature_radius is not None else 0.0
 
         # A local low point: no model surface sits below this contact nearby.
         neighbours = sample_tree.query_ball_point(position_scene, minimum_radius)
         below = sample_tree.data[neighbours][:, 2] < position_scene[2] - 0.05 if neighbours else []
         serves_local_minimum = not bool(np.any(below))
 
-        # vertex_count: number of support vertices in the tip measurement band
         vertex_count = int(len(band_vertices)) if len(band_vertices) else int(len(seeds))
 
         report.contacts.append(
@@ -233,7 +264,7 @@ def describe_contacts(
                 overhang_deg=overhang,
                 mean_curvature=curvature,
                 serves_local_minimum=serves_local_minimum,
-                support_component=int(vertex_component[candidates[seeds[0]]]),
+                support_component=int(vertex_component[seed_indices[0]]),
                 vertex_count=vertex_count,
             )
         )

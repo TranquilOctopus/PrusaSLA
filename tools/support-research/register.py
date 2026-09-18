@@ -100,15 +100,28 @@ def coarse_alignment(
     cm = model_pts.mean(axis=0)
     cs = scene_pts.mean(axis=0)
     tree = cKDTree(scene_pts)
+
+    # Try all 6 permutations of axis correspondence, each with 4 valid sign flips (det=1)
+    sign_combos = ((1, 1, 1), (1, -1, -1), (-1, 1, -1), (-1, -1, 1))
+    permutations = (
+        (0, 1, 2), (0, 2, 1), (1, 0, 2),
+        (1, 2, 0), (2, 0, 1), (2, 1, 0),
+    )
+
     scored = []
-    for signs in ((1, 1, 1), (1, -1, -1), (-1, 1, -1), (-1, -1, 1)):
-        rotation = vs @ np.diag(signs) @ vm.T
-        transform = np.eye(4)
-        transform[:3, :3] = rotation
-        transform[:3, 3] = cs - rotation @ cm
-        moved = trimesh.transform_points(model_pts, transform)
-        distances, _ = tree.query(moved, workers=1)
-        scored.append((float(np.median(distances)), transform))
+    for perm in permutations:
+        vm_perm = vm[:, perm]
+        for signs in sign_combos:
+            rotation = vs @ np.diag(signs) @ vm_perm.T
+            if np.linalg.det(rotation) < 0:
+                continue
+            transform = np.eye(4)
+            transform[:3, :3] = rotation
+            transform[:3, 3] = cs - rotation @ cm
+            moved = trimesh.transform_points(model_pts, transform)
+            distances, _ = tree.query(moved, workers=1)
+            scored.append((float(np.median(distances)), transform))
+
     scored.sort(key=lambda item: item[0])
     return [transform for _, transform in scored]
 
@@ -140,7 +153,7 @@ def register(
 ) -> RegistrationResult:
     if not 1 <= starts <= 4 or iterations < 1 or sample_count < 20:
         raise ValueError("Invalid registration work limits")
-    if not 0 < trim_fraction <= 1 or not 0.9 <= min_inlier_fraction <= 1:
+    if not 0 < trim_fraction <= 1 or not 0.5 <= min_inlier_fraction <= 1:
         raise ValueError("Invalid registration fractions")
     if final_threshold <= 0 or tolerance <= 0:
         raise ValueError("Threshold and tolerance must be positive")

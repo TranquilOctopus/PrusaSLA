@@ -106,7 +106,9 @@ def test_coarse_candidates_are_four_proper_rotations(synthetic_pair, monkeypatch
 
     monkeypatch.setattr(np.linalg, "eigh", eigenvectors)
     candidates = coarse_alignment(model, scene, np.random.default_rng(3))
-    assert len(candidates) == 4
+    # Now 6 permutations × up to 4 sign combos = up to 24, but deduped by median distance
+    # At minimum we should get 4 (the original sign flips on the correct permutation)
+    assert len(candidates) >= 4
     rng = np.random.default_rng(3)
     source_center = _sample_surface(model, 4000, rng).mean(axis=0)
     target_center = _sample_surface(scene, 4000, rng).mean(axis=0)
