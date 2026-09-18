@@ -45,7 +45,8 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
 - [ ] **M0.5** Palette table and SLA theme tokens (PLAN A8 and 2.1). · M · needs M0.2
   Owns: `ThemeTypes.hpp`, `Theme.cpp`. Add one palette table and the SLA tokens, and switch the existing tokens to the 2.1 default mapping.
   Done when: the app runs in the fork palette in both themes, with screenshots committed to `doc/sla-fork/ux/screens/`.
-- [ ] **M0.6** Reserve `SLAResult` fields for per-layer area, peel-force estimate, and a list of detected issues (left empty for now). · S · needs M0.2
+- [x] **M0.6** Reserve `SLAResult` fields for per-layer area, peel-force estimate, and a list of detected issues (left empty for now). · S · needs M0.2
+  Result: `layer_areas`, `layer_peel_force` and a print-level `issues` list (`SlaIssue`) reserved in `SLAResultData`, all empty; compile-time test in `ListenersTests.cpp`. Both suites pass (sla_print_tests 40 cases, slic3r-shared-tests 445 cases). Cost note: touching `SLAResult.hpp` rebuilds most of slic3r-shared (~3.5 h at /MP2), so batch hotspot-header changes. sla_print_tests reported 12111 assertions vs 12117 at baseline with no SLA test touched: its assertion count varies between runs.
 - [ ] **M0.7** Reserve plater tool slots `ToolType::SlaSupportPoints` and `ToolType::SlaHollow`, with stub gizmos and empty dialogs registered in `PlaterRenderModule`. Show them only when the printer is SLA. · M · needs M0.2
 - [ ] **M0.8** Hide FFF-only plater tools while an SLA printer is active: seams, fuzzy skin, multi-material painting, variable layer height. · S · needs M0.7
 - [ ] **M0.9** SLA archive format registry: add the `ISlaArchiveFormat` interface and factory (PLAN A4). · M · needs M0.2
