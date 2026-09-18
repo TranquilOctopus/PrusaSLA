@@ -2,6 +2,7 @@
 #include <random>
 #include <numeric>
 #include <cstdint>
+#include <algorithm>
 
 #include "sla_test_utils.hpp"
 
