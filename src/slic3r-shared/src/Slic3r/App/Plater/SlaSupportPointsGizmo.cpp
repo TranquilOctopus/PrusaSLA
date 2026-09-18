@@ -388,7 +388,7 @@ void SlaSupportPointsGizmo::start_generation()
     }
 
     // Check if object is printable
-    const Domain::ModelInstance* instance = project.find_instance_by_id(m_selected_object_id, m_selected_instance_id);
+    const Domain::ModelInstance* instance = project.find_instance_by_id(m_selected_object_id.id, m_selected_instance_id);
     if (!instance || !instance->is_printable()) {
         AppServices::instance().dialog_manager().show_warning_dialog(
             _u8L("Automatic generation requires printable object."),
