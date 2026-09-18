@@ -79,8 +79,8 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
 
 ## M2: SLA editing tools (porting the legacy gizmos)
 
-- [ ] **M2.1** Support points tool, part 1: dialog, Generate (slice until `slaposSupportPoints`, read the points from `Biz::SLAObjectCache` → `Sla::Object::support_points`), and apply/discard. · M · needs M0.7
-  Note: `GeneratedSupportPointsCache` is FDM-only (filled by `Print`, never by `SLAPrint`); don't use it. Draft on branch `sla/M2.1-support-points-tool`: dialog and header compile; the gizmo .cpp must be rewired to `SLAObjectCache`.
+- [x] **M2.1** Support points tool, part 1: dialog, Generate (slice until `slaposSupportPoints`, read the points from `Biz::SLAObjectCache` → `Sla::Object::support_points`), and apply/discard. · M · needs M0.7
+  Result: gizmo reads points from `SLAObjectCache`; `Sla::Object::object_trafo` (= `SLAPrintObject::trafo()`) added so points convert back to mesh coordinates. Both suites pass (sla_print_tests 40 cases, slic3r-shared-tests 458 cases). Not yet verified in a running app: Generate → Apply placement on a real model (check in M1.1b).
 - [ ] **M2.2** Support points tool, part 2: add, remove and move points, plus head diameter. · M · needs M2.1
 - [ ] **M2.3** Support points tool, part 3: island markers and clipping plane. Write a parity checklist against the legacy `GLGizmoSlaSupports` in `doc/sla-fork/parity/support-points.md`. · M · needs M2.2
 - [ ] **M2.4** Hollow tool, part 1: hollowing parameters and preview. · M · needs M0.7
