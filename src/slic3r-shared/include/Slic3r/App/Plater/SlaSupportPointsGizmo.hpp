@@ -3,6 +3,7 @@
 #include "Slic3r/App/Scene/IGizmo.hpp"
 #include "Slic3r/App/Plater/GizmoWindow.hpp"
 #include "Slic3r/Biz/GeneratedSupportPointsCache.hpp"
+#include "Slic3r/Biz/Scene/SceneInteractor.hpp"
 #include "Slic3r/Domain/ObjectID.hpp"
 #include "Slic3r/Domain/SelectionId.hpp"
 
@@ -21,7 +22,9 @@ class GeneratedSupportPointsRequest;
 
 namespace Slic3r::App::Plater {
 
-class SlaSupportPointsGizmo : public Scene::IToolGizmo
+class SlaSupportPointsGizmo :
+    public Scene::IToolGizmo,
+    public Biz::Scene::ISceneSelectionChangedListener
 {
 public:
     SlaSupportPointsGizmo(
@@ -37,6 +40,7 @@ public:
 
     void on_activated() override;
     void on_deactivated() override;
+
     void on_scene_selection_changed(
         Domain::SelectionId project_id,
         const Biz::Scene::ObjectSelection& selection

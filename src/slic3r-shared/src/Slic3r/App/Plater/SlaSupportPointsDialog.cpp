@@ -3,6 +3,7 @@
 #include "Slic3r/App/Yoga/SliderWithInput.hpp"
 #include "Slic3r/App/Yoga/LayoutButton.hpp"
 #include "Slic3r/App/Yoga/Text.hpp"
+#include "Slic3r/App/Yoga/Item.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
 
 #include <fmt/format.h>
@@ -42,22 +43,22 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
 
     this->add_separator(this->content());
 
-    Item* button_row = content()->emplace<Item>();
-    button_row->set_flex_direction(YGDirectionRow);
+    Item* button_row = content()->emplace_back<Item>();
+    button_row->set_orientation(Orientation::Horizontal);
     button_row->set_justify_content(YGJustifySpaceBetween);
     button_row->set_gap(gap_size());
 
-    m_apply_button = button_row->emplace<LayoutButton>(0, _u8L("Apply"));
+    m_apply_button = button_row->emplace_back<LayoutButton>(_u8L("Apply"));
     m_apply_button->callbacks().action = [this]()
     { m_callbacks.apply(); };
 
-    m_discard_button = button_row->emplace<LayoutButton>(0, _u8L("Discard"));
+    m_discard_button = button_row->emplace_back<LayoutButton>(_u8L("Discard"));
     m_discard_button->callbacks().action = [this]()
     { m_callbacks.discard(); };
 
     this->add_separator(this->content());
 
-    m_point_count_text = content()->emplace<Text>(_u8L("No support points generated yet."));
+    m_point_count_text = content()->emplace_back<Text>(_u8L("No support points generated yet."));
     m_point_count_text->set_flex_shrink(0);
 }
 
@@ -81,7 +82,7 @@ void SlaSupportPointsDialog::set_point_count(size_t count)
     if (count == 0) {
         m_point_count_text->set_text(_u8L("No support points generated yet."));
     } else {
-        m_point_count_text->set_text(fmt::format(_u8L("{} support points generated"), count));
+        m_point_count_text->set_text(fmt::format("{} support points generated", count));
     }
 }
 

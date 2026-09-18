@@ -10,7 +10,7 @@
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/Biz/Slicing/SlicingInteractor.hpp"
 #include "Slic3r/Biz/StatusCache.hpp"
-#include "Slic3r/Biz/UndoProvider.hpp"
+#include "Slic3r/Biz/IUndoProvider.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
 #include "Slic3r/Domain/SelectionId.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
@@ -229,10 +229,10 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     {
         const int density = static_cast<int>(value);
         if (m_selected_object_id.valid()) {
-            const Domain::Project& project = m_project_interactor.selected_project();
+            Domain::Project& project = m_project_interactor.selected_project();
             Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id);
             if (model_object) {
-                m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::PaintOnSupportsAutomaticPainting);
+                m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SetPartSettingsValue);
                 model_object->config.set("support_points_density_relative", density);
                 this->start_generation();
             }
@@ -269,6 +269,9 @@ void SlaSupportPointsGizmo::provide_gizmo_controller(Scene::IGizmoController& co
 
 void SlaSupportPointsGizmo::on_activated()
 {
+    m_scene_presenter.scene().add_listener<Biz::Scene::ISceneSelectionChangedListener>(this);
+    m_project_interactor.scene_interactor().add_listener<Biz::Scene::ISceneSelectionChangedListener>(this);
+
     const Biz::Scene::ObjectSelection& selection =
         m_project_interactor.scene_interactor().object_selection();
     this->on_scene_selection_changed(m_project_interactor.selected_project_id(), selection);
@@ -276,6 +279,9 @@ void SlaSupportPointsGizmo::on_activated()
 
 void SlaSupportPointsGizmo::on_deactivated()
 {
+    m_scene_presenter.scene().remove_listener<Biz::Scene::ISceneSelectionChangedListener>(this);
+    m_project_interactor.scene_interactor().remove_listener<Biz::Scene::ISceneSelectionChangedListener>(this);
+
     if (m_generation_slicing_id.has_value()) {
         m_support_points_request->cancel();
         m_generation_slicing_id.reset();
@@ -456,7 +462,7 @@ void SlaSupportPointsGizmo::apply_generated_points()
         return;
     }
 
-    const Domain::Project& project = m_project_interactor.selected_project();
+    Domain::Project& project = m_project_interactor.selected_project();
     Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id);
     if (!model_object) {
         return;
@@ -477,7 +483,7 @@ void SlaSupportPointsGizmo::apply_generated_points()
     }
 
     // Take undo snapshot
-    m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::PaintOnSupportsAutomaticPainting);
+    m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SetPartSettingsValue);
 
     // Apply to model object
     model_object->sla_support_points = std::move(domain_points);
