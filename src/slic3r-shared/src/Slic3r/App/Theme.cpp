@@ -77,7 +77,7 @@ void Theme::initialize_dark_colors()
     };
     m_colors[Platform::Color::TextLink] = ColorEntry{
         k_palette_sage300,
-        std::make_unique<ImColor>(k_palette_sage300.Value.x * 0.5f, k_palette_sage300.Value.y * 0.5f, k_palette_sage300.Value.z * 0.5f, 1.00f) // disabled
+        std::make_unique<ImColor>(k_palette_sage300.x * 0.5f, k_palette_sage300.y * 0.5f, k_palette_sage300.z * 0.5f, 1.00f) // disabled
     };
     m_colors[Platform::Color::WindowBg]          = auto_entry(k_palette_slate900);
     m_colors[Platform::Color::WindowBgAlternate] = auto_entry(k_palette_slate700);
@@ -145,7 +145,7 @@ void Theme::initialize_dark_colors()
 
     m_colors[Platform::Color::AccentPrimary] = auto_entry(k_palette_sage300);
     m_colors[Platform::Color::AccentPrimary].color_disabled =
-        std::make_unique<ImColor>(k_palette_sage300.Value.x * 0.7f, k_palette_sage300.Value.y * 0.7f, k_palette_sage300.Value.z * 0.7f, 1.0f);
+        std::make_unique<ImColor>(k_palette_sage300.x * 0.7f, k_palette_sage300.y * 0.7f, k_palette_sage300.z * 0.7f, 1.0f);
     m_colors[Platform::Color::AccentSecondary] = auto_entry(k_palette_teal500);
     m_colors[Platform::Color::AccentTertiary]  = ColorEntry{ImColor(175, 119, 255)};
     m_colors[Platform::Color::Error]           = ColorEntry{k_error_dark};
