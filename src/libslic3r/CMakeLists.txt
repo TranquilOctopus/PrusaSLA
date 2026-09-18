@@ -178,6 +178,9 @@ set(SLIC3R_SOURCES
     src/libslic3r/Format/SL1.hpp
     src/libslic3r/Format/SL1_SVG.cpp
     src/libslic3r/Format/SL1_SVG.hpp
+    src/libslic3r/Format/SlaArchiveFormat.hpp
+    src/libslic3r/Format/SlaArchiveFormat.cpp
+    src/libslic3r/Format/SL1Format.cpp
     src/libslic3r/GCode/Thumbnails.hpp
     src/libslic3r/GCode/ToolOrdering.hpp
     src/libslic3r/GCode/WipeTower.hpp
