@@ -93,6 +93,10 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Plater/HeightRangeGizmo.cpp
         include/Slic3r/App/Plater/HeightRangeDialog.hpp
         src/Slic3r/App/Plater/HeightRangeDialog.cpp
+        include/Slic3r/App/Plater/SlaSupportPointsGizmo.hpp
+        src/Slic3r/App/Plater/SlaSupportPointsGizmo.cpp
+        include/Slic3r/App/Plater/SlaHollowGizmo.hpp
+        src/Slic3r/App/Plater/SlaHollowGizmo.cpp
         include/Slic3r/App/Plater/HeightRangeRow.hpp
         src/Slic3r/App/Plater/HeightRangeRow.cpp
         include/Slic3r/App/Plater/LayerRangeSettingsDialog.hpp
@@ -945,10 +949,13 @@ set(SLIC3R_SHARED_FILES
         include/Slic3r/Biz/ResultExport/IResultExportBinarizeListener.hpp
         include/Slic3r/Biz/ResultExport/ResultExportDataFinalizer.hpp
         include/Slic3r/Biz/ResultExport/SLA/SL1.hpp
+        include/Slic3r/Biz/ResultExport/SLA/SlaArchiveFormat.hpp
         include/Slic3r/Biz/ResultExport/SLA/Zipper.hpp
         src/Slic3r/Biz/ResultExport/ResultExportInteractor.cpp
         src/Slic3r/Biz/ResultExport/ResultExportDataFinalizer.cpp
         src/Slic3r/Biz/ResultExport/SLA/SL1.cpp
+        src/Slic3r/Biz/ResultExport/SLA/SL1Format.cpp
+        src/Slic3r/Biz/ResultExport/SLA/SlaArchiveFormat.cpp
         src/Slic3r/Biz/ResultExport/SLA/Zipper.cpp
 
         include/Slic3r/Biz/PrintHost/IPrintHost.hpp
@@ -1530,11 +1537,15 @@ if(SLIC3R_BUILD_TESTS)
 
             test/Slic3r/App/DialogNavigationTests.cpp
 
+            test/Slic3r/App/ThemeTests.cpp
+
             test/Slic3r/App/Scene/Node.cpp
             test/Slic3r/App/Scene/Ray.cpp
         test/Slic3r/App/Scene/MouseBindingScheme.cpp
 
             test/Slic3r/App/Plater/SurfaceMesh.cpp
+
+            test/Slic3r/App/Plater/SlaToolTypesTests.cpp
 
             test/Slic3r/App/PresetUpdater/PresetUpdaterControllerStateTests.cpp
             test/Slic3r/App/PresetUpdater/PresetUpdaterControllerTests.cpp
@@ -1617,6 +1628,7 @@ if(SLIC3R_BUILD_TESTS)
 
             test/Slic3r/Biz/Format/3MFTests.cpp
             test/Slic3r/Biz/Format/STEPTests.cpp
+            test/Slic3r/Biz/ResultExport/SLA/SlaArchiveFormatTests.cpp
 
             test/Slic3r/Biz/BundleCacheTests.cpp
 

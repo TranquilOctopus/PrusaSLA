@@ -492,3 +492,19 @@ TEST_CASE_METHOD(ConfigLoadFDMFixture, "Overrides can be set only partially", "[
     REQUIRE(second_item);
     CHECK(second_item->get<bool>() == true);
 }
+
+TEST_CASE_METHOD(ConfigLoadSLAFixture, "Default SLA material config contains new keys with correct defaults", "[ConfigLoad][SLA]")
+{
+    const auto result{load(json, sla_hw_config)};
+    REQUIRE(result.has_value());
+    const auto result_config{std::get<ConfigPackSLA>(result->config)};
+    const auto& material_settings{result_config.sla_material_settings.items};
+
+    CHECK(material_settings.opt("lift_height").get<double>() == Catch::Approx(0.));
+    CHECK(material_settings.opt("lift_height_2").get<double>() == Catch::Approx(0.));
+    CHECK(material_settings.opt("light_pwm").get<int>() == 255);
+    CHECK(material_settings.opt("bottom_lift_height").get<double>() == Catch::Approx(0.));
+    CHECK(material_settings.opt("bottom_light_pwm").get<int>() == 255);
+    CHECK(material_settings.opt("bottom_layer_count").get<int>() == 0);
+    CHECK(material_settings.opt("material_source_note").get<std::string>().empty());
+}

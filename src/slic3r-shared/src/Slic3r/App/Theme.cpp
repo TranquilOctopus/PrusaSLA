@@ -10,7 +10,22 @@
 
 namespace Slic3r::App {
 
-// Prusa brand orange - used as accent in light mode
+// Palette table (PLAN 2.1): the five base colors plus warning amber and error red.
+// These are the only hard-coded hex values allowed outside this table.
+// All other colors must be derived from these tokens.
+static const ImColor k_palette_sage100(0xCA, 0xD2, 0xC5); // #CAD2C5
+static const ImColor k_palette_sage300(0x84, 0xA9, 0x8C); // #84A98C
+static const ImColor k_palette_teal500(0x52, 0x79, 0x6F); // #52796F
+static const ImColor k_palette_slate700(0x35, 0x4F, 0x52); // #354F52
+static const ImColor k_palette_slate900(0x2F, 0x3E, 0x46); // #2F3E46
+
+// Warning / Error colors (PLAN 2.1 rule 3)
+static const ImColor k_warning_dark(0xE3, 0xA8, 0x57); // #E3A857
+static const ImColor k_error_dark(0xE0, 0x7A, 0x6B); // #E07A6B
+static const ImColor k_warning_light(0x9A, 0x6A, 0x1F); // #9A6A1F
+static const ImColor k_error_light(0xB5, 0x48, 0x3E); // #B5483E
+
+// Prusa brand orange - used as accent in light mode (legacy, to be removed)
 static constexpr ImVec4 k_prusa_orange{0.874f, 0.365f, 0.176f, 1.00f};
 
 Theme::Theme(Style style)
@@ -57,24 +72,25 @@ void Theme::initialize_dark_colors()
     m_colors[Platform::Color::Transparent] = ColorEntry{0, 0, 0, 0};
 
     m_colors[Platform::Color::Text] = ColorEntry{
-        {.90f, .90f, .90f, 1.00f},
-        std::make_unique<ImColor>(0.50f, 0.50f, 0.50f, 1.00f) // disabled
+        k_palette_sage100,
+        std::make_unique<ImColor>(k_palette_sage100.Value.x * 0.5f, k_palette_sage100.Value.y * 0.5f, k_palette_sage100.Value.z * 0.5f, 1.00f) // disabled
     };
     m_colors[Platform::Color::TextLink] = ColorEntry{
-        {0.16f, 0.29f, 0.48f, 1.00f},
-        std::make_unique<ImColor>(0.50f, 0.50f, 0.50f, 1.00f) // disabled
+        k_palette_sage300,
+        std::make_unique<ImColor>(k_palette_sage300.Value.x * 0.5f, k_palette_sage300.Value.y * 0.5f, k_palette_sage300.Value.z * 0.5f, 1.00f) // disabled
     };
-    m_colors[Platform::Color::WindowBg]          = auto_entry({27, 27, 27});
-    m_colors[Platform::Color::WindowBgAlternate] = auto_entry({41, 41, 41});
+    m_colors[Platform::Color::WindowBg]          = auto_entry(k_palette_slate900);
+    m_colors[Platform::Color::WindowBgAlternate] = auto_entry(k_palette_slate700);
+    m_colors[Platform::Color::Control]           = auto_entry(k_palette_slate700);
 
     m_colors[Platform::Color::Scrollbar] = ColorEntry{
-        {0.31f, 0.31f, 0.31f, 1.00f},
+        ImColor(0.31f, 0.31f, 0.31f, 1.00f),
         nullptr,
         std::make_unique<ImColor>(0.41f, 0.41f, 0.41f, 1.00f),
         std::make_unique<ImColor>(0.51f, 0.51f, 0.51f, 1.00f)
     };
 
-    m_colors[Platform::Color::NavCursor] = ColorEntry{{0.26f, 0.59f, 0.98f, 1.00f}};
+    m_colors[Platform::Color::NavCursor] = ColorEntry{k_palette_teal500};
 
     m_colors[Platform::Color::Button] = ColorEntry{
         m_colors[Platform::Color::WindowBgAlternate].color_default,
@@ -84,7 +100,7 @@ void Theme::initialize_dark_colors()
         std::make_unique<ImColor>(
             Theme::color_imgui(Platform::Color::WindowBgAlternate, Platform::ColorGroup::Hovered)
         ),
-        std::make_unique<ImColor>(54, 73, 117),
+        std::make_unique<ImColor>(k_palette_sage300),
         std::make_unique<ImColor>(Theme::color_imgui(
             Platform::Color::WindowBgAlternate,
             Platform::ColorGroup::ActiveDisabled
@@ -92,11 +108,11 @@ void Theme::initialize_dark_colors()
     };
 
     m_colors[Platform::Color::RadioButtonBackground] = ColorEntry{
-        {127, 127, 127},
-        std::make_unique<ImColor>(Imgui::adjust_brightness({127, 127, 127}, 1.5f)),
-        std::make_unique<ImColor>(Imgui::adjust_brightness({127, 127, 127}, 1.2f)),
+        ImColor(127, 127, 127),
+        std::make_unique<ImColor>(Imgui::adjust_brightness(ImColor(127, 127, 127), 1.5f)),
+        std::make_unique<ImColor>(Imgui::adjust_brightness(ImColor(127, 127, 127), 1.2f)),
         std::make_unique<ImColor>(217, 217, 217),
-        std::make_unique<ImColor>(Imgui::adjust_brightness({127, 127, 127}, 1.7f))
+        std::make_unique<ImColor>(Imgui::adjust_brightness(ImColor(127, 127, 127), 1.7f))
     };
 
     m_colors[Platform::Color::RadioButton] = ColorEntry{
@@ -107,7 +123,7 @@ void Theme::initialize_dark_colors()
         std::make_unique<ImColor>(
             Theme::color_imgui(Platform::Color::WindowBgAlternate, Platform::ColorGroup::Hovered)
         ),
-        std::make_unique<ImColor>(78, 128, 248),
+        std::make_unique<ImColor>(k_palette_teal500),
         std::make_unique<ImColor>(
             Imgui::adjust_brightness(Theme::color_imgui(Platform::Color::WindowBgAlternate), 1.9f)
         )
@@ -121,26 +137,45 @@ void Theme::initialize_dark_colors()
         std::make_unique<ImColor>(
             Theme::color_imgui(Platform::Color::WindowBgAlternate, Platform::ColorGroup::Hovered)
         ),
-        std::make_unique<ImColor>(54, 73, 117),
+        std::make_unique<ImColor>(k_palette_sage300),
         std::make_unique<ImColor>(Theme::color_imgui(
             Platform::Color::WindowBgAlternate,
             Platform::ColorGroup::ActiveDisabled
         ))
     };
 
-    m_colors[Platform::Color::AccentPrimary] = auto_entry({223, 93, 45});
+    m_colors[Platform::Color::AccentPrimary] = auto_entry(k_palette_sage300);
     m_colors[Platform::Color::AccentPrimary].color_disabled =
-        std::make_unique<ImColor>(200, 150, 130);
-    m_colors[Platform::Color::AccentSecondary]  = ColorEntry{{0.32f, 0.48f, 0.84f, 1.0f}};
-    m_colors[Platform::Color::AccentTertiary]   = ColorEntry{{175, 119, 255}};
-    m_colors[Platform::Color::Error]            = ColorEntry{{0.79f, 0.18f, 0.14f, 1.0f}};
-    m_colors[Platform::Color::Warning]          = ColorEntry{{255, 193, 7}};
-    m_colors[Platform::Color::ModalWindowDimBg] = ColorEntry{{0.80f, 0.80f, 0.80f, 0.35f}};
+        std::make_unique<ImColor>(k_palette_sage300.Value.x * 0.7f, k_palette_sage300.Value.y * 0.7f, k_palette_sage300.Value.z * 0.7f, 1.0f);
+    m_colors[Platform::Color::AccentSecondary] = auto_entry(k_palette_teal500);
+    m_colors[Platform::Color::AccentTertiary]  = ColorEntry{ImColor(175, 119, 255)};
+    m_colors[Platform::Color::Error]           = ColorEntry{k_error_dark};
+    m_colors[Platform::Color::Warning]         = ColorEntry{k_warning_dark};
+    m_colors[Platform::Color::ModalWindowDimBg] = ColorEntry{ImColor(0.80f, 0.80f, 0.80f, 0.35f)};
 
-    m_colors[Platform::Color::SceneBgTop]         = ColorEntry{{0.35f, 0.35f, 0.35f, 1.0f}};
-    m_colors[Platform::Color::SceneBgBottom]      = ColorEntry{{0.23f, 0.23f, 0.23f, 1.0f}};
-    m_colors[Platform::Color::SceneBgErrorTop]    = ColorEntry{{1.00f, 0.20f, 0.20f, 1.0f}};
-    m_colors[Platform::Color::SceneBgErrorBottom] = ColorEntry{{0.60f, 0.20f, 0.20f, 1.0f}};
+    m_colors[Platform::Color::SceneBgTop]         = ColorEntry{k_palette_slate700};
+    m_colors[Platform::Color::SceneBgBottom]      = ColorEntry{k_palette_slate900};
+    m_colors[Platform::Color::SceneBgErrorTop]    = ColorEntry{ImColor(1.00f, 0.20f, 0.20f, 1.0f)};
+    m_colors[Platform::Color::SceneBgErrorBottom] = ColorEntry{ImColor(0.60f, 0.20f, 0.20f, 1.0f)};
+
+    // SLA semantic colors (PLAN 2.1 / A8)
+    m_colors[Platform::Color::SlaModelResin]      = ColorEntry{k_palette_sage300}; // fallback; overridden by material_colour at runtime
+    m_colors[Platform::Color::SlaSupport]         = ColorEntry{k_palette_sage100};
+    m_colors[Platform::Color::SlaPad]             = ColorEntry{k_palette_teal500};
+    m_colors[Platform::Color::SlaSupportPointAuto] = ColorEntry{k_palette_sage300};
+    m_colors[Platform::Color::SlaSupportPointManual] = ColorEntry{
+        k_palette_sage100,
+        nullptr,
+        nullptr,
+        std::make_unique<ImColor>(k_palette_slate900), // outline for active
+        nullptr
+    };
+    m_colors[Platform::Color::SlaIslandWarning]   = ColorEntry{k_warning_dark};
+    m_colors[Platform::Color::SlaDrainHole]       = ColorEntry{k_palette_sage100};
+    m_colors[Platform::Color::SlaHollowInterior]  = ColorEntry{k_palette_slate700};
+    m_colors[Platform::Color::SlaCupWarning]      = ColorEntry{k_warning_dark};
+    // SlaLayerArea: line and fill handled at render time; token maps to line color
+    m_colors[Platform::Color::SlaLayerArea]       = ColorEntry{k_palette_sage300};
 }
 
 void Theme::initialize_light_colors()
@@ -148,26 +183,27 @@ void Theme::initialize_light_colors()
     m_colors[Platform::Color::Transparent] = ColorEntry{0, 0, 0, 0};
 
     m_colors[Platform::Color::Text] = ColorEntry{
-        {0.1f, 0.1f, 0.1f, 1.00f},
-        std::make_unique<ImColor>(0.45f, 0.45f, 0.45f, 1.00f) // disabled
+        k_palette_slate900,
+        std::make_unique<ImColor>(k_palette_slate900.Value.x * 0.5f, k_palette_slate900.Value.y * 0.5f, k_palette_slate900.Value.z * 0.5f, 1.00f) // disabled
     };
-    // Keep conventional blue for links; orange links are non-standard
     m_colors[Platform::Color::TextLink] = ColorEntry{
-        {0.13f, 0.28f, 0.65f, 1.00f},
-        std::make_unique<ImColor>(0.45f, 0.45f, 0.45f, 1.00f) // disabled
+        k_palette_slate700,
+        std::make_unique<ImColor>(k_palette_slate700.Value.x * 0.5f, k_palette_slate700.Value.y * 0.5f, k_palette_slate700.Value.z * 0.5f, 1.00f) // disabled
     };
-    m_colors[Platform::Color::WindowBg]          = auto_entry_light({235, 235, 235});
-    m_colors[Platform::Color::WindowBgAlternate] = auto_entry_light({220, 220, 220});
+    // WindowBg: Sage100 mixed 60% with white = #DFE4DC
+    m_colors[Platform::Color::WindowBg]          = auto_entry_light(ImColor(0xDF, 0xE4, 0xDC));
+    m_colors[Platform::Color::WindowBgAlternate] = auto_entry_light(k_palette_sage100);
+    m_colors[Platform::Color::Control]           = auto_entry_light(k_palette_sage100);
 
     // Scrollbar: visible dark greys on the light background; hover/active are darker
     m_colors[Platform::Color::Scrollbar] = ColorEntry{
-        {0.58f, 0.58f, 0.58f, 1.00f},
+        ImColor(0.58f, 0.58f, 0.58f, 1.00f),
         nullptr,
         std::make_unique<ImColor>(0.45f, 0.45f, 0.45f, 1.00f), // hovered - darker
-        std::make_unique<ImColor>(0.33f, 0.33f, 0.33f, 1.00f) // active - darkest
+        std::make_unique<ImColor>(0.33f, 0.33f, 0.33f, 1.00f)  // active - darkest
     };
 
-    m_colors[Platform::Color::NavCursor] = ColorEntry{{0.26f, 0.59f, 0.98f, 1.00f}};
+    m_colors[Platform::Color::NavCursor] = ColorEntry{k_palette_teal500};
 
     m_colors[Platform::Color::Button] = ColorEntry{
         m_colors[Platform::Color::WindowBgAlternate].color_default,
@@ -177,7 +213,7 @@ void Theme::initialize_light_colors()
         std::make_unique<ImColor>(
             Theme::color_imgui(Platform::Color::WindowBgAlternate, Platform::ColorGroup::Hovered)
         ),
-        std::make_unique<ImColor>(120, 159, 250), // active - cool blue-grey
+        std::make_unique<ImColor>(k_palette_slate700),
         std::make_unique<ImColor>(Theme::color_imgui(
             Platform::Color::WindowBgAlternate,
             Platform::ColorGroup::ActiveDisabled
@@ -192,7 +228,7 @@ void Theme::initialize_light_colors()
         std::make_unique<ImColor>(
             Theme::color_imgui(Platform::Color::WindowBgAlternate, Platform::ColorGroup::Hovered)
         ),
-        std::make_unique<ImColor>(120, 159, 250),
+        std::make_unique<ImColor>(k_palette_slate700),
         std::make_unique<ImColor>(Theme::color_imgui(
             Platform::Color::WindowBgAlternate,
             Platform::ColorGroup::ActiveDisabled
@@ -200,11 +236,11 @@ void Theme::initialize_light_colors()
     };
 
     m_colors[Platform::Color::RadioButtonBackground] = ColorEntry{
-        {127, 127, 127},
-        std::make_unique<ImColor>(Imgui::adjust_brightness({127, 127, 127}, 1.5f)),
-        std::make_unique<ImColor>(Imgui::adjust_brightness({127, 127, 127}, 1.2f)),
+        ImColor(127, 127, 127),
+        std::make_unique<ImColor>(Imgui::adjust_brightness(ImColor(127, 127, 127), 1.5f)),
+        std::make_unique<ImColor>(Imgui::adjust_brightness(ImColor(127, 127, 127), 1.2f)),
         std::make_unique<ImColor>(217, 217, 217),
-        std::make_unique<ImColor>(Imgui::adjust_brightness({127, 127, 127}, 1.7f))
+        std::make_unique<ImColor>(Imgui::adjust_brightness(ImColor(127, 127, 127), 1.7f))
     };
 
     m_colors[Platform::Color::RadioButton] = ColorEntry{
@@ -215,24 +251,37 @@ void Theme::initialize_light_colors()
         std::make_unique<ImColor>(
             Theme::color_imgui(Platform::Color::WindowBgAlternate, Platform::ColorGroup::Hovered)
         ),
-        std::make_unique<ImColor>(120, 159, 250),
+        std::make_unique<ImColor>(k_palette_teal500),
         std::make_unique<ImColor>(
             Imgui::adjust_brightness(Theme::color_imgui(Platform::Color::WindowBgAlternate), 1.9f)
         )
     };
 
-    // Keep Prusa orange as the primary accent; it pops well on white/light grey
-    m_colors[Platform::Color::AccentPrimary]    = ColorEntry{k_prusa_orange};
-    m_colors[Platform::Color::AccentSecondary]  = ColorEntry{{0.32f, 0.48f, 0.84f, 1.0f}};
-    m_colors[Platform::Color::AccentTertiary]   = ColorEntry{{175, 119, 255}};
-    m_colors[Platform::Color::Error]            = ColorEntry{{0.79f, 0.18f, 0.14f, 1.0f}};
-    m_colors[Platform::Color::Warning]          = ColorEntry{{0.85f, 0.47f, 0.02f, 1.0f}};
-    m_colors[Platform::Color::ModalWindowDimBg] = ColorEntry{{0.20f, 0.20f, 0.20f, 0.35f}};
+    m_colors[Platform::Color::AccentPrimary]   = auto_entry_light(k_palette_teal500);
+    m_colors[Platform::Color::AccentSecondary] = auto_entry_light(k_palette_sage300);
+    m_colors[Platform::Color::AccentTertiary]  = ColorEntry{ImColor(175, 119, 255)};
+    m_colors[Platform::Color::Error]           = ColorEntry{k_error_light};
+    m_colors[Platform::Color::Warning]         = ColorEntry{k_warning_light};
+    m_colors[Platform::Color::ModalWindowDimBg] = ColorEntry{ImColor(0.20f, 0.20f, 0.20f, 0.35f)};
 
-    m_colors[Platform::Color::SceneBgTop]         = ColorEntry{{0.75f, 0.75f, 0.75f, 1.0f}};
-    m_colors[Platform::Color::SceneBgBottom]      = ColorEntry{{0.62f, 0.62f, 0.62f, 1.0f}};
-    m_colors[Platform::Color::SceneBgErrorTop]    = ColorEntry{{0.95f, 0.70f, 0.70f, 1.0f}};
-    m_colors[Platform::Color::SceneBgErrorBottom] = ColorEntry{{0.85f, 0.55f, 0.55f, 1.0f}};
+    // SceneBgTop -> SceneBgBottom: #EEF1EC -> Sage100
+    m_colors[Platform::Color::SceneBgTop]         = ColorEntry{ImColor(0xEE, 0xF1, 0xEC)};
+    m_colors[Platform::Color::SceneBgBottom]      = ColorEntry{k_palette_sage100};
+    m_colors[Platform::Color::SceneBgErrorTop]    = ColorEntry{ImColor(0.95f, 0.70f, 0.70f, 1.0f)};
+    m_colors[Platform::Color::SceneBgErrorBottom] = ColorEntry{ImColor(0.85f, 0.55f, 0.55f, 1.0f)};
+
+    // SLA semantic colors (PLAN 2.1 / A8)
+    m_colors[Platform::Color::SlaModelResin]      = ColorEntry{k_palette_sage300}; // fallback; overridden by material_colour at runtime
+    m_colors[Platform::Color::SlaSupport]         = ColorEntry{k_palette_slate700};
+    m_colors[Platform::Color::SlaPad]             = ColorEntry{k_palette_teal500};
+    m_colors[Platform::Color::SlaSupportPointAuto] = ColorEntry{k_palette_teal500};
+    m_colors[Platform::Color::SlaSupportPointManual] = ColorEntry{k_palette_slate900};
+    m_colors[Platform::Color::SlaIslandWarning]   = ColorEntry{k_warning_light};
+    m_colors[Platform::Color::SlaDrainHole]       = ColorEntry{k_palette_slate900};
+    m_colors[Platform::Color::SlaHollowInterior]  = ColorEntry{k_palette_sage300};
+    m_colors[Platform::Color::SlaCupWarning]      = ColorEntry{k_warning_light};
+    // SlaLayerArea: line and fill handled at render time; token maps to line color
+    m_colors[Platform::Color::SlaLayerArea]       = ColorEntry{k_palette_teal500};
 }
 
 const Domain::ColorRGBA& Theme::color(Platform::Color color_id, Platform::ColorGroup group_id) const
