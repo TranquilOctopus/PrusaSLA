@@ -2,8 +2,12 @@
 
 #include <Slic3r/App/Theme.hpp>
 #include <Slic3r/App/ThemeTypes.hpp>
+#include <cmath>
 
 using namespace Slic3r::App;
+
+// ColorRGBA stores floats in [0, 1]; compare as rounded 8-bit channels.
+static int u8(float v) { return static_cast<int>(std::lround(v * 255.0f)); }
 
 TEST_CASE("[Theme] Every Platform::Color has an entry in both themes")
 {
@@ -80,57 +84,57 @@ TEST_CASE("[Theme] Dark theme uses SLA palette colors")
     const auto& error = dark_theme.color(Platform::Color::Error);
 
     // Sage100 = #CAD2C5 = (202, 210, 197)
-    REQUIRE(text.r == 202);
-    REQUIRE(text.g == 210);
-    REQUIRE(text.b == 197);
+    REQUIRE(u8(text.r()) == 202);
+    REQUIRE(u8(text.g()) == 210);
+    REQUIRE(u8(text.b()) == 197);
 
     // Slate900 = #2F3E46 = (47, 62, 70)
-    REQUIRE(window_bg.r == 47);
-    REQUIRE(window_bg.g == 62);
-    REQUIRE(window_bg.b == 70);
+    REQUIRE(u8(window_bg.r()) == 47);
+    REQUIRE(u8(window_bg.g()) == 62);
+    REQUIRE(u8(window_bg.b()) == 70);
 
     // Slate700 = #354F52 = (53, 79, 82)
-    REQUIRE(window_bg_alt.r == 53);
-    REQUIRE(window_bg_alt.g == 79);
-    REQUIRE(window_bg_alt.b == 82);
+    REQUIRE(u8(window_bg_alt.r()) == 53);
+    REQUIRE(u8(window_bg_alt.g()) == 79);
+    REQUIRE(u8(window_bg_alt.b()) == 82);
 
     // Sage300 = #84A98C = (132, 169, 140)
-    REQUIRE(accent_primary.r == 132);
-    REQUIRE(accent_primary.g == 169);
-    REQUIRE(accent_primary.b == 140);
+    REQUIRE(u8(accent_primary.r()) == 132);
+    REQUIRE(u8(accent_primary.g()) == 169);
+    REQUIRE(u8(accent_primary.b()) == 140);
 
     // Teal500 = #52796F = (82, 121, 111)
-    REQUIRE(accent_secondary.r == 82);
-    REQUIRE(accent_secondary.g == 121);
-    REQUIRE(accent_secondary.b == 111);
+    REQUIRE(u8(accent_secondary.r()) == 82);
+    REQUIRE(u8(accent_secondary.g()) == 121);
+    REQUIRE(u8(accent_secondary.b()) == 111);
 
     // Button uses WindowBgAlternate as default
-    REQUIRE(button.r == 53);
-    REQUIRE(button.g == 79);
-    REQUIRE(button.b == 82);
+    REQUIRE(u8(button.r()) == 53);
+    REQUIRE(u8(button.g()) == 79);
+    REQUIRE(u8(button.b()) == 82);
 
     // SLA semantic colors
-    REQUIRE(sla_model_resin.r == 132); // Sage300 fallback
-    REQUIRE(sla_model_resin.g == 169);
-    REQUIRE(sla_model_resin.b == 140);
+    REQUIRE(u8(sla_model_resin.r()) == 132); // Sage300 fallback
+    REQUIRE(u8(sla_model_resin.g()) == 169);
+    REQUIRE(u8(sla_model_resin.b()) == 140);
 
-    REQUIRE(sla_support.r == 202); // Sage100
-    REQUIRE(sla_support.g == 210);
-    REQUIRE(sla_support.b == 197);
+    REQUIRE(u8(sla_support.r()) == 202); // Sage100
+    REQUIRE(u8(sla_support.g()) == 210);
+    REQUIRE(u8(sla_support.b()) == 197);
 
-    REQUIRE(sla_pad.r == 82); // Teal500
-    REQUIRE(sla_pad.g == 121);
-    REQUIRE(sla_pad.b == 111);
+    REQUIRE(u8(sla_pad.r()) == 82); // Teal500
+    REQUIRE(u8(sla_pad.g()) == 121);
+    REQUIRE(u8(sla_pad.b()) == 111);
 
     // Warning dark = #E3A857 = (227, 168, 87)
-    REQUIRE(warning.r == 227);
-    REQUIRE(warning.g == 168);
-    REQUIRE(warning.b == 87);
+    REQUIRE(u8(warning.r()) == 227);
+    REQUIRE(u8(warning.g()) == 168);
+    REQUIRE(u8(warning.b()) == 87);
 
     // Error dark = #E07A6B = (224, 122, 107)
-    REQUIRE(error.r == 224);
-    REQUIRE(error.g == 122);
-    REQUIRE(error.b == 107);
+    REQUIRE(u8(error.r()) == 224);
+    REQUIRE(u8(error.g()) == 122);
+    REQUIRE(u8(error.b()) == 107);
 }
 
 TEST_CASE("[Theme] Light theme uses SLA palette colors")
@@ -151,55 +155,55 @@ TEST_CASE("[Theme] Light theme uses SLA palette colors")
     const auto& error = light_theme.color(Platform::Color::Error);
 
     // Slate900 = #2F3E46 = (47, 62, 70)
-    REQUIRE(text.r == 47);
-    REQUIRE(text.g == 62);
-    REQUIRE(text.b == 70);
+    REQUIRE(u8(text.r()) == 47);
+    REQUIRE(u8(text.g()) == 62);
+    REQUIRE(u8(text.b()) == 70);
 
     // WindowBg: Sage100 mixed 60% with white = #DFE4DC = (223, 228, 220)
-    REQUIRE(window_bg.r == 223);
-    REQUIRE(window_bg.g == 228);
-    REQUIRE(window_bg.b == 220);
+    REQUIRE(u8(window_bg.r()) == 223);
+    REQUIRE(u8(window_bg.g()) == 228);
+    REQUIRE(u8(window_bg.b()) == 220);
 
     // WindowBgAlternate: Sage100 = #CAD2C5 = (202, 210, 197)
-    REQUIRE(window_bg_alt.r == 202);
-    REQUIRE(window_bg_alt.g == 210);
-    REQUIRE(window_bg_alt.b == 197);
+    REQUIRE(u8(window_bg_alt.r()) == 202);
+    REQUIRE(u8(window_bg_alt.g()) == 210);
+    REQUIRE(u8(window_bg_alt.b()) == 197);
 
     // AccentPrimary: Teal500 = #52796F = (82, 121, 111)
-    REQUIRE(accent_primary.r == 82);
-    REQUIRE(accent_primary.g == 121);
-    REQUIRE(accent_primary.b == 111);
+    REQUIRE(u8(accent_primary.r()) == 82);
+    REQUIRE(u8(accent_primary.g()) == 121);
+    REQUIRE(u8(accent_primary.b()) == 111);
 
     // AccentSecondary: Sage300 = #84A98C = (132, 169, 140)
-    REQUIRE(accent_secondary.r == 132);
-    REQUIRE(accent_secondary.g == 169);
-    REQUIRE(accent_secondary.b == 140);
+    REQUIRE(u8(accent_secondary.r()) == 132);
+    REQUIRE(u8(accent_secondary.g()) == 169);
+    REQUIRE(u8(accent_secondary.b()) == 140);
 
     // Button uses WindowBgAlternate as default
-    REQUIRE(button.r == 202);
-    REQUIRE(button.g == 210);
-    REQUIRE(button.b == 197);
+    REQUIRE(u8(button.r()) == 202);
+    REQUIRE(u8(button.g()) == 210);
+    REQUIRE(u8(button.b()) == 197);
 
     // SLA semantic colors
-    REQUIRE(sla_model_resin.r == 132); // Sage300 fallback
-    REQUIRE(sla_model_resin.g == 169);
-    REQUIRE(sla_model_resin.b == 140);
+    REQUIRE(u8(sla_model_resin.r()) == 132); // Sage300 fallback
+    REQUIRE(u8(sla_model_resin.g()) == 169);
+    REQUIRE(u8(sla_model_resin.b()) == 140);
 
-    REQUIRE(sla_support.r == 53); // Slate700
-    REQUIRE(sla_support.g == 79);
-    REQUIRE(sla_support.b == 82);
+    REQUIRE(u8(sla_support.r()) == 53); // Slate700
+    REQUIRE(u8(sla_support.g()) == 79);
+    REQUIRE(u8(sla_support.b()) == 82);
 
-    REQUIRE(sla_pad.r == 82); // Teal500
-    REQUIRE(sla_pad.g == 121);
-    REQUIRE(sla_pad.b == 111);
+    REQUIRE(u8(sla_pad.r()) == 82); // Teal500
+    REQUIRE(u8(sla_pad.g()) == 121);
+    REQUIRE(u8(sla_pad.b()) == 111);
 
     // Warning light = #9A6A1F = (154, 106, 31)
-    REQUIRE(warning.r == 154);
-    REQUIRE(warning.g == 106);
-    REQUIRE(warning.b == 31);
+    REQUIRE(u8(warning.r()) == 154);
+    REQUIRE(u8(warning.g()) == 106);
+    REQUIRE(u8(warning.b()) == 31);
 
     // Error light = #B5483E = (181, 72, 62)
-    REQUIRE(error.r == 181);
-    REQUIRE(error.g == 72);
-    REQUIRE(error.b == 62);
+    REQUIRE(u8(error.r()) == 181);
+    REQUIRE(u8(error.g()) == 72);
+    REQUIRE(u8(error.b()) == 62);
 }

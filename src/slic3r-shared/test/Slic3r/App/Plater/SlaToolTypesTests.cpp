@@ -37,8 +37,8 @@ TEST_CASE("SlaSupportPoints and SlaHollow have UI info entries", "[ToolGizmosUiI
     REQUIRE(tool_icon(ToolType::SlaHollow) != Slic3r::App::Render::Icon::None);
 
     // Verify tool_key_code returns valid key codes
-    REQUIRE(tool_key_code(ToolType::SlaSupportPoints) != Slic3r::App::Platform::KeyCode::Unknown);
-    REQUIRE(tool_key_code(ToolType::SlaHollow) != Slic3r::App::Platform::KeyCode::Unknown);
+    REQUIRE(tool_key_code(ToolType::SlaSupportPoints) != Slic3r::App::Platform::KeyCode::None);
+    REQUIRE(tool_key_code(ToolType::SlaHollow) != Slic3r::App::Platform::KeyCode::None);
 }
 
 TEST_CASE("SlaSupportPoints and SlaHollow have correct names", "[ToolGizmosUiInfo]") {
