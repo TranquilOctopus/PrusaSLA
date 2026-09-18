@@ -1031,6 +1031,245 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->max = 20;
     def->init_fn = init_with((std::vector<double>{ 0., 0. }));
 
+    def = defs.add("lift_height", typeid(double));
+    def->location = Material;
+    def->label = L("Lift height");
+    def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
+    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Height to lift the build plate during layer separation.");
+    def->units = {L("mm")};
+    def->min = 0;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("lift_height_2", typeid(double));
+    def->location = Material;
+    def->label = L("Lift height (above area fill)");
+    def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
+    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Height to lift the build plate during layer separation for layers above area fill threshold.");
+    def->units = {L("mm")};
+    def->min = 0;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("lift_speed", typeid(double));
+    def->location = Material;
+    def->label = L("Lift speed");
+    def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
+    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Speed of the build plate lift during layer separation.");
+    def->units = {L("mm/s")};
+    def->min = 0;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("lift_speed_2", typeid(double));
+    def->location = Material;
+    def->label = L("Lift speed (above area fill)");
+    def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
+    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Speed of the build plate lift during layer separation for layers above area fill threshold.");
+    def->units = {L("mm/s")};
+    def->min = 0;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("retract_speed", typeid(double));
+    def->location = Material;
+    def->label = L("Retract speed");
+    def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
+    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Speed of the build plate retract after lift during layer separation.");
+    def->units = {L("mm/s")};
+    def->min = 0;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("retract_speed_2", typeid(double));
+    def->location = Material;
+    def->label = L("Retract speed (above area fill)");
+    def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
+    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Speed of the build plate retract after lift for layers above area fill threshold.");
+    def->units = {L("mm/s")};
+    def->min = 0;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("wait_before_lift", typeid(double));
+    def->location = Material;
+    def->label = L("Wait before lift");
+    def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
+    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Delay before starting the lift movement.");
+    def->units = {L("s")};
+    def->min = 0;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("wait_after_lift", typeid(double));
+    def->location = Material;
+    def->label = L("Wait after lift");
+    def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
+    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Delay after the lift movement before retract.");
+    def->units = {L("s")};
+    def->min = 0;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("wait_after_retract", typeid(double));
+    def->location = Material;
+    def->label = L("Wait after retract");
+    def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
+    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Delay after the retract movement before next exposure.");
+    def->units = {L("s")};
+    def->min = 0;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("light_pwm", typeid(int));
+    def->location = Material;
+    def->label = L("Light PWM");
+    def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
+    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->gui_type = ConfigItemDef::GUIType::spinbox;
+    def->tooltip = L("PWM value for the UV light (0-255).");
+    def->min = 0;
+    def->max = 255;
+    def->init_fn = init_with(255);
+
+    def = defs.add("bottom_lift_height", typeid(double));
+    def->location = Material;
+    def->label = L("Bottom lift height");
+    def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
+    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Height to lift the build plate during layer separation for bottom layers.");
+    def->units = {L("mm")};
+    def->min = 0;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("bottom_lift_height_2", typeid(double));
+    def->location = Material;
+    def->label = L("Bottom lift height (above area fill)");
+    def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
+    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Height to lift the build plate during layer separation for bottom layers above area fill threshold.");
+    def->units = {L("mm")};
+    def->min = 0;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("bottom_lift_speed", typeid(double));
+    def->location = Material;
+    def->label = L("Bottom lift speed");
+    def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
+    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Speed of the build plate lift during layer separation for bottom layers.");
+    def->units = {L("mm/s")};
+    def->min = 0;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("bottom_lift_speed_2", typeid(double));
+    def->location = Material;
+    def->label = L("Bottom lift speed (above area fill)");
+    def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
+    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Speed of the build plate lift during layer separation for bottom layers above area fill threshold.");
+    def->units = {L("mm/s")};
+    def->min = 0;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("bottom_retract_speed", typeid(double));
+    def->location = Material;
+    def->label = L("Bottom retract speed");
+    def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
+    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Speed of the build plate retract after lift for bottom layers.");
+    def->units = {L("mm/s")};
+    def->min = 0;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("bottom_retract_speed_2", typeid(double));
+    def->location = Material;
+    def->label = L("Bottom retract speed (above area fill)");
+    def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
+    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Speed of the build plate retract after lift for bottom layers above area fill threshold.");
+    def->units = {L("mm/s")};
+    def->min = 0;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("bottom_wait_before_lift", typeid(double));
+    def->location = Material;
+    def->label = L("Bottom wait before lift");
+    def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
+    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Delay before starting the lift movement for bottom layers.");
+    def->units = {L("s")};
+    def->min = 0;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("bottom_wait_after_lift", typeid(double));
+    def->location = Material;
+    def->label = L("Bottom wait after lift");
+    def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
+    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Delay after the lift movement before retract for bottom layers.");
+    def->units = {L("s")};
+    def->min = 0;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("bottom_wait_after_retract", typeid(double));
+    def->location = Material;
+    def->label = L("Bottom wait after retract");
+    def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
+    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Delay after the retract movement before next exposure for bottom layers.");
+    def->units = {L("s")};
+    def->min = 0;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("bottom_light_pwm", typeid(int));
+    def->location = Material;
+    def->label = L("Bottom light PWM");
+    def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
+    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->gui_type = ConfigItemDef::GUIType::spinbox;
+    def->tooltip = L("PWM value for the UV light for bottom layers (0-255).");
+    def->min = 0;
+    def->max = 255;
+    def->init_fn = init_with(255);
+
+    def = defs.add("bottom_layer_count", typeid(int));
+    def->location = Material;
+    def->label = L("Bottom layer count");
+    def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
+    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->gui_type = ConfigItemDef::GUIType::spinbox;
+    def->tooltip = L("Number of bottom layers to use bottom_* parameters for.");
+    def->min = 0;
+    def->init_fn = init_with(0);
+
+    def = defs.add("material_source_note", typeid(std::string));
+    def->location = Material;
+    def->label = L("Material source note");
+    def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialTemperatures_MaterialProperty;
+    def->category = ConfigItemDef::Category::Filament_MaterialTemperatures;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Records where an imported resin profile came from.");
+    def->init_fn = init_with("");
+
     for (const std::pair<std::string, std::string> prefix : { std::make_pair("", L("Default")), std::make_pair("branching", L("Branching")) }) {
         def = defs.add(prefix.first + "support_head_front_diameter", typeid(double));
         def->label = prefix.second;
