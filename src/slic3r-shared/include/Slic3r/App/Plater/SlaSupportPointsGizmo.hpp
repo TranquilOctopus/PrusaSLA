@@ -2,7 +2,7 @@
 
 #include "Slic3r/App/Scene/IGizmo.hpp"
 #include "Slic3r/App/Plater/GizmoWindow.hpp"
-#include "Slic3r/Biz/GeneratedSupportPointsCache.hpp"
+#include "Slic3r/Biz/SLAObjectCache.hpp"
 #include "Slic3r/Biz/Scene/SceneInteractor.hpp"
 #include "Slic3r/Domain/ObjectID.hpp"
 #include "Slic3r/Domain/SelectionId.hpp"
@@ -24,7 +24,8 @@ namespace Slic3r::App::Plater {
 
 class SlaSupportPointsGizmo :
     public Scene::IToolGizmo,
-    public Biz::Scene::ISceneSelectionChangedListener
+    public Biz::Scene::ISceneSelectionChangedListener,
+    public Biz::ISLAObjectCacheChangedListener
 {
 public:
     SlaSupportPointsGizmo(
@@ -46,6 +47,8 @@ public:
         const Biz::Scene::ObjectSelection& selection
     ) override;
 
+    void on_sla_object_cache_changed(const Domain::SlicingId& id, Domain::ObjectID object_id) override;
+
     void provide_gizmo_controller(Scene::IGizmoController& controller) override;
 
     Scene::GizmoActivationState on_mouse(Scene::GizmoEventContext& ctx, bool only_active) override
@@ -57,7 +60,7 @@ public:
 
 private:
     void start_generation();
-    void on_generation_completed(std::optional<Biz::ObjectSupportPointsRef> support_points);
+    void on_generation_completed(std::optional<Slic3r::Domain::SLA::SupportPoints> support_points);
     void apply_generated_points();
     void discard_generated_points();
 
@@ -68,7 +71,7 @@ private:
     std::optional<Domain::SlicingId> m_generation_slicing_id;
     Domain::ObjectID m_selected_object_id;
     Domain::SelectionId m_selected_instance_id{Domain::INVALID_ID};
-    std::optional<Biz::ObjectSupportPointsRef> m_generated_support_points;
+    std::optional<Slic3r::Domain::SLA::SupportPoints> m_generated_support_points;
     bool m_has_generated_points = false;
     Scene::IGizmoController* m_gizmo_controller = nullptr;
 };
