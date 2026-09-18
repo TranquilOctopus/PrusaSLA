@@ -59,6 +59,8 @@
 #include "Slic3r/App/Plater/VariableLayerHeightDialog.hpp"
 #include "Slic3r/App/Plater/HeightRangeGizmo.hpp"
 #include "Slic3r/App/Plater/HeightRangeDialog.hpp"
+#include "Slic3r/App/Plater/SlaSupportPointsGizmo.hpp"
+#include "Slic3r/App/Plater/SlaHollowGizmo.hpp"
 #include "Slic3r/App/Plater/ToolGizmosUiInfo.hpp"
 #include "Slic3r/App/Navigator.hpp"
 #include "Slic3r/App/ThumbnailStoreUpdater.hpp"
@@ -774,6 +776,18 @@ void PlaterRenderModule::init_scene_layout()
         tool_name(Scene::ToolType::HeightRangeGizmo)
     );
 
+    m_toolbar_sla_support_points = m_layout->add_toolbar_item(
+        ToolbarID::ToolRight,
+        tool_icon(Scene::ToolType::SlaSupportPoints),
+        tool_name(Scene::ToolType::SlaSupportPoints)
+    );
+
+    m_toolbar_sla_hollow = m_layout->add_toolbar_item(
+        ToolbarID::ToolRight,
+        tool_icon(Scene::ToolType::SlaHollow),
+        tool_name(Scene::ToolType::SlaHollow)
+    );
+
     ToolBarButton* plater_button = m_layout->add_toolbar_item_switch(
         ToolbarID::Mode,
         Render::Icon::ObjectIcon,
@@ -873,6 +887,14 @@ void PlaterRenderModule::init_dialog_navigation()
         m_variable_layer_height_gizmo->release_ui_window()
     );
     init_gizmo_dialog(Scene::ToolType::HeightRangeGizmo, m_height_range_gizmo->release_ui_window());
+    init_gizmo_dialog(
+        Scene::ToolType::SlaSupportPoints,
+        m_sla_support_points_gizmo->release_ui_window()
+    );
+    init_gizmo_dialog(
+        Scene::ToolType::SlaHollow,
+        m_sla_hollow_gizmo->release_ui_window()
+    );
 }
 
 void PlaterRenderModule::update_object_selection()
@@ -1088,6 +1110,12 @@ void PlaterRenderModule::init_gizmos()
     m_project_interactor.scene_interactor().add_listener<ISceneSelectionChangedListener>(
         m_height_range_gizmo
     );
+    m_sla_support_points_gizmo = &m_gizmo_manager->add_tool_gizmo<SlaSupportPointsGizmo>(
+        *m_scene_presenter
+    );
+    m_sla_hollow_gizmo = &m_gizmo_manager->add_tool_gizmo<SlaHollowGizmo>(
+        *m_scene_presenter
+    );
 
     m_command_binding_manager.set_gizmos_command_registry(&m_gizmo_manager->command_registry());
 }
@@ -1127,6 +1155,10 @@ ToolBarButton* PlaterRenderModule::get_toolbar_button(Scene::ToolType tool_type)
         return m_toolbar_variable_layer_height;
     case Scene::ToolType::HeightRangeGizmo:
         return m_toolbar_height_range;
+    case Scene::ToolType::SlaSupportPoints:
+        return m_toolbar_sla_support_points;
+    case Scene::ToolType::SlaHollow:
+        return m_toolbar_sla_hollow;
     case Scene::ToolType::None:
         return nullptr;
     default:
