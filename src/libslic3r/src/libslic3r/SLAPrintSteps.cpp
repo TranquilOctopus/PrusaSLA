@@ -509,6 +509,7 @@ void SLAPrint::Steps::generate_preview(SLAPrintObject& po, SLAPrintObjectStep st
         .object_id = po.m_model_object->id(),
         .instance_trafos = get_instance_trafos(po),
         .mesh = std::make_shared<const TriangleMesh>(std::move(m), std::move(stats)),
+        .object_trafo = po.trafo(),
         .issues = std::move(issues)
     };
 }

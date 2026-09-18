@@ -95,6 +95,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Plater/HeightRangeDialog.cpp
         include/Slic3r/App/Plater/SlaSupportPointsGizmo.hpp
         src/Slic3r/App/Plater/SlaSupportPointsGizmo.cpp
+        include/Slic3r/App/Plater/SlaSupportPointsDialog.hpp
+        src/Slic3r/App/Plater/SlaSupportPointsDialog.cpp
         include/Slic3r/App/Plater/SlaHollowGizmo.hpp
         src/Slic3r/App/Plater/SlaHollowGizmo.cpp
         include/Slic3r/App/Plater/HeightRangeRow.hpp
@@ -1546,6 +1548,8 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/App/Plater/SurfaceMesh.cpp
 
             test/Slic3r/App/Plater/SlaToolTypesTests.cpp
+
+            test/Slic3r/App/Plater/SlaSupportPointsGizmoTests.cpp
 
             test/Slic3r/App/PresetUpdater/PresetUpdaterControllerStateTests.cpp
             test/Slic3r/App/PresetUpdater/PresetUpdaterControllerTests.cpp

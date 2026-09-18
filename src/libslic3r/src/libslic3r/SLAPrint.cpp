@@ -924,6 +924,7 @@ Biz::Slicing::ApplyStatus::Status SLAPrint::update(
             Biz::Slicing::Sla::Object slicing_object{};
             slicing_object.object_id = id;
             slicing_object.instance_trafos = get_instance_trafos(**it);
+            slicing_object.object_trafo = (**it).trafo();
             // Sending just trafos means the object was not invalidated.
             m_on_sla_object(slicing_object);
         } else {
@@ -1171,6 +1172,7 @@ void SLAPrint::process()
                     throw_if_canceled();
                     po->set_done(step);
                     po->m_preview->instance_trafos = get_instance_trafos(*po);
+                    po->m_preview->object_trafo = po->trafo();
                     m_on_sla_object(*po->m_preview);
                 }
 
