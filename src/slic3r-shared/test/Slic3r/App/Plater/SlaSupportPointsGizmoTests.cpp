@@ -131,4 +131,28 @@ TEST_CASE("SlaSupportPointsGizmo - transform_support_points", "[SlaSupportPoints
         REQUIRE(result[2].head_front_radius == 0.4f);
         REQUIRE(result[2].type == SupportPointType::manual_add);
     }
+
+    SECTION("Inverse transform recovers original points within tolerance")
+    {
+        Slic3r::Domain::SLA::SupportPoints input;
+        input.push_back({Vec3f{10.0f, 20.0f, 5.0f}, 0.5f, SupportPointType::island});
+        input.push_back({Vec3f{15.0f, 25.0f, 6.0f}, 0.6f, SupportPointType::slope});
+        input.push_back({Vec3f{5.0f, 30.0f, 4.0f}, 0.4f, SupportPointType::manual_add});
+        Transform3d transform = Transform3d::Identity();
+        transform.translate(Vec3d{1.0, 2.0, 3.0});
+        transform.rotate(Eigen::AngleAxisd(M_PI / 4, Vec3d::UnitZ()));
+        transform.scale(Vec3d{1.2, 0.8, 1.0});
+
+        auto transformed = transform_support_points(input, transform);
+        auto recovered = transform_support_points(transformed, transform.inverse());
+
+        REQUIRE(recovered.size() == input.size());
+        for (size_t i = 0; i < input.size(); ++i) {
+            REQUIRE(std::abs(recovered[i].pos.x() - input[i].pos.x()) < 1e-5f);
+            REQUIRE(std::abs(recovered[i].pos.y() - input[i].pos.y()) < 1e-5f);
+            REQUIRE(std::abs(recovered[i].pos.z() - input[i].pos.z()) < 1e-5f);
+            REQUIRE(recovered[i].head_front_radius == input[i].head_front_radius);
+            REQUIRE(recovered[i].type == input[i].type);
+        }
+    }
 }

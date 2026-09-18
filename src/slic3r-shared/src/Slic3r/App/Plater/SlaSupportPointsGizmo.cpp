@@ -195,71 +195,12 @@ private:
 
         // Convert from world coordinates (first instance + printer corrections) to mesh coordinates
         Domain::SLA::SupportPoints world_points = *sla_object.support_points;
-        Domain::SLA::SupportPoints mesh_points = convert_world_to_mesh(world_points);
-        return mesh_points;
-    }
-
-    Domain::SLA::SupportPoints convert_world_to_mesh(const Domain::SLA::SupportPoints& world_points) const
-    {
-        // Get the model object to compute the transform
-        const Domain::Project& project = m_project_interactor.project(m_slicing_id.project_id);
-        const Domain::ModelObject* model_object = project.find_object_by_id(m_model_object_id);
-        if (!model_object || model_object->instances.empty()) {
-            return world_points; // Fallback: return as-is
-        }
-
-        // Get the first instance (same as SLAPrint::sla_trafo uses)
-        const Domain::ModelInstance* first_instance = model_object->instances.front();
-        if (!first_instance) {
-            return world_points;
-        }
-
-        // Get the bed instance to access printer config (relative_correction)
-        const Domain::BedInstance* bed_instance = project.find_bed_instance_by_id(m_slicing_id.bed_instance_id);
-        if (!bed_instance) {
-            return world_points;
-        }
-
-        // Get the config container for this bed
-        const Domain::ConfigContainer* config_container = project.find_config_container_by_bed_instance_id(m_slicing_id.bed_instance_id);
-        if (!config_container) {
-            return world_points;
-        }
-
-        // Build print config to read relative_correction
-        Domain::ConfigPack config_pack = config_container->build_print_config();
-        if (!std::holds_alternative<Domain::ConfigPackSLA>(config_pack)) {
-            return world_points;
-        }
-        const Domain::ConfigPackSLA& sla_config = std::get<Domain::ConfigPackSLA>(config_pack);
-        Domain::FullConfigSLA full_config(sla_config);
-        Domain::SLAPrintConfigView print_config(full_config);
-
-        // Compute relative_correction (same as SLAPrint::relative_correction)
-        Vec3d relative_correction(1., 1., 1.);
-        if (print_config.get<std::vector<double>>("relative_correction").size() >= 2) {
-            relative_correction.x() = print_config.get<double>("relative_correction_x");
-            relative_correction.y() = print_config.get<double>("relative_correction_y");
-            relative_correction.z() = print_config.get<double>("relative_correction_z");
-        }
-
-        // Compute sla_trafo (same as SLAPrint::sla_trafo)
-        Transform3d sla_trafo = Transform3d::Identity();
-        sla_trafo.translate(Vec3d{ 0., 0., first_instance->get_offset().z() * relative_correction.z() });
-        sla_trafo.linear() = Eigen::DiagonalMatrix<double, 3, 3>(relative_correction) * first_instance->get_matrix().linear();
-        if (first_instance->is_left_handed()) {
-            sla_trafo = Eigen::Scaling(Vec3d(-1., 1., 1.)) * sla_trafo;
-        }
-
-        // Invert to get world -> mesh transform
-        Transform3d world_to_mesh = sla_trafo.inverse();
-
-        // Apply inverse transform to all points
         Domain::SLA::SupportPoints mesh_points;
         mesh_points.reserve(world_points.size());
+        const Transform3f inv = sla_object.object_trafo.inverse().cast<float>();
         for (const auto& sp : world_points) {
             Domain::SLA::SupportPoint mesh_sp = sp;
-            mesh_sp.pos = (world_to_mesh * sp.pos.cast<double>()).cast<float>();
+            mesh_sp.pos = inv * sp.pos;
             mesh_points.push_back(mesh_sp);
         }
         return mesh_points;
@@ -430,7 +371,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     }
 
     const Domain::Project& project = m_project_interactor.project(project_id);
-    const Domain::ModelObject* model_object = project.find_object_by_id(element.object_id);
+    const Domain::ModelObject* model_object = project.find_object_by_id(element.object_id.id);
     if (!model_object) {
         m_dialog->set_generate_enabled(false);
         m_dialog->set_apply_enabled(false);

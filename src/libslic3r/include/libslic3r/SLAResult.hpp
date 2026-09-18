@@ -80,6 +80,9 @@ struct Object{
     // or at least an approximation of that.
     std::shared_ptr<const TriangleMesh> mesh;
 
+    // Transformation from model mesh coordinates to the frame of mesh/support_points (SLAPrintObject::trafo()).
+    Domain::Transform3d object_trafo = Domain::Transform3d::Identity();
+
     // Mesh of the supporting structure
     // Note: Support tree could be shared across build plate
     std::shared_ptr<const TriangleMesh> support_structure;
