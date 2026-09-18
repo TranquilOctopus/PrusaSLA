@@ -187,7 +187,7 @@ private:
         m_state = State::SlicingRequested;
         m_slicing_interactor.slice_bed(
             m_slicing_id,
-            SliceUntilStep{Slic3r::posSupportSpotsSearch, m_model_object_id}
+            SliceUntilStep{Slic3r::slaposSupportPoints, m_model_object_id}
         );
     }
 
