@@ -13,17 +13,17 @@ namespace Slic3r::App {
 // Palette table (PLAN 2.1): the five base colors plus warning amber and error red.
 // These are the only hard-coded hex values allowed outside this table.
 // All other colors must be derived from these tokens.
-static constexpr ImVec4 k_palette_sage100  = ImColor(0xCA, 0xD2, 0xC5); // #CAD2C5
-static constexpr ImVec4 k_palette_sage300  = ImColor(0x84, 0xA9, 0x8C); // #84A98C
-static constexpr ImVec4 k_palette_teal500  = ImColor(0x52, 0x79, 0x6F); // #52796F
-static constexpr ImVec4 k_palette_slate700 = ImColor(0x35, 0x4F, 0x52); // #354F52
-static constexpr ImVec4 k_palette_slate900 = ImColor(0x2F, 0x3E, 0x46); // #2F3E46
+static const ImColor k_palette_sage100(0xCA, 0xD2, 0xC5); // #CAD2C5
+static const ImColor k_palette_sage300(0x84, 0xA9, 0x8C); // #84A98C
+static const ImColor k_palette_teal500(0x52, 0x79, 0x6F); // #52796F
+static const ImColor k_palette_slate700(0x35, 0x4F, 0x52); // #354F52
+static const ImColor k_palette_slate900(0x2F, 0x3E, 0x46); // #2F3E46
 
 // Warning / Error colors (PLAN 2.1 rule 3)
-static constexpr ImVec4 k_warning_dark  = ImColor(0xE3, 0xA8, 0x57); // #E3A857
-static constexpr ImVec4 k_error_dark    = ImColor(0xE0, 0x7A, 0x6B); // #E07A6B
-static constexpr ImVec4 k_warning_light = ImColor(0x9A, 0x6A, 0x1F); // #9A6A1F
-static constexpr ImVec4 k_error_light   = ImColor(0xB5, 0x48, 0x3E); // #B5483E
+static const ImColor k_warning_dark(0xE3, 0xA8, 0x57); // #E3A857
+static const ImColor k_error_dark(0xE0, 0x7A, 0x6B); // #E07A6B
+static const ImColor k_warning_light(0x9A, 0x6A, 0x1F); // #9A6A1F
+static const ImColor k_error_light(0xB5, 0x48, 0x3E); // #B5483E
 
 // Prusa brand orange - used as accent in light mode (legacy, to be removed)
 static constexpr ImVec4 k_prusa_orange{0.874f, 0.365f, 0.176f, 1.00f};
@@ -77,7 +77,7 @@ void Theme::initialize_dark_colors()
     };
     m_colors[Platform::Color::TextLink] = ColorEntry{
         k_palette_sage300,
-        std::make_unique<ImColor>(k_palette_sage300.x * 0.5f, k_palette_sage300.y * 0.5f, k_palette_sage300.z * 0.5f, 1.00f) // disabled
+        std::make_unique<ImColor>(k_palette_sage300.Value.x * 0.5f, k_palette_sage300.Value.y * 0.5f, k_palette_sage300.Value.z * 0.5f, 1.00f) // disabled
     };
     m_colors[Platform::Color::WindowBg]          = auto_entry(k_palette_slate900);
     m_colors[Platform::Color::WindowBgAlternate] = auto_entry(k_palette_slate700);
@@ -145,7 +145,7 @@ void Theme::initialize_dark_colors()
 
     m_colors[Platform::Color::AccentPrimary] = auto_entry(k_palette_sage300);
     m_colors[Platform::Color::AccentPrimary].color_disabled =
-        std::make_unique<ImColor>(k_palette_sage300.x * 0.7f, k_palette_sage300.y * 0.7f, k_palette_sage300.z * 0.7f, 1.0f);
+        std::make_unique<ImColor>(k_palette_sage300.Value.x * 0.7f, k_palette_sage300.Value.y * 0.7f, k_palette_sage300.Value.z * 0.7f, 1.0f);
     m_colors[Platform::Color::AccentSecondary] = auto_entry(k_palette_teal500);
     m_colors[Platform::Color::AccentTertiary]  = ColorEntry{ImColor(175, 119, 255)};
     m_colors[Platform::Color::Error]           = ColorEntry{k_error_dark};
