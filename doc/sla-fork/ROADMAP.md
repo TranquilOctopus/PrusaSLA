@@ -79,10 +79,9 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
 
 ## M2: SLA editing tools (porting the legacy gizmos)
 
-- [ ] **M2.1a** SLA generated-points channel: after `slaposSupportPoints`, `SLAPrint` publishes each object's auto-generated support points (mesh coordinates, head radius, point type) to Biz, mirroring the FDM path (`Print::OnGeneratedSupportPoints` in `Print.hpp`, wired in `InitPrint.cpp`, delivered by `SlicingInteractor` to `IGeneratedSupportPointsListener`). Test: slicing a fixture fires the callback with a non-empty point list. · M · needs M0.7
-  Why: `GeneratedSupportPointsCache` is only filled by the FDM `Print`; SLA generates points internally and never publishes them.
-- [ ] **M2.1b** Support points tool, part 1 UI: dialog, Generate through the M2.1a channel, and apply/discard. Draft on branch `sla/M2.1-support-points-tool` (dialog and header compile; gizmo .cpp still fails on a listener registration and must be rewired to the M2.1a channel). · M · needs M2.1a
-- [ ] **M2.2** Support points tool, part 2: add, remove and move points, plus head diameter. · M · needs M2.1b
+- [ ] **M2.1** Support points tool, part 1: dialog, Generate (slice until `slaposSupportPoints`, read the points from `Biz::SLAObjectCache` → `Sla::Object::support_points`), and apply/discard. · M · needs M0.7
+  Note: `GeneratedSupportPointsCache` is FDM-only (filled by `Print`, never by `SLAPrint`); don't use it. Draft on branch `sla/M2.1-support-points-tool`: dialog and header compile; the gizmo .cpp must be rewired to `SLAObjectCache`.
+- [ ] **M2.2** Support points tool, part 2: add, remove and move points, plus head diameter. · M · needs M2.1
 - [ ] **M2.3** Support points tool, part 3: island markers and clipping plane. Write a parity checklist against the legacy `GLGizmoSlaSupports` in `doc/sla-fork/parity/support-points.md`. · M · needs M2.2
 - [ ] **M2.4** Hollow tool, part 1: hollowing parameters and preview. · M · needs M0.7
 - [ ] **M2.5** Hollow tool, part 2: place, move and resize drain holes, plus a parity checklist against `GLGizmoHollow`. · M · needs M2.4
