@@ -7,8 +7,6 @@
 #include <functional>
 #include <map>
 
-#include "libslic3r/ConfigViews.hpp"
-#include "libslic3r/SLA/RasterBase.hpp"
 #include "libslic3r/SLAResult.hpp"
 
 namespace Slic3r::Biz::PrintHost::Sla {
@@ -30,8 +28,6 @@ public:
     /// The file data type this format produces
     virtual Slic3r::Biz::Slicing::Sla::FileDataType file_data_type() const = 0;
 
-    /// Create a rasterizer for this format
-    virtual std::unique_ptr<ISlaRasterizer> create_rasterizer(const SLAPrintConfigView& cfg) const = 0;
 
     /// Write the slicing result to a file
     /// Throws exception on failure (no space, no privilege, etc.)

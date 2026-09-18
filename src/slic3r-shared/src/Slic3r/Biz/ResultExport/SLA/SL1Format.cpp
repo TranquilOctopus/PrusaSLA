@@ -1,9 +1,6 @@
 #include "Slic3r/Biz/ResultExport/SLA/SlaArchiveFormat.hpp"
 #include "Slic3r/Biz/ResultExport/SLA/SL1.hpp"
 
-#include <libslic3r/Format/SL1.hpp>
-#include <libslic3r/Format/SL1_SVG.hpp>
-
 #include <vector>
 #include <memory>
 #include <string>
@@ -18,11 +15,6 @@ public:
     std::vector<std::string> extensions() const override { return {"sl1", "sl1s", "zip"}; }
     Slic3r::Biz::Slicing::Sla::FileDataType file_data_type() const override { return Slic3r::Biz::Slicing::Sla::FileDataType::sl1_png; }
 
-    std::unique_ptr<ISlaRasterizer> create_rasterizer(const SLAPrintConfigView& cfg) const override
-    {
-        return Slic3r::create_sl1_rasterizer(cfg);
-    }
-
     void store(const std::string& file_path, const Biz::Slicing::SLAResultData& data) const override
     {
         store_sl1(file_path, data);
@@ -36,11 +28,6 @@ public:
     std::string description() const override { return "Prusa SL1/SL1S SVG format"; }
     std::vector<std::string> extensions() const override { return {"sl1svg"}; }
     Slic3r::Biz::Slicing::Sla::FileDataType file_data_type() const override { return Slic3r::Biz::Slicing::Sla::FileDataType::sl1_svg; }
-
-    std::unique_ptr<ISlaRasterizer> create_rasterizer(const SLAPrintConfigView& cfg) const override
-    {
-        return Slic3r::create_sl1_svg_rasterizer(cfg);
-    }
 
     void store(const std::string& file_path, const Biz::Slicing::SLAResultData& data) const override
     {
