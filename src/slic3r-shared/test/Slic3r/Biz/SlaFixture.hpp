@@ -1,5 +1,9 @@
 #pragma once
 
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/trompeloeil.hpp>
+#include <catch2/generators/catch_generators.hpp>
+
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/Biz/Platform/PlatformServices.hpp"
 #include "Slic3r/Biz/SecretStoreDummy.hpp"
@@ -21,9 +25,10 @@
 #include <boost/dll/runtime_symbol_info.hpp>
 #include <boost/nowide/fstream.hpp>
 
-namespace Slic3r::Biz::Slicing {
-struct SLAResultData;
-}
+using Slic3r::Test::is_gcode_sane;
+using namespace Slic3r::Biz;
+using namespace trompeloeil;
+namespace fs = boost::filesystem;
 
 namespace Slic3r::Test {
 
@@ -59,11 +64,11 @@ private:
 
     Domain::Workbench workbench;
     App::Platform::StdMainThreadDispatcher dispatcher;
-    Test::AppInstanceMessageHandlerScope app_instance_message_handler_scope;
-    Test::JobManagerScope job_manager_scope;
-    Biz::Slicing::MockThumbnailImageGenerator thumbnail_image_generator;
+    Tests::AppInstanceMessageHandlerScope app_instance_message_handler_scope;
+    Tests::JobManagerScope job_manager_scope;
+    MockThumbnailImageGenerator thumbnail_image_generator;
     Biz::ProjectInteractor project_interactor;
-    Test::ScopedThreadDispatcher thread_dispatcher;
+    Tests::ScopedThreadDispatcher thread_dispatcher;
 };
 
 } // namespace Slic3r::Test

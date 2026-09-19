@@ -37,22 +37,22 @@ std::shared_ptr<const Biz::Slicing::SLAResultData> SlaSlicingFixture::slice_sla_
     SlicingStatusListener listener{project_interactor, promise};
     project_interactor.slicing_interactor().add_listener<Biz::Slicing::IStatusListener>(&listener);
 
-    Domain::Model model_copy = model;
-    Domain::ConfigPackSLA config_copy = config;
+    auto model_copy = model;
+    auto config_copy = config;
 
     auto project_metadata = Domain::ProjectMetadata{};
     auto preset_metadata = Domain::Preset::SelectedPresetMetadata{};
-    auto bed = Domain::Bed{};
-    auto bed_instance = Domain::BedInstance{bed, Domain::SelectionId{0}};
 
     project_interactor.new_project();
 
+    Slic3r::Test::ModelOnBed new_model{std::move(model_copy), std::move(config_copy)};
+
     project_interactor.slicing_interactor().update_process(
-        model_copy,
-        project_metadata,
-        preset_metadata,
-        config_copy,
-        bed_instance
+        new_model.model,
+        new_model.project_metadata,
+        new_model.preset_metadata,
+        new_model.config,
+        new_model.bed_instance
     );
     project_interactor.slicing_interactor().slice_all();
 

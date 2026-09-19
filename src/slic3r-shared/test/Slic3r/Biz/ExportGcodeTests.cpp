@@ -28,6 +28,7 @@
 
 using Slic3r::Test::is_gcode_sane;
 using namespace Slic3r::Biz;
+using Slic3r::Biz::Slicing::SLAResultData;
 using namespace trompeloeil;
 namespace fs = boost::filesystem;
 

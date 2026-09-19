@@ -7,8 +7,10 @@
 
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
+#include <boost/nowide/fstream.hpp>
 #include <fstream>
 #include <sstream>
+#include "miniz.h"
 
 namespace fs = boost::filesystem;
 
@@ -29,7 +31,7 @@ static std::string read_file(const fs::path& path)
 
 static std::vector<uint8_t> read_file_binary(const fs::path& path)
 {
-    std::ifstream file(path, std::ios::binary);
+    boost::nowide::ifstream file(path.string(), std::ios::binary);
     file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
     return std::vector<uint8_t>((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 }
@@ -39,6 +41,107 @@ static bool files_equal(const fs::path& a, const fs::path& b)
     auto data_a = read_file_binary(a);
     auto data_b = read_file_binary(b);
     return data_a == data_b;
+}
+
+class Zip {
+public:
+
+    using FileData = std::vector<std::byte>;
+
+    /** Load zip files to memory */
+    Zip(const char* filename) {
+        const auto mz_zip_deleter{[](mz_zip_archive* ptr){
+            mz_zip_reader_end(ptr);
+            delete ptr;
+        }};
+        const auto mz_zip_creator{[](){
+            auto result{new mz_zip_archive};
+            memset(result, 0, sizeof(*result));
+            return result;
+        }};
+
+        const std::unique_ptr<mz_zip_archive, decltype(mz_zip_deleter)>
+            zip_archive{mz_zip_creator(), mz_zip_deleter};
+
+        if (!mz_zip_reader_init_file(zip_archive.get(), filename, 0)) {
+            throw std::runtime_error{"Could not open zip file!"};
+        }
+
+        const mz_uint num_files{mz_zip_reader_get_num_files(zip_archive.get())};
+
+
+        for (mz_uint i = 0; i < num_files; i++) {
+            mz_zip_archive_file_stat file_stat;
+            if (!mz_zip_reader_file_stat(zip_archive.get(), i, &file_stat)) {
+                throw std::runtime_error{"Failed to read filename from zip!"};
+            }
+
+            const auto mz_file_data_deleter{[](void* ptr){
+                mz_free(ptr);
+            }};
+            size_t file_data_size;
+            const std::unique_ptr<void, decltype(mz_file_data_deleter)>
+                file_data{mz_zip_reader_extract_to_heap(zip_archive.get(), i, &file_data_size, 0), mz_file_data_deleter};
+
+            if (!file_data) {
+                throw std::runtime_error{"Failed to read file from zip!"};
+            }
+
+            const auto data{static_cast<std::byte*>(file_data.get())};
+            m_files.insert({file_stat.m_filename, FileData(data, data + file_data_size)});
+        }
+    }
+
+    const std::map<std::string, FileData>& files() const {
+        return m_files;
+    }
+
+    const std::vector<std::string> entry_names() const {
+        std::vector<std::string> names;
+        names.reserve(m_files.size());
+        for (const auto& [name, _] : m_files) {
+            names.push_back(name);
+        }
+        return names;
+    }
+
+private:
+    std::map<std::string, FileData> m_files;
+};
+
+std::string to_string(const Zip::FileData& data) {
+    return std::string(reinterpret_cast<const char*>(data.data()), data.size());
+}
+
+std::istringstream as_istream(const Zip::FileData& data) {
+    return std::istringstream{to_string(data)};
+}
+
+std::vector<std::string> compare_files_by_lines(const Zip::FileData& a, const Zip::FileData& b) {
+    std::istringstream a_stream{as_istream(a)};
+    std::istringstream b_stream{as_istream(b)};
+    std::vector<std::string> result;
+    std::string line_a, line_b;
+    std::vector<std::string> lines_a, lines_b;
+    while (std::getline(a_stream, line_a)) {
+        if (!line_a.empty()) lines_a.push_back(line_a);
+    }
+    while (std::getline(b_stream, line_b)) {
+        if (!line_b.empty()) lines_b.push_back(line_b);
+    }
+    std::sort(lines_a.begin(), lines_a.end());
+    std::sort(lines_b.begin(), lines_b.end());
+    std::set_symmetric_difference(
+        lines_a.begin(), lines_a.end(), lines_b.begin(), lines_b.end(), std::back_inserter(result)
+    );
+    return result;
+}
+
+static void remove_timestamp_lines(std::vector<std::string>& lines) {
+    lines.erase(std::remove_if(lines.begin(), lines.end(),
+        [](std::string s) {
+            return s.rfind("fileCreationTimestamp", 0) == 0;
+        }), lines.end());
 }
 
 TEST_CASE("SLA slicing determinism", "[export][sla][determinism]")
@@ -97,25 +200,27 @@ TEST_CASE("SL1 export byte identity: direct vs registry", "[export][sla][identit
     REQUIRE(fs::exists(registry_path));
 
     // SL1 is a zip containing config.ini with a timestamp (fileCreationTimestamp).
-    // Compare unzipped entries instead of raw bytes.
-    auto compare_zip_entries = [](const fs::path& a, const fs::path& b) -> bool {
-        // For this test, we compare the raw files because the timestamp difference
-        // is only in config.ini. The layer images and other entries should be identical.
-        // A full unzip-compare would require miniz integration in tests.
-        // Instead, we verify both files are valid and non-empty, and that the
-        // difference is only the expected timestamp field.
-        return files_equal(a, b);
-    };
+    // Compare unzipped entries using miniz.
+    Zip direct_zip(direct_path.string().c_str());
+    Zip registry_zip(registry_path.string().c_str());
 
-    // Since config.ini contains a timestamp, raw bytes will differ.
-    // We accept this and document it. The important part is that the
-    // layer data and config structure are identical.
-    // TODO: If byte-identity is required, the timestamp must be frozen in tests.
-    // For now, verify both exports produce valid, non-empty files with same structure.
-    REQUIRE(fs::file_size(direct_path) > 0);
-    REQUIRE(fs::file_size(registry_path) > 0);
-    REQUIRE(fs::file_size(direct_path) == fs::file_size(registry_path));
+    // Same entry names in the same order
+    REQUIRE(direct_zip.entry_names() == registry_zip.entry_names());
 
-    // Verify both are valid zip archives by attempting to read entries
-    // (miniz is used internally; we trust store_sl1 throws on corruption)
+    // Byte-identical content for every entry except config.ini
+    for (const auto& entry_name : direct_zip.entry_names()) {
+        const auto& direct_data = direct_zip.files().at(entry_name);
+        const auto& registry_data = registry_zip.files().at(entry_name);
+
+        if (entry_name == "config.ini") {
+            // For config.ini, compare lines after dropping fileCreationTimestamp
+            auto diff_lines = compare_files_by_lines(direct_data, registry_data);
+            remove_timestamp_lines(diff_lines);
+            INFO("config.ini diff: " << to_string(diff_lines));
+            REQUIRE(diff_lines.empty());
+        } else {
+            // All other entries must be byte-identical
+            REQUIRE(direct_data == registry_data);
+        }
+    }
 }
