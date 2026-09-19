@@ -52,11 +52,13 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
   Result: one central check in `PlaterRenderModule::update_toolbar_visibility()` using a per-tool technology table in `ToolGizmosUiInfo`; FFF-only tools hidden for SLA and SLA tools hidden for FFF; re-evaluated on preset change. Tests in `SlaToolTypesTests.cpp`. Not checked in a running app.
 - [x] **M0.9** SLA archive format registry: add the `ISlaArchiveFormat` interface and factory (PLAN A4). · M · needs M0.2 · done: Biz-layer registry with SL1 formats; rasterizer creation stays in SLAPrint
 - [x] **M0.10** Move SL1 and SL1_SVG onto the registry. · M · needs M0.9
-  Result: export picks the writer from the registry by `FileDataType`; formats are registered once. SL1 output still goes through the same `store_sl1`. There is no byte-identity test because no sliced-result fixture exists (add one with M0.11).
+  Result: export picks the writer from the registry by `FileDataType`; formats are registered once. SL1 output still goes through the same `store_sl1`. Byte identity is covered by the M0.11a export identity test.
   Done when: exported archives are byte-identical to the previous output on the test 3MFs.
-- [ ] **M0.11** SLA fixture loader in `slic3r-test-utils`, plus the `--sla-fixture <3mf>` debug flag (PLAN A5). · M · needs M0.2
+- [x] **M0.11a** Headless SLA slicing fixture for tests (`SlaSlicingFixture` in `src/slic3r-shared/test/Slic3r/Biz/SlaFixture.*`), plus determinism and SL1 export identity tests. · M · needs M0.2
+  Result: two slices of the same model give byte-identical layer images and identical configs apart from per-run fields (time, config_id, fileCreationTimestamp). SL1 export through the registry equals `store_sl1` entry by entry. The fixture pumps the main-thread dispatcher while waiting and unregisters its listener. `Export sla` keeps its own fixture: two live fixtures tripped the message-handler assertion.
+- [ ] **M0.11b** `--sla-fixture <3mf>` debug flag that loads a sliced fixture straight into Preview (PLAN A5), plus fixture 3MFs in `doc/sla-fork/fixtures/`. · M · needs M0.11a
 - [ ] **M0.12** `[human]` Choose 10–20 benchmark models. Use only models whose licenses allow redistribution, or store them outside the repo. Include miniatures, hollow figurines, flat parts, lattices, and tall thin parts. · S · needs —
-- [ ] **M0.13** Benchmark harness that writes a metrics JSON (PLAN A6). · M · needs M0.11, M0.12
+- [ ] **M0.13** Benchmark harness that writes a metrics JSON (PLAN A6). · M · needs M0.11a, M0.12
   Done when: two runs on the same commit give identical layer hashes, and `doc/sla-fork/baseline.json` is committed.
 - [ ] **M0.14** CI workflow: build, both test binaries, and a comment with the metrics diff (PLAN G1). · M · needs M0.13
 
@@ -235,7 +237,7 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
 - [ ] **M5.3.samples** `[human]` Provide one sliced sample archive per target printer (from Chitubox/Lychee/Photon Workshop) and list the printer models, so the writers can be checked. Samples stay local, like the M7 dataset. · S · needs —
 - [ ] **M5.4** Display mirroring and orientation test pattern for every format (PLAN C3). · M · needs M5.3
 - [ ] **M5.5** Upload SLA archives to print hosts and removable drives (PLAN C4). · M · needs M0.10
-- [ ] **M5.6** Preview layer inspector: 2D layer view with a pixel grid (PLAN F4). Use mock data until M4.9 lands. · L → split · needs M0.11, M1.3
+- [ ] **M5.6** Preview layer inspector: 2D layer view with a pixel grid (PLAN F4). Use mock data until M4.9 lands. · L → split · needs M0.11b, M1.3
 - [ ] **M5.7** Per-layer area and peel-force chart beside the layer slider. · M · needs M5.6, M4.9
 - [ ] **M5.8** Clickable issue markers (islands, cups) that jump to the layer. · M · needs M5.6, M4.8
 - [ ] **M5.9** Pre-export checklist and format picker (PLAN F8). · M · needs M0.9, M1.3
