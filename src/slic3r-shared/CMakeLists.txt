@@ -955,12 +955,14 @@ set(SLIC3R_SHARED_FILES
         include/Slic3r/Biz/ResultExport/SLA/SL1.hpp
         include/Slic3r/Biz/ResultExport/SLA/SlaArchiveFormat.hpp
         include/Slic3r/Biz/ResultExport/SLA/Zipper.hpp
+        include/Slic3r/Biz/ResultExport/SLA/AnycubicSLA.hpp
         src/Slic3r/Biz/ResultExport/ResultExportInteractor.cpp
         src/Slic3r/Biz/ResultExport/ResultExportDataFinalizer.cpp
         src/Slic3r/Biz/ResultExport/SLA/SL1.cpp
         src/Slic3r/Biz/ResultExport/SLA/SL1Format.cpp
         src/Slic3r/Biz/ResultExport/SLA/SlaArchiveFormat.cpp
         src/Slic3r/Biz/ResultExport/SLA/Zipper.cpp
+        src/Slic3r/Biz/ResultExport/SLA/AnycubicSLA.cpp
 
         include/Slic3r/Biz/PrintHost/IPrintHost.hpp
         include/Slic3r/Biz/PrintHost/PrintHostJob.hpp
@@ -1638,6 +1640,7 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/Biz/Format/STEPTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/SlaArchiveFormatTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/SlaExportIdentityTests.cpp
+            test/Slic3r/Biz/ResultExport/SLA/AnycubicExportTests.cpp
 
             test/Slic3r/Biz/BundleCacheTests.cpp
 

@@ -19,7 +19,7 @@ namespace Sla {
 
 using FileData = std::vector<uint8_t>;
 using FilesData = std::vector<FileData>;
-enum class FileDataType{sl1_png, sl1_svg, other};
+enum class FileDataType{sl1_png, sl1_svg, anycubic, other};
 struct OutputFiles
 {
     FilesData data; // files binary data,  count files data == slices.size()

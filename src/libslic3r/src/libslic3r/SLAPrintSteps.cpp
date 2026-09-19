@@ -62,6 +62,7 @@
 
 #include "libslic3r/Format/SL1.hpp"
 #include "libslic3r/Format/SL1_SVG.hpp"
+#include "libslic3r/Format/AnycubicSLA.hpp"
 #include "Slic3r/Biz/Algorithms/BoundingBox.hpp"
 
 using namespace Slic3r::Biz;
@@ -1564,22 +1565,20 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
 namespace{
 Sla::FileDataType get_output_type(const SLAPrintConfigView& cfg)
 {
-    // create the archiver
-    std::string archive_format = cfg.get<std::string>("sla_archive_format"); // TODO: Change format to enum
+    std::string archive_format = cfg.get<std::string>("sla_archive_format");
     if (archive_format.empty())
         throw ExportError(_u8L("Missing archive format specification."));
-    boost::algorithm::to_lower(archive_format); // lowercase the format string
+    boost::algorithm::to_lower(archive_format);
 
-    // select format by
-    if (archive_format == "sl1" ||                             // main extension
-        archive_format == "sl1s" || archive_format == "zip") { // extension aliases
+    if (archive_format == "sl1" ||
+        archive_format == "sl1s" || archive_format == "zip") {
         return Sla::FileDataType::sl1_png;
     } else if (archive_format == "sl1svg") {
         return Sla::FileDataType::sl1_svg;
-    } else if (archive_format == "pwmo" || // Photon Mono
-               archive_format == "pwmx" || // Photon Mono X"
-               archive_format == "pwms") { // Photon Mono SE
-        return Sla::FileDataType::other;
+    } else if (archive_format == "pwmo" ||
+               archive_format == "pwmx" ||
+               archive_format == "pwms") {
+        return Sla::FileDataType::anycubic;
     } else {
         return Sla::FileDataType::other;
     }
@@ -1626,6 +1625,7 @@ void SLAPrint::Steps::rasterize()
     switch (output_type) {
         case FileDataType::sl1_png: rasterizer_ptr = create_sl1_rasterizer(printer_config); break;
         case FileDataType::sl1_svg: rasterizer_ptr = create_sl1_svg_rasterizer(printer_config); break;
+        case FileDataType::anycubic: rasterizer_ptr = create_anycubic_rasterizer(printer_config); break;
         default:
             throw Biz::Slicing::Exception{
                 Biz::Slicing::Error{Biz::Slicing::ErrorCode::UnsupportedOutputFormat}

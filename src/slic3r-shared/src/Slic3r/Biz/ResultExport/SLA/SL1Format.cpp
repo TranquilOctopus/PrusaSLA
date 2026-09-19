@@ -1,5 +1,6 @@
 #include "Slic3r/Biz/ResultExport/SLA/SlaArchiveFormat.hpp"
 #include "Slic3r/Biz/ResultExport/SLA/SL1.hpp"
+#include "Slic3r/Biz/ResultExport/SLA/AnycubicSLA.hpp"
 
 #include <vector>
 #include <memory>
@@ -36,14 +37,28 @@ public:
     }
 };
 
+class AnycubicFormat : public ISlaArchiveFormat
+{
+public:
+    std::string name() const override { return "Anycubic"; }
+    std::string description() const override { return "Anycubic Photon Mono format"; }
+    std::vector<std::string> extensions() const override { return {"pwmo", "pwmx", "pwms"}; }
+    Slic3r::Biz::Slicing::Sla::FileDataType file_data_type() const override { return Slic3r::Biz::Slicing::Sla::FileDataType::anycubic; }
+
+    void store(const std::string& file_path, const Biz::Slicing::SLAResultData& data) const override
+    {
+        store_anycubic(file_path, data);
+    }
+};
+
 void register_sla_archive_formats()
 {
-    // Called before every export; register once so concurrent exports never mutate the registry.
     static std::once_flag once;
     std::call_once(once, [] {
         auto& registry = SlaArchiveFormatRegistry::instance();
         registry.register_format("SL1", []() { return std::make_unique<SL1Format>(); });
         registry.register_format("SL1_SVG", []() { return std::make_unique<SL1SVGFormat>(); });
+        registry.register_format("Anycubic", []() { return std::make_unique<AnycubicFormat>(); });
     });
 }
 
