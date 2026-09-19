@@ -9,6 +9,8 @@
 #include <array>
 #include <algorithm>
 
+using namespace Slic3r::Biz::Slicing;
+
 namespace Slic3r {
 
 static void anycubicsla_get_pixel_span(const std::uint8_t* ptr, const std::uint8_t* end,
