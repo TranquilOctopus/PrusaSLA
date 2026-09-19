@@ -195,21 +195,28 @@ static void anycubicsla_write_layer(std::ofstream &out, anycubicsla_format_layer
     anycubicsla_write_float(out, l.layer48);
 }
 
+// Missing keys, or values that are neither double nor int, fall back to `def`.
 static float get_cfg_value_f(const Domain::ConfigView &cfg, const std::string &key, const float &def = 0.f)
 {
-    if (cfg.has(key)) {
-        if (auto opt = cfg.option(key))
-            return opt->getFloat();
-    }
+    const auto it = cfg.values().find(key);
+    if (it == cfg.values().end())
+        return def;
+    if (it->second.holds_alternative<double>())
+        return float(it->second.get<double>());
+    if (it->second.holds_alternative<int>())
+        return float(it->second.get<int>());
     return def;
 }
 
 static int get_cfg_value_i(const Domain::ConfigView &cfg, const std::string &key, const int &def = 0)
 {
-    if (cfg.has(key)) {
-        if (auto opt = cfg.option(key))
-            return opt->getInt();
-    }
+    const auto it = cfg.values().find(key);
+    if (it == cfg.values().end())
+        return def;
+    if (it->second.holds_alternative<int>())
+        return it->second.get<int>();
+    if (it->second.holds_alternative<double>())
+        return int(it->second.get<double>());
     return def;
 }
 
