@@ -55,14 +55,14 @@ TEST_CASE("Anycubic pwmx export", "[export][sla][anycubic]")
     config.sla_printer_settings.items.opt("display_mirror_x").set(true);
     config.sla_printer_settings.items.opt("display_mirror_y").set(false);
     config.sla_printer_settings.items.opt("gamma_correction").set(1.0);
-    config.sla_printer_settings.items.opt("layer_height").set(0.05);
-    config.sla_printer_settings.items.opt("initial_layer_height").set(0.05);
-    config.sla_printer_settings.items.opt("exposure_time").set(6.0);
-    config.sla_printer_settings.items.opt("initial_exposure_time").set(35.0);
-    config.sla_printer_settings.items.opt("faded_layers").set(10);
-    config.sla_printer_settings.items.opt("bottle_weight").set(1.0);
-    config.sla_printer_settings.items.opt("bottle_volume").set(1000.0);
-    config.sla_printer_settings.items.opt("bottle_cost").set(0.0);
+    config.sla_print_settings.items.opt("layer_height").set(0.05);
+    config.sla_material_settings.items.opt("initial_layer_height").set(0.05);
+    config.sla_material_settings.items.opt("exposure_time").set(6.0);
+    config.sla_material_settings.items.opt("initial_exposure_time").set(35.0);
+    config.sla_print_settings.items.opt("faded_layers").set(10);
+    config.sla_material_settings.items.opt("bottle_weight").set(1.0);
+    config.sla_material_settings.items.opt("bottle_volume").set(1000.0);
+    config.sla_material_settings.items.opt("bottle_cost").set(0.0);
     config.sla_print_settings.items.opt("supports_enable").set(true);
 
     auto sla_result = fixture.slice_sla_model(model, config);
