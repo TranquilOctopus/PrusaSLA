@@ -144,12 +144,14 @@ static void remove_timestamp_lines(std::vector<std::string>& lines) {
         }), lines.end());
 }
 
-// Serialized configs carry a creation timestamp; drop those lines before comparing.
+// Serialized configs carry per-run values (creation time, a random config_id); drop those lines before comparing.
 static std::string without_timestamp_lines(const std::string& text) {
     std::istringstream in{text};
     std::string line, out;
     while (std::getline(in, line))
-        if (line.find("imestamp") == std::string::npos) out += line + '\n';
+        if (line.find("imestamp") == std::string::npos && line.find("\"time\":") == std::string::npos &&
+            line.find("\"config_id\":") == std::string::npos)
+            out += line + '\n';
     return out;
 }
 
