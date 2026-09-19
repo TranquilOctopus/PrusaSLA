@@ -56,8 +56,19 @@ std::shared_ptr<const Biz::Slicing::SLAResultData> SlaSlicingFixture::slice_sla_
     );
     project_interactor.slicing_interactor().slice_all();
 
-    const auto status = future.wait_for(30s);
-    REQUIRE(status == std::future_status::ready);
+    // Slicing results are delivered through the main-thread dispatcher, so pump it while waiting
+    // (as wait_for_status_count in ExportGcodeTests.cpp does).
+    const auto start = std::chrono::steady_clock::now();
+    bool ready = false;
+    while (!(ready = future.wait_for(0s) == std::future_status::ready) &&
+           std::chrono::steady_clock::now() - start < 120s) {
+        dispatcher.dispatch_enqueued();
+        std::this_thread::sleep_for(1ms);
+    }
+    // The listener lives on this stack frame: unregister it and drain queued events before returning.
+    project_interactor.slicing_interactor().remove_listener<Biz::Slicing::IStatusListener>(&listener);
+    dispatcher.dispatch_enqueued();
+    REQUIRE(ready);
 
     return future.get();
 }
