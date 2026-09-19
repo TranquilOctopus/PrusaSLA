@@ -48,6 +48,19 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     m_head_diameter_slider->callbacks().value_changed = [this](double value)
     { m_callbacks.head_diameter_changed(value); };
 
+    add_row_with_slider(
+        content(),
+        &m_clipping_plane_slider,
+        _u8L("Clipping of view"),
+        _u8L("%")
+    );
+    m_clipping_plane_slider->set_begin_value(0.0);
+    m_clipping_plane_slider->set_end_value(1.0);
+    m_clipping_plane_slider->set_step(0.01);
+    m_clipping_plane_slider->set_validator_precision(2);
+    m_clipping_plane_slider->callbacks().value_changed = [this](double value)
+    { m_callbacks.clipping_plane_changed(value); };
+
     this->add_separator(this->content());
 
     add_row_with_button(content(), &m_generate_button, _u8L("Generate"));
@@ -102,6 +115,11 @@ void SlaSupportPointsDialog::set_point_count(size_t count)
 void SlaSupportPointsDialog::set_head_diameter(double diameter_mm)
 {
     m_head_diameter_slider->set_value(diameter_mm);
+}
+
+void SlaSupportPointsDialog::set_clipping_plane_position(double pos)
+{
+    m_clipping_plane_slider->set_value(pos);
 }
 
 } // namespace Slic3r::App::Plater

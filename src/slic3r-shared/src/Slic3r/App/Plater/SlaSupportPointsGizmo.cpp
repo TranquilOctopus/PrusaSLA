@@ -5,12 +5,19 @@
 #include "Slic3r/App/AppServices.hpp"
 #include "Slic3r/App/IDialogManager.hpp"
 #include "Slic3r/App/DisplayStrings.hpp"
+#include "Slic3r/App/Scene/Scene.hpp"
+#include "Slic3r/App/Scene/NodeBuilder.hpp"
+#include "Slic3r/App/Scene/GeometryDataFactory.hpp"
+#include "Slic3r/App/Render/Device.hpp"
+#include "Slic3r/App/Render/GeometryBuilder.hpp"
+#include "Slic3r/App/Plater/PlaterSceneLayer.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/Biz/Slicing/SlicingInteractor.hpp"
 #include "Slic3r/Biz/StatusCache.hpp"
 #include "Slic3r/Biz/IUndoProvider.hpp"
 #include "Slic3r/Biz/Utils/MeshRaycaster.hpp"
+#include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
 #include "Slic3r/Domain/SelectionId.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
@@ -27,6 +34,7 @@ using namespace Slic3r::App::Yoga;
 using namespace Slic3r::Biz;
 using namespace Slic3r::Biz::Slicing;
 using namespace Slic3r::Biz::Utils;
+using namespace Slic3r::Biz::Algorithms;
 using namespace magic_enum::bitwise_operators;
 
 using Slic3r::Domain::SlicingId;
@@ -34,6 +42,7 @@ using Slic3r::Domain::ObjectID;
 using Slic3r::Domain::Transform3d;
 using Slic3r::Domain::Vec3d;
 using Slic3r::Domain::Vec3f;
+using Slic3r::Domain::ColorRGBA;
 using Slic3r::Domain::SLA::SupportPoint;
 using Slic3r::Domain::SLA::SupportPointType;
 using Slic3r::Domain::SLA::SupportPoints;
@@ -252,10 +261,12 @@ namespace Slic3r::App::Plater {
 
 SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     PlaterScenePresenter& scene_presenter,
-    Biz::ProjectInteractor& project_interactor
+    Biz::ProjectInteractor& project_interactor,
+    Render::Device& device
 ) :
     m_scene_presenter(scene_presenter),
     m_project_interactor(project_interactor),
+    m_device(device),
     m_dialog(std::make_unique<SlaSupportPointsDialog>())
 {
     m_dialog->set_title(_u8L("SLA Support Points"));
@@ -293,9 +304,19 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
             m_edit_state->head_diameter_mm = value;
         }
     };
+    m_dialog->callbacks().clipping_plane_changed = [this](double value)
+    {
+        m_clipping_plane_clipper.set_position_by_ratio(value, true);
+        update_clipping_plane();
+    };
 
     m_dialog->set_generate_enabled(false);
     m_dialog->set_apply_enabled(false);
+}
+
+void SlaSupportPointsGizmo::provide_clipper(Scene::Clipper& clipper)
+{
+    m_clipping_plane_presenter = Scene::ClipperPresenter(&clipper, &m_device, &m_scene_presenter);
 }
 
 SlaSupportPointsGizmo::~SlaSupportPointsGizmo() = default;
@@ -332,6 +353,16 @@ void SlaSupportPointsGizmo::on_activated()
     this->on_scene_selection_changed(m_project_interactor.selected_project_id(), selection);
 }
 
+void SlaSupportPointsGizmo::on_activated()
+{
+    m_project_interactor.scene_interactor().add_listener<Biz::Scene::ISceneSelectionChangedListener>(this);
+    m_project_interactor.sla_object_cache().add_listener<Biz::ISLAObjectCacheChangedListener>(this);
+
+    const Biz::Scene::ObjectSelection& selection =
+        m_project_interactor.scene_interactor().object_selection();
+    this->on_scene_selection_changed(m_project_interactor.selected_project_id(), selection);
+}
+
 void SlaSupportPointsGizmo::on_deactivated()
 {
     m_project_interactor.scene_interactor().remove_listener<Biz::Scene::ISceneSelectionChangedListener>(this);
@@ -349,6 +380,13 @@ void SlaSupportPointsGizmo::on_deactivated()
     }
 
     m_paintable_volumes.clear();
+
+    // Deactivate clipping plane presenter
+    m_clipping_plane_presenter.deactivate();
+
+    // Clear point visuals
+    clear_point_visuals();
+    m_hovered_point_idx.reset();
 
     m_dialog->set_generate_enabled(false);
     m_dialog->set_apply_enabled(false);
@@ -411,6 +449,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     if (m_edit_state.has_value()) {
         discard_edited_points();
     }
+    m_hovered_point_idx.reset();
 
     if (!enabled() || selection.elements.empty()) {
         m_dialog->set_generate_enabled(false);
@@ -476,6 +515,32 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
 
     // Collect paintable volumes for raycasting
     this->collect_paintable_volumes(project_id, element);
+
+    // Initialize clipping plane presenter
+    m_clipping_plane_presenter.activate(
+        model_object,
+        instance,
+        m_scene_presenter.scene().root(),
+        0.,
+        Scene::BuildMeshesNodes::No
+    );
+    m_clipping_plane_presenter.set_behavior(true, true, 0.);
+    m_clipping_plane_presenter.set_position_by_ratio(m_clipping_plane_clipper.get_position(), true);
+    m_dialog->set_clipping_plane_position(m_clipping_plane_clipper.get_position());
+
+    // Initialize point visuals scene nodes
+    Scene::Scene& scene = m_scene_presenter.scene();
+    Scene::NodeBuilder main_builder{scene};
+    main_builder.set_debug_name("SlaSupportPointsGizmo - Main");
+    std::unique_ptr<Scene::Node> main_node = main_builder.build();
+    m_main_node = main_node.get();
+    scene.add_child(main_node.release(), &scene.root());
+
+    Scene::NodeBuilder points_builder{scene};
+    points_builder.set_debug_name("SlaSupportPointsGizmo - Points");
+    std::unique_ptr<Scene::Node> points_node = points_builder.build();
+    m_points_node = points_node.get();
+    scene.add_child(points_node.release(), m_main_node);
 
     m_dialog->set_generate_enabled(true);
     m_dialog->set_apply_enabled(false);
@@ -641,10 +706,14 @@ void SlaSupportPointsGizmo::begin_editing()
 
     m_dialog->set_apply_enabled(true);
     m_dialog->set_generate_enabled(true);
+
+    update_point_visuals();
 }
 
 void SlaSupportPointsGizmo::end_editing()
 {
+    clear_point_visuals();
+    m_hovered_point_idx.reset();
     m_edit_state.reset();
 }
 
@@ -732,6 +801,7 @@ void SlaSupportPointsGizmo::add_point_at_mesh_pos(const Domain::Vec3d& mesh_pos)
     m_edit_state->working_points.push_back(new_point);
     m_dialog->set_point_count(m_edit_state->working_points.size());
     take_undo_snapshot();
+    update_point_visuals();
 }
 
 void SlaSupportPointsGizmo::remove_point_at_index(size_t idx)
@@ -743,6 +813,7 @@ void SlaSupportPointsGizmo::remove_point_at_index(size_t idx)
     m_edit_state->working_points.erase(m_edit_state->working_points.begin() + idx);
     m_dialog->set_point_count(m_edit_state->working_points.size());
     take_undo_snapshot();
+    update_point_visuals();
 }
 
 void SlaSupportPointsGizmo::move_point_to_mesh_pos(size_t idx, const Domain::Vec3d& mesh_pos)
@@ -753,6 +824,7 @@ void SlaSupportPointsGizmo::move_point_to_mesh_pos(size_t idx, const Domain::Vec
 
     m_edit_state->working_points[idx].pos = mesh_pos.cast<float>();
     m_dialog->set_point_count(m_edit_state->working_points.size());
+    update_point_visuals();
 }
 
 std::optional<SlaSupportPointsGizmo::VolumeHitPoint> SlaSupportPointsGizmo::raycast_mouse(const Domain::Vec2d& mouse_position) const
@@ -763,6 +835,12 @@ std::optional<SlaSupportPointsGizmo::VolumeHitPoint> SlaSupportPointsGizmo::rayc
 
     const Scene::Camera& camera = m_scene_presenter.scene().camera();
     const Scene::Ray ray = camera.ray_at(mouse_position.x(), mouse_position.y());
+
+    // Get the clipping plane for raycasting
+    std::optional<Biz::ClippingPlane> clipping_plane_opt;
+    if (m_clipping_plane_clipper.get_position() != 0.) {
+        clipping_plane_opt = m_clipping_plane_clipper.get_clipping_plane();
+    }
 
     Domain::Vec3d closest_hit_position = Domain::Vec3d::Zero();
     double closest_hit_squared_distance = std::numeric_limits<double>::max();
@@ -777,7 +855,7 @@ std::optional<SlaSupportPointsGizmo::VolumeHitPoint> SlaSupportPointsGizmo::rayc
                 paintable_volume.aabb_mesh,
                 ray,
                 paintable_volume.world_trafo,
-                std::nullopt,
+                clipping_plane_opt,
                 true
             );
 
@@ -831,6 +909,15 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
 
     const std::optional<VolumeHitPoint> hit_opt = raycast_mouse(mouse_position);
     const bool has_hit = hit_opt.has_value();
+
+    // Track hovered point (when not dragging)
+    if (!m_edit_state->dragged_point_idx.has_value() && has_hit) {
+        const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
+        const double hover_radius = m_edit_state->head_diameter_mm * 2.0;
+        m_hovered_point_idx = find_nearest_point(mesh_pos, hover_radius);
+    } else if (!has_hit) {
+        m_hovered_point_idx.reset();
+    }
 
     if (is_left_button_event && mouse_event.type() == MouseEvent::Type::ButtonDown) {
         if (ctrl_down) {
@@ -886,6 +973,7 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
         if (m_edit_state->dragged_point_idx.has_value()) {
             take_undo_snapshot();
             m_edit_state->dragged_point_idx.reset();
+            update_point_visuals();
         }
         return Scene::GizmoActivationState::Active;
     }
@@ -896,6 +984,149 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
 std::unique_ptr<GizmoWindow> SlaSupportPointsGizmo::release_ui_window()
 {
     return std::move(m_dialog);
+}
+
+// Visuals
+
+void SlaSupportPointsGizmo::update_point_visuals()
+{
+    if (!m_edit_state.has_value() || m_points_node == nullptr) {
+        return;
+    }
+
+    const auto& points = m_edit_state->working_points;
+    if (points.empty()) {
+        clear_point_visuals();
+        return;
+    }
+
+    Scene::Scene& scene = m_scene_presenter.scene();
+    auto& geom_mgr = m_scene_presenter.model_geometry_manager();
+    auto& trimesh_mgr = m_scene_presenter.model_triangle_mesh_manager();
+
+    // Get the instance transform
+    const Domain::Project& project = m_project_interactor.selected_project();
+    const Domain::ModelInstance* instance = project.find_instance_by_id(m_selected_object_id.id, m_selected_instance_id);
+    if (!instance) {
+        return;
+    }
+    const Domain::Transform3d instance_trafo = instance->get_matrix();
+
+    // Sphere geometry (shared for all points)
+    static constexpr double SPHERE_RESOLUTION_ANGLE = Slic3r::deg2rad(360.0 / 32.0);
+    const std::string sphere_id = "support_point_sphere";
+    auto sphere_trimesh = trimesh_mgr.get_or_create(sphere_id, [this]() {
+        Domain::TriangleMesh mesh = Biz::Algorithms::TriangleMesh::make_sphere(1.0, SPHERE_RESOLUTION_ANGLE);
+        return std::make_unique<Scene::TriangleMesh>(std::move(mesh.its));
+    });
+    const auto* sphere_geom = geom_mgr.get_or_create(sphere_id, [&]() {
+        return Render::geometry_from_triangle_mesh(m_device, sphere_trimesh->triangles());
+    });
+
+    // Clear existing point nodes
+    scene.remove_children([this](const Scene::Node* node) {
+        return node->parent() == m_points_node;
+    }, m_points_node);
+
+    // Determine highlighted index (dragged or hovered)
+    std::optional<size_t> highlighted_idx = m_edit_state->dragged_point_idx;
+    if (!highlighted_idx.has_value()) {
+        highlighted_idx = m_hovered_point_idx;
+    }
+
+    for (size_t i = 0; i < points.size(); ++i) {
+        const auto& point = points[i];
+        const bool highlighted = highlighted_idx.has_value() && *highlighted_idx == i;
+
+        // Point position in world space: instance_trafo * point.pos (point.pos is in mesh coords)
+        Domain::Vec3d world_pos = instance_trafo * point.pos.cast<double>();
+
+        // Radius = head_front_radius (minimum 0.2 mm)
+        double radius = std::max(static_cast<double>(point.head_front_radius), 0.2);
+
+        // Color based on point type
+        ColorRGBA color = get_point_color(point, highlighted);
+
+        Render::Material material = Render::Material{}
+            .set_shader(m_scene_presenter.device().context().shader_manager().shader("gouraud_light"))
+            .set_uniform("uniform_color", color);
+
+        Domain::Transform3d xform = Domain::Transform3d::Identity();
+        xform.translate(world_pos);
+        xform.scale(radius);
+
+        Scene::NodeBuilder builder{scene};
+        builder.set_debug_name(fmt::format("support_point_{}", i))
+            .set_mesh(sphere_geom, material, Scene::RenderLayerId(PlaterSceneLayer::GizmoHandles))
+            .set_aabb(sphere_trimesh->aabb_mesh())
+            .transform([xform](auto& xf) { xf = xform; });
+
+        m_points_node->add_child(builder.build().release());
+    }
+}
+
+void SlaSupportPointsGizmo::clear_point_visuals()
+{
+    if (m_points_node != nullptr) {
+        Scene::Scene& scene = m_scene_presenter.scene();
+        scene.remove_children([this](const Scene::Node* node) {
+            return node->parent() == m_points_node;
+        }, m_points_node);
+    }
+}
+
+Domain::ColorRGBA SlaSupportPointsGizmo::get_point_color(const Domain::SLA::SupportPoint& point, bool highlighted) const
+{
+    const auto& theme = AppServices::instance().theme();
+
+    ColorRGBA base_color;
+    switch (point.type) {
+    case SupportPointType::manual_add:
+        base_color = theme.color(Platform::Color::SlaSupportPointManual, Platform::ColorGroup::Default);
+        break;
+    case SupportPointType::island:
+        base_color = theme.color(Platform::Color::SlaIslandWarning, Platform::ColorGroup::Default);
+        break;
+    case SupportPointType::slope:
+    default:
+        base_color = theme.color(Platform::Color::SlaSupportPointAuto, Platform::ColorGroup::Default);
+        break;
+    }
+
+    if (highlighted) {
+        // Brighten for highlight
+        return ColorRGBA{
+            std::min(base_color.r() * 1.5f, 1.0f),
+            std::min(base_color.g() * 1.5f, 1.0f),
+            std::min(base_color.b() * 1.5f, 1.0f),
+            base_color.a()
+        };
+    }
+
+    return base_color;
+}
+
+// Clipping plane
+
+void SlaSupportPointsGizmo::update_clipping_plane()
+{
+    // Update the clipper presenter which updates the scene nodes
+    m_clipping_plane_presenter.update_clipper(
+        m_clipping_plane_clipper.get_clipping_plane().get_normal(),
+        m_clipping_plane_clipper.get_clipping_plane().get_offset(),
+        m_clipping_plane_clipper.get_position(),
+        false
+    );
+}
+
+} // namespace Slic3r::App::Plater
+
+namespace Slic3r::App::Plater {
+
+void SlaSupportPointsGizmo::render_scene(Render::CommandBuffer& cmd_buffer)
+{
+    // Update point visuals each frame to reflect hover/drag state
+    update_point_visuals();
 }
 
 } // namespace Slic3r::App::Plater

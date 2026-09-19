@@ -1117,7 +1117,8 @@ void PlaterRenderModule::init_gizmos()
     );
     m_sla_support_points_gizmo = &m_gizmo_manager->add_tool_gizmo<SlaSupportPointsGizmo>(
         *m_scene_presenter,
-        m_project_interactor
+        m_project_interactor,
+        *m_device
     );
     m_sla_hollow_gizmo = &m_gizmo_manager->add_tool_gizmo<SlaHollowGizmo>(
         *m_scene_presenter

@@ -9,6 +9,8 @@
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
 #include "Slic3r/App/Scene/TriangleMeshManager.hpp"
 #include "Slic3r/Biz/Algorithms/AABBMesh.hpp"
+#include "Slic3r/App/Scene/Clipper.hpp"
+#include "Slic3r/App/Scene/ClipperPresenter.hpp"
 
 #include <memory>
 #include <optional>
@@ -17,6 +19,10 @@
 namespace Slic3r::App::Plater {
 class SlaSupportPointsDialog;
 class PlaterScenePresenter;
+}
+
+namespace Slic3r::App::Render {
+class Device;
 }
 
 namespace Slic3r::Biz {
@@ -56,7 +62,8 @@ class SlaSupportPointsGizmo :
 public:
     SlaSupportPointsGizmo(
         PlaterScenePresenter& scene_presenter,
-        Biz::ProjectInteractor& project_interactor
+        Biz::ProjectInteractor& project_interactor,
+        Render::Device& device
     );
 
     ~SlaSupportPointsGizmo() override;
@@ -81,6 +88,10 @@ public:
 
     std::unique_ptr<GizmoWindow> release_ui_window() override;
 
+    void provide_clipper(Scene::Clipper& clipper);
+
+    void render_scene(Render::CommandBuffer& cmd_buffer) override;
+
 private:
     void start_generation();
     void on_generation_completed(std::optional<Slic3r::Domain::SLA::SupportPoints> support_points);
@@ -98,6 +109,11 @@ private:
     void move_point_to_mesh_pos(size_t idx, const Domain::Vec3d& mesh_pos);
     void take_undo_snapshot();
 
+    // Visuals
+    void update_point_visuals();
+    void clear_point_visuals();
+    Domain::ColorRGBA get_point_color(const Domain::SLA::SupportPoint& point, bool highlighted) const;
+
     // Raycasting helpers (adapted from PaintOnGizmoBase)
     struct VolumeHitPoint
     {
@@ -110,8 +126,12 @@ private:
     std::optional<VolumeHitPoint> raycast_mouse(const Domain::Vec2d& mouse_position) const;
     void collect_paintable_volumes(const Domain::SelectionId project_id, const Domain::ElementRef& element);
 
+    // Clipping plane
+    void update_clipping_plane();
+
     PlaterScenePresenter& m_scene_presenter;
     Biz::ProjectInteractor& m_project_interactor;
+    Render::Device& m_device;
     std::unique_ptr<SlaSupportPointsDialog> m_dialog;
     std::unique_ptr<Biz::SlaSupportPointsRequest> m_support_points_request;
     std::optional<Domain::SlicingId> m_generation_slicing_id;
@@ -126,6 +146,17 @@ private:
 
     // Paintable volumes for raycasting (like PaintOnGizmoBase)
     SupportPointPaintableVolumes m_paintable_volumes;
+
+    // Clipping plane (like PaintOnGizmoBase)
+    Scene::Clipper m_clipping_plane_clipper;
+    Scene::ClipperPresenter m_clipping_plane_presenter;
+
+    // Scene nodes for point visuals
+    Scene::Node* m_main_node = nullptr;
+    Scene::Node* m_points_node = nullptr;
+
+    // Hovered point index (for highlight)
+    std::optional<size_t> m_hovered_point_idx;
 };
 
 } // namespace Slic3r::App::Plater
