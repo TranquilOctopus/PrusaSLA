@@ -78,7 +78,7 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
 - [ ] **M1.7** SLA-first app setting, on by default: the first run defaults to SLA and FFF-only UI is hidden. · M · needs M0.8, M1.6
 - [ ] **M1.8** SLA path in the welcome dialog, plus SLA hints and notifications. Also fix the “Export gcode to a file” tooltip for SLA (evidence: `ux/journeys.md` section H). · M · needs M1.7, M1.3
 - [ ] **M1.9** Toolbar icons (`resources/icons/sla_*.svg`) for support points, hollow, orient, inspector and resin import, following PLAN F7. · M · needs M1.3
-- [ ] **M1.10** Resin economics interactor: resin ml, cost and bottles per bed and per project (PLAN D4). · M · needs M0.11
+- [ ] **M1.10** Resin economics interactor: resin ml, cost and bottles per bed and per project (PLAN D4). · M · needs M0.11a
 - [ ] **M1.11** SLA sidebar summary (PLAN F5). · M · needs M1.10, M1.3
 
 ## M2: SLA editing tools (porting the legacy gizmos)
@@ -245,7 +245,7 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
 ## M6: Quality gates and release
 
 - [ ] **M6.1** Robustness mesh set with no crashes or hangs (PLAN G2). · M · needs M0.13
-- [ ] **M6.2** Visual regression renders, including the grayscale lightness check (PLAN G3). · M · needs M0.11, M0.5
+- [ ] **M6.2** Visual regression renders, including the grayscale lightness check (PLAN G3). · M · needs M0.11b, M0.5
 - [ ] **M6.3** Nightly upstream merge rehearsal with a conflict report (PLAN G4). · S · needs M0.3, M0.14
 - [ ] **M6.4** `[human]` End-to-end walk through the M1.1 journeys on an integrated build, filing new todos for gaps. · M · needs M1.11, M2.7, M3.10
 - [ ] **M6.5** Retune default presets after the M4 changes. · M · needs M4.4, M4.5
