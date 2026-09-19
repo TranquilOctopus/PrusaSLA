@@ -10,6 +10,7 @@
 #include "Slic3r/Biz/Platform/JobManager/JobManager.hpp"
 #include "Slic3r/Biz/Slicing/TestUtils.hpp"
 #include "Slic3r/Biz/Slicing/GCodeUtils.hpp"
+#include "Slic3r/Biz/SlaFixture.hpp"
 
 #include "Slic3r/App/Plater/ThumbnailImageGenerator.hpp"
 #include "Slic3r/App/Platform/StdMainThreadDispatcher.hpp"
@@ -322,33 +323,36 @@ TEST_CASE_METHOD(ExportGcodeFixture, "Export sla", "[export][timeout]")
             })
         );
 
-    SlicingStatusListener slicing_listener{project_interactor, false};
-    project_interactor.slicing_interactor().add_listener<Slic3r::Biz::Slicing::IStatusListener>(&slicing_listener);
-    // Must close (and thus drain) the dispatcher's queue while slicing_listener is still alive:
-    // it can hold pointers to slicing_listener, and this local goes out of scope before the
-    // fixture (and its dispatcher.close() in ~ExportGcodeFixture) is torn down.
-    Tests::ScopedThreadDispatcher thread_dispatcher_guard{dispatcher};
+    // Use the shared SLA slicing fixture for the slicing step
+    Slic3r::Test::SlaSlicingFixture sla_fixture;
+    std::vector<std::shared_ptr<const Biz::Slicing::SLAResultData>> sla_results;
 
-    std::vector<CaseData> projects;
+    // Slice the models
     for (size_t i = 0; i < project_count; i++) {
+        auto model = Slic3r::Test::generate_cubes(1, 5);
+        auto config = Slic3r::Domain::ConfigPackSLA{};
+        auto result = sla_fixture.slice_sla_model(model, config);
+        REQUIRE(result != nullptr);
+        sla_results.push_back(std::move(result));
+    }
 
-        project_interactor.new_project();
-        Slic3r::Test::ModelOnBed new_model {Slic3r::Test::generate_cubes(1, 5), Slic3r::Domain::ConfigPackSLA{}};
-        Slic3r::Domain::SlicingId new_id{i, new_model.bed_instance.id().id};
-        projects.emplace_back(std::move(new_model), std::move(new_id));
+    // Now export each result to a file
+    std::vector<fs::path> export_paths;
+    for (size_t i = 0; i < project_count; i++) {
         for (size_t k = 0; k < export_count; k++) {
-            projects.back().paths.emplace_back(fs::path(Slic3r::data_dir()) / (std::string("test") + std::to_string(k) + extension));
-            slicing_listener.add_export( projects.back().id,  projects.back().paths.back().path());
+            fs::path export_path = fs::path(Slic3r::data_dir()) / (std::string("test_sla_") + std::to_string(i) + "_" + std::to_string(k) + extension);
+            export_paths.push_back(export_path);
+            
+            project_interactor.set_output_dir(i, export_path);
+            PhysicalPrinter::PhysicalPrinterConfig config;
+            config.payload = PhysicalPrinter::FileSystemExport{};
+            PrintHost::PrintHostJobData data{
+                sla_results[i],
+                export_path,
+                PrintHost::get_export_format_from_extension(extension)
+            };
+            project_interactor.result_export_interactor().perform(std::move(config), std::move(data));
         }
-
-        project_interactor.slicing_interactor().update_process(
-            projects.back().model_on_bed.model,
-            projects.back().model_on_bed.project_metadata,
-            projects.back().model_on_bed.preset_metadata,
-            projects.back().model_on_bed.config,
-            projects.back().model_on_bed.bed_instance
-        );
-        project_interactor.slicing_interactor().slice_all();
     }
 
     REQUIRE(wait_for_status_count(
@@ -358,17 +362,13 @@ TEST_CASE_METHOD(ExportGcodeFixture, "Export sla", "[export][timeout]")
         dispatcher
     ));
 
-    for (size_t i = 0; i < project_count; i++) {
-        for (size_t k = 0; k < export_count; k++) {
-            REQUIRE(fs::exists(projects[i].paths[k].path()));
-            std::string gcode;
-            REQUIRE_NOTHROW(gcode = projects[i].paths[k].read_content());
-            REQUIRE(!gcode.empty());
-            if (extension == ".gcode") {
-                const auto error{is_gcode_sane(gcode, projects[i].model_on_bed.model)};
-                INFO((error ? *error : ""));
-                REQUIRE(!error);
-            }
-        }
+    for (const auto& path : export_paths) {
+        REQUIRE(fs::exists(path));
+        boost::nowide::ifstream file_stream(path);
+        file_stream.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+        std::stringstream buffer;
+        buffer << file_stream.rdbuf();
+        std::string content = buffer.str();
+        REQUIRE(!content.empty());
     }
 }

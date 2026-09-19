@@ -1581,6 +1581,8 @@ if(SLIC3R_BUILD_TESTS)
 
             test/Slic3r/Biz/ProjectInteractorTests.cpp
             test/Slic3r/Biz/ExportGcodeTests.cpp
+            test/Slic3r/Biz/SlaFixture.hpp
+            test/Slic3r/Biz/SlaFixture.cpp
             test/Slic3r/Biz/Scene/SceneInteractorTests.cpp
             test/Slic3r/Biz/Scene/VirtualBedPreviewTests.cpp
             test/Slic3r/Biz/WeakerPointerTests.cpp
@@ -1635,6 +1637,7 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/Biz/Format/3MFTests.cpp
             test/Slic3r/Biz/Format/STEPTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/SlaArchiveFormatTests.cpp
+            test/Slic3r/Biz/ResultExport/SLA/SlaExportIdentityTests.cpp
 
             test/Slic3r/Biz/BundleCacheTests.cpp
 

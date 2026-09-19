@@ -1,0 +1,69 @@
+#pragma once
+
+#include "Slic3r/Biz/ProjectInteractor.hpp"
+#include "Slic3r/Biz/Platform/PlatformServices.hpp"
+#include "Slic3r/Biz/SecretStoreDummy.hpp"
+#include "Slic3r/Biz/SLAResultCache.hpp"
+#include "Slic3r/Biz/Platform/JobManager/JobManager.hpp"
+#include "Slic3r/Biz/Slicing/TestUtils.hpp"
+
+#include "Slic3r/App/Plater/ThumbnailImageGenerator.hpp"
+#include "Slic3r/App/Platform/StdMainThreadDispatcher.hpp"
+
+#include "Slic3r/Directories.hpp"
+#include "Slic3r/TestUtils/AppInstanceMessageHandlerScope.hpp"
+#include "Slic3r/TestUtils/JobManagerScope.hpp"
+#include "Slic3r/TestUtils/ScopedThreadDispatcher.hpp"
+#include "Slic3r/TestUtils/TestData.hpp"
+
+#include <boost/filesystem/operations.hpp>
+#include <boost/nowide/filesystem.hpp>
+#include <boost/dll/runtime_symbol_info.hpp>
+#include <boost/nowide/fstream.hpp>
+
+namespace Slic3r::Biz::Slicing {
+struct SLAResultData;
+}
+
+namespace Slic3r::Test {
+
+class SlaSlicingFixture
+{
+public:
+    SlaSlicingFixture();
+
+    std::shared_ptr<const Biz::Slicing::SLAResultData> slice_sla_model(
+        const Domain::Model& model,
+        const Domain::ConfigPackSLA& config
+    );
+
+private:
+    struct SlicingStatusListener : public Biz::Slicing::IStatusListener
+    {
+        SlicingStatusListener(Biz::ProjectInteractor& pi, std::promise<std::shared_ptr<const Biz::Slicing::SLAResultData>>& promise)
+            : m_pi(pi), m_promise(promise) {}
+
+        void on_status_changed(const Biz::Slicing::StatusUpdate status_update, const Domain::SlicingId id) override
+        {
+            if (status_update.code && *status_update.code == Biz::Slicing::StatusCode::Finished) {
+                const std::optional<Biz::SLAResultRef> sla_result{m_pi.sla_result_cache().get_result(id)};
+                if (sla_result) {
+                    m_promise.set_value(sla_result.value().get().export_data);
+                }
+            }
+        }
+
+        Biz::ProjectInteractor& m_pi;
+        std::promise<std::shared_ptr<const Biz::Slicing::SLAResultData>>& m_promise;
+    };
+
+    Domain::Workbench workbench;
+    App::Platform::StdMainThreadDispatcher dispatcher;
+    Test::AppInstanceMessageHandlerScope app_instance_message_handler_scope;
+    Test::JobManagerScope job_manager_scope;
+    Biz::Slicing::MockThumbnailImageGenerator thumbnail_image_generator;
+    Biz::ProjectInteractor project_interactor;
+    Test::ScopedThreadDispatcher thread_dispatcher;
+};
+
+} // namespace Slic3r::Test
