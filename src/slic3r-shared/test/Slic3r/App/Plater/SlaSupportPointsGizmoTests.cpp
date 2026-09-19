@@ -461,7 +461,7 @@ TEST_CASE("SlaSupportPointsEditing - rectangle selection", "[SlaSupportPointsGiz
         std::vector<Vec2d> screen_positions = {
             Vec2d{100, 200}, // point 0
             Vec2d{150, 250}, // point 1
-            Vec2d{50, 300}   // point 2
+            Vec2d{250, 300}  // point 2 (outside: x > 200)
         };
 
         // Rectangle covering first two points
@@ -519,8 +519,9 @@ TEST_CASE("SlaSupportPointsEditing - rectangle selection", "[SlaSupportPointsGiz
         Vec2d rect_max{50, 50};
         auto indices = SlaSupportPointsEditing::points_in_rectangle(screen_positions, rect_min, rect_max);
 
-        // Should normalize and find point 0
-        REQUIRE(indices.size() == 1);
+        // Should normalize and find points 0 and 1 (point 2 at 300 is outside)
+        REQUIRE(indices.size() == 2);
         REQUIRE(indices[0] == 0);
+        REQUIRE(indices[1] == 1);
     }
 }
