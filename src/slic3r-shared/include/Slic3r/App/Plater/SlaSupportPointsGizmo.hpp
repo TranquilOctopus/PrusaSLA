@@ -15,6 +15,7 @@
 
 #include <memory>
 #include <optional>
+#include <unordered_set>
 #include <vector>
 
 namespace Slic3r::App::Plater {
@@ -36,10 +37,18 @@ namespace Slic3r::App::Plater {
 struct SupportPointEditState
 {
     Domain::SLA::SupportPoints working_points;
+    std::unordered_set<size_t> selected_point_indices;
     std::optional<size_t> dragged_point_idx;
     Domain::Vec3d drag_start_world_pos;
     Domain::Vec3d drag_start_mesh_pos;
     double head_diameter_mm = 0.4;
+    bool lock_island_supports = false;
+
+    // Rectangle selection state
+    bool rect_select_active = false;
+    Domain::Vec2d rect_select_start_pos;
+    Domain::Vec2d rect_select_current_pos;
+    bool rect_select_is_add = true;
 };
 
 struct SupportPointPaintableVolume
@@ -92,6 +101,7 @@ public:
     void provide_clipper(Scene::Clipper& clipper);
 
     void render_scene(Render::CommandBuffer& cmd_buffer) override;
+    void on_keyboard(Scene::GizmoKeyEventContext& ctx) override;
 
 private:
     void start_generation();
@@ -129,6 +139,25 @@ private:
 
     // Clipping plane
     void update_clipping_plane();
+    void reset_clipping_plane();
+
+    // Selection helpers
+    void select_point(size_t idx, bool add_to_selection = false);
+    void deselect_point(size_t idx);
+    void select_all_points();
+    void clear_selection();
+    void delete_selected_points();
+    void apply_head_diameter_to_selected();
+
+    // Rectangle selection
+    void start_rectangle_selection(const Domain::Vec2d& mouse_pos, bool is_add);
+    void update_rectangle_selection(const Domain::Vec2d& mouse_pos);
+    void finish_rectangle_selection();
+    void project_points_to_screen(std::vector<Domain::Vec2d>& out_screen_positions) const;
+    std::vector<size_t> points_in_rectangle(const Domain::Vec2d& rect_min, const Domain::Vec2d& rect_max) const;
+
+    // Cone visual
+    void create_cone_geometry_if_needed();
 
     PlaterScenePresenter& m_scene_presenter;
     Biz::ProjectInteractor& m_project_interactor;
@@ -161,6 +190,10 @@ private:
     using TriangleMeshManager = Scene::TriangleMeshManager<std::string>;
     GeometryManager m_geometry_manager{"sla_support_points_geometry"};
     TriangleMeshManager m_triangle_mesh_manager{"sla_support_points_mesh"};
+
+    // Cone geometry for surface normal visualization
+    std::string m_cone_geometry_id = "support_point_cone";
+    bool m_cone_geometry_created = false;
 
     // Hovered point index (for highlight)
     std::optional<size_t> m_hovered_point_idx;

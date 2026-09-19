@@ -8,6 +8,7 @@
 #include "Slic3r/App/Scene/Scene.hpp"
 #include "Slic3r/App/Scene/NodeBuilder.hpp"
 #include "Slic3r/App/Scene/GeometryDataFactory.hpp"
+#include "Slic3r/App/Scene/Ray.hpp"
 #include "Slic3r/App/Render/Device.hpp"
 #include "Slic3r/App/Render/GeometryBuilder.hpp"
 #include "Slic3r/App/Plater/PlaterSceneLayer.hpp"
@@ -24,6 +25,9 @@
 #include "Slic3r/Domain/ConfigContainer.hpp"
 #include "Slic3r/Domain/ConfigPack.hpp"
 #include "Slic3r/Math.hpp"
+#include "Slic3r/App/Platform/KeyboardEvent.hpp"
+#include "Slic3r/App/Platform/KeyModifers.hpp"
+#include "Slic3r/App/Platform/KeyCode.hpp"
 
 #include <Eigen/Geometry>
 #include <fmt/format.h>
@@ -302,12 +306,23 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     {
         if (m_edit_state.has_value()) {
             m_edit_state->head_diameter_mm = value;
+            this->apply_head_diameter_to_selected();
         }
     };
     m_dialog->callbacks().clipping_plane_changed = [this](double value)
     {
         m_clipping_plane_clipper.set_position_by_ratio(value, true);
         update_clipping_plane();
+    };
+    m_dialog->callbacks().lock_island_supports_changed = [this](bool value)
+    {
+        if (m_edit_state.has_value()) {
+            m_edit_state->lock_island_supports = value;
+        }
+    };
+    m_dialog->callbacks().clipping_plane_reset = [this]()
+    {
+        this->reset_clipping_plane();
     };
 
     m_dialog->set_generate_enabled(false);
@@ -693,6 +708,7 @@ void SlaSupportPointsGizmo::begin_editing()
     }
     m_edit_state->head_diameter_mm = head_diameter;
     m_dialog->set_head_diameter(head_diameter);
+    m_dialog->set_lock_island_supports(false);
 
     m_dialog->set_apply_enabled(true);
     m_dialog->set_generate_enabled(true);
@@ -900,56 +916,110 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
     const std::optional<VolumeHitPoint> hit_opt = raycast_mouse(mouse_position);
     const bool has_hit = hit_opt.has_value();
 
-    // Track hovered point (when not dragging)
-    if (!m_edit_state->dragged_point_idx.has_value() && has_hit) {
+    // Track hovered point (when not dragging or rectangle selecting)
+    if (!m_edit_state->dragged_point_idx.has_value() && !m_edit_state->rect_select_active && has_hit) {
         const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
         const double hover_radius = m_edit_state->head_diameter_mm * 2.0;
         m_hovered_point_idx = find_nearest_point(mesh_pos, hover_radius);
-    } else if (!has_hit) {
+    } else if (!has_hit || m_edit_state->dragged_point_idx.has_value() || m_edit_state->rect_select_active) {
         m_hovered_point_idx.reset();
     }
 
+    // Handle mouse wheel for clipping plane (Ctrl + wheel)
+    if (mouse_event.type() == MouseEvent::Type::Wheel) {
+        if (ctrl_down) {
+            const float wheel_rotation =
+                mouse_event.wheel_delta_y() / std::abs(mouse_event.wheel_delta_y());
+            double pos = m_clipping_plane_clipper.get_position();
+            pos = (wheel_rotation > 0.f) ? std::min(1., pos + 0.01) : std::max(0., pos - 0.01);
+            m_clipping_plane_clipper.set_position_by_ratio(pos, true);
+            update_clipping_plane();
+            m_dialog->set_clipping_plane_position(pos);
+            return Scene::GizmoActivationState::Done;
+        }
+    }
+
+    // Left button down
     if (is_left_button_event && mouse_event.type() == MouseEvent::Type::ButtonDown) {
+        // Ctrl+click: remove point
         if (ctrl_down) {
             if (has_hit) {
                 const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
                 const double removal_radius = m_edit_state->head_diameter_mm * 2.0;
                 if (auto idx = find_nearest_point(mesh_pos, removal_radius); idx.has_value()) {
-                    remove_point_at_index(*idx);
+                    if (!m_edit_state->lock_island_supports || !m_edit_state->working_points[*idx].is_island()) {
+                        remove_point_at_index(*idx);
+                    }
                     return Scene::GizmoActivationState::Active;
                 }
             }
             return Scene::GizmoActivationState::Inactive;
         }
 
+        // Shift+click on empty space: start rectangle selection
+        if (shift_down && !has_hit) {
+            start_rectangle_selection(mouse_position, true);
+            return Scene::GizmoActivationState::Probing;
+        }
+
+        // Shift+click on point: toggle selection
+        if (shift_down && has_hit) {
+            const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
+            const double selection_radius = m_edit_state->head_diameter_mm * 2.0;
+            if (auto idx = find_nearest_point(mesh_pos, selection_radius); idx.has_value()) {
+                if (m_edit_state->selected_point_indices.count(*idx)) {
+                    deselect_point(*idx);
+                } else {
+                    select_point(*idx, true);
+                }
+                update_point_visuals();
+                return Scene::GizmoActivationState::Active;
+            }
+        }
+
+        // Regular click on point: select and start drag
         if (has_hit) {
             const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
             const double selection_radius = m_edit_state->head_diameter_mm * 2.0;
             if (auto idx = find_nearest_point(mesh_pos, selection_radius); idx.has_value()) {
-                m_edit_state->dragged_point_idx = idx;
-                m_edit_state->drag_start_world_pos = m_paintable_volumes[hit_opt->volume_idx].world_trafo * hit_opt->volume_hit_position;
-                m_edit_state->drag_start_mesh_pos = mesh_pos;
+                if (!m_edit_state->lock_island_supports || !m_edit_state->working_points[*idx].is_island()) {
+                    clear_selection();
+                    select_point(*idx);
+                    m_edit_state->dragged_point_idx = idx;
+                    m_edit_state->drag_start_world_pos = m_paintable_volumes[hit_opt->volume_idx].world_trafo * hit_opt->volume_hit_position;
+                    m_edit_state->drag_start_mesh_pos = mesh_pos;
+                }
                 return Scene::GizmoActivationState::Active;
             } else {
+                // Click on empty model surface: add point
+                clear_selection();
                 add_point_at_mesh_pos(mesh_pos);
                 return Scene::GizmoActivationState::Active;
             }
         }
+
+        // Click on empty space: clear selection
+        clear_selection();
+        update_point_visuals();
         return Scene::GizmoActivationState::Inactive;
     }
 
+    // Right button down: remove point (or deselect if locked)
     if (is_right_button_event && mouse_event.type() == MouseEvent::Type::ButtonDown) {
         if (has_hit) {
             const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
             const double removal_radius = m_edit_state->head_diameter_mm * 2.0;
             if (auto idx = find_nearest_point(mesh_pos, removal_radius); idx.has_value()) {
-                remove_point_at_index(*idx);
+                if (!m_edit_state->lock_island_supports || !m_edit_state->working_points[*idx].is_island()) {
+                    remove_point_at_index(*idx);
+                }
                 return Scene::GizmoActivationState::Active;
             }
         }
         return Scene::GizmoActivationState::Inactive;
     }
 
+    // Mouse move during drag
     if (mouse_event.type() == MouseEvent::Type::Move && m_edit_state->dragged_point_idx.has_value()) {
         if (has_hit) {
             const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
@@ -959,13 +1029,25 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
         return Scene::GizmoActivationState::Inactive;
     }
 
+    // Mouse move during rectangle selection
+    if (mouse_event.type() == MouseEvent::Type::Move && m_edit_state->rect_select_active) {
+        update_rectangle_selection(mouse_position);
+        return Scene::GizmoActivationState::Active;
+    }
+
+    // Button up
     if ((is_left_button_event || is_right_button_event) && mouse_event.type() == MouseEvent::Type::ButtonUp) {
         if (m_edit_state->dragged_point_idx.has_value()) {
             take_undo_snapshot();
             m_edit_state->dragged_point_idx.reset();
             update_point_visuals();
+            return Scene::GizmoActivationState::Active;
         }
-        return Scene::GizmoActivationState::Active;
+        if (m_edit_state->rect_select_active) {
+            finish_rectangle_selection();
+            return Scene::GizmoActivationState::Active;
+        }
+        return Scene::GizmoActivationState::Inactive;
     }
 
     return Scene::GizmoActivationState::Inactive;
@@ -1011,6 +1093,10 @@ void SlaSupportPointsGizmo::update_point_visuals()
         return Render::geometry_from_triangle_mesh(m_device, sphere_trimesh->triangles());
     });
 
+    // Cone geometry for selected points (surface normal visualization)
+    create_cone_geometry_if_needed();
+    const auto* cone_geom = m_geometry_manager.get(m_cone_geometry_id);
+
     // Clear existing point nodes
     scene.remove_children([this](const Scene::Node* node) {
         return node->parent() == m_points_node;
@@ -1022,9 +1108,15 @@ void SlaSupportPointsGizmo::update_point_visuals()
         highlighted_idx = m_hovered_point_idx;
     }
 
+    // Cone parameters (matching legacy)
+    static constexpr double CONE_RADIUS = 0.25;
+    static constexpr double CONE_HEIGHT = 0.75;
+
     for (size_t i = 0; i < points.size(); ++i) {
         const auto& point = points[i];
         const bool highlighted = highlighted_idx.has_value() && *highlighted_idx == i;
+        const bool is_selected = m_edit_state->selected_point_indices.count(i) > 0;
+        const bool is_locked_island = m_edit_state->lock_island_supports && point.is_island();
 
         // Point position in world space: instance_trafo * point.pos (point.pos is in mesh coords)
         Domain::Vec3d world_pos = instance_trafo * point.pos.cast<double>();
@@ -1032,8 +1124,8 @@ void SlaSupportPointsGizmo::update_point_visuals()
         // Radius = head_front_radius (minimum 0.2 mm)
         double radius = std::max(static_cast<double>(point.head_front_radius), 0.2);
 
-        // Color based on point type
-        ColorRGBA color = get_point_color(point, highlighted);
+        // Color based on point type and state
+        ColorRGBA color = get_point_color(point, highlighted || is_selected);
 
         Render::Material material = Render::Material{}
             .set_shader(m_device.context().shader_manager().shader("gouraud_light"))
@@ -1050,6 +1142,59 @@ void SlaSupportPointsGizmo::update_point_visuals()
             .set_transform(xform);
 
         scene.add_child(builder.build().release(), m_points_node);
+
+// Draw cone for selected points (editing mode visual) - pointing along surface normal
+        if (is_selected && cone_geom) {
+            // Find surface normal by raycasting downward from the point
+            Domain::Vec3d normal_world = Domain::Vec3d::UnitZ(); // Default upward
+            
+            // Raycast from slightly above the point down to the mesh
+            for (const auto& paintable_volume : m_paintable_volumes) {
+                const Domain::Transform3d volume_trafo = paintable_volume.world_trafo;
+                const Domain::Vec3d point_world = world_pos;
+                const Domain::Vec3d point_volume = volume_trafo.inverse() * point_world;
+                
+                // Cast ray downward in world space
+                App::Scene::Ray ray;
+                ray.origin = point_world + Domain::Vec3d::UnitZ() * 10.0;
+                ray.direction = -Domain::Vec3d::UnitZ();
+                
+                const std::optional<MeshRaycaster::UnprojectResult> result =
+                    MeshRaycaster::unproject_on_mesh(
+                        paintable_volume.aabb_mesh,
+                        ray,
+                        volume_trafo,
+                        std::nullopt,
+                        true
+                    );
+                
+                if (result.has_value()) {
+                    // The normal from unproject_on_mesh is in world space
+                    normal_world = result->normal;
+                    normal_world.normalize();
+                    break;
+                }
+            }
+
+            // Create cone transform: point along normal, base at sphere surface
+            Eigen::Quaterniond q;
+            q.setFromTwoVectors(Domain::Vec3d::UnitZ(), normal_world);
+            Domain::Transform3d cone_xform = Domain::Transform3d::Identity();
+            cone_xform.translate(world_pos + normal_world * (radius + CONE_HEIGHT * 0.5 * radius));
+            cone_xform.rotate(q);
+            cone_xform.scale(radius * CONE_RADIUS, radius * CONE_RADIUS, radius * CONE_HEIGHT);
+
+            Render::Material cone_material = Render::Material{}
+                .set_shader(m_device.context().shader_manager().shader("gouraud_light"))
+                .set_uniform("uniform_color", color);
+
+            Scene::NodeBuilder cone_builder{scene};
+            cone_builder.set_debug_name(fmt::format("support_point_cone_{}", i))
+                .set_mesh(cone_geom, cone_material, Scene::RenderLayerId(PlaterSceneLayer::GizmoHandles))
+                .set_transform(cone_xform);
+
+            scene.add_child(cone_builder.build().release(), m_points_node);
+        }
     }
 }
 
@@ -1107,9 +1252,241 @@ void SlaSupportPointsGizmo::update_clipping_plane()
     );
 }
 
-} // namespace Slic3r::App::Plater
+void SlaSupportPointsGizmo::reset_clipping_plane()
+{
+    m_clipping_plane_clipper.set_position_by_ratio(-1., false);
+    update_clipping_plane();
+    m_dialog->set_clipping_plane_position(m_clipping_plane_clipper.get_position());
+}
 
-namespace Slic3r::App::Plater {
+// Selection helpers
+
+void SlaSupportPointsGizmo::select_point(size_t idx, bool add_to_selection)
+{
+    if (!m_edit_state.has_value() || idx >= m_edit_state->working_points.size()) {
+        return;
+    }
+    if (!add_to_selection) {
+        m_edit_state->selected_point_indices.clear();
+    }
+    m_edit_state->selected_point_indices.insert(idx);
+    update_point_visuals();
+}
+
+void SlaSupportPointsGizmo::deselect_point(size_t idx)
+{
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+    m_edit_state->selected_point_indices.erase(idx);
+    update_point_visuals();
+}
+
+void SlaSupportPointsGizmo::select_all_points()
+{
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+    m_edit_state->selected_point_indices.clear();
+    for (size_t i = 0; i < m_edit_state->working_points.size(); ++i) {
+        if (!m_edit_state->lock_island_supports || !m_edit_state->working_points[i].is_island()) {
+            m_edit_state->selected_point_indices.insert(i);
+        }
+    }
+    update_point_visuals();
+}
+
+void SlaSupportPointsGizmo::clear_selection()
+{
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+    m_edit_state->selected_point_indices.clear();
+    update_point_visuals();
+}
+
+void SlaSupportPointsGizmo::delete_selected_points()
+{
+    if (!m_edit_state.has_value() || m_edit_state->selected_point_indices.empty()) {
+        return;
+    }
+
+    // Collect indices to delete (sorted descending to erase correctly)
+    std::vector<size_t> indices_to_delete(m_edit_state->selected_point_indices.begin(),
+                                           m_edit_state->selected_point_indices.end());
+    std::sort(indices_to_delete.rbegin(), indices_to_delete.rend());
+
+    bool any_deleted = false;
+    for (size_t idx : indices_to_delete) {
+        if (idx < m_edit_state->working_points.size()) {
+            const bool is_island = m_edit_state->working_points[idx].is_island();
+            if (!m_edit_state->lock_island_supports || !is_island) {
+                m_edit_state->working_points.erase(m_edit_state->working_points.begin() + idx);
+                any_deleted = true;
+            }
+        }
+    }
+
+    if (any_deleted) {
+        m_edit_state->selected_point_indices.clear();
+        m_dialog->set_point_count(m_edit_state->working_points.size());
+        take_undo_snapshot();
+        update_point_visuals();
+    }
+}
+
+void SlaSupportPointsGizmo::apply_head_diameter_to_selected()
+{
+    if (!m_edit_state.has_value() || m_edit_state->selected_point_indices.empty()) {
+        return;
+    }
+
+    const float new_radius = static_cast<float>(m_edit_state->head_diameter_mm / 2.0);
+    for (size_t idx : m_edit_state->selected_point_indices) {
+        if (idx < m_edit_state->working_points.size()) {
+            m_edit_state->working_points[idx].head_front_radius = new_radius;
+        }
+    }
+    update_point_visuals();
+}
+
+// Rectangle selection
+
+void SlaSupportPointsGizmo::start_rectangle_selection(const Domain::Vec2d& mouse_pos, bool is_add)
+{
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+    m_edit_state->rect_select_active = true;
+    m_edit_state->rect_select_start_pos = mouse_pos;
+    m_edit_state->rect_select_current_pos = mouse_pos;
+    m_edit_state->rect_select_is_add = is_add;
+}
+
+void SlaSupportPointsGizmo::update_rectangle_selection(const Domain::Vec2d& mouse_pos)
+{
+    if (!m_edit_state.has_value() || !m_edit_state->rect_select_active) {
+        return;
+    }
+    m_edit_state->rect_select_current_pos = mouse_pos;
+    // Visual feedback would go here if we had a rectangle drawing API
+    // For now, just update the state
+}
+
+void SlaSupportPointsGizmo::finish_rectangle_selection()
+{
+    if (!m_edit_state.has_value() || !m_edit_state->rect_select_active) {
+        return;
+    }
+
+    const Domain::Vec2d rect_min(
+        std::min(m_edit_state->rect_select_start_pos.x(), m_edit_state->rect_select_current_pos.x()),
+        std::min(m_edit_state->rect_select_start_pos.y(), m_edit_state->rect_select_current_pos.y())
+    );
+    const Domain::Vec2d rect_max(
+        std::max(m_edit_state->rect_select_start_pos.x(), m_edit_state->rect_select_current_pos.x()),
+        std::max(m_edit_state->rect_select_start_pos.y(), m_edit_state->rect_select_current_pos.y())
+    );
+
+    std::vector<size_t> indices = points_in_rectangle(rect_min, rect_max);
+
+    if (m_edit_state->rect_select_is_add) {
+        for (size_t idx : indices) {
+            if (!m_edit_state->lock_island_supports || !m_edit_state->working_points[idx].is_island()) {
+                m_edit_state->selected_point_indices.insert(idx);
+            }
+        }
+    } else {
+        for (size_t idx : indices) {
+            m_edit_state->selected_point_indices.erase(idx);
+        }
+    }
+
+    m_edit_state->rect_select_active = false;
+    update_point_visuals();
+}
+
+void SlaSupportPointsGizmo::project_points_to_screen(std::vector<Domain::Vec2d>& out_screen_positions) const
+{
+    if (!m_edit_state.has_value() || m_paintable_volumes.empty()) {
+        return;
+    }
+
+    const Scene::Camera& camera = m_scene_presenter.scene().camera();
+    const Domain::Project& project = m_project_interactor.selected_project();
+    const Domain::ModelInstance* instance = project.find_instance_by_id(m_selected_object_id.id, m_selected_instance_id);
+    if (!instance) {
+        return;
+    }
+    const Domain::Transform3d instance_trafo = instance->get_matrix();
+
+    out_screen_positions.resize(m_edit_state->working_points.size());
+
+    for (size_t i = 0; i < m_edit_state->working_points.size(); ++i) {
+        const Domain::Vec3d world_pos = instance_trafo * m_edit_state->working_points[i].pos.cast<double>();
+        Domain::Vec2d screen_pos = camera.project_to_screen_space(world_pos);
+        out_screen_positions[i] = screen_pos;
+    }
+}
+
+std::vector<size_t> SlaSupportPointsGizmo::points_in_rectangle(const Domain::Vec2d& rect_min, const Domain::Vec2d& rect_max) const
+{
+    std::vector<Domain::Vec2d> screen_positions;
+    project_points_to_screen(screen_positions);
+
+    std::vector<size_t> result;
+    for (size_t i = 0; i < screen_positions.size(); ++i) {
+        const Domain::Vec2d& pos = screen_positions[i];
+        if (pos.x() >= rect_min.x() && pos.x() <= rect_max.x() &&
+            pos.y() >= rect_min.y() && pos.y() <= rect_max.y()) {
+            result.push_back(i);
+        }
+    }
+    return result;
+}
+
+// Cone visual
+
+void SlaSupportPointsGizmo::create_cone_geometry_if_needed()
+{
+    if (m_cone_geometry_created) {
+        return;
+    }
+
+    static constexpr double CONE_RESOLUTION_ANGLE = Slic3r::deg2rad(360.0 / 32.0);
+    Domain::TriangleMesh mesh = Biz::Algorithms::TriangleMesh::make_cone(1.0, 1.0, CONE_RESOLUTION_ANGLE);
+    auto cone_trimesh = std::make_unique<Scene::TriangleMesh>(std::move(mesh.its));
+    const auto* cone_geom = m_geometry_manager.get_or_create(m_cone_geometry_id, [&]() {
+        return Render::geometry_from_triangle_mesh(m_device, cone_trimesh->triangles());
+    });
+    (void)cone_geom;
+    m_cone_geometry_created = true;
+}
+
+void SlaSupportPointsGizmo::on_keyboard(Scene::GizmoKeyEventContext& ctx)
+{
+    const Platform::KeyboardEvent& evt = ctx.keyboard_event();
+    if (evt.is_repeat() || !m_edit_state.has_value()) {
+        return;
+    }
+
+    Platform::KeyCode code = evt.code();
+
+    // Ctrl+A: Select all
+    if (code == Platform::KeyCode::A && Platform::ctrl_down(evt.key_modifiers())) {
+        if (evt.type() == Platform::KeyboardEvent::Type::KeyDown) {
+            select_all_points();
+        }
+        return;
+    }
+
+    // Delete or Backspace: Delete selected points
+    if ((code == Platform::KeyCode::Delete || code == Platform::KeyCode::Backspace) &&
+        evt.type() == Platform::KeyboardEvent::Type::KeyDown) {
+        delete_selected_points();
+        return;
+    }
+}
 
 void SlaSupportPointsGizmo::render_scene(Render::CommandBuffer& cmd_buffer)
 {

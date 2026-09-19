@@ -4,6 +4,7 @@
 #include "Slic3r/App/Yoga/LayoutButton.hpp"
 #include "Slic3r/App/Yoga/Text.hpp"
 #include "Slic3r/App/Yoga/Item.hpp"
+#include "Slic3r/App/Yoga/Checkbox.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
 
 #include <fmt/format.h>
@@ -84,6 +85,23 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
 
     this->add_separator(this->content());
 
+    m_lock_island_supports_checkbox = content()->emplace_back<Checkbox>(_u8L("Lock island supports"));
+    m_lock_island_supports_checkbox->callbacks().value_changed = [this](bool value)
+    { m_callbacks.lock_island_supports_changed(value); };
+
+    this->add_separator(this->content());
+
+    Item* clipping_row = content()->emplace_back<Item>();
+    clipping_row->set_orientation(Orientation::Horizontal);
+    clipping_row->set_justify_content(YGJustifySpaceBetween);
+    clipping_row->set_gap(gap_size());
+
+    m_clipping_plane_reset_button = clipping_row->emplace_back<LayoutButton>(_u8L("Reset"));
+    m_clipping_plane_reset_button->callbacks().action = [this]()
+    { m_callbacks.clipping_plane_reset(); };
+
+    this->add_separator(this->content());
+
     m_point_count_text = content()->emplace_back<Text>(_u8L("No support points generated yet."));
     m_point_count_text->set_flex_shrink(0);
 }
@@ -120,6 +138,11 @@ void SlaSupportPointsDialog::set_head_diameter(double diameter_mm)
 void SlaSupportPointsDialog::set_clipping_plane_position(double pos)
 {
     m_clipping_plane_slider->set_value(pos);
+}
+
+void SlaSupportPointsDialog::set_lock_island_supports(bool locked)
+{
+    m_lock_island_supports_checkbox->set_value(locked);
 }
 
 } // namespace Slic3r::App::Plater
