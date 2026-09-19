@@ -25,7 +25,6 @@
 #include <boost/dll/runtime_symbol_info.hpp>
 #include <boost/nowide/fstream.hpp>
 
-using Slic3r::Test::is_gcode_sane;
 using namespace Slic3r::Biz;
 using namespace trompeloeil;
 namespace fs = boost::filesystem;

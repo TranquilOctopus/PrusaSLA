@@ -216,7 +216,7 @@ TEST_CASE("SL1 export byte identity: direct vs registry", "[export][sla][identit
             // For config.ini, compare lines after dropping fileCreationTimestamp
             auto diff_lines = compare_files_by_lines(direct_data, registry_data);
             remove_timestamp_lines(diff_lines);
-            INFO("config.ini diff: " << to_string(diff_lines));
+            for (const std::string& line : diff_lines) UNSCOPED_INFO("config.ini diff: " << line);
             REQUIRE(diff_lines.empty());
         } else {
             // All other entries must be byte-identical

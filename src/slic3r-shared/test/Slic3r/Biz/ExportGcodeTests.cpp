@@ -326,7 +326,7 @@ TEST_CASE_METHOD(ExportGcodeFixture, "Export sla", "[export][timeout]")
 
     // Use the shared SLA slicing fixture for the slicing step
     Slic3r::Test::SlaSlicingFixture sla_fixture;
-    std::vector<std::shared_ptr<const Biz::Slicing::SLAResultData>> sla_results;
+    std::vector<std::shared_ptr<const SLAResultData>> sla_results;
 
     // Slice the models
     for (size_t i = 0; i < project_count; i++) {
