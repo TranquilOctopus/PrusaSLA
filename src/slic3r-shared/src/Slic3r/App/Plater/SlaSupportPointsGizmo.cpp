@@ -811,7 +811,7 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
     using namespace Slic3r::App::Platform;
 
     const MouseEvent& mouse_event = ctx.mouse_event();
-    const Vec2d mouse_position = Vec2f(ctx.screen_mouse_x(), ctx.screen_mouse_y()).cast<double>();
+    const Domain::Vec2d mouse_position = Domain::Vec2f(ctx.screen_mouse_x(), ctx.screen_mouse_y()).cast<double>();
 
     const bool is_left_button_event =
         (mouse_event.button() & MouseButton::Left) == MouseButton::Left;
