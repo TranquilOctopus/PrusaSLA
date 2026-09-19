@@ -16,14 +16,18 @@
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
 #include "Slic3r/Domain/ConfigContainer.hpp"
 #include "Slic3r/Domain/ConfigPack.hpp"
+#include "Slic3r/Math.hpp"
 
 #include <Eigen/Geometry>
 #include <fmt/format.h>
+#include <magic_enum/magic_enum_flags.hpp>
 
+using namespace Slic3r;
 using namespace Slic3r::App::Yoga;
 using namespace Slic3r::Biz;
 using namespace Slic3r::Biz::Slicing;
 using namespace Slic3r::Biz::Utils;
+using namespace magic_enum::bitwise_operators;
 
 using Slic3r::Domain::SlicingId;
 using Slic3r::Domain::ObjectID;

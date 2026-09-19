@@ -41,7 +41,7 @@ struct SupportPointPaintableVolume
     const Domain::ModelInstance& model_instance;
     Domain::ModelVolume& model_volume;
     const Scene::TriangleMesh& scene_mesh;
-    const Slic3r::Biz::Algorithms::AABBMesh& aabb_mesh;
+    const Slic3r::AABBMesh& aabb_mesh;
     Domain::Transform3d world_trafo;
     Domain::Transform3d world_trafo_no_translate;
 };
