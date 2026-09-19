@@ -353,16 +353,6 @@ void SlaSupportPointsGizmo::on_activated()
     this->on_scene_selection_changed(m_project_interactor.selected_project_id(), selection);
 }
 
-void SlaSupportPointsGizmo::on_activated()
-{
-    m_project_interactor.scene_interactor().add_listener<Biz::Scene::ISceneSelectionChangedListener>(this);
-    m_project_interactor.sla_object_cache().add_listener<Biz::ISLAObjectCacheChangedListener>(this);
-
-    const Biz::Scene::ObjectSelection& selection =
-        m_project_interactor.scene_interactor().object_selection();
-    this->on_scene_selection_changed(m_project_interactor.selected_project_id(), selection);
-}
-
 void SlaSupportPointsGizmo::on_deactivated()
 {
     m_project_interactor.scene_interactor().remove_listener<Biz::Scene::ISceneSelectionChangedListener>(this);
@@ -516,19 +506,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     // Collect paintable volumes for raycasting
     this->collect_paintable_volumes(project_id, element);
 
-    // Initialize clipping plane presenter
-    m_clipping_plane_presenter.activate(
-        model_object,
-        instance,
-        m_scene_presenter.scene().root(),
-        0.,
-        Scene::BuildMeshesNodes::No
-    );
-    m_clipping_plane_presenter.set_behavior(true, true, 0.);
-    m_clipping_plane_presenter.set_position_by_ratio(m_clipping_plane_clipper.get_position(), true);
-    m_dialog->set_clipping_plane_position(m_clipping_plane_clipper.get_position());
-
-    // Initialize point visuals scene nodes
+    // Initialize point visuals scene nodes first (clipping plane presenter needs m_main_node)
     Scene::Scene& scene = m_scene_presenter.scene();
     Scene::NodeBuilder main_builder{scene};
     main_builder.set_debug_name("SlaSupportPointsGizmo - Main");
@@ -541,6 +519,18 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     std::unique_ptr<Scene::Node> points_node = points_builder.build();
     m_points_node = points_node.get();
     scene.add_child(points_node.release(), m_main_node);
+
+    // Initialize clipping plane presenter
+    m_clipping_plane_presenter.activate(
+        model_object,
+        instance,
+        m_main_node,
+        0.,
+        Scene::BuildMeshesNodes::No
+    );
+    m_clipping_plane_presenter.set_behavior(true, true, 0.);
+    m_clipping_plane_presenter.set_position_by_ratio(m_clipping_plane_clipper.get_position(), true);
+    m_dialog->set_clipping_plane_position(m_clipping_plane_clipper.get_position());
 
     m_dialog->set_generate_enabled(true);
     m_dialog->set_apply_enabled(false);
@@ -1001,8 +991,6 @@ void SlaSupportPointsGizmo::update_point_visuals()
     }
 
     Scene::Scene& scene = m_scene_presenter.scene();
-    auto& geom_mgr = m_scene_presenter.model_geometry_manager();
-    auto& trimesh_mgr = m_scene_presenter.model_triangle_mesh_manager();
 
     // Get the instance transform
     const Domain::Project& project = m_project_interactor.selected_project();
@@ -1015,11 +1003,11 @@ void SlaSupportPointsGizmo::update_point_visuals()
     // Sphere geometry (shared for all points)
     static constexpr double SPHERE_RESOLUTION_ANGLE = Slic3r::deg2rad(360.0 / 32.0);
     const std::string sphere_id = "support_point_sphere";
-    auto sphere_trimesh = trimesh_mgr.get_or_create(sphere_id, [this]() {
+    auto sphere_trimesh = m_triangle_mesh_manager.get_or_create(sphere_id, [this]() {
         Domain::TriangleMesh mesh = Biz::Algorithms::TriangleMesh::make_sphere(1.0, SPHERE_RESOLUTION_ANGLE);
         return std::make_unique<Scene::TriangleMesh>(std::move(mesh.its));
     });
-    const auto* sphere_geom = geom_mgr.get_or_create(sphere_id, [&]() {
+    const auto* sphere_geom = m_geometry_manager.get_or_create(sphere_id, [&]() {
         return Render::geometry_from_triangle_mesh(m_device, sphere_trimesh->triangles());
     });
 
@@ -1048,7 +1036,7 @@ void SlaSupportPointsGizmo::update_point_visuals()
         ColorRGBA color = get_point_color(point, highlighted);
 
         Render::Material material = Render::Material{}
-            .set_shader(m_scene_presenter.device().context().shader_manager().shader("gouraud_light"))
+            .set_shader(m_device.context().shader_manager().shader("gouraud_light"))
             .set_uniform("uniform_color", color);
 
         Domain::Transform3d xform = Domain::Transform3d::Identity();
@@ -1059,9 +1047,9 @@ void SlaSupportPointsGizmo::update_point_visuals()
         builder.set_debug_name(fmt::format("support_point_{}", i))
             .set_mesh(sphere_geom, material, Scene::RenderLayerId(PlaterSceneLayer::GizmoHandles))
             .set_aabb(sphere_trimesh->aabb_mesh())
-            .transform([xform](auto& xf) { xf = xform; });
+            .set_transform(xform);
 
-        m_points_node->add_child(builder.build().release());
+        scene.add_child(builder.build().release(), m_points_node);
     }
 }
 

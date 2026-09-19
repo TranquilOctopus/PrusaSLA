@@ -8,6 +8,7 @@
 #include "Slic3r/Domain/SelectionId.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
 #include "Slic3r/App/Scene/TriangleMeshManager.hpp"
+#include "Slic3r/App/Render/GeometryManager.hpp"
 #include "Slic3r/Biz/Algorithms/AABBMesh.hpp"
 #include "Slic3r/App/Scene/Clipper.hpp"
 #include "Slic3r/App/Scene/ClipperPresenter.hpp"
@@ -154,6 +155,12 @@ private:
     // Scene nodes for point visuals
     Scene::Node* m_main_node = nullptr;
     Scene::Node* m_points_node = nullptr;
+
+    // Geometry and triangle mesh managers for point visuals (like MeasureGizmo)
+    using GeometryManager = Render::GeometryManager<std::string>;
+    using TriangleMeshManager = Scene::TriangleMeshManager<std::string>;
+    GeometryManager m_geometry_manager{"sla_support_points_geometry"};
+    TriangleMeshManager m_triangle_mesh_manager{"sla_support_points_mesh"};
 
     // Hovered point index (for highlight)
     std::optional<size_t> m_hovered_point_idx;
