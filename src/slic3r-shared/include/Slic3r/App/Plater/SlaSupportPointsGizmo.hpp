@@ -2,6 +2,7 @@
 
 #include "Slic3r/App/Scene/IGizmo.hpp"
 #include "Slic3r/App/Plater/GizmoWindow.hpp"
+#include "Slic3r/App/Plater/SlaSupportPointsEditing.hpp"
 #include "Slic3r/Biz/SLAObjectCache.hpp"
 #include "Slic3r/Biz/Scene/SceneInteractor.hpp"
 #include "Slic3r/Domain/ObjectID.hpp"
