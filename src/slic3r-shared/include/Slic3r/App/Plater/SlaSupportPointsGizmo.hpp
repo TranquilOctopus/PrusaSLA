@@ -36,13 +36,10 @@ namespace Slic3r::App::Plater {
 
 struct SupportPointEditState
 {
-    Domain::SLA::SupportPoints working_points;
-    std::unordered_set<size_t> selected_point_indices;
+    SlaSupportPointsEditing editing;
     std::optional<size_t> dragged_point_idx;
     Domain::Vec3d drag_start_world_pos;
     Domain::Vec3d drag_start_mesh_pos;
-    double head_diameter_mm = 0.4;
-    bool lock_island_supports = false;
 
     // Rectangle selection state
     bool rect_select_active = false;
@@ -154,7 +151,6 @@ private:
     void update_rectangle_selection(const Domain::Vec2d& mouse_pos);
     void finish_rectangle_selection();
     void project_points_to_screen(std::vector<Domain::Vec2d>& out_screen_positions) const;
-    std::vector<size_t> points_in_rectangle(const Domain::Vec2d& rect_min, const Domain::Vec2d& rect_max) const;
 
     // Cone visual
     void create_cone_geometry_if_needed();

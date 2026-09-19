@@ -95,6 +95,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Plater/HeightRangeDialog.cpp
         include/Slic3r/App/Plater/SlaSupportPointsGizmo.hpp
         src/Slic3r/App/Plater/SlaSupportPointsGizmo.cpp
+        include/Slic3r/App/Plater/SlaSupportPointsEditing.hpp
+        src/Slic3r/App/Plater/SlaSupportPointsEditing.cpp
         include/Slic3r/App/Plater/SlaSupportPointsDialog.hpp
         src/Slic3r/App/Plater/SlaSupportPointsDialog.cpp
         include/Slic3r/App/Plater/SlaHollowGizmo.hpp

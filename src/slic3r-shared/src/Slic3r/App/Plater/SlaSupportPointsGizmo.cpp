@@ -1,4 +1,5 @@
 #include "Slic3r/App/Plater/SlaSupportPointsGizmo.hpp"
+#include "Slic3r/App/Plater/SlaSupportPointsEditing.hpp"
 
 #include "Slic3r/App/Plater/SlaSupportPointsDialog.hpp"
 #include "Slic3r/App/Plater/PlaterScenePresenter.hpp"
@@ -305,7 +306,7 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     m_dialog->callbacks().head_diameter_changed = [this](double value)
     {
         if (m_edit_state.has_value()) {
-            m_edit_state->head_diameter_mm = value;
+            m_edit_state->editing.head_diameter_mm = value;
             this->apply_head_diameter_to_selected();
         }
     };
@@ -317,7 +318,7 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     m_dialog->callbacks().lock_island_supports_changed = [this](bool value)
     {
         if (m_edit_state.has_value()) {
-            m_edit_state->lock_island_supports = value;
+            m_edit_state->editing.lock_island_supports = value;
         }
     };
     m_dialog->callbacks().clipping_plane_reset = [this]()
@@ -699,14 +700,14 @@ void SlaSupportPointsGizmo::begin_editing()
     }
 
     m_edit_state = SupportPointEditState{};
-    m_edit_state->working_points = model_object->sla_support_points;
+    m_edit_state->editing.points = model_object->sla_support_points;
 
     double head_diameter = 0.4;
     auto head_result = model_object->object_settings_sla.find("support_head_front_diameter");
     if (head_result.item) {
         head_diameter = head_result.item->get<double>();
     }
-    m_edit_state->head_diameter_mm = head_diameter;
+    m_edit_state->editing.head_diameter_mm = head_diameter;
     m_dialog->set_head_diameter(head_diameter);
     m_dialog->set_lock_island_supports(false);
 
@@ -737,7 +738,7 @@ void SlaSupportPointsGizmo::apply_edited_points()
 
     m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SetPartSettingsValue);
 
-    model_object->sla_support_points = std::move(m_edit_state->working_points);
+    model_object->sla_support_points = std::move(m_edit_state->editing.points);
     model_object->sla_points_status = PointsStatus::UserModified;
 
     m_dialog->set_point_count(model_object->sla_support_points.size());
@@ -777,20 +778,7 @@ std::optional<size_t> SlaSupportPointsGizmo::find_nearest_point(const Domain::Ve
         return std::nullopt;
     }
 
-    const auto& points = m_edit_state->working_points;
-    std::optional<size_t> nearest_idx;
-    double nearest_dist_sq = max_distance_mm * max_distance_mm;
-
-    for (size_t i = 0; i < points.size(); ++i) {
-        const Domain::Vec3d point_pos = points[i].pos.cast<double>();
-        double dist_sq = (point_pos - mesh_pos).squaredNorm();
-        if (dist_sq < nearest_dist_sq) {
-            nearest_dist_sq = dist_sq;
-            nearest_idx = i;
-        }
-    }
-
-    return nearest_idx;
+    return m_edit_state->editing.find_nearest_point(mesh_pos, max_distance_mm);
 }
 
 void SlaSupportPointsGizmo::add_point_at_mesh_pos(const Domain::Vec3d& mesh_pos)
@@ -799,37 +787,32 @@ void SlaSupportPointsGizmo::add_point_at_mesh_pos(const Domain::Vec3d& mesh_pos)
         return;
     }
 
-    SupportPoint new_point;
-    new_point.pos = mesh_pos.cast<float>();
-    new_point.head_front_radius = static_cast<float>(m_edit_state->head_diameter_mm / 2.0);
-    new_point.type = SupportPointType::manual_add;
-
-    m_edit_state->working_points.push_back(new_point);
-    m_dialog->set_point_count(m_edit_state->working_points.size());
+    m_edit_state->editing.add_point(mesh_pos);
+    m_dialog->set_point_count(m_edit_state->editing.points.size());
     take_undo_snapshot();
     update_point_visuals();
 }
 
 void SlaSupportPointsGizmo::remove_point_at_index(size_t idx)
 {
-    if (!m_edit_state.has_value() || idx >= m_edit_state->working_points.size()) {
+    if (!m_edit_state.has_value() || idx >= m_edit_state->editing.points.size()) {
         return;
     }
 
-    m_edit_state->working_points.erase(m_edit_state->working_points.begin() + idx);
-    m_dialog->set_point_count(m_edit_state->working_points.size());
+    m_edit_state->editing.remove_point(idx);
+    m_dialog->set_point_count(m_edit_state->editing.points.size());
     take_undo_snapshot();
     update_point_visuals();
 }
 
 void SlaSupportPointsGizmo::move_point_to_mesh_pos(size_t idx, const Domain::Vec3d& mesh_pos)
 {
-    if (!m_edit_state.has_value() || idx >= m_edit_state->working_points.size()) {
+    if (!m_edit_state.has_value() || idx >= m_edit_state->editing.points.size()) {
         return;
     }
 
-    m_edit_state->working_points[idx].pos = mesh_pos.cast<float>();
-    m_dialog->set_point_count(m_edit_state->working_points.size());
+    m_edit_state->editing.move_point(idx, mesh_pos);
+    m_dialog->set_point_count(m_edit_state->editing.points.size());
     update_point_visuals();
 }
 
@@ -919,7 +902,7 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
     // Track hovered point (when not dragging or rectangle selecting)
     if (!m_edit_state->dragged_point_idx.has_value() && !m_edit_state->rect_select_active && has_hit) {
         const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
-        const double hover_radius = m_edit_state->head_diameter_mm * 2.0;
+        const double hover_radius = m_edit_state->editing.head_diameter_mm * 2.0;
         m_hovered_point_idx = find_nearest_point(mesh_pos, hover_radius);
     } else if (!has_hit || m_edit_state->dragged_point_idx.has_value() || m_edit_state->rect_select_active) {
         m_hovered_point_idx.reset();
@@ -945,9 +928,9 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
         if (ctrl_down) {
             if (has_hit) {
                 const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
-                const double removal_radius = m_edit_state->head_diameter_mm * 2.0;
+                const double removal_radius = m_edit_state->editing.head_diameter_mm * 2.0;
                 if (auto idx = find_nearest_point(mesh_pos, removal_radius); idx.has_value()) {
-                    if (!m_edit_state->lock_island_supports || !m_edit_state->working_points[*idx].is_island()) {
+                    if (!m_edit_state->editing.lock_island_supports || !m_edit_state->editing.points[*idx].is_island()) {
                         remove_point_at_index(*idx);
                     }
                     return Scene::GizmoActivationState::Active;
@@ -965,9 +948,9 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
         // Shift+click on point: toggle selection
         if (shift_down && has_hit) {
             const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
-            const double selection_radius = m_edit_state->head_diameter_mm * 2.0;
+            const double selection_radius = m_edit_state->editing.head_diameter_mm * 2.0;
             if (auto idx = find_nearest_point(mesh_pos, selection_radius); idx.has_value()) {
-                if (m_edit_state->selected_point_indices.count(*idx)) {
+                if (m_edit_state->editing.selected_point_indices.count(*idx)) {
                     deselect_point(*idx);
                 } else {
                     select_point(*idx, true);
@@ -980,9 +963,9 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
         // Regular click on point: select and start drag
         if (has_hit) {
             const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
-            const double selection_radius = m_edit_state->head_diameter_mm * 2.0;
+            const double selection_radius = m_edit_state->editing.head_diameter_mm * 2.0;
             if (auto idx = find_nearest_point(mesh_pos, selection_radius); idx.has_value()) {
-                if (!m_edit_state->lock_island_supports || !m_edit_state->working_points[*idx].is_island()) {
+                if (!m_edit_state->editing.lock_island_supports || !m_edit_state->editing.points[*idx].is_island()) {
                     clear_selection();
                     select_point(*idx);
                     m_edit_state->dragged_point_idx = idx;
@@ -1008,9 +991,9 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
     if (is_right_button_event && mouse_event.type() == MouseEvent::Type::ButtonDown) {
         if (has_hit) {
             const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
-            const double removal_radius = m_edit_state->head_diameter_mm * 2.0;
+            const double removal_radius = m_edit_state->editing.head_diameter_mm * 2.0;
             if (auto idx = find_nearest_point(mesh_pos, removal_radius); idx.has_value()) {
-                if (!m_edit_state->lock_island_supports || !m_edit_state->working_points[*idx].is_island()) {
+                if (!m_edit_state->editing.lock_island_supports || !m_edit_state->editing.points[*idx].is_island()) {
                     remove_point_at_index(*idx);
                 }
                 return Scene::GizmoActivationState::Active;
@@ -1066,7 +1049,7 @@ void SlaSupportPointsGizmo::update_point_visuals()
         return;
     }
 
-    const auto& points = m_edit_state->working_points;
+    const auto& points = m_edit_state->editing.points;
     if (points.empty()) {
         clear_point_visuals();
         return;
@@ -1115,8 +1098,8 @@ void SlaSupportPointsGizmo::update_point_visuals()
     for (size_t i = 0; i < points.size(); ++i) {
         const auto& point = points[i];
         const bool highlighted = highlighted_idx.has_value() && *highlighted_idx == i;
-        const bool is_selected = m_edit_state->selected_point_indices.count(i) > 0;
-        const bool is_locked_island = m_edit_state->lock_island_supports && point.is_island();
+        const bool is_selected = m_edit_state->editing.selected_point_indices.count(i) > 0;
+        const bool is_locked_island = m_edit_state->editing.lock_island_supports && point.is_island();
 
         // Point position in world space: instance_trafo * point.pos (point.pos is in mesh coords)
         Domain::Vec3d world_pos = instance_trafo * point.pos.cast<double>();
@@ -1263,14 +1246,10 @@ void SlaSupportPointsGizmo::reset_clipping_plane()
 
 void SlaSupportPointsGizmo::select_point(size_t idx, bool add_to_selection)
 {
-    if (!m_edit_state.has_value() || idx >= m_edit_state->working_points.size()) {
+    if (!m_edit_state.has_value()) {
         return;
     }
-    if (!add_to_selection) {
-        m_edit_state->selected_point_indices.clear();
-    }
-    m_edit_state->selected_point_indices.insert(idx);
-    update_point_visuals();
+    m_edit_state->editing.select_point(idx, add_to_selection);
 }
 
 void SlaSupportPointsGizmo::deselect_point(size_t idx)
@@ -1278,8 +1257,7 @@ void SlaSupportPointsGizmo::deselect_point(size_t idx)
     if (!m_edit_state.has_value()) {
         return;
     }
-    m_edit_state->selected_point_indices.erase(idx);
-    update_point_visuals();
+    m_edit_state->editing.deselect_point(idx);
 }
 
 void SlaSupportPointsGizmo::select_all_points()
@@ -1287,12 +1265,7 @@ void SlaSupportPointsGizmo::select_all_points()
     if (!m_edit_state.has_value()) {
         return;
     }
-    m_edit_state->selected_point_indices.clear();
-    for (size_t i = 0; i < m_edit_state->working_points.size(); ++i) {
-        if (!m_edit_state->lock_island_supports || !m_edit_state->working_points[i].is_island()) {
-            m_edit_state->selected_point_indices.insert(i);
-        }
-    }
+    m_edit_state->editing.select_all_points();
     update_point_visuals();
 }
 
@@ -1301,35 +1274,21 @@ void SlaSupportPointsGizmo::clear_selection()
     if (!m_edit_state.has_value()) {
         return;
     }
-    m_edit_state->selected_point_indices.clear();
+    m_edit_state->editing.clear_selection();
     update_point_visuals();
 }
 
 void SlaSupportPointsGizmo::delete_selected_points()
 {
-    if (!m_edit_state.has_value() || m_edit_state->selected_point_indices.empty()) {
+    if (!m_edit_state.has_value()) {
         return;
     }
 
-    // Collect indices to delete (sorted descending to erase correctly)
-    std::vector<size_t> indices_to_delete(m_edit_state->selected_point_indices.begin(),
-                                           m_edit_state->selected_point_indices.end());
-    std::sort(indices_to_delete.rbegin(), indices_to_delete.rend());
+    const size_t old_count = m_edit_state->editing.points.size();
+    m_edit_state->editing.delete_selected_points();
 
-    bool any_deleted = false;
-    for (size_t idx : indices_to_delete) {
-        if (idx < m_edit_state->working_points.size()) {
-            const bool is_island = m_edit_state->working_points[idx].is_island();
-            if (!m_edit_state->lock_island_supports || !is_island) {
-                m_edit_state->working_points.erase(m_edit_state->working_points.begin() + idx);
-                any_deleted = true;
-            }
-        }
-    }
-
-    if (any_deleted) {
-        m_edit_state->selected_point_indices.clear();
-        m_dialog->set_point_count(m_edit_state->working_points.size());
+    if (m_edit_state->editing.points.size() != old_count) {
+        m_dialog->set_point_count(m_edit_state->editing.points.size());
         take_undo_snapshot();
         update_point_visuals();
     }
@@ -1337,16 +1296,10 @@ void SlaSupportPointsGizmo::delete_selected_points()
 
 void SlaSupportPointsGizmo::apply_head_diameter_to_selected()
 {
-    if (!m_edit_state.has_value() || m_edit_state->selected_point_indices.empty()) {
+    if (!m_edit_state.has_value()) {
         return;
     }
-
-    const float new_radius = static_cast<float>(m_edit_state->head_diameter_mm / 2.0);
-    for (size_t idx : m_edit_state->selected_point_indices) {
-        if (idx < m_edit_state->working_points.size()) {
-            m_edit_state->working_points[idx].head_front_radius = new_radius;
-        }
-    }
+    m_edit_state->editing.apply_head_diameter_to_selected();
     update_point_visuals();
 }
 
@@ -1379,6 +1332,9 @@ void SlaSupportPointsGizmo::finish_rectangle_selection()
         return;
     }
 
+    std::vector<Domain::Vec2d> screen_positions;
+    project_points_to_screen(screen_positions);
+
     const Domain::Vec2d rect_min(
         std::min(m_edit_state->rect_select_start_pos.x(), m_edit_state->rect_select_current_pos.x()),
         std::min(m_edit_state->rect_select_start_pos.y(), m_edit_state->rect_select_current_pos.y())
@@ -1388,17 +1344,17 @@ void SlaSupportPointsGizmo::finish_rectangle_selection()
         std::max(m_edit_state->rect_select_start_pos.y(), m_edit_state->rect_select_current_pos.y())
     );
 
-    std::vector<size_t> indices = points_in_rectangle(rect_min, rect_max);
+    std::vector<size_t> indices = SlaSupportPointsEditing::points_in_rectangle(screen_positions, rect_min, rect_max);
 
     if (m_edit_state->rect_select_is_add) {
         for (size_t idx : indices) {
-            if (!m_edit_state->lock_island_supports || !m_edit_state->working_points[idx].is_island()) {
-                m_edit_state->selected_point_indices.insert(idx);
+            if (!m_edit_state->editing.lock_island_supports || !m_edit_state->editing.points[idx].is_island()) {
+                m_edit_state->editing.select_point(idx, true);
             }
         }
     } else {
         for (size_t idx : indices) {
-            m_edit_state->selected_point_indices.erase(idx);
+            m_edit_state->editing.deselect_point(idx);
         }
     }
 
@@ -1420,29 +1376,13 @@ void SlaSupportPointsGizmo::project_points_to_screen(std::vector<Domain::Vec2d>&
     }
     const Domain::Transform3d instance_trafo = instance->get_matrix();
 
-    out_screen_positions.resize(m_edit_state->working_points.size());
+    out_screen_positions.resize(m_edit_state->editing.points.size());
 
-    for (size_t i = 0; i < m_edit_state->working_points.size(); ++i) {
-        const Domain::Vec3d world_pos = instance_trafo * m_edit_state->working_points[i].pos.cast<double>();
+    for (size_t i = 0; i < m_edit_state->editing.points.size(); ++i) {
+        const Domain::Vec3d world_pos = instance_trafo * m_edit_state->editing.points[i].pos.cast<double>();
         Domain::Vec2d screen_pos = camera.project_to_screen_space(world_pos);
         out_screen_positions[i] = screen_pos;
     }
-}
-
-std::vector<size_t> SlaSupportPointsGizmo::points_in_rectangle(const Domain::Vec2d& rect_min, const Domain::Vec2d& rect_max) const
-{
-    std::vector<Domain::Vec2d> screen_positions;
-    project_points_to_screen(screen_positions);
-
-    std::vector<size_t> result;
-    for (size_t i = 0; i < screen_positions.size(); ++i) {
-        const Domain::Vec2d& pos = screen_positions[i];
-        if (pos.x() >= rect_min.x() && pos.x() <= rect_max.x() &&
-            pos.y() >= rect_min.y() && pos.y() <= rect_max.y()) {
-            result.push_back(i);
-        }
-    }
-    return result;
 }
 
 // Cone visual
