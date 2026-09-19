@@ -13,7 +13,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/path.hpp>
 #include <boost/algorithm/string.hpp>
-#include <boost/log/trivial.hpp>
+#include "Slic3r/Log.hpp"
 
 using namespace Slic3r::Biz::Slicing;
 using Slic3r::Domain::EnumVectorWrapper;
@@ -408,7 +408,7 @@ void store_anycubic(const std::string& file_path, const Biz::Slicing::SLAResultD
         out.write(img_buffer, layer_images.size());
         out.close();
     } catch(std::exception& e) {
-        BOOST_LOG_TRIVIAL(error) << e.what();
+        SPDLOG_ERROR("Anycubic export failed: {}", e.what());
         throw;
     }
 }
