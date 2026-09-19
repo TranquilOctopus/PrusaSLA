@@ -950,11 +950,7 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
             const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
             const double selection_radius = m_edit_state->editing.head_diameter_mm * 2.0;
             if (auto idx = find_nearest_point(mesh_pos, selection_radius); idx.has_value()) {
-                if (m_edit_state->editing.selected_point_indices.count(*idx)) {
-                    deselect_point(*idx);
-                } else {
-                    select_point(*idx, true);
-                }
+                m_edit_state->editing.toggle_point(*idx);
                 update_point_visuals();
                 return Scene::GizmoActivationState::Active;
             }

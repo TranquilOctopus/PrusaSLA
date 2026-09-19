@@ -75,6 +75,18 @@ void SlaSupportPointsEditing::deselect_point(size_t idx)
     selected_point_indices.erase(idx);
 }
 
+void SlaSupportPointsEditing::toggle_point(size_t idx)
+{
+    if (idx >= points.size()) {
+        return;
+    }
+    if (selected_point_indices.count(idx)) {
+        selected_point_indices.erase(idx);
+    } else {
+        selected_point_indices.insert(idx);
+    }
+}
+
 void SlaSupportPointsEditing::select_all_points()
 {
     selected_point_indices.clear();

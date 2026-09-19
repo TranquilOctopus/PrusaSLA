@@ -25,6 +25,7 @@ struct SlaSupportPointsEditing
     // Selection operations
     void select_point(size_t idx, bool add_to_selection = false);
     void deselect_point(size_t idx);
+    void toggle_point(size_t idx);
     void select_all_points();
     void clear_selection();
     void delete_selected_points();
