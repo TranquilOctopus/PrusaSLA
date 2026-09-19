@@ -21,6 +21,7 @@ public:
         std::function<void()> apply = []() {};
         std::function<void()> discard = []() {};
         std::function<void(double)> density_changed = [](double) {};
+        std::function<void(double)> head_diameter_changed = [](double) {};
     };
 
     Callbacks& callbacks();
@@ -29,9 +30,11 @@ public:
     void set_generate_enabled(bool enabled);
     void set_apply_enabled(bool enabled);
     void set_point_count(size_t count);
+    void set_head_diameter(double diameter_mm);
 
 private:
     Yoga::SliderWithInput* m_density_slider = nullptr;
+    Yoga::SliderWithInput* m_head_diameter_slider = nullptr;
     Yoga::LayoutButton* m_generate_button = nullptr;
     Yoga::LayoutButton* m_apply_button = nullptr;
     Yoga::LayoutButton* m_discard_button = nullptr;

@@ -10,6 +10,7 @@
 #include "Slic3r/Biz/Slicing/SlicingInteractor.hpp"
 #include "Slic3r/Biz/StatusCache.hpp"
 #include "Slic3r/Biz/IUndoProvider.hpp"
+#include "Slic3r/Biz/Utils/MeshRaycaster.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
 #include "Slic3r/Domain/SelectionId.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
@@ -22,20 +23,20 @@
 using namespace Slic3r::App::Yoga;
 using namespace Slic3r::Biz;
 using namespace Slic3r::Biz::Slicing;
+using namespace Slic3r::Biz::Utils;
 
 using Slic3r::Domain::SlicingId;
 using Slic3r::Domain::ObjectID;
 using Slic3r::Domain::Transform3d;
 using Slic3r::Domain::Vec3d;
 using Slic3r::Domain::Vec3f;
+using Slic3r::Domain::SLA::SupportPoint;
+using Slic3r::Domain::SLA::SupportPointType;
+using Slic3r::Domain::SLA::SupportPoints;
+using Slic3r::Domain::SLA::PointsStatus;
 
 namespace Slic3r::Biz {
 
-/**
- * @brief Requests SLA support points for a model object by listening to SLAObjectCache.
- * The points arrive in world coordinates (first instance + printer corrections) and are
- * converted to mesh coordinates before being returned.
- */
 class SlaSupportPointsRequest :
     public ISLAObjectCacheChangedListener,
     public IStatusCacheChangedListener
@@ -193,7 +194,6 @@ private:
             return std::nullopt;
         }
 
-        // Convert from world coordinates (first instance + printer corrections) to mesh coordinates
         Domain::SLA::SupportPoints world_points = *sla_object.support_points;
         Domain::SLA::SupportPoints mesh_points;
         mesh_points.reserve(world_points.size());
@@ -283,6 +283,12 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
             }
         }
     };
+    m_dialog->callbacks().head_diameter_changed = [this](double value)
+    {
+        if (m_edit_state.has_value()) {
+            m_edit_state->head_diameter_mm = value;
+        }
+    };
 
     m_dialog->set_generate_enabled(false);
     m_dialog->set_apply_enabled(false);
@@ -314,11 +320,7 @@ void SlaSupportPointsGizmo::provide_gizmo_controller(Scene::IGizmoController& co
 
 void SlaSupportPointsGizmo::on_activated()
 {
-    // Register selection listener only on the scene interactor (not on the scene directly),
-    // as the scene does not carry ISceneSelectionChangedListener.
     m_project_interactor.scene_interactor().add_listener<Biz::Scene::ISceneSelectionChangedListener>(this);
-
-    // Register for SLA object cache changes
     m_project_interactor.sla_object_cache().add_listener<Biz::ISLAObjectCacheChangedListener>(this);
 
     const Biz::Scene::ObjectSelection& selection =
@@ -337,9 +339,57 @@ void SlaSupportPointsGizmo::on_deactivated()
     }
     m_has_generated_points = false;
     m_generated_support_points.reset();
+
+    if (m_edit_state.has_value()) {
+        discard_edited_points();
+    }
+
+    m_paintable_volumes.clear();
+
     m_dialog->set_generate_enabled(false);
     m_dialog->set_apply_enabled(false);
     m_dialog->set_point_count(0);
+}
+
+void SlaSupportPointsGizmo::collect_paintable_volumes(const Domain::SelectionId project_id, const Domain::ElementRef& element)
+{
+    m_paintable_volumes.clear();
+
+    const Domain::Project& project = m_project_interactor.project(project_id);
+    const Domain::ModelObject* model_object = project.find_object_by_id(element.object_id);
+    const Domain::ModelInstance* model_instance = project.find_instance_by_id(element.object_id, element.instance_id);
+
+    if (!model_object || !model_instance) {
+        return;
+    }
+
+    using MeshManager = PlaterScenePresenter::MeshManager;
+    const MeshManager& mesh_manager = m_scene_presenter.model_triangle_mesh_manager(project_id);
+
+    for (Domain::ModelVolume* model_volume : model_object->volumes) {
+        if (!model_volume->is_model_part()) {
+            continue;
+            }
+
+        const Scene::AuxiliaryElementId volume_id{
+            Scene::AuxiliaryElementId::Type::Volume,
+            model_volume->id().id
+        };
+        const Scene::TriangleMesh* scene_mesh = mesh_manager.get(volume_id);
+        if (!scene_mesh) {
+            continue;
+        }
+
+        m_paintable_volumes.push_back({
+            *model_object,
+            *model_instance,
+            *model_volume,
+            *scene_mesh,
+            scene_mesh->aabb_mesh(),
+            model_instance->get_matrix() * model_volume->get_matrix(),
+            model_instance->get_matrix_no_offset() * model_volume->get_matrix_no_offset()
+        });
+    }
 }
 
 void SlaSupportPointsGizmo::on_scene_selection_changed(
@@ -354,6 +404,10 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     m_has_generated_points = false;
     m_generated_support_points.reset();
 
+    if (m_edit_state.has_value()) {
+        discard_edited_points();
+    }
+
     if (!enabled() || selection.elements.empty()) {
         m_dialog->set_generate_enabled(false);
         m_dialog->set_apply_enabled(false);
@@ -363,7 +417,6 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
 
     const Domain::ElementRef& element = selection.elements.front();
     if (element.volume_id != 0) {
-        // Only support whole object selection
         m_dialog->set_generate_enabled(false);
         m_dialog->set_apply_enabled(false);
         m_dialog->set_point_count(0);
@@ -382,7 +435,6 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     m_selected_object_id = model_object->id();
     m_selected_instance_id = element.instance_id;
 
-    // Check if object is on a bed
     const Domain::ModelInstance* instance = project.find_instance_by_id(element.object_id, element.instance_id);
     if (!instance) {
         m_dialog->set_generate_enabled(false);
@@ -399,10 +451,8 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
         return;
     }
 
-    // Get the slicing ID for this bed
     const SlicingId slicing_id{project_id, bed_ref.instance_id};
 
-    // Update dialog with current density setting
     int density = 100;
     auto result = model_object->object_settings_sla.find("support_points_density_relative");
     if (result.item) {
@@ -410,9 +460,18 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     }
     m_dialog->set_density(density);
 
-    // Show existing manual support points count
     size_t existing_count = model_object->sla_support_points.size();
     m_dialog->set_point_count(existing_count);
+
+    double head_diameter = 0.4;
+    auto head_result = model_object->object_settings_sla.find("support_head_front_diameter");
+    if (head_result.item) {
+        head_diameter = head_result.item->get<double>();
+    }
+    m_dialog->set_head_diameter(head_diameter);
+
+    // Collect paintable volumes for raycasting
+    this->collect_paintable_volumes(project_id, element);
 
     m_dialog->set_generate_enabled(true);
     m_dialog->set_apply_enabled(false);
@@ -420,13 +479,9 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
 
 void SlaSupportPointsGizmo::on_sla_object_cache_changed(const Domain::SlicingId& id, Domain::ObjectID object_id)
 {
-    // Only care about the object we're currently generating for
     if (!m_generation_slicing_id.has_value() || id != *m_generation_slicing_id || object_id != m_selected_object_id) {
         return;
     }
-
-    // The request object will handle the cache change and call our callback when ready
-    // No direct action needed here - the request's listener will trigger completion
 }
 
 void SlaSupportPointsGizmo::start_generation()
@@ -441,7 +496,6 @@ void SlaSupportPointsGizmo::start_generation()
         return;
     }
 
-    // Check if object is printable
     const Domain::ModelInstance* instance = project.find_instance_by_id(m_selected_object_id.id, m_selected_instance_id);
     if (!instance || !instance->is_printable()) {
         AppServices::instance().dialog_manager().show_warning_dialog(
@@ -451,7 +505,6 @@ void SlaSupportPointsGizmo::start_generation()
         return;
     }
 
-    // Check if object is on a bed
     const Domain::BedRef bed_ref = instance->get_last_bed();
     if (project.find_bed_instance_by_id(bed_ref.instance_id) == nullptr) {
         AppServices::instance().dialog_manager().show_warning_dialog(
@@ -534,21 +587,17 @@ void SlaSupportPointsGizmo::apply_generated_points()
         return;
     }
 
-    // The points are already in mesh coordinates (converted by the request)
     Domain::SLA::SupportPoints domain_points = std::move(*m_generated_support_points);
 
-    // Take undo snapshot
     m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SetPartSettingsValue);
 
-    // Apply to model object
     model_object->sla_support_points = std::move(domain_points);
-    model_object->sla_points_status = Domain::SLA::PointsStatus::AutoGenerated;
+    model_object->sla_points_status = PointsStatus::AutoGenerated;
 
     m_has_generated_points = false;
     m_dialog->set_apply_enabled(false);
     m_dialog->set_point_count(model_object->sla_support_points.size());
 
-    // Close the tool
     if (m_gizmo_controller) {
         m_gizmo_controller->deactivate_current_tool();
     }
@@ -562,10 +611,276 @@ void SlaSupportPointsGizmo::discard_generated_points()
     m_dialog->set_apply_enabled(false);
     m_dialog->set_generate_enabled(true);
 
-    // Close the tool
     if (m_gizmo_controller) {
         m_gizmo_controller->deactivate_current_tool();
     }
+}
+
+void SlaSupportPointsGizmo::begin_editing()
+{
+    Domain::Project& project = m_project_interactor.selected_project();
+    Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
+    if (!model_object) {
+        return;
+    }
+
+    m_edit_state = SupportPointEditState{};
+    m_edit_state->working_points = model_object->sla_support_points;
+
+    double head_diameter = 0.4;
+    auto head_result = model_object->object_settings_sla.find("support_head_front_diameter");
+    if (head_result.item) {
+        head_diameter = head_result.item->get<double>();
+    }
+    m_edit_state->head_diameter_mm = head_diameter;
+    m_dialog->set_head_diameter(head_diameter);
+
+    m_dialog->set_apply_enabled(true);
+    m_dialog->set_generate_enabled(true);
+}
+
+void SlaSupportPointsGizmo::end_editing()
+{
+    m_edit_state.reset();
+}
+
+void SlaSupportPointsGizmo::apply_edited_points()
+{
+    if (!m_edit_state.has_value() || !m_selected_object_id.valid()) {
+        return;
+    }
+
+    Domain::Project& project = m_project_interactor.selected_project();
+    Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
+    if (!model_object) {
+        return;
+    }
+
+    m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SetPartSettingsValue);
+
+    model_object->sla_support_points = std::move(m_edit_state->working_points);
+    model_object->sla_points_status = PointsStatus::UserModified;
+
+    m_dialog->set_point_count(model_object->sla_support_points.size());
+    end_editing();
+
+    if (m_gizmo_controller) {
+        m_gizmo_controller->deactivate_current_tool();
+    }
+}
+
+void SlaSupportPointsGizmo::discard_edited_points()
+{
+    end_editing();
+    m_dialog->set_apply_enabled(false);
+
+    Domain::Project& project = m_project_interactor.selected_project();
+    Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
+    if (model_object) {
+        m_dialog->set_point_count(model_object->sla_support_points.size());
+    }
+}
+
+void SlaSupportPointsGizmo::take_undo_snapshot()
+{
+    m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SetPartSettingsValue);
+}
+
+std::optional<size_t> SlaSupportPointsGizmo::find_nearest_point(const Domain::Vec3d& mesh_pos, double max_distance_mm) const
+{
+    if (!m_edit_state.has_value()) {
+        return std::nullopt;
+    }
+
+    const auto& points = m_edit_state->working_points;
+    std::optional<size_t> nearest_idx;
+    double nearest_dist_sq = max_distance_mm * max_distance_mm;
+
+    for (size_t i = 0; i < points.size(); ++i) {
+        const Domain::Vec3d point_pos = points[i].pos.cast<double>();
+        double dist_sq = (point_pos - mesh_pos).squaredNorm();
+        if (dist_sq < nearest_dist_sq) {
+            nearest_dist_sq = dist_sq;
+            nearest_idx = i;
+        }
+    }
+
+    return nearest_idx;
+}
+
+void SlaSupportPointsGizmo::add_point_at_mesh_pos(const Domain::Vec3d& mesh_pos)
+{
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+
+    SupportPoint new_point;
+    new_point.pos = mesh_pos.cast<float>();
+    new_point.head_front_radius = static_cast<float>(m_edit_state->head_diameter_mm / 2.0);
+    new_point.type = SupportPointType::manual_add;
+
+    m_edit_state->working_points.push_back(new_point);
+    m_dialog->set_point_count(m_edit_state->working_points.size());
+    take_undo_snapshot();
+}
+
+void SlaSupportPointsGizmo::remove_point_at_index(size_t idx)
+{
+    if (!m_edit_state.has_value() || idx >= m_edit_state->working_points.size()) {
+        return;
+    }
+
+    m_edit_state->working_points.erase(m_edit_state->working_points.begin() + idx);
+    m_dialog->set_point_count(m_edit_state->working_points.size());
+    take_undo_snapshot();
+}
+
+void SlaSupportPointsGizmo::move_point_to_mesh_pos(size_t idx, const Domain::Vec3d& mesh_pos)
+{
+    if (!m_edit_state.has_value() || idx >= m_edit_state->working_points.size()) {
+        return;
+    }
+
+    m_edit_state->working_points[idx].pos = mesh_pos.cast<float>();
+    m_dialog->set_point_count(m_edit_state->working_points.size());
+}
+
+std::optional<SlaSupportPointsGizmo::VolumeHitPoint> SlaSupportPointsGizmo::raycast_mouse(const Domain::Vec2d& mouse_position) const
+{
+    if (m_paintable_volumes.empty()) {
+        return std::nullopt;
+    }
+
+    const Scene::Camera& camera = m_scene_presenter.scene().camera();
+    const Scene::Ray ray = camera.ray_at(mouse_position.x(), mouse_position.y());
+
+    Domain::Vec3d closest_hit_position = Domain::Vec3d::Zero();
+    double closest_hit_squared_distance = std::numeric_limits<double>::max();
+    size_t closest_facet_idx = 0;
+    int closest_volume_idx = -1;
+
+    for (const auto& paintable_volume : m_paintable_volumes) {
+        const int volume_idx = &paintable_volume - &m_paintable_volumes.front();
+
+        const std::optional<MeshRaycaster::UnprojectResult> unproject_result =
+            MeshRaycaster::unproject_on_mesh(
+                paintable_volume.aabb_mesh,
+                ray,
+                paintable_volume.world_trafo,
+                std::nullopt,
+                true
+            );
+
+        if (!unproject_result.has_value()) {
+            continue;
+        }
+
+        double hit_squared_distance =
+            (ray.origin - paintable_volume.world_trafo * unproject_result->position).squaredNorm();
+        if (hit_squared_distance < closest_hit_squared_distance) {
+            closest_hit_squared_distance = hit_squared_distance;
+            closest_facet_idx = unproject_result->facet_idx;
+            closest_volume_idx = volume_idx;
+            closest_hit_position = unproject_result->position;
+        }
+    }
+
+    if (closest_volume_idx == -1) {
+        return std::nullopt;
+    }
+
+    VolumeHitPoint hit;
+    hit.volume_hit_position = closest_hit_position;
+    hit.volume_idx = closest_volume_idx;
+    hit.facet_idx = closest_facet_idx;
+    return hit;
+}
+
+Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventContext& ctx, bool only_active)
+{
+    using namespace Slic3r::App::Platform;
+
+    const MouseEvent& mouse_event = ctx.mouse_event();
+    const Vec2d mouse_position = Vec2f(ctx.screen_mouse_x(), ctx.screen_mouse_y()).cast<double>();
+
+    const bool is_left_button_event =
+        (mouse_event.button() & MouseButton::Left) == MouseButton::Left;
+    const bool is_right_button_event =
+        (mouse_event.button() & MouseButton::Right) == MouseButton::Right;
+
+    const bool ctrl_down  = (mouse_event.key_modifiers() & KeyModifiers(KeyModifier::Ctrl)) != 0;
+    const bool shift_down = (mouse_event.key_modifiers() & KeyModifiers(KeyModifier::Shift)) != 0;
+
+    if (m_paintable_volumes.empty()) {
+        return Scene::GizmoActivationState::Inactive;
+    }
+
+    if (!m_edit_state.has_value()) {
+        begin_editing();
+    }
+
+    const std::optional<VolumeHitPoint> hit_opt = raycast_mouse(mouse_position);
+    const bool has_hit = hit_opt.has_value();
+
+    if (is_left_button_event && mouse_event.type() == MouseEvent::Type::ButtonDown) {
+        if (ctrl_down) {
+            if (has_hit) {
+                const Domain::Vec3d mesh_pos = hit_opt->volume_hit_position;
+                const double removal_radius = m_edit_state->head_diameter_mm * 2.0;
+                if (auto idx = find_nearest_point(mesh_pos, removal_radius); idx.has_value()) {
+                    remove_point_at_index(*idx);
+                    return Scene::GizmoActivationState::Active;
+                }
+            }
+            return Scene::GizmoActivationState::Inactive;
+        }
+
+        if (has_hit) {
+            const Domain::Vec3d mesh_pos = hit_opt->volume_hit_position;
+            const double selection_radius = m_edit_state->head_diameter_mm * 2.0;
+            if (auto idx = find_nearest_point(mesh_pos, selection_radius); idx.has_value()) {
+                m_edit_state->dragged_point_idx = idx;
+                m_edit_state->drag_start_world_pos = m_paintable_volumes[hit_opt->volume_idx].world_trafo * mesh_pos;
+                m_edit_state->drag_start_mesh_pos = mesh_pos;
+                return Scene::GizmoActivationState::Active;
+            } else {
+                add_point_at_mesh_pos(mesh_pos);
+                return Scene::GizmoActivationState::Active;
+            }
+        }
+        return Scene::GizmoActivationState::Inactive;
+    }
+
+    if (is_right_button_event && mouse_event.type() == MouseEvent::Type::ButtonDown) {
+        if (has_hit) {
+            const Domain::Vec3d mesh_pos = hit_opt->volume_hit_position;
+            const double removal_radius = m_edit_state->head_diameter_mm * 2.0;
+            if (auto idx = find_nearest_point(mesh_pos, removal_radius); idx.has_value()) {
+                remove_point_at_index(*idx);
+                return Scene::GizmoActivationState::Active;
+            }
+        }
+        return Scene::GizmoActivationState::Inactive;
+    }
+
+    if (mouse_event.type() == MouseEvent::Type::Move && m_edit_state->dragged_point_idx.has_value()) {
+        if (has_hit) {
+            const Domain::Vec3d mesh_pos = hit_opt->volume_hit_position;
+            move_point_to_mesh_pos(*m_edit_state->dragged_point_idx, mesh_pos);
+            return Scene::GizmoActivationState::Active;
+        }
+        return Scene::GizmoActivationState::Inactive;
+    }
+
+    if ((is_left_button_event || is_right_button_event) && mouse_event.type() == MouseEvent::Type::ButtonUp) {
+        if (m_edit_state->dragged_point_idx.has_value()) {
+            take_undo_snapshot();
+            m_edit_state->dragged_point_idx.reset();
+        }
+        return Scene::GizmoActivationState::Active;
+    }
+
+    return Scene::GizmoActivationState::Inactive;
 }
 
 std::unique_ptr<GizmoWindow> SlaSupportPointsGizmo::release_ui_window()

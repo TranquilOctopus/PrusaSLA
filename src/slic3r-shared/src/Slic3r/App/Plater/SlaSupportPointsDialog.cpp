@@ -35,6 +35,19 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     m_density_slider->callbacks().value_changed = [this](double value)
     { m_callbacks.density_changed(value); };
 
+    add_row_with_slider(
+        content(),
+        &m_head_diameter_slider,
+        _u8L("Head diameter"),
+        _u8L("mm")
+    );
+    m_head_diameter_slider->set_begin_value(0.1);
+    m_head_diameter_slider->set_end_value(5.0);
+    m_head_diameter_slider->set_step(0.1);
+    m_head_diameter_slider->set_validator_precision(1);
+    m_head_diameter_slider->callbacks().value_changed = [this](double value)
+    { m_callbacks.head_diameter_changed(value); };
+
     this->add_separator(this->content());
 
     add_row_with_button(content(), &m_generate_button, _u8L("Generate"));
@@ -84,6 +97,11 @@ void SlaSupportPointsDialog::set_point_count(size_t count)
     } else {
         m_point_count_text->set_text(fmt::format("{} support points generated", count));
     }
+}
+
+void SlaSupportPointsDialog::set_head_diameter(double diameter_mm)
+{
+    m_head_diameter_slider->set_value(diameter_mm);
 }
 
 } // namespace Slic3r::App::Plater
