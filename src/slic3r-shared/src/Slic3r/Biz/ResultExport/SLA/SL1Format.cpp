@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <memory>
+#include <mutex>
 #include <string>
 
 namespace Slic3r::Biz::PrintHost::Sla {
@@ -37,9 +38,13 @@ public:
 
 void register_sla_archive_formats()
 {
-    auto& registry = SlaArchiveFormatRegistry::instance();
-    registry.register_format("SL1", []() { return std::make_unique<SL1Format>(); });
-    registry.register_format("SL1_SVG", []() { return std::make_unique<SL1SVGFormat>(); });
+    // Called before every export; register once so concurrent exports never mutate the registry.
+    static std::once_flag once;
+    std::call_once(once, [] {
+        auto& registry = SlaArchiveFormatRegistry::instance();
+        registry.register_format("SL1", []() { return std::make_unique<SL1Format>(); });
+        registry.register_format("SL1_SVG", []() { return std::make_unique<SL1SVGFormat>(); });
+    });
 }
 
 } // namespace Slic3r::Biz::PrintHost::Sla
