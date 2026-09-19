@@ -105,6 +105,7 @@ private:
         int volume_idx = -1;
         size_t facet_idx = 0;
     };
+    Domain::Vec3d hit_to_object_pos(const VolumeHitPoint& hit) const;
 
     std::optional<VolumeHitPoint> raycast_mouse(const Domain::Vec2d& mouse_position) const;
     void collect_paintable_volumes(const Domain::SelectionId project_id, const Domain::ElementRef& element);

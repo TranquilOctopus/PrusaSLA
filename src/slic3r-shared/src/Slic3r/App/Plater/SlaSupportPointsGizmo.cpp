@@ -686,6 +686,12 @@ void SlaSupportPointsGizmo::take_undo_snapshot()
     m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SetPartSettingsValue);
 }
 
+// Hits are in the hit volume's local frame; sla_support_points live in the object's mesh frame.
+Domain::Vec3d SlaSupportPointsGizmo::hit_to_object_pos(const VolumeHitPoint& hit) const
+{
+    return m_paintable_volumes[hit.volume_idx].model_volume.get_matrix() * hit.volume_hit_position;
+}
+
 std::optional<size_t> SlaSupportPointsGizmo::find_nearest_point(const Domain::Vec3d& mesh_pos, double max_distance_mm) const
 {
     if (!m_edit_state.has_value()) {
@@ -825,7 +831,7 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
     if (is_left_button_event && mouse_event.type() == MouseEvent::Type::ButtonDown) {
         if (ctrl_down) {
             if (has_hit) {
-                const Domain::Vec3d mesh_pos = hit_opt->volume_hit_position;
+                const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
                 const double removal_radius = m_edit_state->head_diameter_mm * 2.0;
                 if (auto idx = find_nearest_point(mesh_pos, removal_radius); idx.has_value()) {
                     remove_point_at_index(*idx);
@@ -836,11 +842,11 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
         }
 
         if (has_hit) {
-            const Domain::Vec3d mesh_pos = hit_opt->volume_hit_position;
+            const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
             const double selection_radius = m_edit_state->head_diameter_mm * 2.0;
             if (auto idx = find_nearest_point(mesh_pos, selection_radius); idx.has_value()) {
                 m_edit_state->dragged_point_idx = idx;
-                m_edit_state->drag_start_world_pos = m_paintable_volumes[hit_opt->volume_idx].world_trafo * mesh_pos;
+                m_edit_state->drag_start_world_pos = m_paintable_volumes[hit_opt->volume_idx].world_trafo * hit_opt->volume_hit_position;
                 m_edit_state->drag_start_mesh_pos = mesh_pos;
                 return Scene::GizmoActivationState::Active;
             } else {
@@ -853,7 +859,7 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
 
     if (is_right_button_event && mouse_event.type() == MouseEvent::Type::ButtonDown) {
         if (has_hit) {
-            const Domain::Vec3d mesh_pos = hit_opt->volume_hit_position;
+            const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
             const double removal_radius = m_edit_state->head_diameter_mm * 2.0;
             if (auto idx = find_nearest_point(mesh_pos, removal_radius); idx.has_value()) {
                 remove_point_at_index(*idx);
@@ -865,7 +871,7 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
 
     if (mouse_event.type() == MouseEvent::Type::Move && m_edit_state->dragged_point_idx.has_value()) {
         if (has_hit) {
-            const Domain::Vec3d mesh_pos = hit_opt->volume_hit_position;
+            const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
             move_point_to_mesh_pos(*m_edit_state->dragged_point_idx, mesh_pos);
             return Scene::GizmoActivationState::Active;
         }
