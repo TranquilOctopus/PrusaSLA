@@ -1,7 +1,7 @@
 #include "AnycubicSLA.hpp"
 
 #include "libslic3r/SLA/RasterBase.hpp"
-#include "libslic3r/Domain/ConfigDefsSLA.hpp"
+#include "Slic3r/Domain/ConfigDefsSLA.hpp"
 
 #include <cstdint>
 #include <vector>
