@@ -54,3 +54,26 @@ TEST_CASE("SlaArchiveFormatRegistry returns SL1 format", "[SlaArchiveFormat]") {
     REQUIRE(std::find(names.begin(), names.end(), "sl1") != names.end());
     REQUIRE(std::find(names.begin(), names.end(), "sl1_svg") != names.end());
 }
+
+TEST_CASE("SlaArchiveFormatRegistry find_by_file_data_type", "[SlaArchiveFormat]") {
+    auto& registry = Slic3r::Biz::PrintHost::Sla::SlaArchiveFormatRegistry::instance();
+
+    // Register formats (idempotent)
+    Slic3r::Biz::PrintHost::Sla::register_sla_archive_formats();
+
+    // Test lookup by FileDataType::sl1_png returns SL1 format
+    auto by_png = registry.find_by_file_data_type(Slic3r::Biz::Slicing::Sla::FileDataType::sl1_png);
+    REQUIRE(by_png != nullptr);
+    REQUIRE(by_png->name() == "SL1");
+    REQUIRE(by_png->file_data_type() == Slic3r::Biz::Slicing::Sla::FileDataType::sl1_png);
+
+    // Test lookup by FileDataType::sl1_svg returns SL1_SVG format
+    auto by_svg = registry.find_by_file_data_type(Slic3r::Biz::Slicing::Sla::FileDataType::sl1_svg);
+    REQUIRE(by_svg != nullptr);
+    REQUIRE(by_svg->name() == "SL1_SVG");
+    REQUIRE(by_svg->file_data_type() == Slic3r::Biz::Slicing::Sla::FileDataType::sl1_svg);
+
+    // Test lookup by FileDataType::other returns nullptr
+    auto by_other = registry.find_by_file_data_type(Slic3r::Biz::Slicing::Sla::FileDataType::other);
+    REQUIRE(by_other == nullptr);
+}

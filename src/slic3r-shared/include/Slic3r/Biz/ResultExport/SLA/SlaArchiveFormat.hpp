@@ -54,6 +54,9 @@ public:
     /// Find a format by file extension (case-insensitive), returns nullptr if not found
     std::unique_ptr<ISlaArchiveFormat> find_by_extension(const std::string& ext) const;
 
+    /// Find a format by FileDataType, returns nullptr if not found
+    std::unique_ptr<ISlaArchiveFormat> find_by_file_data_type(Slic3r::Biz::Slicing::Sla::FileDataType type) const;
+
 private:
     SlaArchiveFormatRegistry() = default;
     struct Entry {
