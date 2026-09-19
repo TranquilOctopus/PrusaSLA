@@ -1565,19 +1565,20 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
 namespace{
 Sla::FileDataType get_output_type(const SLAPrintConfigView& cfg)
 {
-    std::string archive_format = cfg.get<std::string>("sla_archive_format");
+    std::string archive_format = cfg.get<std::string>("sla_archive_format"); // TODO: Change format to enum
     if (archive_format.empty())
         throw ExportError(_u8L("Missing archive format specification."));
-    boost::algorithm::to_lower(archive_format);
+    boost::algorithm::to_lower(archive_format); // lowercase the format string
 
-    if (archive_format == "sl1" ||
-        archive_format == "sl1s" || archive_format == "zip") {
+    // select format by
+    if (archive_format == "sl1" ||                             // main extension
+        archive_format == "sl1s" || archive_format == "zip") { // extension aliases
         return Sla::FileDataType::sl1_png;
     } else if (archive_format == "sl1svg") {
         return Sla::FileDataType::sl1_svg;
-    } else if (archive_format == "pwmo" ||
-               archive_format == "pwmx" ||
-               archive_format == "pwms") {
+    } else if (archive_format == "pwmo" || // Photon Mono
+               archive_format == "pwmx" || // Photon Mono X"
+               archive_format == "pwms") { // Photon Mono SE
         return Sla::FileDataType::anycubic;
     } else {
         return Sla::FileDataType::other;
