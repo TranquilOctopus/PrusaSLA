@@ -9,6 +9,7 @@ using Slic3r::App::Plater::tool_shortcut;
 using Slic3r::App::Plater::tool_command_name;
 using Slic3r::App::Plater::tool_icon;
 using Slic3r::App::Plater::tool_key_code;
+using Slic3r::App::Plater::is_tool_visible_for_technology;
 using Slic3r::App::Scene::ToolType;
 using Slic3r::Domain::PrinterTechnology;
 
@@ -64,4 +65,56 @@ TEST_CASE("SlaSupportPoints and SlaHollow have correct icons", "[ToolGizmosUiInf
 TEST_CASE("SlaSupportPoints and SlaHollow have correct key codes", "[ToolGizmosUiInfo]") {
     REQUIRE(tool_key_code(ToolType::SlaSupportPoints) == Slic3r::App::Platform::KeyCode::P);
     REQUIRE(tool_key_code(ToolType::SlaHollow) == Slic3r::App::Platform::KeyCode::H);
+}
+
+TEST_CASE("is_tool_visible_for_technology returns correct visibility for SLA printer", "[ToolVisibility]") {
+    // SLA-only tools should be visible for SLA
+    REQUIRE(is_tool_visible_for_technology(ToolType::SlaSupportPoints, PrinterTechnology::SLA));
+    REQUIRE(is_tool_visible_for_technology(ToolType::SlaHollow, PrinterTechnology::SLA));
+
+    // FFF-only tools should NOT be visible for SLA
+    REQUIRE_FALSE(is_tool_visible_for_technology(ToolType::PaintOnSeamsGizmo, PrinterTechnology::SLA));
+    REQUIRE_FALSE(is_tool_visible_for_technology(ToolType::PaintOnFuzzySkinGizmo, PrinterTechnology::SLA));
+    REQUIRE_FALSE(is_tool_visible_for_technology(ToolType::MultiMaterialPaintingGizmo, PrinterTechnology::SLA));
+    REQUIRE_FALSE(is_tool_visible_for_technology(ToolType::VariableLayerHeightGizmo, PrinterTechnology::SLA));
+    REQUIRE_FALSE(is_tool_visible_for_technology(ToolType::PaintOnSupportsGizmo, PrinterTechnology::SLA));
+
+    // Common tools should be visible for SLA
+    REQUIRE(is_tool_visible_for_technology(ToolType::Translation, PrinterTechnology::SLA));
+    REQUIRE(is_tool_visible_for_technology(ToolType::Rotation, PrinterTechnology::SLA));
+    REQUIRE(is_tool_visible_for_technology(ToolType::Scale, PrinterTechnology::SLA));
+    REQUIRE(is_tool_visible_for_technology(ToolType::PlaceOnFace, PrinterTechnology::SLA));
+    REQUIRE(is_tool_visible_for_technology(ToolType::Simplify, PrinterTechnology::SLA));
+    REQUIRE(is_tool_visible_for_technology(ToolType::ArrangeGizmo, PrinterTechnology::SLA));
+    REQUIRE(is_tool_visible_for_technology(ToolType::TextGizmo, PrinterTechnology::SLA));
+    REQUIRE(is_tool_visible_for_technology(ToolType::Svg, PrinterTechnology::SLA));
+    REQUIRE(is_tool_visible_for_technology(ToolType::MeasureGizmo, PrinterTechnology::SLA));
+    REQUIRE(is_tool_visible_for_technology(ToolType::CutGizmo, PrinterTechnology::SLA));
+    REQUIRE(is_tool_visible_for_technology(ToolType::HeightRangeGizmo, PrinterTechnology::SLA));
+}
+
+TEST_CASE("is_tool_visible_for_technology returns correct visibility for FFF printer", "[ToolVisibility]") {
+    // SLA-only tools should NOT be visible for FFF
+    REQUIRE_FALSE(is_tool_visible_for_technology(ToolType::SlaSupportPoints, PrinterTechnology::FFF));
+    REQUIRE_FALSE(is_tool_visible_for_technology(ToolType::SlaHollow, PrinterTechnology::FFF));
+
+    // FFF-only tools should be visible for FFF
+    REQUIRE(is_tool_visible_for_technology(ToolType::PaintOnSeamsGizmo, PrinterTechnology::FFF));
+    REQUIRE(is_tool_visible_for_technology(ToolType::PaintOnFuzzySkinGizmo, PrinterTechnology::FFF));
+    REQUIRE(is_tool_visible_for_technology(ToolType::MultiMaterialPaintingGizmo, PrinterTechnology::FFF));
+    REQUIRE(is_tool_visible_for_technology(ToolType::VariableLayerHeightGizmo, PrinterTechnology::FFF));
+    REQUIRE(is_tool_visible_for_technology(ToolType::PaintOnSupportsGizmo, PrinterTechnology::FFF));
+
+    // Common tools should be visible for FFF
+    REQUIRE(is_tool_visible_for_technology(ToolType::Translation, PrinterTechnology::FFF));
+    REQUIRE(is_tool_visible_for_technology(ToolType::Rotation, PrinterTechnology::FFF));
+    REQUIRE(is_tool_visible_for_technology(ToolType::Scale, PrinterTechnology::FFF));
+    REQUIRE(is_tool_visible_for_technology(ToolType::PlaceOnFace, PrinterTechnology::FFF));
+    REQUIRE(is_tool_visible_for_technology(ToolType::Simplify, PrinterTechnology::FFF));
+    REQUIRE(is_tool_visible_for_technology(ToolType::ArrangeGizmo, PrinterTechnology::FFF));
+    REQUIRE(is_tool_visible_for_technology(ToolType::TextGizmo, PrinterTechnology::FFF));
+    REQUIRE(is_tool_visible_for_technology(ToolType::Svg, PrinterTechnology::FFF));
+    REQUIRE(is_tool_visible_for_technology(ToolType::MeasureGizmo, PrinterTechnology::FFF));
+    REQUIRE(is_tool_visible_for_technology(ToolType::CutGizmo, PrinterTechnology::FFF));
+    REQUIRE(is_tool_visible_for_technology(ToolType::HeightRangeGizmo, PrinterTechnology::FFF));
 }

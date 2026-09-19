@@ -9,4 +9,6 @@ const char* tool_command_name(Scene::ToolType tool);
 Render::Icon tool_icon(Scene::ToolType tool);
 Platform::KeyCode tool_key_code(Scene::ToolType tool);
 
+bool is_tool_visible_for_technology(Scene::ToolType tool, Domain::PrinterTechnology technology);
+
 } // namespace Slic3r::App::Plater
