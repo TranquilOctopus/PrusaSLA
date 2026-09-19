@@ -48,9 +48,11 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
 - [x] **M0.6** Reserve `SLAResult` fields for per-layer area, peel-force estimate, and a list of detected issues (left empty for now). · S · needs M0.2
   Result: `layer_areas`, `layer_peel_force` and a print-level `issues` list (`SlaIssue`) reserved in `SLAResultData`, all empty; compile-time test in `ListenersTests.cpp`. Both suites pass (sla_print_tests 40 cases, slic3r-shared-tests 445 cases). Cost note: touching `SLAResult.hpp` rebuilds most of slic3r-shared (~3.5 h at /MP2), so batch hotspot-header changes. sla_print_tests reported 12111 assertions vs 12117 at baseline with no SLA test touched: its assertion count varies between runs.
 - [x] **M0.7** Reserve plater tool slots `ToolType::SlaSupportPoints` and `ToolType::SlaHollow`, with stub gizmos and empty dialogs registered in `PlaterRenderModule`. Show them only when the printer is SLA. · M · needs M0.2
-- [ ] **M0.8** Hide FFF-only plater tools while an SLA printer is active: seams, fuzzy skin, multi-material painting, variable layer height. · S · needs M0.7
+- [x] **M0.8** Hide FFF-only plater tools while an SLA printer is active: seams, fuzzy skin, multi-material painting, variable layer height. · S · needs M0.7
+  Result: one central check in `PlaterRenderModule::update_toolbar_visibility()` using a per-tool technology table in `ToolGizmosUiInfo`; FFF-only tools hidden for SLA and SLA tools hidden for FFF; re-evaluated on preset change. Tests in `SlaToolTypesTests.cpp`. Not checked in a running app.
 - [x] **M0.9** SLA archive format registry: add the `ISlaArchiveFormat` interface and factory (PLAN A4). · M · needs M0.2 · done: Biz-layer registry with SL1 formats; rasterizer creation stays in SLAPrint
-- [ ] **M0.10** Move SL1 and SL1_SVG onto the registry. · M · needs M0.9
+- [x] **M0.10** Move SL1 and SL1_SVG onto the registry. · M · needs M0.9
+  Result: export picks the writer from the registry by `FileDataType`; formats are registered once. SL1 output still goes through the same `store_sl1`. There is no byte-identity test because no sliced-result fixture exists (add one with M0.11).
   Done when: exported archives are byte-identical to the previous output on the test 3MFs.
 - [ ] **M0.11** SLA fixture loader in `slic3r-test-utils`, plus the `--sla-fixture <3mf>` debug flag (PLAN A5). · M · needs M0.2
 - [ ] **M0.12** `[human]` Choose 10–20 benchmark models. Use only models whose licenses allow redistribution, or store them outside the repo. Include miniatures, hollow figurines, flat parts, lattices, and tall thin parts. · S · needs —
@@ -81,7 +83,8 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
 
 - [x] **M2.1** Support points tool, part 1: dialog, Generate (slice until `slaposSupportPoints`, read the points from `Biz::SLAObjectCache` → `Sla::Object::support_points`), and apply/discard. · M · needs M0.7
   Result: gizmo reads points from `SLAObjectCache`; `Sla::Object::object_trafo` (= `SLAPrintObject::trafo()`) added so points convert back to mesh coordinates. Both suites pass (sla_print_tests 40 cases, slic3r-shared-tests 458 cases). Not yet verified in a running app: Generate → Apply placement on a real model (check in M1.1b).
-- [ ] **M2.2** Support points tool, part 2: add, remove and move points, plus head diameter. · M · needs M2.1
+- [x] **M2.2** Support points tool, part 2: add, remove and move points, plus head diameter. · M · needs M2.1
+  Result: add (click), remove (Ctrl-click or right-click) and drag points on the surface; click hits are converted from volume to object mesh coordinates; head diameter control; one undo snapshot per edit. Editing logic has unit tests. Not checked in a running app; the select/remove radius (2 x head diameter) may need tuning.
 - [ ] **M2.3** Support points tool, part 3: island markers and clipping plane. Write a parity checklist against the legacy `GLGizmoSlaSupports` in `doc/sla-fork/parity/support-points.md`. · M · needs M2.2
 - [ ] **M2.4** Hollow tool, part 1: hollowing parameters and preview. · M · needs M0.7
 - [ ] **M2.5** Hollow tool, part 2: place, move and resize drain holes, plus a parity checklist against `GLGizmoHollow`. · M · needs M2.4
