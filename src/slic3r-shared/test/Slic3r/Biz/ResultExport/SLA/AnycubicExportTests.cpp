@@ -86,7 +86,7 @@ TEST_CASE("Anycubic pwmx export", "[export][sla][anycubic]")
 
     REQUIRE(data.size() >= 12);
     std::string magic(reinterpret_cast<const char*>(data.data()), 12);
-    REQUIRE(magic == "ANYCUBIC\0\0\0\0");
+    REQUIRE(magic == std::string("ANYCUBIC\0\0\0\0", 12));
 
     REQUIRE(data.size() >= 16);
     uint32_t version = read_le<uint32_t>(data.data() + 12);
