@@ -149,8 +149,7 @@ static std::string without_timestamp_lines(const std::string& text) {
     std::istringstream in{text};
     std::string line, out;
     while (std::getline(in, line))
-        if (line.find("imestamp") == std::string::npos) out += line + "
-";
+        if (line.find("imestamp") == std::string::npos) out += line + '\n';
     return out;
 }
 
