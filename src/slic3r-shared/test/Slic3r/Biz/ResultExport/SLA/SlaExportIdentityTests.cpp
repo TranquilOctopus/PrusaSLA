@@ -140,8 +140,18 @@ std::vector<std::string> compare_files_by_lines(const Zip::FileData& a, const Zi
 static void remove_timestamp_lines(std::vector<std::string>& lines) {
     lines.erase(std::remove_if(lines.begin(), lines.end(),
         [](std::string s) {
-            return s.rfind("fileCreationTimestamp", 0) == 0;
+            return s.find("imestamp") != std::string::npos;
         }), lines.end());
+}
+
+// Serialized configs carry a creation timestamp; drop those lines before comparing.
+static std::string without_timestamp_lines(const std::string& text) {
+    std::istringstream in{text};
+    std::string line, out;
+    while (std::getline(in, line))
+        if (line.find("imestamp") == std::string::npos) out += line + '
+';
+    return out;
 }
 
 TEST_CASE("SLA slicing determinism", "[export][sla][determinism]")
@@ -166,8 +176,8 @@ TEST_CASE("SLA slicing determinism", "[export][sla][determinism]")
         REQUIRE(result1->files.data[i] == result2->files.data[i]);
     }
 
-    REQUIRE(result1->serialized_config.ini == result2->serialized_config.ini);
-    REQUIRE(result1->serialized_config.json == result2->serialized_config.json);
+    REQUIRE(without_timestamp_lines(result1->serialized_config.ini) == without_timestamp_lines(result2->serialized_config.ini));
+    REQUIRE(without_timestamp_lines(result1->serialized_config.json) == without_timestamp_lines(result2->serialized_config.json));
     REQUIRE(result1->project_name == result2->project_name);
 }
 
@@ -183,8 +193,11 @@ TEST_CASE("SL1 export byte identity: direct vs registry", "[export][sla][identit
 
     Tests::TestTempDir temp_dir;
 
-    fs::path direct_path = temp_dir.path() / "direct.sl1";
-    fs::path registry_path = temp_dir.path() / "registry.sl1";
+    // SL1 names layer images after the output file, so use the same name in two directories.
+    fs::create_directories(temp_dir.path() / "direct");
+    fs::create_directories(temp_dir.path() / "registry");
+    fs::path direct_path = temp_dir.path() / "direct" / "out.sl1";
+    fs::path registry_path = temp_dir.path() / "registry" / "out.sl1";
 
     // Export directly via store_sl1
     REQUIRE_NOTHROW(store_sl1(direct_path.string(), *sla_result));
