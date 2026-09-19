@@ -210,8 +210,15 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
 ## M5: Formats and inspection
 
 - [ ] **M5.1** Import `.sl1`/`.sl1s`/`.slx` archives in the new app, porting the legacy `SLAImportJob` (PLAN C1). · M · needs M0.10
-- [ ] **M5.2** `[human]` Pick which open archive formats to support next, based on target printers (PLAN D2). · S · needs —
-- [ ] **M5.3** Add one todo per chosen format here (`M5.3.<fmt>`): writer, reader, spec conformance tests, and registration of its resin reader for M3.8. · S · needs M5.2
+- [x] **M5.2** `[human]` Pick which open archive formats to support next, based on target printers (PLAN D2). · S · needs —
+  Result (2026-09-19): Elegoo and Anycubic. Elegoo: `.goo` (published spec; Saturn 4 / Mars 5 families), plus `.ctb` for older machines, unencrypted versions only. Anycubic: Photon Workshop family (`.pwmx`/`.pwma`/`.pm3` older, `.pm5`/`.pm5s`/`.pm7` newer).
+- [x] **M5.3** Add one todo per chosen format here (`M5.3.<fmt>`): writer, reader, spec conformance tests, and registration of its resin reader for M3.8. · S · needs M5.2
+  Result: split into M5.3.* below. Every writer registers through the M0.9 registry (`ISlaArchiveFormat`) and needs M0.10. Specs and sample files stay out of the repo unless their license allows it; tests compare against locally held sample archives, like the M7 dataset rule.
+- [ ] **M5.3.goo** Elegoo `.goo` writer: header, preview images, RLE layer encoding and per-layer exposure/motion fields from the M0.4 keys. Tests: round-trip through a `.goo` reader in the test suite, plus a byte-level header check against a locally held Elegoo-sliced sample. · M · needs M0.10
+- [ ] **M5.3.ctb** Chitubox `.ctb` writer for older Elegoo machines, **unencrypted versions only**. Record which printer firmwares accept it. Encrypted versions (v4+) stay out until someone decides it's legally safe. · M · needs M0.10, M5.3.goo
+- [ ] **M5.3.pw** Anycubic Photon Workshop writer: a shared core, plus one variant table per extension (`.pwmx`, `.pwma`, `.pm3`, `.pm5`, `.pm5s`, `.pm7`) for resolution, pixel size, format version and preview size. Tests like M5.3.goo, against locally held Anycubic-sliced samples. · L → split per format version · needs M0.10
+- [ ] **M5.3.profiles** Printer presets for the target Elegoo and Anycubic machines (resolution, pixel size, build volume, archive format), in `resources/presets/` with the output format selected per printer. · M · needs M5.3.goo or M5.3.pw
+- [ ] **M5.3.samples** `[human]` Provide one sliced sample archive per target printer (from Chitubox/Lychee/Photon Workshop) and list the printer models, so the writers can be checked. Samples stay local, like the M7 dataset. · S · needs —
 - [ ] **M5.4** Display mirroring and orientation test pattern for every format (PLAN C3). · M · needs M5.3
 - [ ] **M5.5** Upload SLA archives to print hosts and removable drives (PLAN C4). · M · needs M0.10
 - [ ] **M5.6** Preview layer inspector: 2D layer view with a pixel grid (PLAN F4). Use mock data until M4.9 lands. · L → split · needs M0.11, M1.3
