@@ -63,7 +63,7 @@ TEST_CASE("Anycubic pwmx export", "[export][sla][anycubic]")
     config.sla_printer_settings.items.opt("bottle_weight").set(1.0);
     config.sla_printer_settings.items.opt("bottle_volume").set(1000.0);
     config.sla_printer_settings.items.opt("bottle_cost").set(0.0);
-    config.print.items.opt("supports_enable").set(true);
+    config.sla_print_settings.items.opt("supports_enable").set(true);
 
     auto sla_result = fixture.slice_sla_model(model, config);
     REQUIRE(sla_result != nullptr);
