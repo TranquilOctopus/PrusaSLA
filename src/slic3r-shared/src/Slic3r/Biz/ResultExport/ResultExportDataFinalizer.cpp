@@ -2,6 +2,7 @@
 #include "Slic3r/Biz/libpgcode/LineView.hpp"
 #include "Slic3r/Assert.hpp"
 #include "Slic3r/Biz/ResultExport/SLA/SL1.hpp"
+#include "Slic3r/Biz/ResultExport/SLA/SlaArchiveFormat.hpp"
 #include "Slic3r/Directories.hpp"
 
 #include <LibBGCode/convert/convert.hpp>
@@ -108,7 +109,20 @@ void process_line_view(const libpgcode::LineView& input, const boost::filesystem
 
 void process_sla_result(const Slicing::SLAResultData& data, const boost::filesystem::path& result_path, PrintHost::PrintHostExportFormat result_format)
 {
-    PrintHost::Sla::store_sl1(result_path.string(), data);
+    (void)result_format; // Format is determined by data.files.type
+    
+    // Ensure formats are registered (idempotent)
+    Slic3r::Biz::PrintHost::Sla::register_sla_archive_formats();
+    
+    auto& registry = Slic3r::Biz::PrintHost::Sla::SlaArchiveFormatRegistry::instance();
+    auto format = registry.find_by_file_data_type(data.files.type);
+    
+    if (!format) {
+        throw std::runtime_error("No SLA archive format registered for FileDataType: " + 
+            std::to_string(static_cast<int>(data.files.type)));
+    }
+    
+    format->store(result_path.string(), data);
 }
 
 boost::filesystem::path get_temporary_file_path(const std::string& extension)

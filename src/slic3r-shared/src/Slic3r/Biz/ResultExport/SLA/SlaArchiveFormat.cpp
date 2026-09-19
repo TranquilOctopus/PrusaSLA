@@ -66,4 +66,14 @@ std::unique_ptr<ISlaArchiveFormat> SlaArchiveFormatRegistry::find_by_extension(c
     return nullptr;
 }
 
+std::unique_ptr<ISlaArchiveFormat> SlaArchiveFormatRegistry::find_by_file_data_type(Slic3r::Biz::Slicing::Sla::FileDataType type) const
+{
+    for (const auto& [name, entry] : m_formats) {
+        auto fmt = entry.creator();
+        if (fmt->file_data_type() == type)
+            return fmt;
+    }
+    return nullptr;
+}
+
 } // namespace Slic3r::Biz::PrintHost::Sla
