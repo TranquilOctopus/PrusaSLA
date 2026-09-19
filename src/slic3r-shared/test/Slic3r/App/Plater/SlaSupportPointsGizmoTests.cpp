@@ -11,6 +11,8 @@ using Slic3r::Domain::SLA::SupportPointType;
 using Slic3r::Domain::Transform3d;
 using Slic3r::Domain::Vec3f;
 using Slic3r::Domain::Vec3d;
+using Slic3r::Domain::Vec2d;
+using Slic3r::Domain::Vec4d;
 
 namespace {
 
