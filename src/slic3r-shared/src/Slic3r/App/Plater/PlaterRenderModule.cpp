@@ -937,8 +937,13 @@ void PlaterRenderModule::update_current_right_sidebar()
 
 void PlaterRenderModule::update_toolbar_visibility()
 {
+    const Domain::PrinterTechnology active_technology =
+        m_project_interactor.selected_config_container().print_technology();
+
     for (const Scene::GizmoManager::IToolGizmoPtr& tool_gizmo : m_gizmo_manager->tool_gizmos()) {
-        get_toolbar_button(tool_gizmo->type())->set_visible(tool_gizmo->enabled());
+        const bool visible = is_tool_visible_for_technology(tool_gizmo->type(), active_technology)
+            && tool_gizmo->enabled();
+        get_toolbar_button(tool_gizmo->type())->set_visible(visible);
     }
 
     m_toolbar_add->set_visible(
