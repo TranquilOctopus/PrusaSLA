@@ -1182,7 +1182,7 @@ void SlaSupportPointsGizmo::update_point_visuals()
             Domain::Transform3d cone_xform = Domain::Transform3d::Identity();
             cone_xform.translate(world_pos + normal_world * (radius + CONE_HEIGHT * 0.5 * radius));
             cone_xform.rotate(q);
-            cone_xform.scale(radius * CONE_RADIUS, radius * CONE_RADIUS, radius * CONE_HEIGHT);
+            cone_xform.scale(Domain::Vec3d(radius * CONE_RADIUS, radius * CONE_RADIUS, radius * CONE_HEIGHT));
 
             Render::Material cone_material = Render::Material{}
                 .set_shader(m_device.context().shader_manager().shader("gouraud_light"))

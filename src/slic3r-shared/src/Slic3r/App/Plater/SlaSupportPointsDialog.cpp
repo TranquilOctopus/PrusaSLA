@@ -4,7 +4,7 @@
 #include "Slic3r/App/Yoga/LayoutButton.hpp"
 #include "Slic3r/App/Yoga/Text.hpp"
 #include "Slic3r/App/Yoga/Item.hpp"
-#include "Slic3r/App/Yoga/Checkbox.hpp"
+#include "Slic3r/App/Yoga/ToggleButton.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
 
 #include <fmt/format.h>
@@ -85,8 +85,8 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
 
     this->add_separator(this->content());
 
-    m_lock_island_supports_checkbox = content()->emplace_back<Checkbox>(_u8L("Lock island supports"));
-    m_lock_island_supports_checkbox->callbacks().value_changed = [this](bool value)
+    m_lock_island_supports_checkbox = content()->emplace_back<ToggleButton>(_u8L("Lock island supports"));
+    m_lock_island_supports_checkbox->callbacks().checked_changed = [this](bool value)
     { m_callbacks.lock_island_supports_changed(value); };
 
     this->add_separator(this->content());
@@ -142,7 +142,7 @@ void SlaSupportPointsDialog::set_clipping_plane_position(double pos)
 
 void SlaSupportPointsDialog::set_lock_island_supports(bool locked)
 {
-    m_lock_island_supports_checkbox->set_value(locked);
+    m_lock_island_supports_checkbox->set_checked(locked);
 }
 
 } // namespace Slic3r::App::Plater

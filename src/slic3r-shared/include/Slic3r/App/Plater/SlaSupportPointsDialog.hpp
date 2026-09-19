@@ -6,7 +6,7 @@ namespace Slic3r::App::Yoga {
 class SliderWithInput;
 class LayoutButton;
 class Text;
-class Checkbox;
+class ToggleButton;
 } // namespace Slic3r::App::Yoga
 
 namespace Slic3r::App::Plater {
@@ -46,7 +46,7 @@ private:
     Yoga::LayoutButton* m_apply_button = nullptr;
     Yoga::LayoutButton* m_discard_button = nullptr;
     Yoga::LayoutButton* m_clipping_plane_reset_button = nullptr;
-    Yoga::Checkbox* m_lock_island_supports_checkbox = nullptr;
+    Yoga::ToggleButton* m_lock_island_supports_checkbox = nullptr;
     Yoga::Text* m_point_count_text = nullptr;
 
     Callbacks m_callbacks;
