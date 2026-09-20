@@ -590,7 +590,7 @@ void SlaHollowGizmo::show_preview_mesh(const Biz::Slicing::Sla::Object& sla_obje
 
     const std::string mesh_id = "sla_hollow_preview";
     auto trimesh = m_triangle_mesh_manager.get_or_create(mesh_id, [&]() {
-        return std::make_unique<Scene::TriangleMesh>(sla_object.mesh->its);
+        return std::make_unique<Scene::TriangleMesh>(sla_object.mesh);
     });
 
     // Create or get geometry
