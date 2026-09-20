@@ -234,11 +234,12 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
 - [x] **M5.3.pw-a** Anycubic Photon Mono export for the older formats (`.pwmo`, `.pwmx`, `.pwms`), ported from upstream's removed writer. · M · needs M0.10
   Result: `FileDataType::anycubic` added; `SLAPrintSteps` maps the three extensions to an Anycubic rasterizer (upstream RLE encoder); writer in `Biz/ResultExport/SLA/AnycubicSLA.cpp` registered in the archive registry. Test slices a cube for pwmx and checks the exported header (magic, version, 2560x1440, 35 um, 0.05 mm, layer count). Both suites pass (468 cases).
   Unverified: no printer has been fed one of these files; the RLE round-trip test is skipped (the encoder is file-static in libslic3r); preview thumbnails and per-variant parameters for pwmo/pwms are untested.
-- [ ] **M5.3.pw-b** Anycubic newer formats (`.pm5`, `.pm5s`, `.pm7`): per-variant tables (resolution, pixel size, format version, preview size) on top of the M5.3.pw-a writer. · L → split per format · needs M5.3.pw-a
+- [ ] **M5.3.pw-b** Anycubic newer formats (`.pm5`, `.pm5s`, `.pm7`) — **`.pm5` first: it is the format the maintainer's Photon Mono M5 reads, so nothing exported from this fork prints on that machine until it exists**: per-variant tables (resolution, pixel size, format version, preview size) on top of the M5.3.pw-a writer. · L → split per format · needs M5.3.pw-a
   Starting point: upstream's own Anycubic writer for `.pwmo`/`.pwmx`/`.pwms`, removed in the 3.0 refactor. Recover it with `git show c80474c8b4^:src/libslic3r/Format/AnycubicSLA.cpp` (and `.hpp`); it's the same repository and license. `SLAPrintSteps.cpp` still maps those extensions to `FileDataType::other`.
 - [ ] **M5.3.profiles** Printer presets for the target machines, each with build volume, LCD resolution, pixel size and output format, in `resources/presets/`, so the bed and plate size in the 3D view follow the selected printer. · M · needs M5.3.goo or M5.3.pw-a
   Target list (specs from vendor pages and reviews, **each one to be verified against the official spec sheet before shipping**):
-  - Anycubic Photon Mono M5s: 219 x 123 x 200 mm, 11520 x 5120 (12K), pixel 19 x 24 um
+  - **Anycubic Photon Mono M5 (the maintainer's own printer: do this one first and test on it): 218 x 123 x 200 mm, 11520 x 5120 (12K), pixel 19 x 24 um, file format `.pm5`**
+  - Anycubic Photon Mono M5s: 219 x 123 x 200 mm, 11520 x 5120 (12K), pixel 19 x 24 um, `.pm5s`
   - Anycubic Photon Mono M7: 223 x 126 x 230 mm, resolution to confirm
   - Anycubic Photon Mono M7 Pro: 223 x 126 x 230 mm, 13320 x 5120 (14K)
   - Elegoo Saturn 4 Ultra 12K: 218.88 x 122.88 x 220 mm, 11520 x 5120, pixel 19 x 24 um
