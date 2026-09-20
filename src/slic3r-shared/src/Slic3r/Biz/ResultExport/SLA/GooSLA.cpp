@@ -157,6 +157,15 @@ static void write_string_padded(std::ofstream &out, const std::string &str, size
     out.write(s.data(), len);
 }
 
+// ConfigView::get asserts when a key is missing, so look these up through values().
+static std::string get_cfg_value_s(const Domain::ConfigView &cfg, const std::string &key, const std::string &def = {})
+{
+    const auto it = cfg.values().find(key);
+    if (it == cfg.values().end() || !it->second.holds_alternative<std::string>())
+        return def;
+    return it->second.get<std::string>();
+}
+
 static float get_cfg_value_f(const Domain::ConfigView &cfg, const std::string &key, const float &def = 0.f)
 {
     const auto it = cfg.values().find(key);
@@ -238,13 +247,13 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", ltm);
     std::memcpy(header.file_time, time_buf, std::min<size_t>(24, strlen(time_buf)));
 
-    std::string printer_name = cfg.get<std::string>("printer_name");
+    std::string printer_name = get_cfg_value_s(cfg, "printer_name");
     std::memcpy(header.printer_name, printer_name.data(), std::min<size_t>(32, printer_name.size()));
 
-    std::string printer_type = cfg.get<std::string>("printer_vendor");
+    std::string printer_type = get_cfg_value_s(cfg, "printer_vendor");
     std::memcpy(header.printer_type, printer_type.data(), std::min<size_t>(32, printer_type.size()));
 
-    std::string profile_name = cfg.get<std::string>("sla_material_profile_id");
+    std::string profile_name = get_cfg_value_s(cfg, "sla_material_profile_id");
     std::memcpy(header.profile_name, profile_name.data(), std::min<size_t>(32, profile_name.size()));
 
     header.anti_aliasing_level = 1;
