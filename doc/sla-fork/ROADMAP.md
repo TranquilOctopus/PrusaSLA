@@ -100,6 +100,7 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
   State: partly done on branch `sla/M2.5-drain-holes` (merged, inert): `SlaDrainHolesEditing.{hpp,cpp}` helper, dialog controls and gizmo declarations exist, but nothing is wired into `SlaHollowGizmo.cpp`, and there are no tests and no parity checklist. The run timed out. Finish the wiring, tests and `doc/sla-fork/parity/hollow.md`.
 - [ ] **M2.6** Undo/redo for support point and drain hole edits. · M · needs M2.3, M2.5
 - [ ] **M2.7** 3MF round-trip tests with `sla_roundtrip{1,2}.3mf`. · S · needs M2.6
+- [ ] **M2.7b** Extend the 3MF SLA data so nothing is lost on save/reload: support point `type` (only an island flag is stored today, so slope and manual_add both come back as manual_add), `sla_points_status`, and per-object `object_settings_sla`, which is not written at all. Keep older files readable and keep the file readable by upstream PrusaSlicer. Evidence: the M2.7 round-trip tests in `3MFTests.cpp`. · M · needs M2.7
 - [x] **M2.8** Per-object SLA overrides in the object list (PLAN E4). · M · needs M0.4
   Result: the per-object override panel offers SLA categories when the printer is SLA (`SidebarObject`). The menu entry the model added was dropped: it reached a private member through the wrong base class. No automated test: the one written used APIs that do not exist. Not checked in a running app.
 - [ ] **M2.9** Plater SLA visuals: resin tint, support and pad materials, and overlay styling (PLAN F3). · L → split before starting · needs M0.5, M1.3
