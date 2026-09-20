@@ -25,9 +25,9 @@ SlaHollowDialog::SlaHollowDialog() : GizmoWindow()
     content()->set_gap(2.f * gap_size());
 
     add_row_with_toggle_button(
+        _u8L("Enable hollowing"),
         content(),
-        &m_enable_checkbox,
-        _u8L("Enable hollowing")
+        &m_enable_checkbox
     );
     m_enable_checkbox->callbacks().checked_changed = [this](bool value)
     { m_callbacks.enable_changed(value); };

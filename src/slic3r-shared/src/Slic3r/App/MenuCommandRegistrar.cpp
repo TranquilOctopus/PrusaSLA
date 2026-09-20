@@ -653,29 +653,6 @@ void MenuCommandRegistrar::register_object_menu_commands()
                 .checked = [this]()
                 { return m_project_interactor.scene_interactor().selected_instances_printable(); },
             }
-        )
-        .append_separator()
-        .append_item(
-            MenuItemName::ObjectSettings,
-            CommandName::OpenObjectSettings,
-            [this]()
-            {
-                if (auto* sidebar_object = m_render_module.m_sidebar_object.get()) {
-                    sidebar_object->open_settings_dialog();
-                }
-            },
-            UIItemCommandExtraOpts{
-                .enabled = [this]()
-                {
-                    const auto& selection =
-                        m_project_interactor.scene_interactor().object_selection();
-                    if (selection.empty() || selection.mode != Biz::Scene::SelectionMode::Instance) {
-                        return false;
-                    }
-                    const auto& container = m_project_interactor.selected_config_container();
-                    return container.selected_preset().technology() == Domain::PrinterTechnology::SLA;
-                }
-            }
         );
 }
 
@@ -1148,30 +1125,7 @@ void MenuCommandRegistrar::register_multi_object_menu_commands()
             }
         )
         .append_separator()
-        .append_item_from_command(MenuItemName::PrintableMultiObjects, CommandName::SetAsPrintable)
-        .append_separator()
-        .append_item(
-            MenuItemName::MultiObjectSettings,
-            CommandName::OpenObjectSettings,
-            [this]()
-            {
-                if (auto* sidebar_object = m_render_module.m_sidebar_object.get()) {
-                    sidebar_object->open_settings_dialog();
-                }
-            },
-            UIItemCommandExtraOpts{
-                .enabled = [this]()
-                {
-                    const auto& selection =
-                        m_project_interactor.scene_interactor().object_selection();
-                    if (selection.empty() || selection.mode != Biz::Scene::SelectionMode::Instance) {
-                        return false;
-                    }
-                    const auto& container = m_project_interactor.selected_config_container();
-                    return container.selected_preset().technology() == Domain::PrinterTechnology::SLA;
-                }
-            }
-        );
+        .append_item_from_command(MenuItemName::PrintableMultiObjects, CommandName::SetAsPrintable);
 }
 
 boost::filesystem::path MenuCommandRegistrar::default_dialog_folder() const

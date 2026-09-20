@@ -2,6 +2,7 @@
 #include "Slic3r/App/Plater/SlaHollowDialog.hpp"
 #include "Slic3r/App/Plater/PlaterScenePresenter.hpp"
 #include "Slic3r/App/AppServices.hpp"
+#include "Slic3r/App/IDialogManager.hpp"
 #include "Slic3r/App/Scene/Scene.hpp"
 #include "Slic3r/App/Scene/NodeBuilder.hpp"
 #include "Slic3r/App/Scene/GeometryDataFactory.hpp"

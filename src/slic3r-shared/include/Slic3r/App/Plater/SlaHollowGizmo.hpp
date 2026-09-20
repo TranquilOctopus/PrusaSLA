@@ -28,11 +28,11 @@ class Device;
 
 namespace Slic3r::Biz {
 class ProjectInteractor;
+class SlaHollowRequest;
 } // namespace Slic3r::Biz
 
 namespace Slic3r::App::Plater {
 
-struct SlaHollowRequest;
 
 struct DrainHoleEditState
 {
@@ -148,7 +148,7 @@ private:
     Biz::ProjectInteractor& m_project_interactor;
     Render::Device& m_device;
     std::unique_ptr<SlaHollowDialog> m_dialog;
-    std::unique_ptr<SlaHollowRequest> m_hollow_request;
+    std::unique_ptr<Biz::SlaHollowRequest> m_hollow_request;
     std::optional<Domain::SlicingId> m_preview_slicing_id;
     Domain::ObjectID m_selected_object_id;
     Domain::SelectionId m_selected_instance_id{Domain::INVALID_ID};
