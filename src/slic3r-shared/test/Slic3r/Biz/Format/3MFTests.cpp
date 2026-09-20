@@ -283,9 +283,9 @@ TEST_CASE("3MF SLA round trip preserves support points and drain holes", "[3mf][
 
     // (c) Per-object SLA settings in object_settings_sla
     // NOTE: object_settings_sla is NOT currently written by PrusaFile.cpp (gap)
-    object->object_settings_sla.set("support_points_density_relative", 150);
-    object->object_settings_sla.set("hollowing_enable", true);
-    object->object_settings_sla.set("hollowing_min_thickness", 2.0);
+    object->object_settings_sla.overrides.set("support_points_density_relative", 150);
+    object->object_settings_sla.overrides.set("hollowing_enable", true);
+    object->object_settings_sla.overrides.set("hollowing_min_thickness", 2.0);
 
     const fs::path temp_dir =
         fs::temp_directory_path() / fs::unique_path("slic3r-3mf-sla-test-%%%%-%%%%");
