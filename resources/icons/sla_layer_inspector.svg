@@ -1,0 +1,17 @@
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Stacked layers -->
+  <!-- Bottom layer -->
+  <path d="M2 13.5H14" stroke="#F7F7F7" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Second layer -->
+  <path d="M2 10.5H14" stroke="#F7F7F7" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Highlighted layer (third from bottom) -->
+  <rect x="1.5" y="7" width="13" height="3" rx="0.5" fill="#F7F7F7" fill-opacity="0.3"/>
+  <path d="M2 8.5H14" stroke="#F7F7F7" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Fourth layer -->
+  <path d="M2 5.5H14" stroke="#F7F7F7" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Top layer -->
+  <path d="M2 2.5H14" stroke="#F7F7F7" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Side edges for 3D effect -->
+  <path d="M2 2.5V13.5" stroke="#F7F7F7" stroke-width="1" stroke-linecap="round" opacity="0.5"/>
+  <path d="M14 2.5V13.5" stroke="#F7F7F7" stroke-width="1" stroke-linecap="round" opacity="0.5"/>
+</svg>

@@ -91,12 +91,12 @@ static const std::unordered_map<Scene::ToolType, ToolGizmoUiInfo> tool_gizmos_ui
      {Biz::L("SLA Support Points"),
        Platform::CommandName::SlaSupportPointsGizmo,
        Platform::KeyCode::P,
-       Render::Icon::Support}},
+       Render::Icon::SlaSupportPoints}},
     {Scene::ToolType::SlaHollow,
      {Biz::L("SLA Hollow"),
        Platform::CommandName::SlaHollowGizmo,
        Platform::KeyCode::H,
-       Render::Icon::Hollowing}},
+       Render::Icon::SlaHollow}},
 };
 
 std::string tool_name(Scene::ToolType tool)
