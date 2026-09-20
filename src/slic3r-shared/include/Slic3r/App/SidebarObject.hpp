@@ -48,6 +48,8 @@ public:
 
     void active_tool_changed(Scene::IToolGizmo* active_tool) override;
 
+    void open_settings_dialog();
+
 protected:
     void visible_updated_internal() override;
 
