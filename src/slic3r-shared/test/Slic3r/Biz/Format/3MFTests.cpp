@@ -17,6 +17,7 @@ using namespace Slic3r::Biz;
 namespace fs = boost::filesystem;
 
 using Slic3r::Domain::FacetsAnnotation;
+using Slic3r::Domain::ModelObject;
 using Slic3r::Domain::ModelObjectPtrs;
 using Slic3r::Domain::ModelVolume;
 using Slic3r::Domain::Project;
