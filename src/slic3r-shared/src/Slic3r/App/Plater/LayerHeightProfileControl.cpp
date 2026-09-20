@@ -23,7 +23,7 @@ LayerHeightProfileControl::LayerHeightProfileControl() : Item()
 
     const ImColor range_color = m_theme->color_imgui(Platform::Color::AccentSecondary);
 
-    m_layer_height_profile_color              = ImColor(175, 119, 255, 255);
+    m_layer_height_profile_color              = m_theme->color_imgui(Platform::Color::AccentTertiary);
     m_layer_height_baseline_color             = m_theme->color_imgui(Platform::Color::Transparent);
     m_height_range_color_even                 = Imgui::adjust_brightness(range_color, 0.65f);
     m_height_range_color_odd                  = Imgui::adjust_brightness(range_color, 0.5f);
