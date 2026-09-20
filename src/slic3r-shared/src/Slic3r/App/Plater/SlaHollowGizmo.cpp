@@ -1,5 +1,6 @@
 #include "Slic3r/App/Plater/SlaHollowGizmo.hpp"
 #include "Slic3r/App/Plater/SlaHollowDialog.hpp"
+#include "Slic3r/App/Plater/SlaDrainHolesEditing.hpp"
 #include "Slic3r/App/Plater/PlaterScenePresenter.hpp"
 #include "Slic3r/App/AppServices.hpp"
 #include "Slic3r/App/IDialogManager.hpp"
@@ -15,16 +16,22 @@
 #include "Slic3r/Biz/Slicing/SlicingInteractor.hpp"
 #include "Slic3r/Biz/StatusCache.hpp"
 #include "Slic3r/Biz/IUndoProvider.hpp"
+#include "Slic3r/Biz/Utils/MeshRaycaster.hpp"
 #include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
 #include "Slic3r/Domain/SelectionId.hpp"
 #include "Slic3r/Domain/ConfigContainer.hpp"
 #include "Slic3r/Domain/ConfigPack.hpp"
+#include "Slic3r/Domain/SLA/DrainHole.hpp"
 #include "Slic3r/Math.hpp"
 #include "libslic3r/SLAResult.hpp"
 #include "libslic3r/IPrint.hpp"
 #include "libslic3r/PrintSteps.hpp"
+#include "Slic3r/App/Platform/KeyboardEvent.hpp"
+#include "Slic3r/App/Platform/KeyModifers.hpp"
+#include "Slic3r/App/Platform/KeyCode.hpp"
 
+#include <Eigen/Geometry>
 #include <fmt/format.h>
 #include <magic_enum/magic_enum_flags.hpp>
 
@@ -32,6 +39,7 @@ using namespace Slic3r;
 using namespace Slic3r::App::Yoga;
 using namespace Slic3r::Biz;
 using namespace Slic3r::Biz::Slicing;
+using namespace Slic3r::Biz::Utils;
 using namespace Slic3r::Biz::Algorithms;
 using namespace magic_enum::bitwise_operators;
 
@@ -41,7 +49,8 @@ using Slic3r::Domain::Transform3d;
 using Slic3r::Domain::Vec3d;
 using Slic3r::Domain::Vec3f;
 using Slic3r::Domain::ColorRGBA;
-using Slic3r::Domain::SLA::SupportPoint;
+using Slic3r::Domain::SLA::DrainHole;
+using Slic3r::Domain::SLA::DrainHoles;
 
 namespace Slic3r::Biz {
 
@@ -457,6 +466,33 @@ void SlaHollowGizmo::on_scene_selection_changed(
 
     m_dialog->set_preview_enabled(true);
     m_dialog->set_status(_u8L("Ready to preview."));
+
+    // Connect drain hole dialog callbacks
+    m_dialog->callbacks().hole_radius_changed = [this](double value)
+    {
+        m_current_hole_radius = value;
+        if (m_edit_state.has_value()) {
+            m_edit_state->editing.hole_radius_mm = value;
+        }
+    };
+    m_dialog->callbacks().hole_height_changed = [this](double value)
+    {
+        m_current_hole_height = value;
+        if (m_edit_state.has_value()) {
+            m_edit_state->editing.hole_height_mm = value;
+        }
+    };
+    m_dialog->callbacks().remove_selected_holes = [this]()
+    {
+        delete_selected_holes();
+    };
+    m_dialog->callbacks().remove_all_holes = [this]()
+    {
+        if (m_edit_state.has_value()) {
+            m_edit_state->editing.select_all_holes();
+            delete_selected_holes();
+        }
+    };
 }
 
 void SlaHollowGizmo::on_sla_object_cache_changed(const Domain::SlicingId& id, Domain::ObjectID object_id)
