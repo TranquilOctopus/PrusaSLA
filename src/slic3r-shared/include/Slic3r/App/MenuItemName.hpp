@@ -149,6 +149,7 @@ enum class MenuItemName
     InvalidateCutInfo,
     SetAsSeparateObject,
     PrintableObject,
+    ObjectSettings,
 
     MultiObjectsContextMenu,
     CopyMultiObjects,
@@ -157,6 +158,7 @@ enum class MenuItemName
     MergeMultiObjects,
     FixMultiObjectWithRepairAlgorithm,
     PrintableMultiObjects,
+    MultiObjectSettings,
 
     SvgOrTextContextMenu,
     EditSvgOrText,

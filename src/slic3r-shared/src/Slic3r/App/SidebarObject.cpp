@@ -417,6 +417,13 @@ void SidebarObject::visible_updated_internal()
     }
 }
 
+void SidebarObject::open_settings_dialog()
+{
+    if (m_override_settings_dialog) {
+        m_override_settings_dialog->open();
+    }
+}
+
 void SidebarObject::add_volume_type_selector()
 {
     m_volume_type_selector =
@@ -585,6 +592,26 @@ void SidebarObject::update_enable_modifiers()
     m_override_group_list_view->set_visible(enable);
     m_no_overrides_label->set_visible(!wipe_tower_selected && !enable);
     m_scale_section->set_visible(!wipe_tower_selected);
+
+    // Update default categories based on printer technology
+    const bool is_sla = m_project_interactor.selected_config_container()
+                            .selected_preset()
+                            .technology() == Domain::PrinterTechnology::SLA;
+    if (is_sla) {
+        m_override_group_filter->set_default_categories(
+            {Domain::ConfigItemDef::Category::Print_Supports,
+             Domain::ConfigItemDef::Category::Print_Hollowing,
+             Domain::ConfigItemDef::Category::Print_Pad}
+        );
+    } else {
+        m_override_group_filter->set_default_categories(
+            {Domain::ConfigItemDef::Category::Print_Infill,
+             Domain::ConfigItemDef::Category::Print_LayersSurfaces,
+             Domain::ConfigItemDef::Category::Print_Supports,
+             Domain::ConfigItemDef::Category::Print_WallsPerimeters,
+             Domain::ConfigItemDef::Category::Print_BedAdhesion}
+        );
+    }
 
     if (!enable) {
         m_override_settings_dialog->close();

@@ -121,6 +121,7 @@ struct CommandName
     static constexpr const char* FixWithRepairAlgorithm = "fix-with-repair-algorithm";
     static constexpr const char* SetAsPrintable         = "set-as-printable";
     static constexpr const char* SplitToVolumes         = "split-to-volumes";
+    static constexpr const char* OpenObjectSettings     = "open-object-settings";
 
     static constexpr const char* PluginExecutePrefix = "plugin-execute-";
     static constexpr const char* PluginRescan = "plugin-rescan";
