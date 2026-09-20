@@ -96,10 +96,12 @@ TEST_CASE("Anycubic pwmx export", "[export][sla][anycubic]")
     uint32_t area_num = read_le<uint32_t>(data.data() + 16);
     REQUIRE(area_num == 4);
 
-    size_t header_offset = sizeof(uint32_t) * 3 + 12;
+    // The intro block stores the offset of every section; the header is not at a fixed position.
+    REQUIRE(data.size() >= 24);
+    size_t header_offset = read_le<uint32_t>(data.data() + 20);
     REQUIRE(data.size() >= header_offset + 12);
     std::string header_tag(reinterpret_cast<const char*>(data.data() + header_offset), 12);
-    REQUIRE(header_tag == "HEADER\0\0\0\0\0\0");
+    REQUIRE(header_tag == std::string("HEADER\0\0\0\0\0\0", 12));
 
     size_t header_payload_offset = header_offset + 12 + 4;
     REQUIRE(data.size() >= header_payload_offset + 4);
