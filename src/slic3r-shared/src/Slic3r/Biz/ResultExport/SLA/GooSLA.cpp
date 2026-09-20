@@ -166,6 +166,14 @@ static std::string get_cfg_value_s(const Domain::ConfigView &cfg, const std::str
     return it->second.get<std::string>();
 }
 
+static bool get_cfg_value_b(const Domain::ConfigView &cfg, const std::string &key, bool def = false)
+{
+    const auto it = cfg.values().find(key);
+    if (it == cfg.values().end() || !it->second.holds_alternative<bool>())
+        return def;
+    return it->second.get<bool>();
+}
+
 static float get_cfg_value_f(const Domain::ConfigView &cfg, const std::string &key, const float &def = 0.f)
 {
     const auto it = cfg.values().find(key);
@@ -270,14 +278,14 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     header.x_resolution = get_cfg_value_i(cfg, "display_pixels_x");
     header.y_resolution = get_cfg_value_i(cfg, "display_pixels_y");
 
-    header.x_mirror = cfg.get<bool>("display_mirror_x") ? 1 : 0;
-    header.y_mirror = cfg.get<bool>("display_mirror_y") ? 1 : 0;
+    header.x_mirror = get_cfg_value_b(cfg, "display_mirror_x") ? 1 : 0;
+    header.y_mirror = get_cfg_value_b(cfg, "display_mirror_y") ? 1 : 0;
 
-    double dw = cfg.get<double>("display_width");
-    double dh = cfg.get<double>("display_height");
+    double dw = get_cfg_value_f(cfg, "display_width");
+    double dh = get_cfg_value_f(cfg, "display_height");
     header.x_size_platform = static_cast<float>(dw);
     header.y_size_platform = static_cast<float>(dh);
-    header.z_size_platform = cfg.get<double>("printer_build_height");
+    header.z_size_platform = get_cfg_value_f(cfg, "printer_build_height");
 
     header.layer_thickness = get_cfg_value_f(cfg, "layer_height");
     header.common_exposure_time = get_cfg_value_f(cfg, "exposure_time");
@@ -330,9 +338,9 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     }
     header.printing_time = static_cast<int32_t>(print_time);
 
-    float bottle_weight_g = cfg.get<double>("bottle_weight") * 1000.0;
-    float bottle_volume_ml = cfg.get<double>("bottle_volume");
-    float bottle_cost = cfg.get<double>("bottle_cost");
+    float bottle_weight_g = get_cfg_value_f(cfg, "bottle_weight") * 1000.0;
+    float bottle_volume_ml = get_cfg_value_f(cfg, "bottle_volume");
+    float bottle_cost = get_cfg_value_f(cfg, "bottle_cost");
     float material_density = (bottle_volume_ml > 0) ? (bottle_weight_g / bottle_volume_ml) : 1.0f;
 
     header.total_volume = (stats.objects_used_material + stats.support_used_material) / 1000.0f;
