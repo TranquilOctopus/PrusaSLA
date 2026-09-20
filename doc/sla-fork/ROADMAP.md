@@ -236,7 +236,15 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
   Unverified: no printer has been fed one of these files; the RLE round-trip test is skipped (the encoder is file-static in libslic3r); preview thumbnails and per-variant parameters for pwmo/pwms are untested.
 - [ ] **M5.3.pw-b** Anycubic newer formats (`.pm5`, `.pm5s`, `.pm7`): per-variant tables (resolution, pixel size, format version, preview size) on top of the M5.3.pw-a writer. · L → split per format · needs M5.3.pw-a
   Starting point: upstream's own Anycubic writer for `.pwmo`/`.pwmx`/`.pwms`, removed in the 3.0 refactor. Recover it with `git show c80474c8b4^:src/libslic3r/Format/AnycubicSLA.cpp` (and `.hpp`); it's the same repository and license. `SLAPrintSteps.cpp` still maps those extensions to `FileDataType::other`.
-- [ ] **M5.3.profiles** Printer presets for the target Elegoo and Anycubic machines (resolution, pixel size, build volume, archive format), in `resources/presets/` with the output format selected per printer. · M · needs M5.3.goo or M5.3.pw
+- [ ] **M5.3.profiles** Printer presets for the target machines, each with build volume, LCD resolution, pixel size and output format, in `resources/presets/`, so the bed and plate size in the 3D view follow the selected printer. · M · needs M5.3.goo or M5.3.pw-a
+  Target list (specs from vendor pages and reviews, **each one to be verified against the official spec sheet before shipping**):
+  - Anycubic Photon Mono M5s: 219 x 123 x 200 mm, 11520 x 5120 (12K), pixel 19 x 24 um
+  - Anycubic Photon Mono M7: 223 x 126 x 230 mm, resolution to confirm
+  - Anycubic Photon Mono M7 Pro: 223 x 126 x 230 mm, 13320 x 5120 (14K)
+  - Elegoo Saturn 4 Ultra 12K: 218.88 x 122.88 x 220 mm, 11520 x 5120, pixel 19 x 24 um
+  - Elegoo Saturn 4 Ultra 16K: 211.68 x 118.37 x 220 mm, 15120 x 6230, pixel 14 x 19 um
+  - Elegoo Mars 5 Ultra: 9K 7-inch, pixel 18 x 18 um, build volume to confirm
+  Older machines (Mars 4 family, Saturn 3) use `.goo` too; add them once the first presets work.
 - [ ] **M5.3.samples** `[human]` Provide one sliced sample archive per target printer (from Chitubox/Lychee/Photon Workshop) and list the printer models, so the writers can be checked. Samples stay local, like the M7 dataset. · S · needs —
 - [ ] **M5.4** Display mirroring and orientation test pattern for every format (PLAN C3). · M · needs M5.3
 - [ ] **M5.5** Upload SLA archives to print hosts and removable drives (PLAN C4). · M · needs M0.10
@@ -244,6 +252,7 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
 - [ ] **M5.7** Per-layer area and peel-force chart beside the layer slider. · M · needs M5.6, M4.9
 - [ ] **M5.8** Clickable issue markers (islands, cups) that jump to the layer. · M · needs M5.6, M4.8
 - [ ] **M5.9** Pre-export checklist and format picker (PLAN F8). · M · needs M0.9, M1.3
+- [ ] **M5.10** Height-band clipping in the 3D view, like Chitubox's preview: two sliders set a lower and an upper Z limit and the scene shows only that slice of the model, with the cut faces capped so the inside is readable. Works on the plater view (model, supports and pad) and follows the selected printer's plate size. Reuse the clipping plane the paint and SLA tools already use (`Scene::Clipper`, `Scene::ClipperPresenter`) rather than adding a second mechanism. · M · needs M1.3
 
 ## M6: Quality gates and release
 
