@@ -559,7 +559,7 @@ void ColorMixDialog::create_footer(Item* parent)
     LayoutButton* ok_button = footer->emplace_back<LayoutButton>(_u8L("OK"));
     ok_button->set_content_padding(button_padding);
     ok_button->set_background_color(Color::AccentPrimary);
-    ok_button->set_label_color(ImColor(255, 255, 255));
+    ok_button->set_label_color(m_theme->color_imgui(Platform::Color::OnAccentPrimary));
     ok_button->callbacks().action = [this]() { this->on_accept_clicked(); };
 }
 
@@ -1039,9 +1039,10 @@ void ColorMixDialog::update_preview_and_validation()
 
     m_editor_title->set_text(recipe_title(virtual_extruder));
 
+    const ImColor fallback_color = m_theme->color_imgui(Platform::Color::NeutralGrey);
     const ImColor display_color = virtual_extruder.color.has_value() ?
-        parse_hex_color(*virtual_extruder.color) :
-        parse_hex_color(effective_color_hex(virtual_extruder, m_physical_colors));
+        parse_hex_color(*virtual_extruder.color, fallback_color) :
+        parse_hex_color(effective_color_hex(virtual_extruder, m_physical_colors), fallback_color);
     m_color_picker_button->set_color(display_color);
     m_color_picker_button->set_background_color(display_color, display_color);
     m_reset_display_color_button->set_visible(virtual_extruder.color.has_value());
@@ -1054,9 +1055,10 @@ void ColorMixDialog::update_selected_list_row()
         return;
     }
 
+    const ImColor fallback_color = m_theme->color_imgui(Platform::Color::NeutralGrey);
     m_recipe_rows.at(selection)->update(
         ColorMixRecipeRow::
-            make_row_data(m_working_virtual_extruders.at(selection), m_physical_colors)
+            make_row_data(m_working_virtual_extruders.at(selection), m_physical_colors, fallback_color)
     );
 }
 
@@ -1363,7 +1365,8 @@ int ColorMixDialog::count_objects_using(unsigned int virtual_extruder_id) const
 
 ImColor ColorMixDialog::physical_color(unsigned int extruder_id_1based) const
 {
-    return physical_slot_color(m_physical_colors, extruder_id_1based);
+    const ImColor fallback_color = m_theme->color_imgui(Platform::Color::NeutralGrey);
+    return physical_slot_color(m_physical_colors, extruder_id_1based, fallback_color);
 }
 
 void ColorMixDialog::clear_color_override()

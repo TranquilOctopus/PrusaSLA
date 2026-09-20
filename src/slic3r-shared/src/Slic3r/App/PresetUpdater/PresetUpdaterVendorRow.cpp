@@ -253,7 +253,7 @@ void PresetUpdaterVendorRow::on_data_update()
 
     m_state_icon->set_icon(row->skipped ? Render::Icon::ErrorMarker : Render::Icon::WarningMarker);
     m_state_icon->set_tint(
-        row->skipped ? m_theme->color_imgui(Platform::Color::Error) : ImColor(1.0f, 1.0f, 1.0f)
+        row->skipped ? m_theme->color_imgui(Platform::Color::Error) : m_theme->color_imgui(Platform::Color::OnWarning)
     );
     m_state_icon->set_visible(row->skipped || has_warning_icon(row->state));
 

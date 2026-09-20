@@ -26,12 +26,13 @@ namespace Slic3r::App::ColorMix {
 
 ColorMixRecipeRow::RowData ColorMixRecipeRow::make_row_data(
     const VirtualExtruder& virtual_extruder,
-    const std::vector<std::string>& physical_colors
+    const std::vector<std::string>& physical_colors,
+    ImColor fallback_color
 )
 {
     RowData row_data;
     row_data.title        = recipe_title(virtual_extruder);
-    row_data.swatch_color = parse_hex_color(effective_color_hex(virtual_extruder, physical_colors));
+    row_data.swatch_color = parse_hex_color(effective_color_hex(virtual_extruder, physical_colors), fallback_color);
 
     if (virtual_extruder.type() == VirtualExtruder::Type::Gradient) {
         row_data.subtitle_prefix = _u8L("Gradient");
@@ -39,7 +40,7 @@ ColorMixRecipeRow::RowData ColorMixRecipeRow::make_row_data(
             row_data.badges.reserve(virtual_extruder.gradient->stops.size());
             for (const VirtualExtruderGradientStop& stop : virtual_extruder.gradient->stops) {
                 row_data.badges.push_back(
-                    {physical_slot_color(physical_colors, stop.extruder_id), stop.extruder_id, -1}
+                    {physical_slot_color(physical_colors, stop.extruder_id, fallback_color), stop.extruder_id, -1}
                 );
             }
         }
@@ -50,7 +51,7 @@ ColorMixRecipeRow::RowData ColorMixRecipeRow::make_row_data(
     row_data.badges.reserve(virtual_extruder.components.size());
     for (const VirtualExtruderComponent& component : virtual_extruder.components) {
         row_data.badges.push_back(
-            {physical_slot_color(physical_colors, component.extruder_id),
+            {physical_slot_color(physical_colors, component.extruder_id, fallback_color),
              component.extruder_id,
              int(std::round(component.ratio * 100.0))}
         );

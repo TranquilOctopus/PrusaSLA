@@ -176,6 +176,18 @@ void Theme::initialize_dark_colors()
     m_colors[Platform::Color::SlaCupWarning]      = ColorEntry{k_warning_dark};
     // SlaLayerArea: line and fill handled at render time; token maps to line color
     m_colors[Platform::Color::SlaLayerArea]       = ColorEntry{k_palette_sage300};
+
+    // New tokens for palette sweep (M1.5)
+    m_colors[Platform::Color::NeutralGrey]     = ColorEntry{ImColor(0x80, 0x80, 0x80)};
+    m_colors[Platform::Color::OnAccentPrimary] = ColorEntry{ImColor(0xFF, 0xFF, 0xFF)};
+    m_colors[Platform::Color::Shadow]          = ColorEntry{ImColor(0.0f, 0.0f, 0.0f, 0.43f)};
+    m_colors[Platform::Color::PickerHandle]    = ColorEntry{ImColor(0xFF, 0xFF, 0xFF)};
+    m_colors[Platform::Color::Outline]         = ColorEntry{ImColor(0.0f, 0.0f, 0.0f, 0.50f)};
+    m_colors[Platform::Color::OnWarning]       = ColorEntry{ImColor(0xFF, 0xFF, 0xFF)};
+    m_colors[Platform::Color::MeasureFeature1] = ColorEntry{ImColor(64, 191, 191)};
+    m_colors[Platform::Color::MeasureFeature2] = ColorEntry{ImColor(191, 64, 191)};
+    m_colors[Platform::Color::IconTint]        = ColorEntry{ImColor(0, 0, 0)};
+    m_colors[Platform::Color::CursorHighlight] = ColorEntry{ImColor(255, 255, 0, 255)};
 }
 
 void Theme::initialize_light_colors()
@@ -282,6 +294,18 @@ void Theme::initialize_light_colors()
     m_colors[Platform::Color::SlaCupWarning]      = ColorEntry{k_warning_light};
     // SlaLayerArea: line and fill handled at render time; token maps to line color
     m_colors[Platform::Color::SlaLayerArea]       = ColorEntry{k_palette_teal500};
+
+    // New tokens for palette sweep (M1.5)
+    m_colors[Platform::Color::NeutralGrey]     = ColorEntry{ImColor(0x80, 0x80, 0x80)};
+    m_colors[Platform::Color::OnAccentPrimary] = ColorEntry{ImColor(0xFF, 0xFF, 0xFF)};
+    m_colors[Platform::Color::Shadow]          = ColorEntry{ImColor(0.0f, 0.0f, 0.0f, 0.43f)};
+    m_colors[Platform::Color::PickerHandle]    = ColorEntry{ImColor(0xFF, 0xFF, 0xFF)};
+    m_colors[Platform::Color::Outline]         = ColorEntry{ImColor(0.0f, 0.0f, 0.0f, 0.50f)};
+    m_colors[Platform::Color::OnWarning]       = ColorEntry{ImColor(0xFF, 0xFF, 0xFF)};
+    m_colors[Platform::Color::MeasureFeature1] = ColorEntry{ImColor(64, 191, 191)};
+    m_colors[Platform::Color::MeasureFeature2] = ColorEntry{ImColor(191, 64, 191)};
+    m_colors[Platform::Color::IconTint]        = ColorEntry{ImColor(0, 0, 0)};
+    m_colors[Platform::Color::CursorHighlight] = ColorEntry{ImColor(255, 255, 0, 255)};
 }
 
 const Domain::ColorRGBA& Theme::color(Platform::Color color_id, Platform::ColorGroup group_id) const

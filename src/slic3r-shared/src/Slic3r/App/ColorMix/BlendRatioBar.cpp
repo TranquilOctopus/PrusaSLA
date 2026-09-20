@@ -151,10 +151,10 @@ void BlendRatioBar::render(const Vec2f& pos, const Vec2f& size)
     draw_list->AddRectFilled(
         ImVec2(handle_min.x + shadow_offset, handle_min.y + shadow_offset),
         ImVec2(handle_max.x + shadow_offset, handle_max.y + shadow_offset),
-        ImColor(0, 0, 0, 110),
+        m_theme->color_imgui(Platform::Color::Shadow),
         handle_rounding
     );
-    draw_list->AddRectFilled(handle_min, handle_max, ImColor(255, 255, 255), handle_rounding);
+    draw_list->AddRectFilled(handle_min, handle_max, m_theme->color_imgui(Platform::Color::PickerHandle), handle_rounding);
 }
 
 } // namespace Slic3r::App::ColorMix

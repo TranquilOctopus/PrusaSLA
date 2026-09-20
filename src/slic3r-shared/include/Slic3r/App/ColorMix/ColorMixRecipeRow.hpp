@@ -34,7 +34,7 @@ public:
         std::string title;
         std::string subtitle_prefix;
         std::string plain_subtitle;
-        ImColor swatch_color{0x80, 0x80, 0x80};
+        ImColor swatch_color;
         std::vector<BadgeData> badges;
     };
 
@@ -46,7 +46,8 @@ public:
 
     static RowData make_row_data(
         const Domain::VirtualExtruder& virtual_extruder,
-        const std::vector<std::string>& physical_colors
+        const std::vector<std::string>& physical_colors,
+        ImColor fallback_color = ImColor(0x80, 0x80, 0x80)
     );
 
     explicit ColorMixRecipeRow(const RowData& row_data);
