@@ -569,7 +569,7 @@ void SlaHollowGizmo::clear_preview_visuals()
 
     if (m_main_node != nullptr) {
         Scene::Scene& scene = m_scene_presenter.scene();
-        scene.remove_child(m_main_node, &scene.root());
+        scene.remove_child(m_main_node);
         m_main_node = nullptr;
         m_preview_node = nullptr;
     }
@@ -583,20 +583,14 @@ void SlaHollowGizmo::show_preview_mesh(const Biz::Slicing::Sla::Object& sla_obje
 
     Scene::Scene& scene = m_scene_presenter.scene();
 
-    // Get the mesh triangles
-    const auto& triangles = sla_object.mesh->triangles();
-    if (triangles.empty()) {
+    // Sla::Object::mesh is already a Domain::TriangleMesh; hand its indexed set to the scene.
+    if (sla_object.mesh->its.indices.empty()) {
         return;
     }
 
-    // Create or get triangle mesh in manager
     const std::string mesh_id = "sla_hollow_preview";
     auto trimesh = m_triangle_mesh_manager.get_or_create(mesh_id, [&]() {
-        Domain::TriangleMesh mesh;
-        mesh.its.indices = triangles;
-        mesh.its.vertices = sla_object.mesh->vertices();
-        mesh.its.normals = sla_object.mesh->normals();
-        return std::make_unique<Scene::TriangleMesh>(std::move(mesh.its));
+        return std::make_unique<Scene::TriangleMesh>(sla_object.mesh->its);
     });
 
     // Create or get geometry
