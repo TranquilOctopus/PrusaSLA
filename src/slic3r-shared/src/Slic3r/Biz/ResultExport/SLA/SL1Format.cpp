@@ -1,6 +1,7 @@
 #include "Slic3r/Biz/ResultExport/SLA/SlaArchiveFormat.hpp"
 #include "Slic3r/Biz/ResultExport/SLA/SL1.hpp"
 #include "Slic3r/Biz/ResultExport/SLA/AnycubicSLA.hpp"
+#include "Slic3r/Biz/ResultExport/SLA/GooSLA.hpp"
 
 #include <vector>
 #include <memory>
@@ -51,6 +52,20 @@ public:
     }
 };
 
+class GooFormat : public ISlaArchiveFormat
+{
+public:
+    std::string name() const override { return "Goo"; }
+    std::string description() const override { return "Elegoo GOO format"; }
+    std::vector<std::string> extensions() const override { return {"goo"}; }
+    Slic3r::Biz::Slicing::Sla::FileDataType file_data_type() const override { return Slic3r::Biz::Slicing::Sla::FileDataType::goo; }
+
+    void store(const std::string& file_path, const Biz::Slicing::SLAResultData& data) const override
+    {
+        store_goo(file_path, data);
+    }
+};
+
 void register_sla_archive_formats()
 {
     static std::once_flag once;
@@ -59,6 +74,7 @@ void register_sla_archive_formats()
         registry.register_format("SL1", []() { return std::make_unique<SL1Format>(); });
         registry.register_format("SL1_SVG", []() { return std::make_unique<SL1SVGFormat>(); });
         registry.register_format("Anycubic", []() { return std::make_unique<AnycubicFormat>(); });
+        registry.register_format("Goo", []() { return std::make_unique<GooFormat>(); });
     });
 }
 

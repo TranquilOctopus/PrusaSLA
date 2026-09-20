@@ -180,6 +180,8 @@ set(SLIC3R_SOURCES
     src/libslic3r/Format/SL1_SVG.hpp
     src/libslic3r/Format/AnycubicSLA.cpp
     src/libslic3r/Format/AnycubicSLA.hpp
+    src/libslic3r/Format/GooSLA.cpp
+    src/libslic3r/Format/GooSLA.hpp
     src/libslic3r/GCode/Thumbnails.hpp
     src/libslic3r/GCode/ToolOrdering.hpp
     src/libslic3r/GCode/WipeTower.hpp

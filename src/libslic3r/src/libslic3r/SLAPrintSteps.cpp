@@ -63,6 +63,7 @@
 #include "libslic3r/Format/SL1.hpp"
 #include "libslic3r/Format/SL1_SVG.hpp"
 #include "libslic3r/Format/AnycubicSLA.hpp"
+#include "libslic3r/Format/GooSLA.hpp"
 #include "Slic3r/Biz/Algorithms/BoundingBox.hpp"
 
 using namespace Slic3r::Biz;
@@ -1580,6 +1581,8 @@ Sla::FileDataType get_output_type(const SLAPrintConfigView& cfg)
                archive_format == "pwmx" || // Photon Mono X"
                archive_format == "pwms") { // Photon Mono SE
         return Sla::FileDataType::anycubic;
+    } else if (archive_format == "goo") { // Elegoo GOO
+        return Sla::FileDataType::goo;
     } else {
         return Sla::FileDataType::other;
     }
@@ -1627,6 +1630,7 @@ void SLAPrint::Steps::rasterize()
         case FileDataType::sl1_png: rasterizer_ptr = create_sl1_rasterizer(printer_config); break;
         case FileDataType::sl1_svg: rasterizer_ptr = create_sl1_svg_rasterizer(printer_config); break;
         case FileDataType::anycubic: rasterizer_ptr = create_anycubic_rasterizer(printer_config); break;
+        case FileDataType::goo: rasterizer_ptr = create_goo_rasterizer(printer_config); break;
         default:
             throw Biz::Slicing::Exception{
                 Biz::Slicing::Error{Biz::Slicing::ErrorCode::UnsupportedOutputFormat}
