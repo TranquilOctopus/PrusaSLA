@@ -31,6 +31,7 @@ namespace {
 #define PREV_BIG_W 290
 #define PREV_BIG_H 290
 
+#pragma pack(push, 1)
 typedef struct goo_header_info
 {
     char version[4];
@@ -95,7 +96,7 @@ typedef struct goo_header_info
     int32_t layer_content_offset;
     uint8_t gray_scale_level;
     int16_t transition_layers;
-} __attribute__((packed)) goo_header_info;
+} goo_header_info;
 
 typedef struct goo_layer_def
 {
@@ -118,7 +119,8 @@ typedef struct goo_layer_def
     int16_t light_pwm;
     char delimiter[2];
     int32_t data_size;
-} __attribute__((packed)) goo_layer_def;
+} goo_layer_def;
+#pragma pack(pop)
 
 static void write_be_int16(std::ofstream &out, int16_t val)
 {
@@ -224,10 +226,9 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     std::memcpy(header.magic_tag, GOO_MAGIC_TAG, 8);
 
     std::string sw_info = "PrusaSlicer";
-    write_string_padded(std::ostringstream().seekp(0), sw_info, 32);
     std::memcpy(header.software_info, sw_info.data(), std::min<size_t>(32, sw_info.size()));
 
-    std::string sw_ver = Slic3r::Version::get().to_string();
+    std::string sw_ver = SLIC3R_VERSION;
     std::memcpy(header.software_version, sw_ver.data(), std::min<size_t>(24, sw_ver.size()));
 
     CNumericLocalesSetter locales_setter;
