@@ -81,6 +81,52 @@ SlaHollowDialog::SlaHollowDialog() : GizmoWindow()
 
     this->add_separator(this->content());
 
+    add_row_with_slider(
+        content(),
+        &m_hole_radius_slider,
+        _u8L("Hole radius"),
+        _u8L("mm")
+    );
+    m_hole_radius_slider->set_begin_value(0.5);
+    m_hole_radius_slider->set_end_value(25.0);
+    m_hole_radius_slider->set_step(0.1);
+    m_hole_radius_slider->set_validator_precision(1);
+    m_hole_radius_slider->callbacks().value_changed = [this](double value)
+    { m_callbacks.hole_radius_changed(value); };
+
+    add_row_with_slider(
+        content(),
+        &m_hole_height_slider,
+        _u8L("Hole depth"),
+        _u8L("mm")
+    );
+    m_hole_height_slider->set_begin_value(0.0);
+    m_hole_height_slider->set_end_value(50.0);
+    m_hole_height_slider->set_step(0.1);
+    m_hole_height_slider->set_validator_precision(1);
+    m_hole_height_slider->callbacks().value_changed = [this](double value)
+    { m_callbacks.hole_height_changed(value); };
+
+    this->add_separator(this->content());
+
+    Item* hole_buttons_row = content()->emplace_back<Item>();
+    hole_buttons_row->set_orientation(Orientation::Horizontal);
+    hole_buttons_row->set_justify_content(YGJustifySpaceBetween);
+    hole_buttons_row->set_gap(gap_size());
+
+    m_remove_selected_button = hole_buttons_row->emplace_back<LayoutButton>(_u8L("Remove selected"));
+    m_remove_selected_button->callbacks().action = [this]()
+    { m_callbacks.remove_selected_holes(); };
+
+    m_remove_all_button = hole_buttons_row->emplace_back<LayoutButton>(_u8L("Remove all"));
+    m_remove_all_button->callbacks().action = [this]()
+    { m_callbacks.remove_all_holes(); };
+
+    this->add_separator(this->content());
+
+    m_hole_count_text = content()->emplace_back<Text>(_u8L("No drain holes."));
+    m_hole_count_text->set_flex_shrink(0);
+
     m_status_text = content()->emplace_back<Text>(_u8L("No preview generated yet."));
     m_status_text->set_flex_shrink(0);
 }
@@ -113,9 +159,46 @@ void SlaHollowDialog::set_closing_distance(double distance_mm)
     m_closing_distance_slider->set_value(distance_mm);
 }
 
+void SlaHollowDialog::set_hole_radius(double radius_mm)
+{
+    m_hole_radius_slider->set_value(radius_mm);
+}
+
+void SlaHollowDialog::set_hole_height(double height_mm)
+{
+    m_hole_height_slider->set_value(height_mm);
+}
+
+void SlaHollowDialog::set_hole_count(size_t count)
+{
+    if (count == 0) {
+        m_hole_count_text->set_text(_u8L("No drain holes."));
+    } else {
+        m_hole_count_text->set_text(fmt::format("{} drain hole{}", count, count == 1 ? "" : "s"));
+    }
+}
+
 void SlaHollowDialog::set_status(const std::string& status)
 {
     m_status_text->set_text(status);
+}
+
+void SlaHollowDialog::set_holes_controls_enabled(bool enabled)
+{
+    m_hole_radius_slider->set_enabled(enabled);
+    m_hole_height_slider->set_enabled(enabled);
+    m_remove_selected_button->set_enabled(enabled);
+    m_remove_all_button->set_enabled(enabled);
+}
+
+void SlaHollowDialog::set_remove_selected_enabled(bool enabled)
+{
+    m_remove_selected_button->set_enabled(enabled);
+}
+
+void SlaHollowDialog::set_remove_all_enabled(bool enabled)
+{
+    m_remove_all_button->set_enabled(enabled);
 }
 
 } // namespace Slic3r::App::Plater

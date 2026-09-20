@@ -103,6 +103,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Plater/SlaHollowDialog.cpp
         include/Slic3r/App/Plater/SlaHollowGizmo.hpp
         src/Slic3r/App/Plater/SlaHollowGizmo.cpp
+        include/Slic3r/App/Plater/SlaDrainHolesEditing.hpp
+        src/Slic3r/App/Plater/SlaDrainHolesEditing.cpp
         include/Slic3r/App/Plater/HeightRangeRow.hpp
         src/Slic3r/App/Plater/HeightRangeRow.cpp
         include/Slic3r/App/Plater/LayerRangeSettingsDialog.hpp
