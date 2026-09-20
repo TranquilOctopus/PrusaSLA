@@ -41,6 +41,7 @@
 #include <Slic3r/Biz/UserAccount/UserAccountTokenStore.hpp>
 #include <Slic3r/Biz/AppInstance/AppInstanceMessageHandlerFactory.hpp>
 #include <Slic3r/Biz/AppInstance/AppInstanceUtils.hpp>
+#include <Slic3r/Biz/IProjectsChangedListener.hpp>
 #include "Slic3r/Biz/WX/FontManager.hpp"
 
 #include "Slic3r/Biz/Scene/BedGeometry.hpp"
@@ -564,6 +565,40 @@ void DesktopApp::finish_init()
     if (m_splash_screen)
         m_splash_screen->Destroy();
 
+    // Handle --sla-fixture flag: load the 3MF file, slice it, and switch to Preview.
+    if (m_init_params.input.sla_fixture.has_value()) {
+        const std::string& fixture_path = m_init_params.input.sla_fixture.value();
+        if (!boost::filesystem::exists(fixture_path)) {
+            SPDLOG_ERROR("SLA fixture file not found: {}", fixture_path);
+        } else {
+            // Listener to handle project load completion and trigger slicing + preview switch.
+            struct SlaFixtureListener final : public Biz::IProjectsChangedListener {
+                DesktopApp* app;
+                std::string fixture_path;
+
+                SlaFixtureListener(DesktopApp* app_, const std::string& path)
+                    : app(app_), fixture_path(path) {}
+
+                void on_project_loaded(Domain::SelectionId project_id) override {
+                    SPDLOG_INFO("SLA fixture project loaded: {}", project_id);
+                    app->m_project_interactor->remove_listener<Biz::IProjectsChangedListener>(this);
+                    app->process_sla_fixture(project_id);
+                }
+
+                void on_project_load_failed(const std::string& error) override {
+                    SPDLOG_ERROR("SLA fixture project load failed: {}", error);
+                    app->m_project_interactor->remove_listener<Biz::IProjectsChangedListener>(this);
+                }
+            };
+
+            auto listener = std::make_unique<SlaFixtureListener>(this, fixture_path);
+            // Keep the listener alive until the project loads.
+            m_sla_fixture_listener = std::move(listener);
+            m_project_interactor->add_listener<Biz::IProjectsChangedListener>(m_sla_fixture_listener.get());
+            m_project_interactor->load_project(boost::filesystem::path{fixture_path});
+        }
+    }
+
 #if !defined(__linux)
     // Initial repaint
     canvas.render();
@@ -727,5 +762,24 @@ void DesktopApp::MacOpenURL(const wxString& url)
     }
 }
 #endif /* __APPLE__ */
+
+void DesktopApp::process_sla_fixture(Domain::SelectionId project_id)
+{
+    SPDLOG_INFO("Processing SLA fixture for project: {}", project_id);
+
+    // Select the loaded project
+    m_project_interactor->select_project(project_id);
+
+    // Get the slicing ID for the selected bed
+    const Domain::SlicingId slicing_id = m_project_interactor->selected_bed_slicing_id();
+
+    // Slice the bed
+    m_project_interactor->slicing_interactor().slice_bed(slicing_id);
+
+    // Switch to Preview mode
+    m_navigator.navigate_to_module_type(Slic3r::App::Render::ModuleType::Preview);
+
+    SPDLOG_INFO("SLA fixture processed, switched to Preview mode");
+}
 
 } // namespace Slic3r::App::Desktop
