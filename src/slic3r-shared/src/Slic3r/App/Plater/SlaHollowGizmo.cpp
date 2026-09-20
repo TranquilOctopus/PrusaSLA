@@ -7,6 +7,7 @@
 #include "Slic3r/App/Scene/Scene.hpp"
 #include "Slic3r/App/Scene/NodeBuilder.hpp"
 #include "Slic3r/App/Scene/GeometryDataFactory.hpp"
+#include "Slic3r/App/Scene/Ray.hpp"
 #include "Slic3r/App/Render/Device.hpp"
 #include "Slic3r/App/Render/GeometryBuilder.hpp"
 #include "Slic3r/App/Plater/PlaterSceneLayer.hpp"
@@ -18,6 +19,7 @@
 #include "Slic3r/Biz/IUndoProvider.hpp"
 #include "Slic3r/Biz/Utils/MeshRaycaster.hpp"
 #include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
+#include "Slic3r/Biz/Utils/MeshRaycaster.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
 #include "Slic3r/Domain/SelectionId.hpp"
 #include "Slic3r/Domain/ConfigContainer.hpp"
@@ -41,6 +43,7 @@ using namespace Slic3r::Biz;
 using namespace Slic3r::Biz::Slicing;
 using namespace Slic3r::Biz::Utils;
 using namespace Slic3r::Biz::Algorithms;
+using namespace Slic3r::Biz::Utils;
 using namespace magic_enum::bitwise_operators;
 
 using Slic3r::Domain::SlicingId;
@@ -276,7 +279,7 @@ SlaHollowGizmo::SlaHollowGizmo(
             Domain::Project& project = m_project_interactor.selected_project();
             Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
             if (model_object) {
-                m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SetPartSettingsValue);
+                m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SlaDrainHolesEdit);
                 write_hollowing_config(model_object, value, m_current_min_thickness, m_current_quality, m_current_closing_distance);
                 m_current_enable = value;
                 if (value) {
@@ -295,7 +298,7 @@ SlaHollowGizmo::SlaHollowGizmo(
             Domain::Project& project = m_project_interactor.selected_project();
             Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
             if (model_object) {
-                m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SetPartSettingsValue);
+                m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SlaDrainHolesEdit);
                 write_hollowing_config(model_object, m_current_enable, value, m_current_quality, m_current_closing_distance);
                 if (m_current_enable) {
                     start_preview();
@@ -310,7 +313,7 @@ SlaHollowGizmo::SlaHollowGizmo(
             Domain::Project& project = m_project_interactor.selected_project();
             Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
             if (model_object) {
-                m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SetPartSettingsValue);
+                m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SlaDrainHolesEdit);
                 write_hollowing_config(model_object, m_current_enable, m_current_min_thickness, value, m_current_closing_distance);
                 if (m_current_enable) {
                     start_preview();
@@ -325,13 +328,36 @@ SlaHollowGizmo::SlaHollowGizmo(
             Domain::Project& project = m_project_interactor.selected_project();
             Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
             if (model_object) {
-                m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SetPartSettingsValue);
+                m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SlaDrainHolesEdit);
                 write_hollowing_config(model_object, m_current_enable, m_current_min_thickness, m_current_quality, value);
                 if (m_current_enable) {
                     start_preview();
                 }
             }
         }
+    };
+    m_dialog->callbacks().hole_radius_changed = [this](double value)
+    {
+        if (m_edit_state.has_value()) {
+            m_edit_state->editing.hole_radius_mm = value;
+            apply_radius_to_selected();
+        }
+    };
+    m_dialog->callbacks().hole_height_changed = [this](double value)
+    {
+        if (m_edit_state.has_value()) {
+            m_edit_state->editing.hole_height_mm = value;
+            apply_height_to_selected();
+        }
+    };
+    m_dialog->callbacks().remove_selected_holes = [this]()
+    {
+        delete_selected_holes();
+    };
+    m_dialog->callbacks().remove_all_holes = [this]()
+    {
+        select_all_holes();
+        delete_selected_holes();
     };
 
     m_dialog->set_preview_enabled(false);
@@ -728,7 +754,7 @@ void SlaHollowGizmo::write_hollowing_config(Domain::ModelObject* model_object, b
 
 void SlaHollowGizmo::take_undo_snapshot()
 {
-    m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SetPartSettingsValue);
+    m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SlaDrainHolesEdit);
 }
 
 std::unique_ptr<GizmoWindow> SlaHollowGizmo::release_ui_window()

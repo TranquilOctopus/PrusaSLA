@@ -273,6 +273,14 @@ static std::string to_string(Biz::UndoSnapshotType type)
         return _u8L("Edit virtual extruders");
     case Type::RepairObjectMesh:
         return _u8L("Repair mesh");
+    case Type::SlaSupportPointsEdit:
+        return _u8L("Edit SLA support points");
+    case Type::SlaDrainHolesEdit:
+        return _u8L("Edit SLA drain holes");
+    case Type::SlaSupportPointsApply:
+        return _u8L("Apply SLA support points");
+    case Type::SlaDrainHolesApply:
+        return _u8L("Apply SLA drain holes");
     }
     PANIC("Unknown option");
     return {};
