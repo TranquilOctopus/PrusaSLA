@@ -58,8 +58,8 @@ TEST_CASE("SlaSupportPoints and SlaHollow have correct shortcuts", "[ToolGizmosU
 }
 
 TEST_CASE("SlaSupportPoints and SlaHollow have correct icons", "[ToolGizmosUiInfo]") {
-    REQUIRE(tool_icon(ToolType::SlaSupportPoints) == Slic3r::App::Render::Icon::Support);
-    REQUIRE(tool_icon(ToolType::SlaHollow) == Slic3r::App::Render::Icon::Hollowing);
+    REQUIRE(tool_icon(ToolType::SlaSupportPoints) == Slic3r::App::Render::Icon::SlaSupportPoints);
+    REQUIRE(tool_icon(ToolType::SlaHollow) == Slic3r::App::Render::Icon::SlaHollow);
 }
 
 TEST_CASE("SlaSupportPoints and SlaHollow have correct key codes", "[ToolGizmosUiInfo]") {
