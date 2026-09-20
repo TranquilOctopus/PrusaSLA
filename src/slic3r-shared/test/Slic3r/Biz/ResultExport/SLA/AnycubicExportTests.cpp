@@ -118,15 +118,12 @@ TEST_CASE("Anycubic pwmx export", "[export][sla][anycubic]")
     REQUIRE(res_x == 2560);
     REQUIRE(res_y == 1440);
 
-    size_t layers_header_offset = 0;
-    for (size_t i = header_offset + 12; i + 12 <= data.size(); ++i) {
-        std::string tag(reinterpret_cast<const char*>(data.data() + i), 12);
-        if (tag == "LAYERDEF\0\0\0\0") {
-            layers_header_offset = i;
-            break;
-        }
-    }
+    // Intro layout: tag(12), version, area_num, then the section offsets; layer_data_offset is the fifth.
+    size_t layers_header_offset = read_le<uint32_t>(data.data() + 36);
     REQUIRE(layers_header_offset > 0);
+    REQUIRE(data.size() >= layers_header_offset + 12);
+    std::string layers_tag(reinterpret_cast<const char*>(data.data() + layers_header_offset), 12);
+    REQUIRE(layers_tag == std::string("LAYERDEF\0\0\0\0", 12));
 
     REQUIRE(data.size() >= layers_header_offset + 12 + 4 + 4);
     uint32_t layer_count = read_le<uint32_t>(data.data() + layers_header_offset + 12 + 4);
