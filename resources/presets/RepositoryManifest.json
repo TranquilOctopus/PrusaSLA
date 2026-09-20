@@ -14,4 +14,12 @@
     "url": "http://localhost:8000/prusa-research-sla/",
     "index_url": "http://localhost:8000/prusa-research-sla/vendor_indices.zip",
     "selected": true
+}, {
+    "name": "Community SLA",
+    "description": "Community SLA printers (Anycubic, Elegoo)",
+    "visibility": "",
+    "id": "community-sla",
+    "url": "http://localhost:8000/community-sla/",
+    "index_url": "http://localhost:8000/community-sla/vendor_indices.zip",
+    "selected": true
 }]

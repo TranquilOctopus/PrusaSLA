@@ -321,7 +321,7 @@ void PresetInteractor::load_preset_bundle(const IO::BundlePaths& bundle_paths)
         // TODO: remove this when config wizard is ready
         {
             HwConfigEvaluator config_eval;
-            for (const auto& vendor : {"PrusaResearch", "PrusaResearchSLA"}) {
+            for (const auto& vendor : {"PrusaResearch", "PrusaResearchSLA", "CommunitySLA"}) {
                 auto vendor_bundle_it = preset_bundle.vendor_bundles.find(vendor);
                 ASSERT(vendor_bundle_it != preset_bundle.vendor_bundles.end() || strcmp(vendor, "PrusaResearch") != 0);
                 if (vendor_bundle_it == preset_bundle.vendor_bundles.end()
