@@ -3,6 +3,8 @@
 #include "Slic3r/Biz/Slicing/TestUtils.hpp"
 #include "Slic3r/Domain/Model.hpp"
 #include "Slic3r/Domain/Project.hpp"
+#include "Slic3r/Domain/SLA/DrainHole.hpp"
+#include "Slic3r/Domain/SLA/SupportPoint.hpp"
 #include "Slic3r/Biz/Config/3mf_legacy.hpp"
 #include "Slic3r/Biz/Config/ConfigLegacy.hpp"
 
@@ -19,6 +21,11 @@ using Slic3r::Domain::ModelObjectPtrs;
 using Slic3r::Domain::ModelVolume;
 using Slic3r::Domain::Project;
 using Slic3r::Domain::Vec3d;
+using Slic3r::Domain::Vec3f;
+using Slic3r::Domain::SLA::SupportPoint;
+using Slic3r::Domain::SLA::SupportPointType;
+using Slic3r::Domain::SLA::PointsStatus;
+using Slic3r::Domain::SLA::DrainHole;
 using Slic3r::Domain::TriangleSelector::TriangleStateType;
 
 static inline std::string test_3mf_path(const char* path)
@@ -227,4 +234,113 @@ TEST_CASE("3MF dual-write: version-2 MM segmentation is not dual-written for the
     // A 2.x reader only ever sees MM painting via the inline attribute, so when it's skipped
     // (version 2 data can't be dual-written) the legacy importer must find no MM painting at all.
     CHECK(legacy_model.objects[0]->volumes.front()->mm_segmentation_facets.empty());
+}
+
+TEST_CASE("3MF SLA round trip preserves support points and drain holes", "[3mf][sla]")
+{
+    // Default project works for SLA data round-trip (model object data is stored separately from config)
+    Project project;
+    project.model() = Test::generate_cubes(1, 1);
+
+    ModelObject* object = project.model().objects[0];
+
+    // (a) SLA support points: positions, head radius, type
+    object->sla_support_points.clear();
+    object->sla_support_points.push_back(SupportPoint{
+        Vec3f{10.0f, 10.0f, 5.0f},  // pos
+        1.5f,                        // head_front_radius
+        SupportPointType::manual_add // type
+    });
+    object->sla_support_points.push_back(SupportPoint{
+        Vec3f{15.0f, 15.0f, 8.0f},
+        2.0f,
+        SupportPointType::island
+    });
+    object->sla_support_points.push_back(SupportPoint{
+        Vec3f{5.0f, 5.0f, 12.0f},
+        1.0f,
+        SupportPointType::slope
+    });
+
+    // sla_points_status is a separate field NOT serialized in 3MF (gap)
+    object->sla_points_status = PointsStatus::UserModified;
+
+    // (b) SLA drain holes: position, normal, radius, height
+    object->sla_drain_holes.clear();
+    object->sla_drain_holes.push_back(DrainHole{
+        Vec3f{12.0f, 12.0f, 0.0f},   // pos
+        Vec3f{0.0f, 0.0f, 1.0f},     // normal
+        2.5f,                         // radius
+        5.0f                          // height
+    });
+    object->sla_drain_holes.push_back(DrainHole{
+        Vec3f{8.0f, 8.0f, 0.0f},
+        Vec3f{0.0f, 0.0f, 1.0f},
+        1.5f,
+        3.0f
+    });
+
+    // (c) Per-object SLA settings in object_settings_sla
+    // NOTE: object_settings_sla is NOT currently written by PrusaFile.cpp (gap)
+    object->object_settings_sla.items.opt("support_points_density_relative").set(150);
+    object->object_settings_sla.items.opt("hollowing_enable").set(true);
+    object->object_settings_sla.items.opt("hollowing_min_thickness").set(2.0);
+
+    const fs::path temp_dir =
+        fs::temp_directory_path() / fs::unique_path("slic3r-3mf-sla-test-%%%%-%%%%");
+    fs::create_directories(temp_dir);
+    const fs::path file_path = temp_dir / "sla_round_trip.3mf";
+    store_3mf(file_path.string(), project);
+
+    const Loaded3MF loaded = load_3mf(file_path.string());
+    boost::system::error_code cleanup_error;
+    fs::remove_all(temp_dir, cleanup_error);
+
+    REQUIRE(loaded.model.objects.size() == 1);
+    const ModelObject* loaded_object = loaded.model.objects[0];
+
+    // ---- Support points round-trip ----
+    REQUIRE(loaded_object->sla_support_points.size() == 3);
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[0].pos.x(), 10.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[0].pos.y(), 10.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[0].pos.z(), 5.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[0].head_front_radius, 1.5f));
+    CHECK(loaded_object->sla_support_points[0].type == SupportPointType::manual_add);
+
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[1].pos.x(), 15.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[1].pos.y(), 15.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[1].pos.z(), 8.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[1].head_front_radius, 2.0f));
+    CHECK(loaded_object->sla_support_points[1].type == SupportPointType::island);
+
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[2].pos.x(), 5.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[2].pos.y(), 5.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[2].pos.z(), 12.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[2].head_front_radius, 1.0f));
+    CHECK(loaded_object->sla_support_points[2].type == SupportPointType::slope);
+
+    // GAP: sla_points_status is NOT serialized - it resets to default (NoPoints)
+    CHECK(loaded_object->sla_points_status == PointsStatus::NoPoints);
+    // REQUIRE_FALSE(loaded_object->sla_points_status == PointsStatus::UserModified); // Expected to fail - not serialized
+
+    // ---- Drain holes round-trip ----
+    REQUIRE(loaded_object->sla_drain_holes.size() == 2);
+    CHECK(Domain::is_approx(loaded_object->sla_drain_holes[0].pos.x(), 12.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_drain_holes[0].pos.y(), 12.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_drain_holes[0].pos.z(), 0.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_drain_holes[0].normal.x(), 0.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_drain_holes[0].normal.y(), 0.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_drain_holes[0].normal.z(), 1.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_drain_holes[0].radius, 2.5f));
+    CHECK(Domain::is_approx(loaded_object->sla_drain_holes[0].height, 5.0f));
+
+    CHECK(Domain::is_approx(loaded_object->sla_drain_holes[1].pos.x(), 8.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_drain_holes[1].pos.y(), 8.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_drain_holes[1].pos.z(), 0.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_drain_holes[1].radius, 1.5f));
+    CHECK(Domain::is_approx(loaded_object->sla_drain_holes[1].height, 3.0f));
+
+    // GAP: object_settings_sla is NOT serialized - overrides remain empty
+    CHECK(loaded_object->object_settings_sla.overrides.empty());
+    // REQUIRE_FALSE(loaded_object->object_settings_sla.overrides.empty()); // Expected to fail - not serialized
 }
