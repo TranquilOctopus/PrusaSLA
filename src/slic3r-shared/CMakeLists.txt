@@ -1563,6 +1563,8 @@ if(SLIC3R_BUILD_TESTS)
 
             test/Slic3r/App/Plater/SlaHollowGizmoTests.cpp
 
+            test/Slic3r/App/Undo/ModelSerializeRoundtripTests.cpp
+
             test/Slic3r/App/PresetUpdater/PresetUpdaterControllerStateTests.cpp
             test/Slic3r/App/PresetUpdater/PresetUpdaterControllerTests.cpp
 

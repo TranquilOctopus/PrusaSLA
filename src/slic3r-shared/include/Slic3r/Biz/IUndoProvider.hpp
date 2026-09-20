@@ -111,6 +111,10 @@ enum class UndoSnapshotType
     ReplaceWithStl,
     ReloadFromDisk,
     EditVirtualExtruders,
+    SlaSupportPointsEdit,
+    SlaDrainHolesEdit,
+    SlaSupportPointsApply,
+    SlaDrainHolesApply,
 };
 
 namespace UndoSnapshotSelection {
