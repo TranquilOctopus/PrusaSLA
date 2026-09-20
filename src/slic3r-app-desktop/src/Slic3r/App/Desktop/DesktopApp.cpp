@@ -503,7 +503,12 @@ void DesktopApp::finish_init()
 
     preset_interactor.set_dialog_manager(&app_services.dialog_manager());
 
-    m_project_interactor->new_project();
+    bool sla_first = app_services.app_config().get<bool>("sla_first");
+    if (sla_first) {
+        m_project_interactor->new_project_with_technology(Domain::PrinterTechnology::SLA);
+    } else {
+        m_project_interactor->new_project();
+    }
 
     select_favorite_preset(preset_interactor);
 

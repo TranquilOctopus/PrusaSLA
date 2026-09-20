@@ -601,6 +601,49 @@ public:
                 show_dialog(false);
             });
         m_dialog->set_visible(false);
+
+        // Auto-add SLA printer if sla_first mode is enabled
+        auto& app_config = AppServices::instance().app_config();
+        if (app_config.get<bool>("sla_first")) {
+            auto_add_sla_printer();
+        }
+    }
+
+private:
+    void auto_add_sla_printer()
+    {
+        const auto& preset_bundle = m_project_interactor.workbench().preset_bundle();
+        const auto vendor_it = preset_bundle.vendor_bundles.find("prusa-research-sla");
+        if (vendor_it == preset_bundle.vendor_bundles.end()) {
+            return;
+        }
+        const auto& vendor_bundle = vendor_it->second;
+
+        // Find the first SLA printer preset from the vendor
+        for (const auto& [hw_config_id, evaluated_presets] : preset_bundle.evaluated_presets) {
+            const auto& hw_config = preset_bundle.printer_configs.at(hw_config_id);
+            if (hw_config.vendor_id != "prusa-research-sla") {
+                continue;
+            }
+            if (hw_config.technology != Domain::PrinterTechnology::SLA) {
+                continue;
+            }
+            for (const auto& evaluated_preset : evaluated_presets) {
+                // Use the first printer preset found
+                const Domain::Preset::VendorData& vendor_data = vendor_bundle.vendor_data;
+                Domain::Preset::HwPrinterConfig config{hw_config};
+                // Get sheet definition from vendor data
+                const auto& tech_defs = vendor_data.defs.at(hw_config.technology);
+                const auto sheet_it = tech_defs.sheets.find(hw_config.sheet.id);
+                if (sheet_it != tech_defs.sheets.end()) {
+                    config.sheet = Biz::Preset::from_def(vendor_data, sheet_it->second);
+                }
+                config.tools.clear(); // SLA printers have no tools
+
+                add_printer(PrinterToAdd{config, evaluated_preset.preset.id});
+                return;
+            }
+        }
     }
 
     void disable_printer_sync() {
@@ -928,6 +971,8 @@ public:
     }
 
 private:
+    void auto_add_sla_printer();
+
     Biz::ProjectInteractor& m_project_interactor;
     std::function<void()> m_go_to_prev;
     std::function<void(const std::vector<PrinterToAdd>&)> m_finish;

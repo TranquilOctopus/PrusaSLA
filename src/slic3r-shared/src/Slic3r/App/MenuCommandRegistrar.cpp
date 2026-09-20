@@ -2181,7 +2181,15 @@ void MenuCommandRegistrar::register_file_menu_commands()
             {MenuItemName::FileMenu, MenuItemName::NewProject},
             std::make_unique<UIItemCommand>(
                 CommandName::NewProject,
-                [this]() { m_project_interactor.new_project(); },
+                [this]() {
+                    auto& app_config = AppServices::instance().app_config();
+                    bool sla_first = app_config.get<bool>("sla_first");
+                    if (sla_first) {
+                        m_project_interactor.new_project_with_technology(Domain::PrinterTechnology::SLA);
+                    } else {
+                        m_project_interactor.new_project();
+                    }
+                },
                 UIItemCommandExtraOpts{
                     .keyboard_shortcuts = Platform::KeyboardShortcuts{Platform::KeyboardShortcut{
                         Platform::KeyModifiers(Platform::KeyModifier::Ctrl),

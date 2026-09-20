@@ -157,6 +157,9 @@ public:
     Domain::SelectionId new_project_with_modification(
         const std::function<void(Domain::Project&)>& modifier
     );
+    Domain::SelectionId new_project_with_technology(
+        Domain::PrinterTechnology technology
+    );
 
     /**
      * @brief Create new project from a preset built from metadata and configuration

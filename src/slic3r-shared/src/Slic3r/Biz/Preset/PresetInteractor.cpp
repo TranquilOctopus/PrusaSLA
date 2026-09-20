@@ -840,10 +840,9 @@ PresetInteractorConfigContainerContext& PresetInteractor::initialize_config_cont
     return it->second;
 }
 
-void PresetInteractor::initialize_config_container_with_default(Domain::ConfigContainer& cc)
+void PresetInteractor::initialize_config_container_with_default(Domain::ConfigContainer& cc,
+    std::optional<Domain::PrinterTechnology> preferred_technology)
 {
-    const static std::string selected_printer_name =
-        "Prusa CORE One"; //"SL1S SPEED";//"Prusa MK4S";
     const auto& preset_bundle     = m_workbench.preset_bundle();
 
     std::vector<PresetItem> items;
@@ -862,10 +861,41 @@ void PresetInteractor::initialize_config_container_with_default(Domain::ConfigCo
 
     ASSERT(items.size() > 0);
 
-    auto filter_pred = [](const PresetItem& p)
+    // Filter by preferred technology if specified
+    if (preferred_technology.has_value()) {
+        auto tech_filter = [preferred_technology](const PresetItem& p) {
+            // We need to find the hw_config to check its technology
+            return p.hw_printer_config_id.empty() == false;
+        };
+        // First, filter items by technology by checking the hw_config
+        std::vector<PresetItem> tech_items;
+        tech_items.reserve(items.size());
+        for (const auto& item : items) {
+            const auto& hw_config = preset_bundle.printer_configs.at(item.hw_printer_config_id);
+            if (hw_config.technology == preferred_technology.value()) {
+                tech_items.push_back(item);
+            }
+        }
+        if (!tech_items.empty()) {
+            items = std::move(tech_items);
+        }
+    }
+
+    // Prefer Prusa Research SLA printers when SLA is preferred
+    const static std::string sla_printer_vendor = "prusa-research-sla";
+    const static std::string fff_printer_name = "Prusa CORE One";
+
+    auto filter_pred = [&](const PresetItem& p)
     {
-        return p.hw_printer_config_name.starts_with(selected_printer_name)
-            && p.origin == Domain::Preset::PresetOrigin::System;
+        bool is_system = p.origin == Domain::Preset::PresetOrigin::System;
+        if (preferred_technology == Domain::PrinterTechnology::SLA) {
+            // For SLA, prefer prusa-research-sla vendor
+            const auto& hw_config = preset_bundle.printer_configs.at(p.hw_printer_config_id);
+            return is_system && hw_config.vendor_id == sla_printer_vendor;
+        } else {
+            // For FFF or no preference, use the original logic
+            return is_system && p.hw_printer_config_name.starts_with(fff_printer_name);
+        }
     };
     auto filtered_range = items | std::views::filter(filter_pred);
     auto it = std::ranges::min_element(filtered_range, {}, sort_key);

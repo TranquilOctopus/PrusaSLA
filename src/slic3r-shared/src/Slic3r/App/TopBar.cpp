@@ -123,7 +123,15 @@ TopBar::TopBar(
         Render::Icon::Plus,
         Biz::_u8L("Add new project")
     );
-    add_new_project_btn->callbacks().action = [this] { m_project_interactor.new_project(); };
+    add_new_project_btn->callbacks().action = [this] {
+        auto& app_config = AppServices::instance().app_config();
+        bool sla_first = app_config.get<bool>("sla_first");
+        if (sla_first) {
+            m_project_interactor.new_project_with_technology(Domain::PrinterTechnology::SLA);
+        } else {
+            m_project_interactor.new_project();
+        }
+    };
 
     Item* right_wrapper = emplace_back<Item>();
     right_wrapper->set_flex_shrink(0);
