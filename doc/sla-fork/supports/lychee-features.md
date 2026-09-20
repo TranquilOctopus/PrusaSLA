@@ -1,6 +1,8 @@
 # Lychee support options: parity target
 
-**Status: the parity target is every Lychee support option, not a personal subset.** Compiled from general knowledge of Lychee Slicer's settings, not from its files or code. This list was written from general knowledge of Lychee Slicer's support settings, not from its files or code (see the M7 research rules in [ROADMAP.md](../ROADMAP.md)). Option names and ranges may be wrong or incomplete. Rows are unverified: names and ranges may be wrong, and options may be missing. Treat a wrong name as a bug to fix when someone checks against the Lychee UI, not as a reason to delay M2.11. Add any option found later.
+**Status: the parity target is every Lychee support option, not a personal subset.** Compiled from general knowledge of Lychee Slicer's settings, not from its files or code (see the M7 research rules in [ROADMAP.md](../ROADMAP.md)).
+
+Rows are unverified: names and ranges may be wrong, and options may be missing. Treat a wrong name as a bug to fix when someone checks against the Lychee UI, not as a reason to delay M2.11. Add any option found later.
 
 Goal: every option below has an equivalent in this fork, per support point where Lychee allows it and globally otherwise.
 
