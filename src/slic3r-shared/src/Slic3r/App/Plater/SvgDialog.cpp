@@ -119,7 +119,7 @@ SvgDialog::SvgDialog() : GizmoWindow()
         Yoga::Unit{240.f - padding.horizontal().value}
         // from m_layout_right_column->set_min_size({240, YGUndefined});
     );
-    m_preview->set_tint(ImColor(0, 0, 0));
+    m_preview->set_tint(m_theme->color_imgui(Platform::Color::IconTint));
     m_preview->set_flex_grow(1.f);
     m_preview->set_fill_mode(Icon::FillMode::PreservedAspectCentered);
     // <<

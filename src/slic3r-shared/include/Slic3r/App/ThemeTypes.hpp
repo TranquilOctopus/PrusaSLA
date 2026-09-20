@@ -39,6 +39,16 @@ enum class Color
     SlaCupWarning,
     SlaLayerArea,
     Transparent,
+    NeutralGrey,
+    OnAccentPrimary,
+    Shadow,
+    PickerHandle,
+    Outline,
+    OnWarning,
+    MeasureFeature1,
+    MeasureFeature2,
+    IconTint,
+    CursorHighlight,
 };
 
 /**

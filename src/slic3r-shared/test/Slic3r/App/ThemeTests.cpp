@@ -53,6 +53,16 @@ TEST_CASE("[Theme] Every Platform::Color has an entry in both themes")
             Platform::Color::SlaCupWarning,
             Platform::Color::SlaLayerArea,
             Platform::Color::Transparent,
+            Platform::Color::NeutralGrey,
+            Platform::Color::OnAccentPrimary,
+            Platform::Color::Shadow,
+            Platform::Color::PickerHandle,
+            Platform::Color::Outline,
+            Platform::Color::OnWarning,
+            Platform::Color::MeasureFeature1,
+            Platform::Color::MeasureFeature2,
+            Platform::Color::IconTint,
+            Platform::Color::CursorHighlight,
         };
 
         for (Platform::Color color : all_colors) {
@@ -135,6 +145,71 @@ TEST_CASE("[Theme] Dark theme uses SLA palette colors")
     REQUIRE(u8(error.r()) == 224);
     REQUIRE(u8(error.g()) == 122);
     REQUIRE(u8(error.b()) == 107);
+
+    // New tokens (M1.5)
+    const auto& neutral_grey = dark_theme.color(Platform::Color::NeutralGrey);
+    const auto& on_accent_primary = dark_theme.color(Platform::Color::OnAccentPrimary);
+    const auto& shadow = dark_theme.color(Platform::Color::Shadow);
+    const auto& picker_handle = dark_theme.color(Platform::Color::PickerHandle);
+    const auto& outline = dark_theme.color(Platform::Color::Outline);
+    const auto& on_warning = dark_theme.color(Platform::Color::OnWarning);
+    const auto& measure_feature1 = dark_theme.color(Platform::Color::MeasureFeature1);
+    const auto& measure_feature2 = dark_theme.color(Platform::Color::MeasureFeature2);
+    const auto& icon_tint = dark_theme.color(Platform::Color::IconTint);
+    const auto& cursor_highlight = dark_theme.color(Platform::Color::CursorHighlight);
+
+    // NeutralGrey = #808080 = (128, 128, 128)
+    REQUIRE(u8(neutral_grey.r()) == 128);
+    REQUIRE(u8(neutral_grey.g()) == 128);
+    REQUIRE(u8(neutral_grey.b()) == 128);
+
+    // OnAccentPrimary = White = (255, 255, 255)
+    REQUIRE(u8(on_accent_primary.r()) == 255);
+    REQUIRE(u8(on_accent_primary.g()) == 255);
+    REQUIRE(u8(on_accent_primary.b()) == 255);
+
+    // Shadow = Black 43% alpha = (0, 0, 0, 110)
+    REQUIRE(u8(shadow.r()) == 0);
+    REQUIRE(u8(shadow.g()) == 0);
+    REQUIRE(u8(shadow.b()) == 0);
+    REQUIRE(u8(shadow.a()) == 110);
+
+    // PickerHandle = White = (255, 255, 255)
+    REQUIRE(u8(picker_handle.r()) == 255);
+    REQUIRE(u8(picker_handle.g()) == 255);
+    REQUIRE(u8(picker_handle.b()) == 255);
+
+    // Outline = Black 50% alpha = (0, 0, 0, 128)
+    REQUIRE(u8(outline.r()) == 0);
+    REQUIRE(u8(outline.g()) == 0);
+    REQUIRE(u8(outline.b()) == 0);
+    REQUIRE(u8(outline.a()) == 128);
+
+    // OnWarning = White = (255, 255, 255)
+    REQUIRE(u8(on_warning.r()) == 255);
+    REQUIRE(u8(on_warning.g()) == 255);
+    REQUIRE(u8(on_warning.b()) == 255);
+
+    // MeasureFeature1 = #40BFBF = (64, 191, 191)
+    REQUIRE(u8(measure_feature1.r()) == 64);
+    REQUIRE(u8(measure_feature1.g()) == 191);
+    REQUIRE(u8(measure_feature1.b()) == 191);
+
+    // MeasureFeature2 = #BF40BF = (191, 64, 191)
+    REQUIRE(u8(measure_feature2.r()) == 191);
+    REQUIRE(u8(measure_feature2.g()) == 64);
+    REQUIRE(u8(measure_feature2.b()) == 191);
+
+    // IconTint = Black = (0, 0, 0)
+    REQUIRE(u8(icon_tint.r()) == 0);
+    REQUIRE(u8(icon_tint.g()) == 0);
+    REQUIRE(u8(icon_tint.b()) == 0);
+
+    // CursorHighlight = Yellow = (255, 255, 0, 255)
+    REQUIRE(u8(cursor_highlight.r()) == 255);
+    REQUIRE(u8(cursor_highlight.g()) == 255);
+    REQUIRE(u8(cursor_highlight.b()) == 0);
+    REQUIRE(u8(cursor_highlight.a()) == 255);
 }
 
 TEST_CASE("[Theme] Light theme uses SLA palette colors")
@@ -206,4 +281,69 @@ TEST_CASE("[Theme] Light theme uses SLA palette colors")
     REQUIRE(u8(error.r()) == 181);
     REQUIRE(u8(error.g()) == 72);
     REQUIRE(u8(error.b()) == 62);
+
+    // New tokens (M1.5) - same values in light theme
+    const auto& neutral_grey = light_theme.color(Platform::Color::NeutralGrey);
+    const auto& on_accent_primary = light_theme.color(Platform::Color::OnAccentPrimary);
+    const auto& shadow = light_theme.color(Platform::Color::Shadow);
+    const auto& picker_handle = light_theme.color(Platform::Color::PickerHandle);
+    const auto& outline = light_theme.color(Platform::Color::Outline);
+    const auto& on_warning = light_theme.color(Platform::Color::OnWarning);
+    const auto& measure_feature1 = light_theme.color(Platform::Color::MeasureFeature1);
+    const auto& measure_feature2 = light_theme.color(Platform::Color::MeasureFeature2);
+    const auto& icon_tint = light_theme.color(Platform::Color::IconTint);
+    const auto& cursor_highlight = light_theme.color(Platform::Color::CursorHighlight);
+
+    // NeutralGrey = #808080 = (128, 128, 128)
+    REQUIRE(u8(neutral_grey.r()) == 128);
+    REQUIRE(u8(neutral_grey.g()) == 128);
+    REQUIRE(u8(neutral_grey.b()) == 128);
+
+    // OnAccentPrimary = White = (255, 255, 255)
+    REQUIRE(u8(on_accent_primary.r()) == 255);
+    REQUIRE(u8(on_accent_primary.g()) == 255);
+    REQUIRE(u8(on_accent_primary.b()) == 255);
+
+    // Shadow = Black 43% alpha = (0, 0, 0, 110)
+    REQUIRE(u8(shadow.r()) == 0);
+    REQUIRE(u8(shadow.g()) == 0);
+    REQUIRE(u8(shadow.b()) == 0);
+    REQUIRE(u8(shadow.a()) == 110);
+
+    // PickerHandle = White = (255, 255, 255)
+    REQUIRE(u8(picker_handle.r()) == 255);
+    REQUIRE(u8(picker_handle.g()) == 255);
+    REQUIRE(u8(picker_handle.b()) == 255);
+
+    // Outline = Black 50% alpha = (0, 0, 0, 128)
+    REQUIRE(u8(outline.r()) == 0);
+    REQUIRE(u8(outline.g()) == 0);
+    REQUIRE(u8(outline.b()) == 0);
+    REQUIRE(u8(outline.a()) == 128);
+
+    // OnWarning = White = (255, 255, 255)
+    REQUIRE(u8(on_warning.r()) == 255);
+    REQUIRE(u8(on_warning.g()) == 255);
+    REQUIRE(u8(on_warning.b()) == 255);
+
+    // MeasureFeature1 = #40BFBF = (64, 191, 191)
+    REQUIRE(u8(measure_feature1.r()) == 64);
+    REQUIRE(u8(measure_feature1.g()) == 191);
+    REQUIRE(u8(measure_feature1.b()) == 191);
+
+    // MeasureFeature2 = #BF40BF = (191, 64, 191)
+    REQUIRE(u8(measure_feature2.r()) == 191);
+    REQUIRE(u8(measure_feature2.g()) == 64);
+    REQUIRE(u8(measure_feature2.b()) == 191);
+
+    // IconTint = Black = (0, 0, 0)
+    REQUIRE(u8(icon_tint.r()) == 0);
+    REQUIRE(u8(icon_tint.g()) == 0);
+    REQUIRE(u8(icon_tint.b()) == 0);
+
+    // CursorHighlight = Yellow = (255, 255, 0, 255)
+    REQUIRE(u8(cursor_highlight.r()) == 255);
+    REQUIRE(u8(cursor_highlight.g()) == 255);
+    REQUIRE(u8(cursor_highlight.b()) == 0);
+    REQUIRE(u8(cursor_highlight.a()) == 255);
 }

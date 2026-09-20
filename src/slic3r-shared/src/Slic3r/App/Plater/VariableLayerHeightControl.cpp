@@ -10,11 +10,11 @@
 namespace Slic3r::App::Plater {
 
 const constexpr float LAYER_HEIGHT_PROFILE_PADDING = 5.f;
-const constexpr ImColor LAYER_HEIGHT_CURSOR_COLOR  = ImColor(255, 255, 0, 255);
 
 VariableLayerHeightControl::VariableLayerHeightControl() : LayerHeightProfileControl()
 {
     this->set_object_name("VariableLayerHeightControl");
+    m_cursor_color = m_theme->color_imgui(Platform::Color::CursorHighlight);
 }
 
 VariableLayerHeightControl::Callbacks& VariableLayerHeightControl::callbacks()
@@ -123,15 +123,15 @@ void VariableLayerHeightControl::render_cursor(const Domain::Vec2f& pos, const D
             + 0.25f;
 
         const ImColor color_top{
-            LAYER_HEIGHT_CURSOR_COLOR.Value.x,
-            LAYER_HEIGHT_CURSOR_COLOR.Value.y,
-            LAYER_HEIGHT_CURSOR_COLOR.Value.z,
+            m_cursor_color.Value.x,
+            m_cursor_color.Value.y,
+            m_cursor_color.Value.z,
             alpha_top
         };
         const ImColor color_bottom{
-            LAYER_HEIGHT_CURSOR_COLOR.Value.x,
-            LAYER_HEIGHT_CURSOR_COLOR.Value.y,
-            LAYER_HEIGHT_CURSOR_COLOR.Value.z,
+            m_cursor_color.Value.x,
+            m_cursor_color.Value.y,
+            m_cursor_color.Value.z,
             alpha_bottom
         };
 

@@ -16,14 +16,15 @@ namespace Slic3r::App::ColorMix {
 /**
  * @brief Parse a config hex color like "#AA5500".
  */
-ImColor parse_hex_color(const std::string& hex_color);
+ImColor parse_hex_color(const std::string& hex_color, ImColor fallback = ImColor(0x80, 0x80, 0x80));
 
 /**
  * @brief Color of the given 1-based physical slot.
  */
 ImColor physical_slot_color(
     const std::vector<std::string>& physical_colors,
-    unsigned int extruder_id_1based
+    unsigned int extruder_id_1based,
+    ImColor fallback = ImColor(0x80, 0x80, 0x80)
 );
 
 /**

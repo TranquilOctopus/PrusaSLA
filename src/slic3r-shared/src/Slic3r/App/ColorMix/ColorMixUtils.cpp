@@ -14,11 +14,11 @@ using namespace Slic3r::Biz;
 
 namespace Slic3r::App::ColorMix {
 
-ImColor parse_hex_color(const std::string& hex_color)
+ImColor parse_hex_color(const std::string& hex_color, ImColor fallback)
 {
     ColorRGBA color;
     if (!Algorithms::Color::decode_color(hex_color, color)) {
-        return ImColor(0x80, 0x80, 0x80);
+        return fallback;
     }
 
     return ImColor(color.r(), color.g(), color.b(), color.a());
@@ -26,14 +26,15 @@ ImColor parse_hex_color(const std::string& hex_color)
 
 ImColor physical_slot_color(
     const std::vector<std::string>& physical_colors,
-    unsigned int extruder_id_1based
+    unsigned int extruder_id_1based,
+    ImColor fallback
 )
 {
     if (extruder_id_1based >= 1 && extruder_id_1based <= physical_colors.size()) {
-        return parse_hex_color(physical_colors[extruder_id_1based - 1]);
+        return parse_hex_color(physical_colors[extruder_id_1based - 1], fallback);
     }
 
-    return ImColor(0x80, 0x80, 0x80);
+    return fallback;
 }
 
 std::string effective_color_hex(
