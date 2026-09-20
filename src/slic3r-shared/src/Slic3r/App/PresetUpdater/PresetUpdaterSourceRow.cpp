@@ -319,9 +319,9 @@ void PresetUpdaterSourceRow::on_data_update()
     m_summary_icon->set_visible(icon.has_value());
     if (icon.has_value()) {
         m_summary_icon->set_icon(*icon);
-        m_summary_icon->set_tint(
+m_summary_icon->set_tint(
             *icon == Render::Icon::ErrorMarker ? m_theme->color_imgui(Platform::Color::Error) :
-                                                 ImColor(1.0f, 1.0f, 1.0f)
+                                                  m_theme->color_imgui(Platform::Color::OnWarning)
         );
     }
 

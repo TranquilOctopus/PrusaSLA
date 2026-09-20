@@ -335,8 +335,8 @@ void BarycentricRatioPicker::render(const Vec2f& pos, const Vec2f& size)
     const ImVec2 handle_center{pos.x() + handle_x, pos.y() + handle_y};
     const float handle_radius = m_handle_radius.result;
 
-    draw_list->AddCircleFilled(handle_center, handle_radius, ImColor(255, 255, 255));
-    draw_list->AddCircle(handle_center, handle_radius, ImColor(0, 0, 0, 128), 0, 1.5f);
+    draw_list->AddCircleFilled(handle_center, handle_radius, m_theme->color_imgui(Platform::Color::PickerHandle));
+    draw_list->AddCircle(handle_center, handle_radius, m_theme->color_imgui(Platform::Color::Outline), 0, 1.5f);
 }
 
 } // namespace Slic3r::App::ColorMix

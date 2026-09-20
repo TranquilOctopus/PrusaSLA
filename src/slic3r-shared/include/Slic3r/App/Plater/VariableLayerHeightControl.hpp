@@ -70,6 +70,8 @@ private:
     Button m_mouse_button_down = Button::None;
     bool m_was_active          = false;
     bool m_was_hovered         = false;
+
+    ImColor m_cursor_color;
 };
 
 } // namespace Slic3r::App::Plater

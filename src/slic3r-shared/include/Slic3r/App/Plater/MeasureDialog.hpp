@@ -69,6 +69,9 @@ private:
     Yoga::Text* m_help_select_text   = nullptr;
     Yoga::Icon* m_help_unselect_icon = nullptr;
     Yoga::Text* m_help_unselect_text = nullptr;
+
+    ImColor m_feature_1_color;
+    ImColor m_feature_2_color;
 };
 
 } // namespace Slic3r::App::Plater

@@ -16,14 +16,12 @@ using namespace Slic3r::App::Yoga;
 using namespace Slic3r::App::Plater::Measure;
 
 namespace Slic3r::App::Plater {
-static const ImColor FEATURE_1_COLOR = ImColor(64, 191, 191);
-static const ImColor FEATURE_2_COLOR = ImColor(191, 64, 191);
-
-using namespace Biz;
 
 MeasureDialog::MeasureDialog() : GizmoWindow()
 {
     const Vec2f shortcut_button_size{30.f, 30.f};
+    m_feature_1_color = m_theme->color_imgui(Platform::Color::MeasureFeature1);
+    m_feature_2_color = m_theme->color_imgui(Platform::Color::MeasureFeature2);
 
     content()->set_orientation(Orientation::Vertical);
     content()->set_gap(gap_size());
@@ -55,11 +53,11 @@ MeasureDialog::MeasureDialog() : GizmoWindow()
 
     std::unique_ptr<SpotDescription> spot1 = std::make_unique<SpotDescription>();
     m_spot1                                = spot1.get();
-    add_spot_row(FEATURE_1_COLOR, _u8L("Feature 1"), std::move(spot1));
+    add_spot_row(m_feature_1_color, _u8L("Feature 1"), std::move(spot1));
 
     std::unique_ptr<SpotDescription> spot2 = std::make_unique<SpotDescription>();
     m_spot2                                = spot2.get();
-    add_spot_row(FEATURE_2_COLOR, _u8L("Feature 2"), std::move(spot2));
+    add_spot_row(m_feature_2_color, _u8L("Feature 2"), std::move(spot2));
 
     add_separator(m_main_panel);
 
@@ -192,31 +190,31 @@ void MeasureDialog::update(
     ImColor select_color;
     std::string select_text = _u8L("Select");
     if (features.hover_id == HoverID::FirstSelectedFeature) {
-        select_color = FEATURE_1_COLOR;
+        select_color = m_feature_1_color;
         select_text  = _u8L("Unselect");
     } else if (features.hover_id == HoverID::SecondSelectedFeature) {
-        select_color = FEATURE_2_COLOR;
+        select_color = m_feature_2_color;
         select_text  = _u8L("Unselect");
     } else if (features.hover_id == HoverID::FirstCircleCenterFeature) {
-        select_color = FEATURE_1_COLOR;
+        select_color = m_feature_1_color;
         select_text  = (!first_selected || !features.first_selected()->parent.has_value()) ?
             _u8L("Select") :
             _u8L("Unselect");
     } else if (features.hover_id == HoverID::SecondCircleCenterFeature) {
-        select_color = FEATURE_2_COLOR;
+        select_color = m_feature_2_color;
         select_text  = (!second_selected || !features.second_selected()->parent.has_value()) ?
             _u8L("Select") :
             _u8L("Unselect");
     } else if (first_selected)
-        select_color = FEATURE_2_COLOR;
+        select_color = m_feature_2_color;
     else
-        select_color = FEATURE_1_COLOR;
+        select_color = m_feature_1_color;
 
     m_help_select_icon->set_tint(select_color);
     m_help_select_text->set_text_color(select_color);
 
     const ImColor unselect_color = m_help_unselect_icon->enabled() ?
-        (second_selected ? FEATURE_2_COLOR : FEATURE_1_COLOR) :
+        (second_selected ? m_feature_2_color : m_feature_1_color) :
         m_theme->color_imgui(Platform::Color::Text);
     m_help_unselect_text->set_text_color(unselect_color);
     m_help_unselect_icon->set_tint(unselect_color);
