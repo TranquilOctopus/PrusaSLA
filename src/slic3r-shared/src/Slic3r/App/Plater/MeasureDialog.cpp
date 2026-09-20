@@ -15,6 +15,8 @@
 using namespace Slic3r::App::Yoga;
 using namespace Slic3r::App::Plater::Measure;
 
+using namespace Slic3r::Biz;
+
 namespace Slic3r::App::Plater {
 
 MeasureDialog::MeasureDialog() : GizmoWindow()
