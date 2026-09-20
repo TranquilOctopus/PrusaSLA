@@ -51,6 +51,15 @@ void appconfig_config_init_fn(Domain::ConfigDefinitions& defs)
     def->option_group = Domain::ConfigItemDef::OptionGroup::AppConfig_General_Application;
     def->init_fn = []() { return Domain::ConfigValue(true); };
 
+    def = defs.add("sla_first", typeid(bool));
+    def->location = Domain::AppConfigLocation{};
+    def->gui_type = GUIType::checkbox;
+    def->label = L("SLA-first mode");
+    def->tooltip = L("On first run, select an SLA printer by default and hide FFF-only UI.");
+    def->category = Domain::ConfigItemDef::Category::AppConfig_General;
+    def->option_group = Domain::ConfigItemDef::OptionGroup::AppConfig_General_Application;
+    def->init_fn = []() { return Domain::ConfigValue(true); };
+
     def = defs.add("crash_reason", typeid(std::string));
     def->location = Domain::AppConfigLocation{};
     def->category = Category::Hidden;

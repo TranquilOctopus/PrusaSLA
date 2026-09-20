@@ -124,6 +124,14 @@ Domain::SelectionId ProjectInteractor::new_project_with_modification(
     const std::function<void(Domain::Project&)>& modifier
 )
 {
+    return new_project_with_modification(modifier, std::nullopt);
+}
+
+Domain::SelectionId ProjectInteractor::new_project_with_modification(
+    const std::function<void(Domain::Project&)>& modifier,
+    std::optional<Domain::PrinterTechnology> preferred_technology
+)
+{
     Domain::Project project;
 
     project.config_containers().emplace_back(std::make_unique<Domain::ConfigContainer>());
@@ -132,7 +140,7 @@ Domain::SelectionId ProjectInteractor::new_project_with_modification(
     {
         InvokeLaterBag bag;
         project_id = add_project(std::move(project), bag);
-        m_preset_interactor.initialize_config_container_with_default(config_container);
+        m_preset_interactor.initialize_config_container_with_default(config_container, preferred_technology);
 
         Domain::Project& added_project{m_workbench.project(project_id)};
         initialize_bed(project_id, config_container.id().id, added_project.bed_container());
@@ -145,6 +153,13 @@ Domain::SelectionId ProjectInteractor::new_project_with_modification(
     });
 
     return project_id;
+}
+
+Domain::SelectionId ProjectInteractor::new_project_with_technology(
+    Domain::PrinterTechnology technology
+)
+{
+    return new_project_with_modification([](auto& _){}, technology);
 }
 
 tl::expected<SelectionId, std::string> ProjectInteractor::do_load_project(

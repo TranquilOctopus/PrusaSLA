@@ -142,7 +142,8 @@ public:
         Domain::SelectionId project_id,
         Domain::SelectionId config_container_id
     );
-    void initialize_config_container_with_default(Domain::ConfigContainer& cc);
+    void initialize_config_container_with_default(Domain::ConfigContainer& cc,
+        std::optional<Domain::PrinterTechnology> preferred_technology = std::nullopt);
     void initialize_config_container_with_selected(Domain::ConfigContainer& cc);
 
     const Domain::Preset::HwPrinterConfig& current_printer_config() const;
