@@ -40,8 +40,9 @@ T read_be(const uint8_t* ptr)
     return val;
 }
 
-static const std::string GOO_ENDING = "\x00\x00\x00\x07\x00\x00\x00\x44\x4C\x50\x00";
-static const std::string GOO_MAGIC_TAG = "\x07\x00\x00\x00\x44\x4C\x50\x00";
+// Both contain NUL bytes, so the length must be explicit or the string stops at the first one.
+static const std::string GOO_ENDING("\x00\x00\x00\x07\x00\x00\x00\x44\x4C\x50\x00", 11);
+static const std::string GOO_MAGIC_TAG("\x07\x00\x00\x00\x44\x4C\x50\x00", 8);
 static const std::string GOO_DELIMITER = "\x0D\x0A";
 
 TEST_CASE("Goo export", "[export][sla][goo]")
@@ -112,7 +113,8 @@ TEST_CASE("Goo export", "[export][sla][goo]")
     REQUIRE(y_res == 1440);
 
     // Check layer thickness == layer_height
-    size_t layer_thickness_offset = res_offset + 4 + 1 + 1 + 16 + 4;
+    // X/Y resolution (2+2), X/Y mirror (1+1), platform X/Y/Z floats (3*4).
+    size_t layer_thickness_offset = res_offset + 4 + 2 + 12;
     REQUIRE(data.size() >= layer_thickness_offset + 4);
     float layer_thickness;
     uint32_t layer_thickness_bits = read_be<uint32_t>(data.data() + layer_thickness_offset);
