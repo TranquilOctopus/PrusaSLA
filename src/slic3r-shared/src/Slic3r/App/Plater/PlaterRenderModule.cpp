@@ -1121,7 +1121,9 @@ void PlaterRenderModule::init_gizmos()
         *m_device
     );
     m_sla_hollow_gizmo = &m_gizmo_manager->add_tool_gizmo<SlaHollowGizmo>(
-        *m_scene_presenter
+        *m_scene_presenter,
+        m_project_interactor,
+        *m_device
     );
 
     m_command_binding_manager.set_gizmos_command_registry(&m_gizmo_manager->command_registry());
