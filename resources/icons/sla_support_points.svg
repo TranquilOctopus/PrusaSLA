@@ -1,0 +1,15 @@
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Small object (cube-like) -->
+  <path d="M8 2L13 5V11L8 14L3 11V5L8 2Z" stroke="#F7F7F7" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M8 2V14" stroke="#F7F7F7" stroke-width="1.2" stroke-linecap="round"/>
+  <path d="M3 5V11" stroke="#F7F7F7" stroke-width="1.2" stroke-linecap="round"/>
+  <path d="M13 5V11" stroke="#F7F7F7" stroke-width="1.2" stroke-linecap="round"/>
+  <!-- Support pins under the object -->
+  <path d="M5 14V15.5" stroke="#F7F7F7" stroke-width="1" stroke-linecap="round"/>
+  <path d="M8 14V15.5" stroke="#F7F7F7" stroke-width="1" stroke-linecap="round"/>
+  <path d="M11 14V15.5" stroke="#F7F7F7" stroke-width="1" stroke-linecap="round"/>
+  <!-- Pin heads -->
+  <circle cx="5" cy="15.5" r="0.8" fill="#F7F7F7"/>
+  <circle cx="8" cy="15.5" r="0.8" fill="#F7F7F7"/>
+  <circle cx="11" cy="15.5" r="0.8" fill="#F7F7F7"/>
+</svg>

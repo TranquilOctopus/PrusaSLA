@@ -222,6 +222,9 @@ enum class Icon : wchar_t
     PhysicalPrinterIcon,
     CheckMark,
     Robot,
+    SlaSupportPoints,
+    SlaHollow,
+    SlaLayerInspector,
 
     // FontIconS
     // DO NOT TOUCH, DO NOT CHANGE ORDER

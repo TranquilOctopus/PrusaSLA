@@ -1,0 +1,15 @@
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer object shape (cube-like) -->
+  <path d="M8 1.5L13.5 4.5V11.5L8 14.5L2.5 11.5V4.5L8 1.5Z" stroke="#F7F7F7" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M8 1.5V14.5" stroke="#F7F7F7" stroke-width="1.2" stroke-linecap="round"/>
+  <path d="M2.5 4.5V11.5" stroke="#F7F7F7" stroke-width="1.2" stroke-linecap="round"/>
+  <path d="M13.5 4.5V11.5" stroke="#F7F7F7" stroke-width="1.2" stroke-linecap="round"/>
+  <!-- Inner hollow cavity -->
+  <path d="M8 4.5L11 6.5V10L8 12L5 10V6.5L8 4.5Z" stroke="#F7F7F7" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2 2"/>
+  <path d="M8 4.5V12" stroke="#F7F7F7" stroke-width="1" stroke-linecap="round" stroke-dasharray="2 2"/>
+  <path d="M5 6.5V10" stroke="#F7F7F7" stroke-width="1" stroke-linecap="round" stroke-dasharray="2 2"/>
+  <path d="M11 6.5V10" stroke="#F7F7F7" stroke-width="1" stroke-linecap="round" stroke-dasharray="2 2"/>
+  <!-- Drain hole at bottom -->
+  <circle cx="8" cy="13.5" r="1.2" stroke="#F7F7F7" stroke-width="1.2"/>
+  <circle cx="8" cy="13.5" r="0.5" fill="#F7F7F7"/>
+</svg>
