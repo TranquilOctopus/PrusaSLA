@@ -21,6 +21,7 @@
 #include <Slic3r/App/ThumbnailStoreUpdater.hpp>
 #include <Slic3r/App/Undo/Store.hpp>
 #include "Slic3r/App/AppConfig.hpp"
+#include <Slic3r/Biz/IProjectsChangedListener.hpp>
 
 #include "SplashScreen.hpp"
 
@@ -89,6 +90,10 @@ private:
     Biz::Preset::IO::BundlePaths m_bundle_paths;
     wxWeakRef<SplashScreen> m_splash_screen;
     bool m_init_completed{false};
+
+    // For --sla-fixture handling
+    std::unique_ptr<Biz::IProjectsChangedListener> m_sla_fixture_listener;
+    void process_sla_fixture(Domain::SelectionId project_id);
 };
 
 } // namespace Slic3r::App::Desktop

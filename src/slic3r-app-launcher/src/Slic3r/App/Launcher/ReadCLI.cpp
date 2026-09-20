@@ -164,6 +164,13 @@ void add_input_options(CLI::App& app, App::InitParams& params)
 
     app.add_option("Input-files", params.input.input_files, "Input files to process.")
         ->type_name("FILES");
+
+    app.add_option(
+           "--sla-fixture",
+           params.input.sla_fixture,
+           "Load the given 3MF file, slice it for SLA, and open the Preview tab. Debug flag for UI development."
+    )
+        ->type_name("FILE");
 }
 
 void add_transform_options(CLI::App& app, App::InitParams& params)

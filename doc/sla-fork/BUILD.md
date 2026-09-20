@@ -79,3 +79,14 @@ Run from the repository root in PowerShell, executing each command only after th
 8. Inspect `git status`, `git diff`, `git diff --cached`, and `git log --oneline -10`. Commit the reviewed merge only with authorization. Integration into `sla/main` is a separate owner-approved action.
 
 Do not push, force-push, or rewrite `master` or `sla/main`. No fetch, merge from a remote, or network-access check was performed for M0.3; verification covered local remote configuration, branch creation history, and this documented procedure.
+
+## Debug flags
+
+### `--sla-fixture <file.3mf>`
+
+Loads the given 3MF project, slices it for SLA, and opens the Preview tab on the result. Intended for UI development so that no manual setup is needed.
+
+Example:
+```powershell
+.\build-default\src\slic3r-app-launcher\Release\prusa-slicer-launcher.exe --sla-fixture C:\path\to\model.3mf
+```

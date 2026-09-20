@@ -121,6 +121,8 @@ struct InputParams
 
     std::optional<std::string> print_profile_preset;
     std::optional<std::string> printer_profile_preset;
+
+    std::optional<std::string> sla_fixture;
 };
 
 struct TransformParams
