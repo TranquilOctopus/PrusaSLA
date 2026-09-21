@@ -334,9 +334,7 @@ TEST_CASE("3MF SLA round trip preserves support points and drain holes", "[3mf][
     CHECK(Domain::is_approx(loaded_object->sla_support_points[2].pillar_diameter, 0.f));
     CHECK(Domain::is_approx(loaded_object->sla_support_points[2].base_diameter, 0.f));
     CHECK(Domain::is_approx(loaded_object->sla_support_points[2].base_height, 0.f));
-    // GAP: 3MF stores only position, radius and an "island" flag (PrusaFile.cpp:1170-1183),
-    // so slope and manual_add both come back as manual_add. Extending the format is M2.7b.
-    CHECK(loaded_object->sla_support_points[2].type == SupportPointType::manual_add);
+    CHECK(loaded_object->sla_support_points[2].type == SupportPointType::slope);
 
     // Point with per-point overrides
     CHECK(Domain::is_approx(loaded_object->sla_support_points[3].pos.x(), 20.0f));
