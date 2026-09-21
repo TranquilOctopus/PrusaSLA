@@ -1051,14 +1051,13 @@ std::pair<Domain::Vec3d, Domain::Vec3d> SlaHollowGizmo::hit_to_object_pos_normal
     Domain::Vec3d mesh_normal = hit.volume_hit_normal;
     if (mesh_normal.norm() < 1e-6) {
         const Scene::TriangleMesh& scene_mesh = paintable_volume.scene_mesh;
-        if (hit.facet_idx < scene_mesh.triangles().its.indices.size() / 3) {
-            const auto& its = scene_mesh.triangles().its;
-            const size_t i0 = its.indices[hit.facet_idx * 3 + 0];
-            const size_t i1 = its.indices[hit.facet_idx * 3 + 1];
-            const size_t i2 = its.indices[hit.facet_idx * 3 + 2];
-            const Domain::Vec3f v0 = its.vertices[i0].cast<float>();
-            const Domain::Vec3f v1 = its.vertices[i1].cast<float>();
-            const Domain::Vec3f v2 = its.vertices[i2].cast<float>();
+        // triangles() is the indexed set itself; indices holds one Index3 per facet.
+        const auto& its = scene_mesh.triangles();
+        if (hit.facet_idx < its.indices.size()) {
+            const Domain::Index3& face = its.indices[hit.facet_idx];
+            const Domain::Vec3f v0 = its.vertices[face[0]];
+            const Domain::Vec3f v1 = its.vertices[face[1]];
+            const Domain::Vec3f v2 = its.vertices[face[2]];
             Domain::Vec3f facet_normal = (v1 - v0).cross(v2 - v0);
             facet_normal.normalize();
             mesh_normal = paintable_volume.world_trafo_no_translate.linear() * facet_normal.cast<double>();
