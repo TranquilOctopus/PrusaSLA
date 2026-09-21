@@ -35,6 +35,7 @@
 #include "Slic3r/App/Plater/PlaceOnFaceGizmo.hpp"
 #include "Slic3r/App/Plater/SimplifyGizmo.hpp"
 #include "Slic3r/App/Plater/SimplifyNotification.hpp"
+#include "Slic3r/App/Plater/SlaIssueNotification.hpp"
 #include "Slic3r/App/Plater/PaintOnSupportsGizmo.hpp"
 #include "Slic3r/App/Plater/PaintOnSupportsDialog.hpp"
 #include "Slic3r/App/Plater/PaintOnSeamsGizmo.hpp"
@@ -1050,6 +1051,10 @@ void PlaterRenderModule::init_gizmos()
             *m_gizmo_manager,
             AppServices::instance().pop_notification_center()
         )
+    );
+    m_sla_issue_notification = std::make_unique<SlaIssueNotification>(
+        m_project_interactor,
+        AppServices::instance().pop_notification_center()
     );
     m_paint_on_supports_gizmo = &m_gizmo_manager->add_tool_gizmo<PaintOnSupportsGizmo>(
         *m_device,
