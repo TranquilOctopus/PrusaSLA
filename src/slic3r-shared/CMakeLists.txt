@@ -1206,6 +1206,9 @@ set(SLIC3R_SHARED_FILES
         include/Slic3r/App/AppSettingsAdvanced.hpp
         src/Slic3r/App/AppSettingsAdvanced.cpp
 
+        include/Slic3r/App/SlaFirstPreference.hpp
+        src/Slic3r/App/SlaFirstPreference.cpp
+
         include/Slic3r/Biz/RemovableDrive/RemovableDriveService.hpp
         include/Slic3r/Biz/RemovableDrive/IRemovableDriveMonitor.hpp
         include/Slic3r/Biz/RemovableDrive/RemovableDriveData.hpp
@@ -1550,6 +1553,8 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/App/DialogNavigationTests.cpp
 
             test/Slic3r/App/ThemeTests.cpp
+
+            test/Slic3r/App/SlaFirstPreferenceTests.cpp
 
             test/Slic3r/App/Scene/Node.cpp
             test/Slic3r/App/Scene/Ray.cpp
