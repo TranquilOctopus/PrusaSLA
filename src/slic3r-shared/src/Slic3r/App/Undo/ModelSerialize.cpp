@@ -170,7 +170,7 @@ void serialize(Archive& archive, BoxType& box)
 template <class Archive>
 void serialize(Archive& ar, Slic3r::Domain::SLA::SupportPoint& point)
 {
-    ar(point.pos, point.head_front_radius, point.type);
+    ar(point.pos, point.head_front_radius, point.pillar_diameter, point.base_diameter, point.base_height, point.type);
 }
 
 template <class Archive>

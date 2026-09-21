@@ -1725,7 +1725,11 @@ namespace Slic3rLegacy {
                                                     float(std::atof(object_data_points[i+0].c_str())),
                                                     float(std::atof(object_data_points[i+1].c_str())),
 													float(std::atof(object_data_points[i+2].c_str()))),
-                                                    0.4f});
+                                                    0.4f,  // head_front_radius
+                                                    0.f,   // pillar_diameter
+                                                    0.f,   // base_diameter
+                                                    0.f,   // base_height
+                                                    SupportPointType::manual_add});
                 }
                 if (version == 1) {
                     auto get_support_point_type = [](double val)->SupportPointType{
@@ -1741,7 +1745,10 @@ namespace Slic3rLegacy {
                                 Vec3f{float(std::atof(object_data_points[i+0].c_str())),
                                       float(std::atof(object_data_points[i+1].c_str())),
                                       float(std::atof(object_data_points[i+2].c_str()))},
-                                float(std::atof(object_data_points[i+3].c_str())),
+                                float(std::atof(object_data_points[i+3].c_str())),  // head_front_radius
+                                0.f,   // pillar_diameter
+                                0.f,   // base_diameter
+                                0.f,   // base_height
                                 get_support_point_type(std::atof(object_data_points[i+4].c_str()))
                             });
                 }

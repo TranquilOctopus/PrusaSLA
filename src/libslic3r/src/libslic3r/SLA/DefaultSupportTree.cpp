@@ -363,6 +363,14 @@ bool DefaultSupportTree::create_ground_pillar(const Junction &hjp,
                                              const Vec3d &sourcedir,
                                              long         head_id)
 {
+    double base_height_override = 0.;
+    double base_radius_override = 0.;
+    if (head_id >= 0 && size_t(head_id) < m_sm.pts->size()) {
+        const Domain::SLA::SupportPoint &sp = m_sm.pts->at(head_id);
+        if (sp.base_height > 0.f) base_height_override = double(sp.base_height);
+        if (sp.base_diameter > 0.f) base_radius_override = double(sp.base_diameter) * 0.5;
+    }
+
     auto [ret, pillar_id] = sla::create_ground_pillar(suptree_ex_policy,
                                                       m_builder,
                                                       m_sm,
@@ -370,7 +378,9 @@ bool DefaultSupportTree::create_ground_pillar(const Junction &hjp,
                                                       sourcedir,
                                                       hjp.r,
                                                       hjp.r,
-                                                      head_id);
+                                                      head_id,
+                                                      base_height_override,
+                                                      base_radius_override);
 
     if (pillar_id >= 0) // Save the pillar endpoint in the spatial index
         m_pillar_index.guarded_insert(m_builder.pillar(pillar_id).endpt,
@@ -509,7 +519,13 @@ void DefaultSupportTree::add_pinheads()
     execution::for_each(
         suptree_ex_policy, size_t(0), filtered_indices.size(),
         [this, &filterfn, &filtered_indices](size_t i) {
-            filterfn(filtered_indices[i], i, m_sm.cfg.head_back_radius_mm);
+            unsigned sp_idx = filtered_indices[i];
+            double back_r = m_sm.cfg.head_back_radius_mm;
+            const Domain::SLA::SupportPoint &sp = m_sm.pts->at(sp_idx);
+            if (sp.pillar_diameter > 0.f) {
+                back_r = double(sp.pillar_diameter) * 0.5;
+            }
+            filterfn(sp_idx, i, back_r);
         },
         execution::max_concurrency(suptree_ex_policy));
 

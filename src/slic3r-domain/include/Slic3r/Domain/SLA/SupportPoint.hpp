@@ -36,6 +36,15 @@ struct SupportPoint
     // Also define force it must keep
     float head_front_radius = 0.f; // [in mm]
 
+    // Per-point pillar (stem) diameter override. 0 = use global config.
+    float pillar_diameter = 0.f; // [in mm]
+
+    // Per-point base diameter override. 0 = use global config.
+    float base_diameter = 0.f; // [in mm]
+
+    // Per-point base height override. 0 = use global config.
+    float base_height = 0.f; // [in mm]
+
     // type
     SupportPointType type{SupportPointType::manual_add};
 

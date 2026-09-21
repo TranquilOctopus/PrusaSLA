@@ -1170,7 +1170,10 @@ namespace SlaSupportPointsSerialization {
 constexpr std::string_view POSITION = "p";          // position of support point on Object
 constexpr std::string_view HEAD_FRONT_RADIUS = "r"; // head front radius
 constexpr std::string_view IS_NEW_ISLAND = "island";        // is new island
-NamesType NAMES{{POSITION, HEAD_FRONT_RADIUS, IS_NEW_ISLAND}};
+constexpr std::string_view PILLAR_DIAMETER = "pd";  // pillar (stem) diameter
+constexpr std::string_view BASE_DIAMETER = "bd";    // base diameter
+constexpr std::string_view BASE_HEIGHT = "bh";      // base height
+NamesType NAMES{{POSITION, HEAD_FRONT_RADIUS, IS_NEW_ISLAND, PILLAR_DIAMETER, BASE_DIAMETER, BASE_HEIGHT}};
 
 json to_json(const Domain::SLA::SupportPoints &points) {
     json r = json::array();
@@ -1178,6 +1181,12 @@ json to_json(const Domain::SLA::SupportPoints &points) {
         json p_json;
         p_json[POSITION] = ::to_json(p.pos);
         p_json[HEAD_FRONT_RADIUS] = p.head_front_radius;
+        if (p.pillar_diameter > 0.f)
+            p_json[PILLAR_DIAMETER] = p.pillar_diameter;
+        if (p.base_diameter > 0.f)
+            p_json[BASE_DIAMETER] = p.base_diameter;
+        if (p.base_height > 0.f)
+            p_json[BASE_HEIGHT] = p.base_height;
         if (p.is_island())
             p_json[IS_NEW_ISLAND] = true;
         r.push_back(std::move(p_json));
@@ -1198,6 +1207,9 @@ void load(const json &pts_json, Domain::SLA::SupportPoints &pts, Read3mfIssues& 
         bool is_island = pt.is_island();
         from_json(pt_json, POSITION,          pt.pos,               collected_issues, RT::project_sla_support_point_position_issue, true);
         from_json(pt_json, HEAD_FRONT_RADIUS, pt.head_front_radius, collected_issues, RT::project_sla_support_point_radius_issue, true);
+        from_json(pt_json, PILLAR_DIAMETER,   pt.pillar_diameter,   collected_issues, RT::project_sla_support_point_radius_issue);
+        from_json(pt_json, BASE_DIAMETER,     pt.base_diameter,     collected_issues, RT::project_sla_support_point_radius_issue);
+        from_json(pt_json, BASE_HEIGHT,       pt.base_height,       collected_issues, RT::project_sla_support_point_radius_issue);
         from_json(pt_json, IS_NEW_ISLAND,     is_island,            collected_issues, RT::project_sla_support_point_is_new_island_issue);
         if (is_island)
             pt.type = Domain::SLA::SupportPointType::island;

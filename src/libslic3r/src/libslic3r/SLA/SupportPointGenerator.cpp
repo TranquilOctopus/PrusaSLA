@@ -284,6 +284,9 @@ void support_part_overhangs(
                 SupportPoint{
                     Vec3f{unscale<float>(p.x()), unscale<float>(p.y()), part_z},
                     /* head_front_radius */ config.head_diameter / 2,
+                    0.f,  // pillar_diameter
+                    0.f,  // base_diameter
+                    0.f,  // base_height
                     SupportPointType::slope
                 },
                 /* position_on_layer */ p,
@@ -315,6 +318,9 @@ void support_island(const LayerPart &part, NearPoints& near_points, float part_z
                     part_z
                 },
                 /* head_front_radius */ cfg.head_diameter / 2,
+                0.f,  // pillar_diameter
+                0.f,  // base_diameter
+                0.f,  // base_height
                 SupportPointType::island
             },
             /* position_on_layer */ sample->point,
@@ -337,6 +343,9 @@ void support_peninsulas(const Peninsulas& peninsulas, NearPoints& near_points, f
                         part_z
                     },
                     /* head_front_radius */ cfg.head_diameter / 2, 
+                    0.f,  // pillar_diameter
+                    0.f,  // base_diameter
+                    0.f,  // base_height
                     SupportPointType::island
                 },
                 /* position_on_layer */ support->point,
