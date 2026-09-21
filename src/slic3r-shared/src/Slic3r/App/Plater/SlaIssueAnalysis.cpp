@@ -14,10 +14,11 @@ SlaIssueAnalysis analyze_sla_issues_for_notification(
     SlaIssueAnalysis analysis;
     for (const auto& issue : issues) {
         if (issue.kind == Biz::Slicing::Sla::SlaIssue::Kind::Island) {
-            analysis.island_count++;
-            if (analysis.lowest_layer == 0 || issue.layer < analysis.lowest_layer) {
+            // Layer 0 is a valid answer, so count is the "nothing seen yet" marker, not the layer value.
+            if (analysis.island_count == 0 || issue.layer < analysis.lowest_layer) {
                 analysis.lowest_layer = issue.layer;
             }
+            analysis.island_count++;
         }
     }
 
