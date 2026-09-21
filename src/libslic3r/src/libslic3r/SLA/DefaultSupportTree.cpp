@@ -365,10 +365,14 @@ bool DefaultSupportTree::create_ground_pillar(const Junction &hjp,
 {
     double base_height_override = 0.;
     double base_radius_override = 0.;
+    uint8_t stem_sides = 0;
+    double stem_taper = 0.;
     if (head_id >= 0 && size_t(head_id) < m_sm.pts->size()) {
         const Domain::SLA::SupportPoint &sp = m_sm.pts->at(head_id);
         if (sp.base_height > 0.f) base_height_override = double(sp.base_height);
         if (sp.base_diameter > 0.f) base_radius_override = double(sp.base_diameter) * 0.5;
+        if (sp.stem_sides != 0) stem_sides = sp.stem_sides;
+        if (sp.stem_taper > 0.f) stem_taper = double(sp.stem_taper);
     }
 
     auto [ret, pillar_id] = sla::create_ground_pillar(suptree_ex_policy,
@@ -380,7 +384,9 @@ bool DefaultSupportTree::create_ground_pillar(const Junction &hjp,
                                                       hjp.r,
                                                       head_id,
                                                       base_height_override,
-                                                      base_radius_override);
+                                                      base_radius_override,
+                                                      stem_sides,
+                                                      stem_taper);
 
     if (pillar_id >= 0) // Save the pillar endpoint in the spatial index
         m_pillar_index.guarded_insert(m_builder.pillar(pillar_id).endpt,
@@ -419,11 +425,13 @@ void DefaultSupportTree::add_pinheads()
     auto heads = reserve_vector<Head>(m_sm.pts->size());
     for (const Domain::SLA::SupportPoint &sp : *m_sm.pts) {
         m_thr();
+        double tip_len = sp.tip_length > 0.f ? double(sp.tip_length) : m_sm.cfg.head_width_mm;
+        double contact_d = sp.contact_depth > 0.f ? double(sp.contact_depth) : m_sm.cfg.head_penetration_mm;
         heads.emplace_back(
             NaNd,
             sp.head_front_radius,
             0.,
-            m_sm.cfg.head_penetration_mm,
+            contact_d,
             Vec3d::Zero(),         // dir
             sp.pos.cast<double>()  // displacement
             );
@@ -453,17 +461,19 @@ void DefaultSupportTree::add_pinheads()
         // save the head (pinpoint) position
         Vec3d hp = m_points.row(fidx);
 
-        double lmin = m_sm.cfg.head_width_mm, lmax = lmin;
+        const Domain::SLA::SupportPoint &sp = m_sm.pts->at(fidx);
+        double lmin = sp.tip_length > 0.f ? double(sp.tip_length) : m_sm.cfg.head_width_mm;
+        double lmax = lmin;
 
         if (back_r < m_sm.cfg.head_back_radius_mm) {
-            lmin = 0., lmax = m_sm.cfg.head_penetration_mm;
+            lmin = 0., lmax = (sp.contact_depth > 0.f ? double(sp.contact_depth) : m_sm.cfg.head_penetration_mm);
         }
 
         // The distance needed for a pinhead to not collide with model.
         double w = lmin + 2 * back_r + 2 * m_sm.cfg.head_front_radius_mm -
-                   m_sm.cfg.head_penetration_mm;
+                   (sp.contact_depth > 0.f ? double(sp.contact_depth) : m_sm.cfg.head_penetration_mm);
 
-        double pin_r = double(m_sm.pts->at(fidx).head_front_radius);
+        double pin_r = double(sp.head_front_radius);
 
         // Reassemble the now corrected normal
         auto nn = spheric_to_dir(polar, azimuth).normalized();
