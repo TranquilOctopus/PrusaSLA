@@ -334,10 +334,7 @@ TEST_CASE("3MF SLA round trip preserves support points and drain holes", "[3mf][
     CHECK(Domain::is_approx(loaded_object->sla_support_points[2].pillar_diameter, 0.f));
     CHECK(Domain::is_approx(loaded_object->sla_support_points[2].base_diameter, 0.f));
     CHECK(Domain::is_approx(loaded_object->sla_support_points[2].base_height, 0.f));
-    // M2.7b, unfinished: PrusaFile.cpp now writes and reads a TYPE key, but a round trip still
-    // returns manual_add, so something in the save path is not using that writer. Investigate
-    // before claiming type is preserved.
-    CHECK(loaded_object->sla_support_points[2].type == SupportPointType::manual_add);
+    CHECK(loaded_object->sla_support_points[2].type == SupportPointType::slope);
 
     // Point with per-point overrides
     CHECK(Domain::is_approx(loaded_object->sla_support_points[3].pos.x(), 20.0f));

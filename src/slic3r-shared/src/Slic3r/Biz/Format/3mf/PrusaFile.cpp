@@ -1197,7 +1197,7 @@ json to_json(const Domain::SLA::SupportPoints &points) {
         if (p.base_height > 0.f)
             p_json[BASE_HEIGHT] = p.base_height;
         if (p.type != Domain::SLA::SupportPointType::manual_add)
-            p_json[TYPE] = static_cast<int>(p.type);
+            p_json[TYPE] = static_cast<json::number_integer_t>(p.type);
         if (p.is_island())
             p_json[IS_NEW_ISLAND] = true;
         if (p.tip_length > 0.f)
@@ -1228,7 +1228,8 @@ void load(const json &pts_json, Domain::SLA::SupportPoints &pts, Read3mfIssues& 
             continue;
         Domain::SLA::SupportPoint pt;
         bool is_island = pt.is_island();
-        int type_int = static_cast<int>(pt.type);
+        // The json helper only reads its own numeric types; a plain int silently fails.
+        json::number_integer_t type_int = static_cast<json::number_integer_t>(pt.type);
         from_json(pt_json, POSITION,          pt.pos,               collected_issues, RT::project_sla_support_point_position_issue, true);
         from_json(pt_json, HEAD_FRONT_RADIUS, pt.head_front_radius, collected_issues, RT::project_sla_support_point_radius_issue, true);
         from_json(pt_json, PILLAR_DIAMETER,   pt.pillar_diameter,   collected_issues, RT::project_sla_support_point_radius_issue);
@@ -1252,7 +1253,7 @@ void load(const json &pts_json, Domain::SLA::SupportPoints &pts, Read3mfIssues& 
         from_json(pt_json, KNOT_RADIUS,       pt.knot_radius,       collected_issues, RT::project_sla_support_point_radius_issue);
         if (is_island)
             pt.type = Domain::SLA::SupportPointType::island;
-        else if (type_int != static_cast<int>(Domain::SLA::SupportPointType::manual_add))
+        else if (type_int != static_cast<json::number_integer_t>(Domain::SLA::SupportPointType::manual_add))
             pt.type = static_cast<Domain::SLA::SupportPointType>(type_int);
         pts.push_back(pt);
     }
