@@ -1047,27 +1047,25 @@ std::pair<Domain::Vec3d, Domain::Vec3d> SlaHollowGizmo::hit_to_object_pos_normal
     const auto& paintable_volume = m_paintable_volumes[hit.volume_idx];
     const Domain::Vec3d mesh_pos = paintable_volume.model_volume.get_matrix() * hit.volume_hit_position;
 
-    // Use the raycast normal if available; otherwise compute facet normal from the scene mesh
-    Domain::Vec3d mesh_normal = hit.volume_hit_normal;
-    if (mesh_normal.norm() < 1e-6) {
-        const Scene::TriangleMesh& scene_mesh = paintable_volume.scene_mesh;
-        // triangles() is the indexed set itself; indices holds one Index3 per facet.
-        const auto& its = scene_mesh.triangles();
+    // Both the raycast normal and a computed facet normal are in the volume's local frame,
+    // like hit.volume_hit_position. Convert once to object mesh space with the inverse transpose
+    // so non-uniform volume scaling keeps normals perpendicular to the surface.
+    Domain::Vec3d volume_normal = hit.volume_hit_normal;
+    if (volume_normal.norm() < 1e-6) {
+        const auto& its = paintable_volume.scene_mesh.triangles();
         if (hit.facet_idx < its.indices.size()) {
             const Domain::Index3& face = its.indices[hit.facet_idx];
             const Domain::Vec3f v0 = its.vertices[face[0]];
             const Domain::Vec3f v1 = its.vertices[face[1]];
             const Domain::Vec3f v2 = its.vertices[face[2]];
-            Domain::Vec3f facet_normal = (v1 - v0).cross(v2 - v0);
-            facet_normal.normalize();
-            mesh_normal = paintable_volume.world_trafo_no_translate.linear() * facet_normal.cast<double>();
-            mesh_normal.normalize();
+            volume_normal = (v1 - v0).cross(v2 - v0).cast<double>();
         }
-    } else {
-        // Transform normal from world space to object mesh space
-        mesh_normal = paintable_volume.world_trafo_no_translate.linear().inverse() * mesh_normal;
-        mesh_normal.normalize();
     }
+    if (volume_normal.norm() < 1e-6) {
+        volume_normal = Domain::Vec3d::UnitZ();
+    }
+    const auto normal_matrix = paintable_volume.model_volume.get_matrix().linear().inverse().transpose();
+    Domain::Vec3d mesh_normal = (normal_matrix * volume_normal).normalized();
 
     return {mesh_pos, mesh_normal};
 }
