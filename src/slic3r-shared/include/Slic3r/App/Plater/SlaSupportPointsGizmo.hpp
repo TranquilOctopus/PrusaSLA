@@ -146,6 +146,12 @@ private:
     void clear_selection();
     void delete_selected_points();
     void apply_head_diameter_to_selected();
+    void apply_pillar_diameter_to_selected();
+    void apply_base_diameter_to_selected();
+    void apply_base_height_to_selected();
+    void apply_preset_light();
+    void apply_preset_medium();
+    void apply_preset_heavy();
 
     // Rectangle selection
     void start_rectangle_selection(const Domain::Vec2d& mouse_pos, bool is_add);

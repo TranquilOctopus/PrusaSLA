@@ -310,6 +310,72 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
             this->apply_head_diameter_to_selected();
         }
     };
+    m_dialog->callbacks().pillar_diameter_changed = [this](double value)
+    {
+        if (m_edit_state.has_value()) {
+            m_edit_state->editing.pillar_diameter_mm = value;
+            m_edit_state->editing.pillar_diameter_use_global = false;
+            m_dialog->set_pillar_diameter_use_global(false);
+            this->apply_pillar_diameter_to_selected();
+        }
+    };
+    m_dialog->callbacks().base_diameter_changed = [this](double value)
+    {
+        if (m_edit_state.has_value()) {
+            m_edit_state->editing.base_diameter_mm = value;
+            m_edit_state->editing.base_diameter_use_global = false;
+            m_dialog->set_base_diameter_use_global(false);
+            this->apply_base_diameter_to_selected();
+        }
+    };
+    m_dialog->callbacks().base_height_changed = [this](double value)
+    {
+        if (m_edit_state.has_value()) {
+            m_edit_state->editing.base_height_mm = value;
+            m_edit_state->editing.base_height_use_global = false;
+            m_dialog->set_base_height_use_global(false);
+            this->apply_base_height_to_selected();
+        }
+    };
+    m_dialog->callbacks().head_diameter_use_global_changed = [this](bool value)
+    {
+        if (m_edit_state.has_value()) {
+            m_edit_state->editing.head_diameter_use_global = value;
+            if (value) {
+                this->apply_head_diameter_to_selected();
+            }
+        }
+    };
+    m_dialog->callbacks().pillar_diameter_use_global_changed = [this](bool value)
+    {
+        if (m_edit_state.has_value()) {
+            m_edit_state->editing.pillar_diameter_use_global = value;
+            if (value) {
+                this->apply_pillar_diameter_to_selected();
+            }
+        }
+    };
+    m_dialog->callbacks().base_diameter_use_global_changed = [this](bool value)
+    {
+        if (m_edit_state.has_value()) {
+            m_edit_state->editing.base_diameter_use_global = value;
+            if (value) {
+                this->apply_base_diameter_to_selected();
+            }
+        }
+    };
+    m_dialog->callbacks().base_height_use_global_changed = [this](bool value)
+    {
+        if (m_edit_state.has_value()) {
+            m_edit_state->editing.base_height_use_global = value;
+            if (value) {
+                this->apply_base_height_to_selected();
+            }
+        }
+    };
+    m_dialog->callbacks().preset_light = [this]() { this->apply_preset_light(); };
+    m_dialog->callbacks().preset_medium = [this]() { this->apply_preset_medium(); };
+    m_dialog->callbacks().preset_heavy = [this]() { this->apply_preset_heavy(); };
     m_dialog->callbacks().clipping_plane_changed = [this](double value)
     {
         m_clipping_plane_clipper.set_position_by_ratio(value, true);
@@ -709,6 +775,38 @@ void SlaSupportPointsGizmo::begin_editing()
     }
     m_edit_state->editing.head_diameter_mm = head_diameter;
     m_dialog->set_head_diameter(head_diameter);
+
+    double pillar_diameter = 0.8;
+    auto pillar_result = model_object->object_settings_sla.find("support_pillar_diameter");
+    if (pillar_result.item) {
+        pillar_diameter = pillar_result.item->get<double>();
+    }
+    m_edit_state->editing.pillar_diameter_mm = pillar_diameter;
+    m_edit_state->editing.pillar_diameter_use_global = true;
+    m_dialog->set_pillar_diameter(pillar_diameter);
+    m_dialog->set_pillar_diameter_use_global(true);
+
+    double base_diameter = 2.0;
+    auto base_dia_result = model_object->object_settings_sla.find("support_base_diameter");
+    if (base_dia_result.item) {
+        base_diameter = base_dia_result.item->get<double>();
+    }
+    m_edit_state->editing.base_diameter_mm = base_diameter;
+    m_edit_state->editing.base_diameter_use_global = true;
+    m_dialog->set_base_diameter(base_diameter);
+    m_dialog->set_base_diameter_use_global(true);
+
+    double base_height = 1.0;
+    auto base_ht_result = model_object->object_settings_sla.find("support_base_height");
+    if (base_ht_result.item) {
+        base_height = base_ht_result.item->get<double>();
+    }
+    m_edit_state->editing.base_height_mm = base_height;
+    m_edit_state->editing.base_height_use_global = true;
+    m_dialog->set_base_height(base_height);
+    m_dialog->set_base_height_use_global(true);
+
+    m_dialog->set_head_diameter_use_global(true);
     m_dialog->set_lock_island_supports(false);
 
     m_dialog->set_apply_enabled(true);
@@ -1295,7 +1393,176 @@ void SlaSupportPointsGizmo::apply_head_diameter_to_selected()
     if (!m_edit_state.has_value()) {
         return;
     }
+    take_undo_snapshot();
     m_edit_state->editing.apply_head_diameter_to_selected();
+    update_point_visuals();
+}
+
+void SlaSupportPointsGizmo::apply_pillar_diameter_to_selected()
+{
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+    take_undo_snapshot();
+    m_edit_state->editing.apply_pillar_diameter_to_selected();
+    update_point_visuals();
+}
+
+void SlaSupportPointsGizmo::apply_base_diameter_to_selected()
+{
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+    take_undo_snapshot();
+    m_edit_state->editing.apply_base_diameter_to_selected();
+    update_point_visuals();
+}
+
+void SlaSupportPointsGizmo::apply_base_height_to_selected()
+{
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+    take_undo_snapshot();
+    m_edit_state->editing.apply_base_height_to_selected();
+    update_point_visuals();
+}
+
+void SlaSupportPointsGizmo::apply_preset_light()
+{
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+    take_undo_snapshot();
+
+    constexpr float head_diameter = 0.30f;
+    constexpr float pillar_diameter = 0.8f;
+    constexpr float base_diameter = 2.0f;
+    constexpr float base_height = 0.5f;
+
+    m_edit_state->editing.head_diameter_mm = head_diameter;
+    m_edit_state->editing.pillar_diameter_mm = pillar_diameter;
+    m_edit_state->editing.base_diameter_mm = base_diameter;
+    m_edit_state->editing.base_height_mm = base_height;
+    m_edit_state->editing.head_diameter_use_global = false;
+    m_edit_state->editing.pillar_diameter_use_global = false;
+    m_edit_state->editing.base_diameter_use_global = false;
+    m_edit_state->editing.base_height_use_global = false;
+
+    m_dialog->set_head_diameter(head_diameter);
+    m_dialog->set_pillar_diameter(pillar_diameter);
+    m_dialog->set_base_diameter(base_diameter);
+    m_dialog->set_base_height(base_height);
+    m_dialog->set_head_diameter_use_global(false);
+    m_dialog->set_pillar_diameter_use_global(false);
+    m_dialog->set_base_diameter_use_global(false);
+    m_dialog->set_base_height_use_global(false);
+
+    if (m_edit_state->editing.selected_point_indices.empty()) {
+        for (size_t i = 0; i < m_edit_state->editing.points.size(); ++i) {
+            m_edit_state->editing.points[i].head_front_radius = head_diameter / 2.0f;
+            m_edit_state->editing.points[i].pillar_diameter = pillar_diameter;
+            m_edit_state->editing.points[i].base_diameter = base_diameter;
+            m_edit_state->editing.points[i].base_height = base_height;
+        }
+    } else {
+        m_edit_state->editing.apply_head_diameter_to_selected();
+        m_edit_state->editing.apply_pillar_diameter_to_selected();
+        m_edit_state->editing.apply_base_diameter_to_selected();
+        m_edit_state->editing.apply_base_height_to_selected();
+    }
+    update_point_visuals();
+}
+
+void SlaSupportPointsGizmo::apply_preset_medium()
+{
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+    take_undo_snapshot();
+
+    constexpr float head_diameter = 0.45f;
+    constexpr float pillar_diameter = 1.2f;
+    constexpr float base_diameter = 3.0f;
+    constexpr float base_height = 0.7f;
+
+    m_edit_state->editing.head_diameter_mm = head_diameter;
+    m_edit_state->editing.pillar_diameter_mm = pillar_diameter;
+    m_edit_state->editing.base_diameter_mm = base_diameter;
+    m_edit_state->editing.base_height_mm = base_height;
+    m_edit_state->editing.head_diameter_use_global = false;
+    m_edit_state->editing.pillar_diameter_use_global = false;
+    m_edit_state->editing.base_diameter_use_global = false;
+    m_edit_state->editing.base_height_use_global = false;
+
+    m_dialog->set_head_diameter(head_diameter);
+    m_dialog->set_pillar_diameter(pillar_diameter);
+    m_dialog->set_base_diameter(base_diameter);
+    m_dialog->set_base_height(base_height);
+    m_dialog->set_head_diameter_use_global(false);
+    m_dialog->set_pillar_diameter_use_global(false);
+    m_dialog->set_base_diameter_use_global(false);
+    m_dialog->set_base_height_use_global(false);
+
+    if (m_edit_state->editing.selected_point_indices.empty()) {
+        for (size_t i = 0; i < m_edit_state->editing.points.size(); ++i) {
+            m_edit_state->editing.points[i].head_front_radius = head_diameter / 2.0f;
+            m_edit_state->editing.points[i].pillar_diameter = pillar_diameter;
+            m_edit_state->editing.points[i].base_diameter = base_diameter;
+            m_edit_state->editing.points[i].base_height = base_height;
+        }
+    } else {
+        m_edit_state->editing.apply_head_diameter_to_selected();
+        m_edit_state->editing.apply_pillar_diameter_to_selected();
+        m_edit_state->editing.apply_base_diameter_to_selected();
+        m_edit_state->editing.apply_base_height_to_selected();
+    }
+    update_point_visuals();
+}
+
+void SlaSupportPointsGizmo::apply_preset_heavy()
+{
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+    take_undo_snapshot();
+
+    constexpr float head_diameter = 0.60f;
+    constexpr float pillar_diameter = 1.8f;
+    constexpr float base_diameter = 4.0f;
+    constexpr float base_height = 1.0f;
+
+    m_edit_state->editing.head_diameter_mm = head_diameter;
+    m_edit_state->editing.pillar_diameter_mm = pillar_diameter;
+    m_edit_state->editing.base_diameter_mm = base_diameter;
+    m_edit_state->editing.base_height_mm = base_height;
+    m_edit_state->editing.head_diameter_use_global = false;
+    m_edit_state->editing.pillar_diameter_use_global = false;
+    m_edit_state->editing.base_diameter_use_global = false;
+    m_edit_state->editing.base_height_use_global = false;
+
+    m_dialog->set_head_diameter(head_diameter);
+    m_dialog->set_pillar_diameter(pillar_diameter);
+    m_dialog->set_base_diameter(base_diameter);
+    m_dialog->set_base_height(base_height);
+    m_dialog->set_head_diameter_use_global(false);
+    m_dialog->set_pillar_diameter_use_global(false);
+    m_dialog->set_base_diameter_use_global(false);
+    m_dialog->set_base_height_use_global(false);
+
+    if (m_edit_state->editing.selected_point_indices.empty()) {
+        for (size_t i = 0; i < m_edit_state->editing.points.size(); ++i) {
+            m_edit_state->editing.points[i].head_front_radius = head_diameter / 2.0f;
+            m_edit_state->editing.points[i].pillar_diameter = pillar_diameter;
+            m_edit_state->editing.points[i].base_diameter = base_diameter;
+            m_edit_state->editing.points[i].base_height = base_height;
+        }
+    } else {
+        m_edit_state->editing.apply_head_diameter_to_selected();
+        m_edit_state->editing.apply_pillar_diameter_to_selected();
+        m_edit_state->editing.apply_base_diameter_to_selected();
+        m_edit_state->editing.apply_base_height_to_selected();
+    }
     update_point_visuals();
 }
 
