@@ -779,8 +779,8 @@ void SlaHollowGizmo::begin_editing()
     m_dialog->set_hole_radius(m_current_hole_radius);
     m_dialog->set_hole_height(m_current_hole_height);
 
-    m_dialog->set_apply_enabled(true);
-    m_dialog->set_generate_enabled(true);
+    m_dialog->set_holes_controls_enabled(true);
+    m_dialog->set_preview_enabled(true);
 
     update_hole_visuals();
 }
@@ -819,7 +819,7 @@ void SlaHollowGizmo::apply_edited_holes()
 void SlaHollowGizmo::discard_edited_holes()
 {
     end_editing();
-    m_dialog->set_apply_enabled(false);
+    m_dialog->set_holes_controls_enabled(false);
 
     Domain::Project& project = m_project_interactor.selected_project();
     Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
