@@ -1,7 +1,8 @@
 #include <libslic3r/SLA/IslandDetection.hpp>
 
 #include <libslic3r/ClipperUtils.hpp>
-#include "ExPolygon.hpp"
+#include <libslic3r/ExPolygon.hpp>
+#include "Slic3r/Domain/ExPolygon.hpp"
 #include "Slic3r/Biz/Algorithms/ExPolygon.hpp"
 
 namespace Slic3r::SLA {
