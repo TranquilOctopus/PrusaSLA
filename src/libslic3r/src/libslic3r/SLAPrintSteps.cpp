@@ -1,3 +1,5 @@
+#include <sstream>
+#include <iomanip>
 #include <chrono>
 #include <algorithm>
 #include <array>
@@ -30,6 +32,7 @@
 #include <libslic3r/SLA/Pad.hpp>
 #include <libslic3r/SLA/SupportPointGenerator.hpp>
 #include <libslic3r/SLA/ZCorrection.hpp>
+#include <libslic3r/SLA/IslandDetection.hpp>
 #include <libslic3r/SLA/SupportTree.hpp>
 #include <libslic3r/ElephantFootCompensation.hpp>
 #include <libslic3r/CSGMesh/ModelToCSGMesh.hpp>
@@ -1517,6 +1520,16 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
     execution::for_each(execution::ex_tbb, size_t(0), printer_input.size(), printlayerfn,
                         execution::max_concurrency(execution::ex_tbb));
 
+    // Detect islands: connected regions in layer N that have no overlap with layer N-1.
+    // Layer 0 never produces islands.
+    constexpr double MIN_ISLAND_AREA_MM2 = 0.05; // Minimum area to report as island (mm²).
+    std::vector<ExPolygons> all_layer_polygons;
+    all_layer_polygons.reserve(printer_input.size());
+    for (const PrintLayer& layer : printer_input) {
+        all_layer_polygons.push_back(layer.transformed_slices());
+    }
+    std::vector<SLA::IslandHit> island_hits = SLA::detect_islands(all_layer_polygons, MIN_ISLAND_AREA_MM2);
+
     auto& print_statistics = m_print->m_print_statistics;
     print_statistics = create_stats(layers_info, is_prusa_print);
     if (printer_input.empty()) // set as invalid
@@ -1550,11 +1563,32 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
         heights.push_back(level_f);
     }
 
+    // Convert island hits to SlaIssue entries.
+    std::vector<Sla::SlaIssue> issues;
+    issues.reserve(island_hits.size());
+    for (const auto& hit : island_hits) {
+        // Get the Z coordinate for this layer.
+        float layer_z = 0.0f;
+        if (hit.layer_index < heights.size()) {
+            layer_z = heights[hit.layer_index];
+        }
+        std::ostringstream note_ss;
+        note_ss << "island, " << std::fixed << std::setprecision(2) << hit.area_mm2 << " mm2";
+        issues.emplace_back(Sla::SlaIssue{
+            .kind = Sla::SlaIssue::Kind::Island,
+            .layer = hit.layer_index,
+            .object_id = Domain::ObjectID{}, // Merged layers cannot attribute to a single object.
+            .position = Domain::Vec3d(hit.centroid.x(), hit.centroid.y(), layer_z),
+            .note = note_ss.str()
+        });
+    }
+
     m_print->m_on_sla_result(Biz::Slicing::SLAResult{
     .export_data = std::make_shared<SLAResultData>(SLAResultData{
         .serialized_config = m_print->build_serialized_config(print_statistics),
         .config       = config,
         .print_statistics  = print_statistics,
+        .issues = std::move(issues),
     }),
     .slices  = std::move(slices),
     .heights = std::move(heights),
