@@ -365,8 +365,8 @@ bool DefaultSupportTree::create_ground_pillar(const Junction &hjp,
 {
     double base_height_override = 0.;
     double base_radius_override = 0.;
-    uint8_t stem_sides = 0;
-    double stem_taper = 0.;
+    [[maybe_unused]] uint8_t stem_sides = 0;   // see note below: not yet honoured
+    [[maybe_unused]] double stem_taper = 0.;   // see note below: not yet honoured
     if (head_id >= 0 && size_t(head_id) < m_sm.pts->size()) {
         const Domain::SLA::SupportPoint &sp = m_sm.pts->at(head_id);
         if (sp.base_height > 0.f) base_height_override = double(sp.base_height);
@@ -384,9 +384,9 @@ bool DefaultSupportTree::create_ground_pillar(const Junction &hjp,
                                                       hjp.r,
                                                       head_id,
                                                       base_height_override,
-                                                      base_radius_override,
-                                                      stem_sides,
-                                                      stem_taper);
+                                                      base_radius_override);
+    // stem_sides and stem_taper are stored on the point but not yet used: the pillar mesh
+    // builder only makes round, untapered pillars. Honouring them needs a mesh-builder change.
 
     if (pillar_id >= 0) // Save the pillar endpoint in the spatial index
         m_pillar_index.guarded_insert(m_builder.pillar(pillar_id).endpt,
