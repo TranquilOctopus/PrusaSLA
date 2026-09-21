@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "Slic3r/App/Plater/SlaIssueAnalysis.hpp"
-#include "Slic3r/Biz/Slicing/SLAResult.hpp"
+#include "libslic3r/SLAResult.hpp"
 
 #include <vector>
 
