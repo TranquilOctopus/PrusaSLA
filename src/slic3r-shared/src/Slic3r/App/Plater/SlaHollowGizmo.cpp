@@ -490,6 +490,12 @@ void SlaHollowGizmo::on_scene_selection_changed(
     m_preview_node = preview_node.get();
     scene.add_child(preview_node.release(), m_main_node);
 
+    Scene::NodeBuilder holes_builder{scene};
+    holes_builder.set_debug_name("SlaHollowGizmo - Holes");
+    std::unique_ptr<Scene::Node> holes_node = holes_builder.build();
+    m_holes_node = holes_node.get();
+    scene.add_child(holes_node.release(), m_main_node);
+
     m_dialog->set_preview_enabled(true);
     m_dialog->set_status(_u8L("Ready to preview."));
 
@@ -634,6 +640,7 @@ void SlaHollowGizmo::clear_preview_visuals()
         scene.remove_child(m_main_node);
         m_main_node = nullptr;
         m_preview_node = nullptr;
+        m_holes_node = nullptr;
     }
 }
 
@@ -1199,6 +1206,139 @@ void SlaHollowGizmo::render_scene(Render::CommandBuffer& cmd_buffer)
 {
     // No per-frame updates needed for static preview
     (void)cmd_buffer;
+}
+
+// Visuals
+
+void SlaHollowGizmo::update_hole_visuals()
+{
+    if (!m_edit_state.has_value() || m_holes_node == nullptr) {
+        return;
+    }
+
+    const auto& holes = m_edit_state->editing.holes;
+    if (holes.empty()) {
+        clear_hole_visuals();
+        return;
+    }
+
+    Scene::Scene& scene = m_scene_presenter.scene();
+
+    // Get the instance transform
+    const Domain::Project& project = m_project_interactor.selected_project();
+    const Domain::ModelInstance* instance = project.find_instance_by_id(m_selected_object_id.id, m_selected_instance_id);
+    if (!instance) {
+        return;
+    }
+    const Domain::Transform3d instance_trafo = instance->get_matrix();
+
+    // Cylinder geometry (shared for all holes, unit radius and height)
+    create_cylinder_geometry_if_needed();
+    const auto* cylinder_geom = m_geometry_manager.get(m_cylinder_geometry_id);
+    if (!cylinder_geom) {
+        return;
+    }
+    const auto* cylinder_trimesh = m_triangle_mesh_manager.get(m_cylinder_geometry_id);
+    if (!cylinder_trimesh) {
+        return;
+    }
+
+    // Clear existing hole nodes
+    scene.remove_children([this](const Scene::Node* node) {
+        return node->parent() == m_holes_node;
+    }, m_holes_node);
+
+    // Determine highlighted index (dragged or hovered)
+    std::optional<size_t> highlighted_idx = m_edit_state->dragged_hole_idx;
+    if (!highlighted_idx.has_value()) {
+        highlighted_idx = m_hovered_hole_idx;
+    }
+
+    for (size_t i = 0; i < holes.size(); ++i) {
+        const auto& hole = holes[i];
+        const bool highlighted = highlighted_idx.has_value() && *highlighted_idx == i;
+        const bool is_selected = m_edit_state->editing.selected_hole_indices.count(i) > 0;
+        const bool is_failed = hole.failed;
+
+        // Hole position in world space: instance_trafo * hole.pos (hole.pos is in mesh coords)
+        Domain::Vec3d world_pos = instance_trafo * hole.pos.cast<double>();
+
+        // Color based on hole state
+        ColorRGBA color = get_hole_color(hole, highlighted || is_selected);
+
+        Render::Material material = Render::Material{}
+            .set_shader(m_device.context().shader_manager().shader("gouraud_light"))
+            .set_uniform("uniform_color", color);
+
+        // Transform: translate to world position, rotate to align with normal, scale to hole radius and height
+        Eigen::Quaterniond q;
+        Domain::Vec3d hole_normal = hole.normal.cast<double>();
+        hole_normal.normalize();
+        q.setFromTwoVectors(Domain::Vec3d::UnitZ(), hole_normal);
+
+        Domain::Transform3d xform = Domain::Transform3d::Identity();
+        xform.translate(world_pos);
+        xform.rotate(q);
+        xform.scale(Domain::Vec3d(static_cast<double>(hole.radius), static_cast<double>(hole.radius), static_cast<double>(hole.height)));
+
+        Scene::NodeBuilder builder{scene};
+        builder.set_debug_name(fmt::format("drain_hole_{}", i))
+            .set_mesh(cylinder_geom, material, Scene::RenderLayerId(PlaterSceneLayer::GizmoHandles))
+            .set_aabb(cylinder_trimesh->aabb_mesh())
+            .set_transform(xform);
+
+        scene.add_child(builder.build().release(), m_holes_node);
+    }
+}
+
+void SlaHollowGizmo::clear_hole_visuals()
+{
+    if (m_holes_node != nullptr) {
+        Scene::Scene& scene = m_scene_presenter.scene();
+        scene.remove_children([this](const Scene::Node* node) {
+            return node->parent() == m_holes_node;
+        }, m_holes_node);
+    }
+}
+
+Domain::ColorRGBA SlaHollowGizmo::get_hole_color(const Domain::SLA::DrainHole& hole, bool highlighted) const
+{
+    const auto& theme = AppServices::instance().theme();
+
+    ColorRGBA base_color;
+    if (hole.failed) {
+        base_color = theme.color(Platform::Color::Error, Platform::ColorGroup::Default);
+    } else {
+        base_color = theme.color(Platform::Color::SlaDrainHole, Platform::ColorGroup::Default);
+    }
+
+    if (highlighted) {
+        // Brighten for highlight
+        return ColorRGBA{
+            std::min(base_color.r() * 1.5f, 1.0f),
+            std::min(base_color.g() * 1.5f, 1.0f),
+            std::min(base_color.b() * 1.5f, 1.0f),
+            base_color.a()
+        };
+    }
+
+    return base_color;
+}
+
+void SlaHollowGizmo::create_cylinder_geometry_if_needed()
+{
+    if (m_cylinder_geometry_created) {
+        return;
+    }
+
+    static constexpr double CYLINDER_RESOLUTION_ANGLE = Slic3r::deg2rad(360.0 / 32.0);
+    Domain::TriangleMesh mesh = Biz::Algorithms::TriangleMesh::make_cylinder(1.0, 1.0, CYLINDER_RESOLUTION_ANGLE);
+    auto cylinder_trimesh = std::make_unique<Scene::TriangleMesh>(std::move(mesh.its));
+    const auto* cylinder_geom = m_geometry_manager.get_or_create(m_cylinder_geometry_id, [&]() {
+        return Render::geometry_from_triangle_mesh(m_device, cylinder_trimesh->triangles());
+    });
+    (void)cylinder_geom;
+    m_cylinder_geometry_created = true;
 }
 
 } // namespace Slic3r::App::Plater
