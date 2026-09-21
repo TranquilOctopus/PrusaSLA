@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 
 #include "Slic3r/Domain/Constants.hpp"
 #include "Slic3r/Domain/Point.hpp"
@@ -47,6 +49,25 @@ struct SupportPoint
 
     // Per-point base height override. 0 = use global config.
     float base_height = 0.f; // [in mm]
+
+    // Tip shape for this point. Default keeps the standard pinhead geometry.
+    enum class TipShape : uint8_t { Default, Cone, Ball };
+    TipShape tip_shape = TipShape::Default;
+
+    // Per-point tip length override. 0 = use global config (head width).
+    float tip_length = 0.f; // [in mm]
+
+    // Per-point contact depth override (how far the tip sinks in). 0 = use global penetration.
+    float contact_depth = 0.f; // [in mm]
+
+    // Per-point stem cross-section. 0 = use global (round); 4 = square, 6 = hexagon, and so on.
+    uint8_t stem_sides = 0;
+
+    // Per-point stem taper: fraction of the stem diameter lost from base to tip. 0 = no taper.
+    float stem_taper = 0.f;
+
+    // Radius of a ball at the tip-to-stem joint. 0 = no knot.
+    float knot_radius = 0.f; // [in mm]
 
 
     bool is_island() const { return type == SupportPointType::island; }
