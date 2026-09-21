@@ -3,10 +3,16 @@
 #include <algorithm>
 
 #include "Slic3r/Domain/Point.hpp"
+#include "Slic3r/Domain/ExPolygon.hpp"
 #include "Slic3r/Biz/Algorithms/ExPolygon.hpp"
+#include "Slic3r/Biz/Algorithms/Scaling.hpp"
 #include "libslic3r/SLA/IslandDetection.hpp"
 
 using namespace Slic3r;
+using Slic3r::Domain::ExPolygon;
+using Slic3r::Domain::ExPolygons;
+using Slic3r::Domain::Point;
+using Slic3r::Biz::Algorithms::Scaling::scaled;
 using Catch::Approx;
 
 namespace {
