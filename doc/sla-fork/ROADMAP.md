@@ -230,6 +230,7 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
 - [ ] **M4.6** Pad robustness when printing directly on the plate, plus pad generation speed (PLAN B4). · M · needs M4.1
 - [ ] **M4.7** Hollowing performance and wall thickness tolerance test (PLAN B5). · M · needs M4.1
 - [ ] **M4.8** Trapped-resin and suction-cup detection, with drain hole suggestions (PLAN B5b). · L → split · needs M4.7, M0.6
+- [ ] **M4.8b** Island detection in sliced layers: after slicing, find every region in a layer that has nothing beneath it in the layer below (no overlap with the previous layer's solid area, supports and pad included), skipping the first printed layer. Record each as a `SlaIssue{Kind::Island, layer, position}` in `SLAResultData::issues` (reserved in M0.6), with its area so tiny specks can be filtered. Report the count before export and refuse silently dropping them. Islands are what fall off the plate mid-print, so this is the highest-value check we can run on a sliced file. Tests: synthetic geometry with a known floating region (a bridge with a gap, a sphere's equator start) plus `tests/data/sla_islands/*.svg` if those fixtures suit. · M · needs M0.6
 - [ ] **M4.9** Per-layer stats: area, island count, peel-force estimate (PLAN B6). · M · needs M0.6
 - [ ] **M4.10** Invalidation test: a table-driven test for every SLA config key, checking that only the expected steps re-run (PLAN B9). · M · needs M0.4
 - [ ] **M4.11** SLA auto-orientation algorithm (PLAN B7). · L → split · needs M4.1
