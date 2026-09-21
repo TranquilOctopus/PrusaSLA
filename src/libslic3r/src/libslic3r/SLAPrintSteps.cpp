@@ -1617,6 +1617,8 @@ Sla::FileDataType get_output_type(const SLAPrintConfigView& cfg)
         return Sla::FileDataType::anycubic;
     } else if (archive_format == "goo") { // Elegoo GOO
         return Sla::FileDataType::goo;
+    } else if (archive_format == "pm5") { // Anycubic PM5
+        return Sla::FileDataType::pm5;
     } else {
         return Sla::FileDataType::other;
     }
@@ -1664,6 +1666,8 @@ void SLAPrint::Steps::rasterize()
         case FileDataType::sl1_png: rasterizer_ptr = create_sl1_rasterizer(printer_config); break;
         case FileDataType::sl1_svg: rasterizer_ptr = create_sl1_svg_rasterizer(printer_config); break;
         case FileDataType::anycubic: rasterizer_ptr = create_anycubic_rasterizer(printer_config); break;
+        case FileDataType::pm5: // pm5 layer encoding is unconfirmed; reusing Anycubic rasterizer for now
+            rasterizer_ptr = create_anycubic_rasterizer(printer_config); break;
         case FileDataType::goo: rasterizer_ptr = create_goo_rasterizer(printer_config); break;
         default:
             throw Biz::Slicing::Exception{

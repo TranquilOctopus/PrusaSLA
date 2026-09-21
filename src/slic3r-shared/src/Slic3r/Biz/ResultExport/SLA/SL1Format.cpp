@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <stdexcept>
 
 namespace Slic3r::Biz::PrintHost::Sla {
 
@@ -52,6 +53,22 @@ public:
     }
 };
 
+class PM5Format : public ISlaArchiveFormat
+{
+public:
+    std::string name() const override { return "PM5"; }
+    std::string description() const override { return "Anycubic PM5 format (not implemented)"; }
+    std::vector<std::string> extensions() const override { return {"pm5"}; }
+    Slic3r::Biz::Slicing::Sla::FileDataType file_data_type() const override { return Slic3r::Biz::Slicing::Sla::FileDataType::pm5; }
+
+    void store(const std::string& file_path, const Biz::Slicing::SLAResultData& data) const override
+    {
+        throw Biz::Slicing::Exception{
+            Biz::Slicing::Error{Biz::Slicing::ErrorCode::UnsupportedOutputFormat}
+        };
+    }
+};
+
 class GooFormat : public ISlaArchiveFormat
 {
 public:
@@ -74,6 +91,7 @@ void register_sla_archive_formats()
         registry.register_format("SL1", []() { return std::make_unique<SL1Format>(); });
         registry.register_format("SL1_SVG", []() { return std::make_unique<SL1SVGFormat>(); });
         registry.register_format("Anycubic", []() { return std::make_unique<AnycubicFormat>(); });
+        registry.register_format("PM5", []() { return std::make_unique<PM5Format>(); });
         registry.register_format("Goo", []() { return std::make_unique<GooFormat>(); });
     });
 }
