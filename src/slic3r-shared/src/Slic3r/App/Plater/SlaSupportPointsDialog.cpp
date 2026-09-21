@@ -49,6 +49,61 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     m_head_diameter_slider->callbacks().value_changed = [this](double value)
     { m_callbacks.head_diameter_changed(value); };
 
+    m_head_diameter_use_global_checkbox = content()->emplace_back<ToggleButton>(_u8L("Use global head diameter"));
+    m_head_diameter_use_global_checkbox->callbacks().checked_changed = [this](bool value)
+    { m_callbacks.head_diameter_use_global_changed(value); };
+
+    add_row_with_slider(
+        content(),
+        &m_pillar_diameter_slider,
+        _u8L("Stem diameter"),
+        _u8L("mm")
+    );
+    m_pillar_diameter_slider->set_begin_value(0.1);
+    m_pillar_diameter_slider->set_end_value(10.0);
+    m_pillar_diameter_slider->set_step(0.1);
+    m_pillar_diameter_slider->set_validator_precision(1);
+    m_pillar_diameter_slider->callbacks().value_changed = [this](double value)
+    { m_callbacks.pillar_diameter_changed(value); };
+
+    m_pillar_diameter_use_global_checkbox = content()->emplace_back<ToggleButton>(_u8L("Use global stem diameter"));
+    m_pillar_diameter_use_global_checkbox->callbacks().checked_changed = [this](bool value)
+    { m_callbacks.pillar_diameter_use_global_changed(value); };
+
+    add_row_with_slider(
+        content(),
+        &m_base_diameter_slider,
+        _u8L("Base diameter"),
+        _u8L("mm")
+    );
+    m_base_diameter_slider->set_begin_value(0.1);
+    m_base_diameter_slider->set_end_value(20.0);
+    m_base_diameter_slider->set_step(0.1);
+    m_base_diameter_slider->set_validator_precision(1);
+    m_base_diameter_slider->callbacks().value_changed = [this](double value)
+    { m_callbacks.base_diameter_changed(value); };
+
+    m_base_diameter_use_global_checkbox = content()->emplace_back<ToggleButton>(_u8L("Use global base diameter"));
+    m_base_diameter_use_global_checkbox->callbacks().checked_changed = [this](bool value)
+    { m_callbacks.base_diameter_use_global_changed(value); };
+
+    add_row_with_slider(
+        content(),
+        &m_base_height_slider,
+        _u8L("Base height"),
+        _u8L("mm")
+    );
+    m_base_height_slider->set_begin_value(0.1);
+    m_base_height_slider->set_end_value(10.0);
+    m_base_height_slider->set_step(0.1);
+    m_base_height_slider->set_validator_precision(1);
+    m_base_height_slider->callbacks().value_changed = [this](double value)
+    { m_callbacks.base_height_changed(value); };
+
+    m_base_height_use_global_checkbox = content()->emplace_back<ToggleButton>(_u8L("Use global base height"));
+    m_base_height_use_global_checkbox->callbacks().checked_changed = [this](bool value)
+    { m_callbacks.base_height_use_global_changed(value); };
+
     add_row_with_slider(
         content(),
         &m_clipping_plane_slider,
@@ -61,6 +116,25 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     m_clipping_plane_slider->set_validator_precision(2);
     m_clipping_plane_slider->callbacks().value_changed = [this](double value)
     { m_callbacks.clipping_plane_changed(value); };
+
+    this->add_separator(this->content());
+
+    Item* preset_row = content()->emplace_back<Item>();
+    preset_row->set_orientation(Orientation::Horizontal);
+    preset_row->set_justify_content(YGJustifySpaceBetween);
+    preset_row->set_gap(gap_size());
+
+    m_preset_light_button = preset_row->emplace_back<LayoutButton>(_u8L("Light"));
+    m_preset_light_button->callbacks().action = [this]()
+    { m_callbacks.preset_light(); };
+
+    m_preset_medium_button = preset_row->emplace_back<LayoutButton>(_u8L("Medium"));
+    m_preset_medium_button->callbacks().action = [this]()
+    { m_callbacks.preset_medium(); };
+
+    m_preset_heavy_button = preset_row->emplace_back<LayoutButton>(_u8L("Heavy"));
+    m_preset_heavy_button->callbacks().action = [this]()
+    { m_callbacks.preset_heavy(); };
 
     this->add_separator(this->content());
 
@@ -143,6 +217,45 @@ void SlaSupportPointsDialog::set_clipping_plane_position(double pos)
 void SlaSupportPointsDialog::set_lock_island_supports(bool locked)
 {
     m_lock_island_supports_checkbox->set_checked(locked);
+}
+
+void SlaSupportPointsDialog::set_pillar_diameter(double diameter_mm)
+{
+    m_pillar_diameter_slider->set_value(diameter_mm);
+}
+
+void SlaSupportPointsDialog::set_base_diameter(double diameter_mm)
+{
+    m_base_diameter_slider->set_value(diameter_mm);
+}
+
+void SlaSupportPointsDialog::set_base_height(double height_mm)
+{
+    m_base_height_slider->set_value(height_mm);
+}
+
+void SlaSupportPointsDialog::set_head_diameter_use_global(bool use_global)
+{
+    m_head_diameter_use_global_checkbox->set_checked(use_global);
+    m_head_diameter_slider->set_enabled(!use_global);
+}
+
+void SlaSupportPointsDialog::set_pillar_diameter_use_global(bool use_global)
+{
+    m_pillar_diameter_use_global_checkbox->set_checked(use_global);
+    m_pillar_diameter_slider->set_enabled(!use_global);
+}
+
+void SlaSupportPointsDialog::set_base_diameter_use_global(bool use_global)
+{
+    m_base_diameter_use_global_checkbox->set_checked(use_global);
+    m_base_diameter_slider->set_enabled(!use_global);
+}
+
+void SlaSupportPointsDialog::set_base_height_use_global(bool use_global)
+{
+    m_base_height_use_global_checkbox->set_checked(use_global);
+    m_base_height_slider->set_enabled(!use_global);
 }
 
 } // namespace Slic3r::App::Plater

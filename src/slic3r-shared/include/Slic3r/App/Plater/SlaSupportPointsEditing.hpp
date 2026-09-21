@@ -13,6 +13,13 @@ struct SlaSupportPointsEditing
 {
     Domain::SLA::SupportPoints points;
     double head_diameter_mm = 0.4;
+    double pillar_diameter_mm = 0.0;
+    double base_diameter_mm = 0.0;
+    double base_height_mm = 0.0;
+    bool head_diameter_use_global = true;
+    bool pillar_diameter_use_global = true;
+    bool base_diameter_use_global = true;
+    bool base_height_use_global = true;
     std::unordered_set<size_t> selected_point_indices;
     bool lock_island_supports = false;
 
@@ -30,6 +37,9 @@ struct SlaSupportPointsEditing
     void clear_selection();
     void delete_selected_points();
     void apply_head_diameter_to_selected();
+    void apply_pillar_diameter_to_selected();
+    void apply_base_diameter_to_selected();
+    void apply_base_height_to_selected();
 
     // Rectangle selection (works on pre-projected screen positions)
     static std::vector<size_t> points_in_rectangle(

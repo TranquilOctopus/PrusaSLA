@@ -27,6 +27,15 @@ void SlaSupportPointsEditing::add_point(const Domain::Vec3d& mesh_pos)
     Domain::SLA::SupportPoint new_point;
     new_point.pos = mesh_pos.cast<float>();
     new_point.head_front_radius = static_cast<float>(head_diameter_mm / 2.0);
+    if (!pillar_diameter_use_global) {
+        new_point.pillar_diameter = static_cast<float>(pillar_diameter_mm);
+    }
+    if (!base_diameter_use_global) {
+        new_point.base_diameter = static_cast<float>(base_diameter_mm);
+    }
+    if (!base_height_use_global) {
+        new_point.base_height = static_cast<float>(base_height_mm);
+    }
     new_point.type = Domain::SLA::SupportPointType::manual_add;
     points.push_back(new_point);
 }
@@ -134,6 +143,36 @@ void SlaSupportPointsEditing::apply_head_diameter_to_selected()
     for (size_t idx : selected_point_indices) {
         if (idx < points.size()) {
             points[idx].head_front_radius = new_radius;
+        }
+    }
+}
+
+void SlaSupportPointsEditing::apply_pillar_diameter_to_selected()
+{
+    const float new_diameter = pillar_diameter_use_global ? 0.f : static_cast<float>(pillar_diameter_mm);
+    for (size_t idx : selected_point_indices) {
+        if (idx < points.size()) {
+            points[idx].pillar_diameter = new_diameter;
+        }
+    }
+}
+
+void SlaSupportPointsEditing::apply_base_diameter_to_selected()
+{
+    const float new_diameter = base_diameter_use_global ? 0.f : static_cast<float>(base_diameter_mm);
+    for (size_t idx : selected_point_indices) {
+        if (idx < points.size()) {
+            points[idx].base_diameter = new_diameter;
+        }
+    }
+}
+
+void SlaSupportPointsEditing::apply_base_height_to_selected()
+{
+    const float new_height = base_height_use_global ? 0.f : static_cast<float>(base_height_mm);
+    for (size_t idx : selected_point_indices) {
+        if (idx < points.size()) {
+            points[idx].base_height = new_height;
         }
     }
 }
