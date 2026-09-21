@@ -2,6 +2,7 @@
 #include <ranges>
 #include "Slic3r/App/AppConfig.hpp"
 #include "Slic3r/App/AppConfigInteractor.hpp"
+#include "Slic3r/App/SlaFirstPreference.hpp"
 #include "Slic3r/App/Browser/BrowserLogicLogInRedirect.hpp"
 #include "Slic3r/App/IDialogManager.hpp"
 #include "Slic3r/App/Yoga/ButtonGroup.hpp"
@@ -1370,8 +1371,18 @@ void WelcomeDialog::finalize(const std::vector<PrinterToAdd>& printers)
         app_settings_advanced.toggle_printer_favorite_preset(printer_preset_item_id, hw_config.id);
     }
 
-    m_project_interactor.preset_interactor().select_printer_preset(printer_configs.front().id,
-                                                                   printer_preset_item_ids.front());
+    std::vector<Domain::PrinterTechnology> technologies;
+    technologies.reserve(printer_configs.size());
+    for (const auto& config : printer_configs) {
+        technologies.push_back(config.technology);
+    }
+
+    const bool sla_first = AppServices::instance().app_config().get<bool>("sla_first");
+    const size_t preselected_index = select_preselected_printer_index(technologies, sla_first);
+
+    m_project_interactor.preset_interactor().select_printer_preset(
+        printer_configs[preselected_index].id,
+        printer_preset_item_ids[preselected_index]);
 
     auto& app_config_interactor{AppServices::instance().app_config_interactor()};
     app_config_interactor.set_item_value("printers_only_favorites", Domain::ConfigValue{false});
