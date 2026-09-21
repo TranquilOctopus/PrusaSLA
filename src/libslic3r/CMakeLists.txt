@@ -361,6 +361,8 @@ set(SLIC3R_SOURCES
     src/libslic3r/SLA/SupportTreeUtilsLegacy.hpp
     src/libslic3r/SLA/ZCorrection.cpp
     src/libslic3r/SLA/ZCorrection.hpp
+    src/libslic3r/SLA/IslandDetection.cpp
+    src/libslic3r/SLA/IslandDetection.hpp
     src/libslic3r/SLAPrint.hpp
     src/libslic3r/SLAPrint.cpp
     src/libslic3r/SLAPrintSteps.cpp
