@@ -757,17 +757,442 @@ void SlaHollowGizmo::take_undo_snapshot()
     m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SlaDrainHolesEdit);
 }
 
-std::unique_ptr<GizmoWindow> SlaHollowGizmo::release_ui_window()
+void SlaHollowGizmo::begin_editing()
 {
-    return std::move(m_dialog);
+    Domain::Project& project = m_project_interactor.selected_project();
+    Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
+    if (!model_object) {
+        return;
+    }
+
+    m_edit_state = DrainHoleEditState{};
+    m_edit_state->editing.holes = model_object->sla_drain_holes;
+    m_edit_state->editing.hole_radius_mm = m_current_hole_radius;
+    m_edit_state->editing.hole_height_mm = m_current_hole_height;
+    m_dialog->set_hole_radius(m_current_hole_radius);
+    m_dialog->set_hole_height(m_current_hole_height);
+
+    m_dialog->set_apply_enabled(true);
+    m_dialog->set_generate_enabled(true);
+
+    update_hole_visuals();
+}
+
+void SlaHollowGizmo::end_editing()
+{
+    clear_hole_visuals();
+    m_hovered_hole_idx.reset();
+    m_edit_state.reset();
+}
+
+void SlaHollowGizmo::apply_edited_holes()
+{
+    if (!m_edit_state.has_value() || !m_selected_object_id.valid()) {
+        return;
+    }
+
+    Domain::Project& project = m_project_interactor.selected_project();
+    Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
+    if (!model_object) {
+        return;
+    }
+
+    m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SlaDrainHolesApply);
+
+    model_object->sla_drain_holes = std::move(m_edit_state->editing.holes);
+
+    m_dialog->set_hole_count(model_object->sla_drain_holes.size());
+    end_editing();
+
+    if (m_gizmo_controller) {
+        m_gizmo_controller->deactivate_current_tool();
+    }
+}
+
+void SlaHollowGizmo::discard_edited_holes()
+{
+    end_editing();
+    m_dialog->set_apply_enabled(false);
+
+    Domain::Project& project = m_project_interactor.selected_project();
+    Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
+    if (model_object) {
+        m_dialog->set_hole_count(model_object->sla_drain_holes.size());
+    }
+}
+
+std::optional<size_t> SlaHollowGizmo::find_nearest_hole(const Domain::Vec3d& mesh_pos, double max_distance_mm) const
+{
+    if (!m_edit_state.has_value()) {
+        return std::nullopt;
+    }
+
+    return m_edit_state->editing.find_nearest_hole(mesh_pos, max_distance_mm);
+}
+
+void SlaHollowGizmo::add_hole_at_mesh_pos(const Domain::Vec3d& mesh_pos, const Domain::Vec3d& mesh_normal)
+{
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+
+    m_edit_state->editing.add_hole(mesh_pos, mesh_normal);
+    m_dialog->set_hole_count(m_edit_state->editing.holes.size());
+    take_hole_undo_snapshot();
+    update_hole_visuals();
+}
+
+void SlaHollowGizmo::remove_hole_at_index(size_t idx)
+{
+    if (!m_edit_state.has_value() || idx >= m_edit_state->editing.holes.size()) {
+        return;
+    }
+
+    m_edit_state->editing.remove_hole(idx);
+    m_dialog->set_hole_count(m_edit_state->editing.holes.size());
+    take_hole_undo_snapshot();
+    update_hole_visuals();
+}
+
+void SlaHollowGizmo::move_hole_to_mesh_pos(size_t idx, const Domain::Vec3d& mesh_pos, const Domain::Vec3d& mesh_normal)
+{
+    if (!m_edit_state.has_value() || idx >= m_edit_state->editing.holes.size()) {
+        return;
+    }
+
+    m_edit_state->editing.move_hole(idx, mesh_pos, mesh_normal);
+    m_dialog->set_hole_count(m_edit_state->editing.holes.size());
+    update_hole_visuals();
+}
+
+void SlaHollowGizmo::take_hole_undo_snapshot()
+{
+    m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SlaDrainHolesEdit);
+}
+
+void SlaHollowGizmo::select_hole(size_t idx, bool add_to_selection)
+{
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+    m_edit_state->editing.select_hole(idx, add_to_selection);
+    update_hole_visuals();
+}
+
+void SlaHollowGizmo::deselect_hole(size_t idx)
+{
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+    m_edit_state->editing.deselect_hole(idx);
+    update_hole_visuals();
+}
+
+void SlaHollowGizmo::select_all_holes()
+{
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+    m_edit_state->editing.select_all_holes();
+    update_hole_visuals();
+}
+
+void SlaHollowGizmo::clear_hole_selection()
+{
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+    m_edit_state->editing.clear_selection();
+    update_hole_visuals();
+}
+
+void SlaHollowGizmo::delete_selected_holes()
+{
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+
+    const size_t old_count = m_edit_state->editing.holes.size();
+    m_edit_state->editing.delete_selected_holes();
+
+    if (m_edit_state->editing.holes.size() != old_count) {
+        m_dialog->set_hole_count(m_edit_state->editing.holes.size());
+        take_hole_undo_snapshot();
+        update_hole_visuals();
+    }
+}
+
+void SlaHollowGizmo::apply_radius_to_selected()
+{
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+    m_edit_state->editing.apply_radius_to_selected();
+    update_hole_visuals();
+}
+
+void SlaHollowGizmo::apply_height_to_selected()
+{
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+    m_edit_state->editing.apply_height_to_selected();
+    update_hole_visuals();
+}
+
+void SlaHollowGizmo::collect_paintable_volumes(const Domain::SelectionId project_id, const Domain::ElementRef& element)
+{
+    m_paintable_volumes.clear();
+
+    const Domain::Project& project = m_project_interactor.project(project_id);
+    const Domain::ModelObject* model_object = project.find_object_by_id(element.object_id);
+    const Domain::ModelInstance* model_instance = project.find_instance_by_id(element.object_id, element.instance_id);
+
+    if (!model_object || !model_instance) {
+        return;
+    }
+
+    using MeshManager = PlaterScenePresenter::MeshManager;
+    const MeshManager& mesh_manager = m_scene_presenter.model_triangle_mesh_manager(project_id);
+
+    for (Domain::ModelVolume* model_volume : model_object->volumes) {
+        if (!model_volume->is_model_part()) {
+            continue;
+        }
+
+        const Scene::AuxiliaryElementId volume_id{
+            Scene::AuxiliaryElementId::Type::Volume,
+            model_volume->id().id
+        };
+        const Scene::TriangleMesh* scene_mesh = mesh_manager.get(volume_id);
+        if (!scene_mesh) {
+            continue;
+        }
+
+        m_paintable_volumes.push_back({
+            *model_object,
+            *model_instance,
+            *model_volume,
+            *scene_mesh,
+            scene_mesh->aabb_mesh(),
+            model_instance->get_matrix() * model_volume->get_matrix(),
+            model_instance->get_matrix_no_offset() * model_volume->get_matrix_no_offset()
+        });
+    }
+}
+
+std::optional<SlaHollowGizmo::VolumeHitPoint> SlaHollowGizmo::raycast_mouse(const Domain::Vec2d& mouse_position) const
+{
+    if (m_paintable_volumes.empty()) {
+        return std::nullopt;
+    }
+
+    const Scene::Camera& camera = m_scene_presenter.scene().camera();
+    const Scene::Ray ray = camera.ray_at(mouse_position.x(), mouse_position.y());
+
+    Domain::Vec3d closest_hit_position = Domain::Vec3d::Zero();
+    Domain::Vec3d closest_hit_normal = Domain::Vec3d::UnitZ();
+    double closest_hit_squared_distance = std::numeric_limits<double>::max();
+    size_t closest_facet_idx = 0;
+    int closest_volume_idx = -1;
+
+    for (const auto& paintable_volume : m_paintable_volumes) {
+        const int volume_idx = &paintable_volume - &m_paintable_volumes.front();
+
+        const std::optional<MeshRaycaster::UnprojectResult> unproject_result =
+            MeshRaycaster::unproject_on_mesh(
+                paintable_volume.aabb_mesh,
+                ray,
+                paintable_volume.world_trafo,
+                std::nullopt,
+                true
+            );
+
+        if (!unproject_result.has_value()) {
+            continue;
+        }
+
+        double hit_squared_distance =
+            (ray.origin - paintable_volume.world_trafo * unproject_result->position).squaredNorm();
+        if (hit_squared_distance < closest_hit_squared_distance) {
+            closest_hit_squared_distance = hit_squared_distance;
+            closest_facet_idx = unproject_result->facet_idx;
+            closest_volume_idx = volume_idx;
+            closest_hit_position = unproject_result->position;
+            closest_hit_normal = unproject_result->normal;
+        }
+    }
+
+    if (closest_volume_idx == -1) {
+        return std::nullopt;
+    }
+
+    VolumeHitPoint hit;
+    hit.volume_hit_position = closest_hit_position;
+    hit.volume_hit_normal = closest_hit_normal;
+    hit.volume_idx = closest_volume_idx;
+    hit.facet_idx = closest_facet_idx;
+    return hit;
+}
+
+std::pair<Domain::Vec3d, Domain::Vec3d> SlaHollowGizmo::hit_to_object_pos_normal(const VolumeHitPoint& hit) const
+{
+    const auto& paintable_volume = m_paintable_volumes[hit.volume_idx];
+    const Domain::Vec3d mesh_pos = paintable_volume.model_volume.get_matrix() * hit.volume_hit_position;
+
+    // Use the raycast normal if available; otherwise compute facet normal from the scene mesh
+    Domain::Vec3d mesh_normal = hit.volume_hit_normal;
+    if (mesh_normal.norm() < 1e-6) {
+        const Scene::TriangleMesh& scene_mesh = paintable_volume.scene_mesh;
+        if (hit.facet_idx < scene_mesh.triangles().its.indices.size() / 3) {
+            const auto& its = scene_mesh.triangles().its;
+            const size_t i0 = its.indices[hit.facet_idx * 3 + 0];
+            const size_t i1 = its.indices[hit.facet_idx * 3 + 1];
+            const size_t i2 = its.indices[hit.facet_idx * 3 + 2];
+            const Domain::Vec3f v0 = its.vertices[i0].cast<float>();
+            const Domain::Vec3f v1 = its.vertices[i1].cast<float>();
+            const Domain::Vec3f v2 = its.vertices[i2].cast<float>();
+            Domain::Vec3f facet_normal = (v1 - v0).cross(v2 - v0);
+            facet_normal.normalize();
+            mesh_normal = paintable_volume.world_trafo_no_translate.linear() * facet_normal.cast<double>();
+            mesh_normal.normalize();
+        }
+    } else {
+        // Transform normal from world space to object mesh space
+        mesh_normal = paintable_volume.world_trafo_no_translate.linear().inverse() * mesh_normal;
+        mesh_normal.normalize();
+    }
+
+    return {mesh_pos, mesh_normal};
 }
 
 Scene::GizmoActivationState SlaHollowGizmo::on_mouse(Scene::GizmoEventContext& ctx, bool only_active)
 {
-    // No interactive mouse handling for hollowing gizmo
-    (void)ctx;
-    (void)only_active;
+    using namespace Slic3r::App::Platform;
+
+    const MouseEvent& mouse_event = ctx.mouse_event();
+    const Domain::Vec2d mouse_position = Domain::Vec2f(ctx.screen_mouse_x(), ctx.screen_mouse_y()).cast<double>();
+
+    const bool is_left_button_event =
+        (mouse_event.button() & MouseButton::Left) == MouseButton::Left;
+    const bool is_right_button_event =
+        (mouse_event.button() & MouseButton::Right) == MouseButton::Right;
+
+    const bool ctrl_down  = (mouse_event.key_modifiers() & KeyModifiers(KeyModifier::Ctrl)) != 0;
+    const bool shift_down = (mouse_event.key_modifiers() & KeyModifiers(KeyModifier::Shift)) != 0;
+
+    if (m_paintable_volumes.empty()) {
+        return Scene::GizmoActivationState::Inactive;
+    }
+
+    if (!m_edit_state.has_value()) {
+        begin_editing();
+    }
+
+    const std::optional<VolumeHitPoint> hit_opt = raycast_mouse(mouse_position);
+    const bool has_hit = hit_opt.has_value();
+
+    // Track hovered hole (when not dragging)
+    if (!m_edit_state->dragged_hole_idx.has_value() && has_hit) {
+        const auto [mesh_pos, mesh_normal] = hit_to_object_pos_normal(*hit_opt);
+        const double hover_radius = m_edit_state->editing.hole_radius_mm * 2.0;
+        m_hovered_hole_idx = find_nearest_hole(mesh_pos, hover_radius);
+    } else if (!has_hit || m_edit_state->dragged_hole_idx.has_value()) {
+        m_hovered_hole_idx.reset();
+    }
+
+    // Left button down
+    if (is_left_button_event && mouse_event.type() == MouseEvent::Type::ButtonDown) {
+        // Ctrl+click: remove hole
+        if (ctrl_down) {
+            if (has_hit) {
+                const auto [mesh_pos, mesh_normal] = hit_to_object_pos_normal(*hit_opt);
+                const double removal_radius = m_edit_state->editing.hole_radius_mm * 2.0;
+                if (auto idx = find_nearest_hole(mesh_pos, removal_radius); idx.has_value()) {
+                    remove_hole_at_index(*idx);
+                    return Scene::GizmoActivationState::Active;
+                }
+            }
+            return Scene::GizmoActivationState::Inactive;
+        }
+
+        // Shift+click on hole: toggle selection
+        if (shift_down && has_hit) {
+            const auto [mesh_pos, mesh_normal] = hit_to_object_pos_normal(*hit_opt);
+            const double selection_radius = m_edit_state->editing.hole_radius_mm * 2.0;
+            if (auto idx = find_nearest_hole(mesh_pos, selection_radius); idx.has_value()) {
+                m_edit_state->editing.toggle_hole(*idx);
+                update_hole_visuals();
+                return Scene::GizmoActivationState::Active;
+            }
+        }
+
+        // Regular click on hole: select and start drag
+        if (has_hit) {
+            const auto [mesh_pos, mesh_normal] = hit_to_object_pos_normal(*hit_opt);
+            const double selection_radius = m_edit_state->editing.hole_radius_mm * 2.0;
+            if (auto idx = find_nearest_hole(mesh_pos, selection_radius); idx.has_value()) {
+                clear_hole_selection();
+                select_hole(*idx);
+                m_edit_state->dragged_hole_idx = idx;
+                m_edit_state->drag_start_world_pos = m_paintable_volumes[hit_opt->volume_idx].world_trafo * hit_opt->volume_hit_position;
+                m_edit_state->drag_start_mesh_pos = mesh_pos;
+                return Scene::GizmoActivationState::Active;
+            } else {
+                // Click on empty model surface: add hole
+                clear_hole_selection();
+                const auto [mesh_pos, mesh_normal] = hit_to_object_pos_normal(*hit_opt);
+                add_hole_at_mesh_pos(mesh_pos, mesh_normal);
+                return Scene::GizmoActivationState::Active;
+            }
+        }
+
+        // Click on empty space: clear selection
+        clear_hole_selection();
+        update_hole_visuals();
+        return Scene::GizmoActivationState::Inactive;
+    }
+
+    // Right button down: remove hole
+    if (is_right_button_event && mouse_event.type() == MouseEvent::Type::ButtonDown) {
+        if (has_hit) {
+            const auto [mesh_pos, mesh_normal] = hit_to_object_pos_normal(*hit_opt);
+            const double removal_radius = m_edit_state->editing.hole_radius_mm * 2.0;
+            if (auto idx = find_nearest_hole(mesh_pos, removal_radius); idx.has_value()) {
+                remove_hole_at_index(*idx);
+                return Scene::GizmoActivationState::Active;
+            }
+        }
+        return Scene::GizmoActivationState::Inactive;
+    }
+
+    // Mouse move during drag
+    if (mouse_event.type() == MouseEvent::Type::Move && m_edit_state->dragged_hole_idx.has_value()) {
+        if (has_hit) {
+            const auto [mesh_pos, mesh_normal] = hit_to_object_pos_normal(*hit_opt);
+            move_hole_to_mesh_pos(*m_edit_state->dragged_hole_idx, mesh_pos, mesh_normal);
+            return Scene::GizmoActivationState::Active;
+        }
+        return Scene::GizmoActivationState::Inactive;
+    }
+
+    // Button up
+    if ((is_left_button_event || is_right_button_event) && mouse_event.type() == MouseEvent::Type::ButtonUp) {
+        if (m_edit_state->dragged_hole_idx.has_value()) {
+            take_hole_undo_snapshot();
+            m_edit_state->dragged_hole_idx.reset();
+            update_hole_visuals();
+            return Scene::GizmoActivationState::Active;
+        }
+        return Scene::GizmoActivationState::Inactive;
+    }
+
     return Scene::GizmoActivationState::Inactive;
+}
+
+std::unique_ptr<GizmoWindow> SlaHollowGizmo::release_ui_window()
+{
+    return std::move(m_dialog);
 }
 
 void SlaHollowGizmo::render_scene(Render::CommandBuffer& cmd_buffer)
