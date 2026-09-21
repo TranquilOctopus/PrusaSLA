@@ -49,6 +49,10 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Plater/SimplifyGizmo.cpp
         include/Slic3r/App/Plater/SimplifyNotification.hpp
         src/Slic3r/App/Plater/SimplifyNotification.cpp
+        include/Slic3r/App/Plater/SlaIssueNotification.hpp
+        src/Slic3r/App/Plater/SlaIssueNotification.cpp
+        include/Slic3r/App/Plater/SlaIssueAnalysis.hpp
+        src/Slic3r/App/Plater/SlaIssueAnalysis.cpp
         include/Slic3r/App/Plater/SimplifyDialog.hpp
         src/Slic3r/App/Plater/SimplifyDialog.cpp
         include/Slic3r/App/Plater/ArrangeDialog.hpp
@@ -1569,6 +1573,8 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/App/Plater/SlaDrainHolesEditingTests.cpp
 
             test/Slic3r/App/Plater/SlaHollowGizmoTests.cpp
+
+            test/Slic3r/App/Plater/SlaIssueAnalysisTests.cpp
 
             test/Slic3r/App/Undo/ModelSerializeRoundtripTests.cpp
 
