@@ -3,6 +3,7 @@
 #include "Slic3r/Biz/SlaFixture.hpp"
 #include "Slic3r/Biz/ResultExport/SLA/SlaArchiveFormat.hpp"
 #include "libslic3r/SLAResult.hpp"
+#include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/TestUtils/TestTempDir.hpp"
 
 #include <boost/filesystem.hpp>
