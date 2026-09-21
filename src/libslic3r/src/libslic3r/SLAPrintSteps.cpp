@@ -33,6 +33,7 @@
 #include <libslic3r/SLA/SupportPointGenerator.hpp>
 #include <libslic3r/SLA/ZCorrection.hpp>
 #include <libslic3r/SLA/IslandDetection.hpp>
+#include <libslic3r/SLA/LayerStats.hpp>
 #include <libslic3r/SLA/SupportTree.hpp>
 #include <libslic3r/ElephantFootCompensation.hpp>
 #include <libslic3r/CSGMesh/ModelToCSGMesh.hpp>
@@ -1563,6 +1564,10 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
         heights.push_back(level_f);
     }
 
+    // Compute per-layer exposed area and peel force estimates (M4.9).
+    std::vector<float> layer_areas = SLA::layer_areas_mm2(slices);
+    std::vector<float> layer_peel_force = SLA::peel_force_estimate(layer_areas);
+
     // Convert island hits to SlaIssue entries.
     std::vector<Sla::SlaIssue> issues;
     issues.reserve(island_hits.size());
@@ -1588,6 +1593,8 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
         .serialized_config = m_print->build_serialized_config(print_statistics),
         .config       = config,
         .print_statistics  = print_statistics,
+        .layer_areas = std::move(layer_areas),
+        .layer_peel_force = std::move(layer_peel_force),
         .issues = std::move(issues),
     }),
     .slices  = std::move(slices),
