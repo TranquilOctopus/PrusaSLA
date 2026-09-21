@@ -2,7 +2,7 @@
 
 #include <string>
 #include <vector>
-#include "Slic3r/Biz/Slicing/SLAResult.hpp"
+#include "libslic3r/SLAResult.hpp"
 
 namespace Slic3r::App::Plater {
 
