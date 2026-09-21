@@ -138,7 +138,7 @@ void SlaIssueNotification::recreate_notification(Domain::SelectionId project_id,
     m_notify.upsert_notification(data, matcher);
 }
 
-void SlaIssueNotification::close_notification_if_open()
+bool SlaIssueNotification::close_notification_if_open()
 {
     auto& list = m_notify.observable_list();
     bool is_open = false;
@@ -149,9 +149,10 @@ void SlaIssueNotification::close_notification_if_open()
         }
     }
     if (!is_open) {
-        return;
+        return false;
     }
     list.close_notifications_of_type(PopNotificationType::SlaIssueDetected);
+    return true;
 }
 
 } // namespace Slic3r::App::Plater

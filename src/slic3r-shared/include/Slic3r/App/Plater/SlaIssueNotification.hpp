@@ -56,7 +56,8 @@ public:
 
 private:
     void recreate_notification(Domain::SelectionId project_id, bool open_when_closed = false);
-    void close_notification_if_open();
+    /// Returns whether a notification was open (and therefore closed).
+    bool close_notification_if_open();
 
     Biz::ProjectInteractor& m_project_interactor;
     PopNotification::PopNotificationCenter& m_notify;
