@@ -12,6 +12,7 @@
 
 namespace Slic3r::App::Plater {
 using namespace Slic3r;
+using namespace Slic3r::App::PopNotification;
 using namespace Slic3r::Biz;
 
 SlaIssueNotification::SlaIssueNotification(
@@ -76,7 +77,7 @@ void SlaIssueNotification::on_sla_result_cache_changed(const Domain::SlicingId& 
 
 void SlaIssueNotification::on_selected_project_changed(size_t index)
 {
-    m_current_slicing_id = Domain::INVALID_ID;
+    m_current_slicing_id = Domain::SlicingId{};
     recreate_notification(index, /*open_when_closed=*/true);
 }
 
@@ -85,7 +86,7 @@ void SlaIssueNotification::on_project_will_be_removed(Domain::SelectionId projec
     m_dismissed_projects.erase(project_id);
     close_notification_if_open();
     if (m_current_slicing_id.project_id == project_id) {
-        m_current_slicing_id = Domain::INVALID_ID;
+        m_current_slicing_id = Domain::SlicingId{};
     }
 }
 
@@ -93,7 +94,7 @@ void SlaIssueNotification::on_project_changed(Domain::SelectionId project_id)
 {
     close_notification_if_open();
     if (m_current_slicing_id.project_id == project_id) {
-        m_current_slicing_id = Domain::INVALID_ID;
+        m_current_slicing_id = Domain::SlicingId{};
     }
     recreate_notification(project_id, /*open_when_closed=*/true);
 }

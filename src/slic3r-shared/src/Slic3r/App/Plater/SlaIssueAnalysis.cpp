@@ -4,6 +4,8 @@
 
 #include "fmt/format.h"
 
+using namespace Slic3r::Biz;
+
 namespace Slic3r::App::Plater {
 
 SlaIssueAnalysis analyze_sla_issues_for_notification(

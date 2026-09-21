@@ -62,7 +62,7 @@ private:
     PopNotification::PopNotificationCenter& m_notify;
 
     std::set<Domain::SelectionId> m_dismissed_projects;
-    Domain::SlicingId m_current_slicing_id{Domain::INVALID_ID};
+    Domain::SlicingId m_current_slicing_id{};
 };
 
 } // namespace Slic3r::App::Plater
