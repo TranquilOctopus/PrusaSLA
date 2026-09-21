@@ -1,5 +1,6 @@
 #include "Slic3r/Biz/ResultExport/SLA/SlaArchiveFormat.hpp"
 #include "Slic3r/Biz/ResultExport/SLA/SL1.hpp"
+#include <libslic3r/SlicingStatus.hpp>
 #include "Slic3r/Biz/ResultExport/SLA/AnycubicSLA.hpp"
 #include "Slic3r/Biz/ResultExport/SLA/GooSLA.hpp"
 
