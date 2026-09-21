@@ -250,17 +250,35 @@ TEST_CASE("3MF SLA round trip preserves support points and drain holes", "[3mf][
     object->sla_support_points.push_back(SupportPoint{
         Vec3f{10.0f, 10.0f, 5.0f},  // pos
         1.5f,                        // head_front_radius
+        0.f,                         // pillar_diameter (0 = use global)
+        0.f,                         // base_diameter (0 = use global)
+        0.f,                         // base_height (0 = use global)
         SupportPointType::manual_add // type
     });
     object->sla_support_points.push_back(SupportPoint{
         Vec3f{15.0f, 15.0f, 8.0f},
         2.0f,
+        0.f,
+        0.f,
+        0.f,
         SupportPointType::island
     });
     object->sla_support_points.push_back(SupportPoint{
         Vec3f{5.0f, 5.0f, 12.0f},
         1.0f,
+        0.f,
+        0.f,
+        0.f,
         SupportPointType::slope
+    });
+    // Point with per-point overrides
+    object->sla_support_points.push_back(SupportPoint{
+        Vec3f{20.0f, 20.0f, 10.0f},
+        1.2f,
+        1.8f,  // pillar_diameter override
+        3.5f,  // base_diameter override
+        1.2f,  // base_height override
+        SupportPointType::manual_add
     });
 
     // sla_points_status is a separate field NOT serialized in 3MF (gap)
@@ -301,26 +319,45 @@ TEST_CASE("3MF SLA round trip preserves support points and drain holes", "[3mf][
     const ModelObject* loaded_object = loaded.model.objects[0];
 
     // ---- Support points round-trip ----
-    REQUIRE(loaded_object->sla_support_points.size() == 3);
+    REQUIRE(loaded_object->sla_support_points.size() == 4);
     CHECK(Domain::is_approx(loaded_object->sla_support_points[0].pos.x(), 10.0f));
     CHECK(Domain::is_approx(loaded_object->sla_support_points[0].pos.y(), 10.0f));
     CHECK(Domain::is_approx(loaded_object->sla_support_points[0].pos.z(), 5.0f));
     CHECK(Domain::is_approx(loaded_object->sla_support_points[0].head_front_radius, 1.5f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[0].pillar_diameter, 0.f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[0].base_diameter, 0.f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[0].base_height, 0.f));
     CHECK(loaded_object->sla_support_points[0].type == SupportPointType::manual_add);
 
     CHECK(Domain::is_approx(loaded_object->sla_support_points[1].pos.x(), 15.0f));
     CHECK(Domain::is_approx(loaded_object->sla_support_points[1].pos.y(), 15.0f));
     CHECK(Domain::is_approx(loaded_object->sla_support_points[1].pos.z(), 8.0f));
     CHECK(Domain::is_approx(loaded_object->sla_support_points[1].head_front_radius, 2.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[1].pillar_diameter, 0.f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[1].base_diameter, 0.f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[1].base_height, 0.f));
     CHECK(loaded_object->sla_support_points[1].type == SupportPointType::island);
 
     CHECK(Domain::is_approx(loaded_object->sla_support_points[2].pos.x(), 5.0f));
     CHECK(Domain::is_approx(loaded_object->sla_support_points[2].pos.y(), 5.0f));
     CHECK(Domain::is_approx(loaded_object->sla_support_points[2].pos.z(), 12.0f));
     CHECK(Domain::is_approx(loaded_object->sla_support_points[2].head_front_radius, 1.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[2].pillar_diameter, 0.f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[2].base_diameter, 0.f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[2].base_height, 0.f));
     // GAP: 3MF stores only position, radius and an "island" flag (PrusaFile.cpp:1170-1183),
     // so slope and manual_add both come back as manual_add. Extending the format is M2.7b.
     CHECK(loaded_object->sla_support_points[2].type == SupportPointType::manual_add);
+
+    // Point with per-point overrides
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[3].pos.x(), 20.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[3].pos.y(), 20.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[3].pos.z(), 10.0f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[3].head_front_radius, 1.2f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[3].pillar_diameter, 1.8f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[3].base_diameter, 3.5f));
+    CHECK(Domain::is_approx(loaded_object->sla_support_points[3].base_height, 1.2f));
+    CHECK(loaded_object->sla_support_points[3].type == SupportPointType::manual_add);
 
     // GAP: sla_points_status is NOT serialized - it resets to default (NoPoints)
     CHECK(loaded_object->sla_points_status == PointsStatus::NoPoints);

@@ -102,7 +102,9 @@ std::pair<bool, long> create_ground_pillar(
     const Vec3d           &sourcedir,
     double                 radius,
     double                 end_radius,
-    long                   head_id = SupportTreeNode::ID_UNSET)
+    long                   head_id = SupportTreeNode::ID_UNSET,
+    double                 base_height_override = 0.,
+    double                 base_radius_override = 0.)
 {
     Vec3d  jp           = pinhead_junctionpt, endp = jp, dir = sourcedir;
     long   pillar_id    = SupportTreeNode::ID_UNSET;
@@ -116,11 +118,12 @@ std::pair<bool, long> create_ground_pillar(
 
     auto to_floor = [&gndlvl](const Vec3d &p) { return Vec3d{p.x(), p.y(), gndlvl}; };
 
-    auto eval_limits = [&sm, &radius, &can_add_base, &gndlvl, &gap_dist, &jp_gnd]
+    auto eval_limits = [&sm, &radius, &can_add_base, &gndlvl, &gap_dist, &jp_gnd,
+                        base_radius_override]
         (bool base_en = true)
     {
         can_add_base  = base_en && radius >= sm.cfg.head_back_radius_mm;
-        double base_r = can_add_base ? sm.cfg.base_radius_mm : 0.;
+        double base_r = can_add_base ? (base_radius_override > 0. ? base_radius_override : sm.cfg.base_radius_mm) : 0.;
         gndlvl        = ground_level(sm);
         if (!can_add_base) gndlvl -= sm.pad_cfg.wall_thickness_mm;
         jp_gnd   = gndlvl + (can_add_base ? 0. : sm.cfg.head_back_radius_mm);
@@ -212,9 +215,11 @@ std::pair<bool, long> create_ground_pillar(
     pillar_id = head_id >= 0 && !non_head ? builder.add_pillar(head_id, h) :
                                             builder.add_pillar(gp, h, radius, end_radius);
 
-    if (can_add_base)
-        builder.add_pillar_base(pillar_id, sm.cfg.base_height_mm,
-                                sm.cfg.base_radius_mm);
+    if (can_add_base) {
+        double base_h = (base_height_override > 0. ? base_height_override : sm.cfg.base_height_mm);
+        double base_r = (base_radius_override > 0. ? base_radius_override : sm.cfg.base_radius_mm);
+        builder.add_pillar_base(pillar_id, base_h, base_r);
+    }
 
     return {true, pillar_id};
 }
