@@ -4,6 +4,7 @@
 #include <libslic3r/ExPolygon.hpp>
 #include "Slic3r/Domain/ExPolygon.hpp"
 #include "Slic3r/Biz/Algorithms/ExPolygon.hpp"
+#include "Slic3r/Biz/Algorithms/Scaling.hpp"
 
 namespace Slic3r::SLA {
 
@@ -27,7 +28,9 @@ std::vector<IslandHit> detect_islands(const std::vector<Domain::ExPolygons>& lay
 
         for (const Domain::ExPolygon& island : unsupported) {
             double area = Biz::Algorithms::ExPolygon::area(island);
-            double area_mm2 = area * (1.0 / Slic3r::SCALING_FACTOR) * (1.0 / Slic3r::SCALING_FACTOR);
+            // Areas come in scaled units: multiply by the factor twice to get mm2.
+            constexpr double sf = Biz::Algorithms::Scaling::SCALING_FACTOR;
+            double area_mm2 = area * sf * sf;
 
             if (area_mm2 >= min_area_mm2) {
                 // Compute centroid of the island
