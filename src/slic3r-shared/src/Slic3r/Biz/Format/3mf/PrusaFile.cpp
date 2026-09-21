@@ -1167,13 +1167,22 @@ void load_volume(const json &volume_json, const VolumeMap &volume_map, Read3mfIs
 
 namespace SlaSupportPointsSerialization {
 
-constexpr std::string_view POSITION = "p";          // position of support point on Object
-constexpr std::string_view HEAD_FRONT_RADIUS = "r"; // head front radius
-constexpr std::string_view IS_NEW_ISLAND = "island";        // is new island
-constexpr std::string_view PILLAR_DIAMETER = "pd";  // pillar (stem) diameter
-constexpr std::string_view BASE_DIAMETER = "bd";    // base diameter
-constexpr std::string_view BASE_HEIGHT = "bh";      // base height
-NamesType NAMES{{POSITION, HEAD_FRONT_RADIUS, IS_NEW_ISLAND, PILLAR_DIAMETER, BASE_DIAMETER, BASE_HEIGHT}};
+constexpr std::string_view POSITION         = "p";          // position of support point on Object
+constexpr std::string_view HEAD_FRONT_RADIUS = "r";         // head front radius
+constexpr std::string_view IS_NEW_ISLAND     = "island";    // is new island
+constexpr std::string_view PILLAR_DIAMETER   = "pd";        // pillar (stem) diameter
+constexpr std::string_view BASE_DIAMETER     = "bd";        // base diameter
+constexpr std::string_view BASE_HEIGHT       = "bh";        // base height
+constexpr std::string_view TYPE              = "t";         // support point type
+constexpr std::string_view TIP_LENGTH        = "tl";        // tip length
+constexpr std::string_view CONTACT_DEPTH     = "cd";        // contact depth
+constexpr std::string_view TIP_SHAPE         = "ts";        // tip shape
+constexpr std::string_view STEM_SIDES        = "ss";        // stem sides
+constexpr std::string_view STEM_TAPER        = "st";        // stem taper
+constexpr std::string_view KNOT_RADIUS       = "kr";        // knot radius
+NamesType NAMES{{POSITION, HEAD_FRONT_RADIUS, IS_NEW_ISLAND, PILLAR_DIAMETER, BASE_DIAMETER, BASE_HEIGHT, TYPE, TIP_LENGTH, CONTACT_DEPTH, TIP_SHAPE, STEM_SIDES, STEM_TAPER, KNOT_RADIUS}};
+
+static constexpr std::array<std::string_view, 3> TIP_SHAPE_NAMES = {"default", "cone", "ball"};
 
 json to_json(const Domain::SLA::SupportPoints &points) {
     json r = json::array();
@@ -1187,8 +1196,22 @@ json to_json(const Domain::SLA::SupportPoints &points) {
             p_json[BASE_DIAMETER] = p.base_diameter;
         if (p.base_height > 0.f)
             p_json[BASE_HEIGHT] = p.base_height;
+        if (p.type != Domain::SLA::SupportPointType::manual_add)
+            p_json[TYPE] = static_cast<int>(p.type);
         if (p.is_island())
             p_json[IS_NEW_ISLAND] = true;
+        if (p.tip_length > 0.f)
+            p_json[TIP_LENGTH] = p.tip_length;
+        if (p.contact_depth > 0.f)
+            p_json[CONTACT_DEPTH] = p.contact_depth;
+        if (p.tip_shape != Domain::SLA::SupportPoint::TipShape::Default)
+            p_json[TIP_SHAPE] = TIP_SHAPE_NAMES[static_cast<size_t>(p.tip_shape)];
+        if (p.stem_sides != 0)
+            p_json[STEM_SIDES] = p.stem_sides;
+        if (p.stem_taper > 0.f)
+            p_json[STEM_TAPER] = p.stem_taper;
+        if (p.knot_radius > 0.f)
+            p_json[KNOT_RADIUS] = p.knot_radius;
         r.push_back(std::move(p_json));
     }
     return r;
@@ -1205,14 +1228,32 @@ void load(const json &pts_json, Domain::SLA::SupportPoints &pts, Read3mfIssues& 
             continue;
         Domain::SLA::SupportPoint pt;
         bool is_island = pt.is_island();
+        int type_int = static_cast<int>(pt.type);
         from_json(pt_json, POSITION,          pt.pos,               collected_issues, RT::project_sla_support_point_position_issue, true);
         from_json(pt_json, HEAD_FRONT_RADIUS, pt.head_front_radius, collected_issues, RT::project_sla_support_point_radius_issue, true);
         from_json(pt_json, PILLAR_DIAMETER,   pt.pillar_diameter,   collected_issues, RT::project_sla_support_point_radius_issue);
         from_json(pt_json, BASE_DIAMETER,     pt.base_diameter,     collected_issues, RT::project_sla_support_point_radius_issue);
         from_json(pt_json, BASE_HEIGHT,       pt.base_height,       collected_issues, RT::project_sla_support_point_radius_issue);
         from_json(pt_json, IS_NEW_ISLAND,     is_island,            collected_issues, RT::project_sla_support_point_is_new_island_issue);
+        from_json(pt_json, TYPE,              type_int,             collected_issues, RT::project_sla_support_point_type_issue);
+        from_json(pt_json, TIP_LENGTH,        pt.tip_length,        collected_issues, RT::project_sla_support_point_radius_issue);
+        from_json(pt_json, CONTACT_DEPTH,     pt.contact_depth,     collected_issues, RT::project_sla_support_point_radius_issue);
+        std::string tip_shape_str;
+        if (from_json(pt_json, TIP_SHAPE, tip_shape_str, collected_issues, RT::project_sla_support_point_tip_shape_issue)) {
+            for (size_t i = 0; i < TIP_SHAPE_NAMES.size(); ++i) {
+                if (tip_shape_str == TIP_SHAPE_NAMES[i]) {
+                    pt.tip_shape = static_cast<Domain::SLA::SupportPoint::TipShape>(i);
+                    break;
+                }
+            }
+        }
+        from_json(pt_json, STEM_SIDES,        pt.stem_sides,        collected_issues, RT::project_sla_support_point_stem_sides_issue);
+        from_json(pt_json, STEM_TAPER,        pt.stem_taper,        collected_issues, RT::project_sla_support_point_radius_issue);
+        from_json(pt_json, KNOT_RADIUS,       pt.knot_radius,       collected_issues, RT::project_sla_support_point_radius_issue);
         if (is_island)
             pt.type = Domain::SLA::SupportPointType::island;
+        else if (type_int != static_cast<int>(Domain::SLA::SupportPointType::manual_add))
+            pt.type = static_cast<Domain::SLA::SupportPointType>(type_int);
         pts.push_back(pt);
     }
 }

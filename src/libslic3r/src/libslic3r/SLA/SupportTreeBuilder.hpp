@@ -156,6 +156,9 @@ struct Pillar: public SupportTreeNode {
     // How many pillars are cascaded with this one
     unsigned links = 0;
 
+    // Per-point stem sides override. 0 = use global/round; 4 = square, 6 = hexagon, etc.
+    uint8_t stem_sides = 0;
+
     Pillar(const Vec3d &endp, double h, double start_radius, double end_radius)
         : height{h}
         , r_start(start_radius)
@@ -282,7 +285,7 @@ public:
         return m_heads.back();
     }
     
-    long add_pillar(long headid, double length)
+    long add_pillar(long headid, double length, uint8_t stem_sides = 0)
     {
         std::lock_guard<Mutex> lk(m_mutex);
         if (m_pillars.capacity() < m_heads.size())
@@ -293,6 +296,7 @@ public:
         
         Vec3d hjp = head.junction_point() - Vec3d{0, 0, length};
         m_pillars.emplace_back(hjp, length, head.r_back_mm);
+        m_pillars.back().stem_sides = stem_sides;
 
         Pillar& pillar = m_pillars.back();
         pillar.id = long(m_pillars.size() - 1);
@@ -346,6 +350,22 @@ public:
             m_pillars.reserve(m_heads.size() * 10);
         
         m_pillars.emplace_back(std::forward<Args>(args)...);
+        Pillar& pillar = m_pillars.back();
+        pillar.id = long(m_pillars.size() - 1);
+        pillar.starts_from_head = false;
+        m_meshcache_valid = false;
+        return pillar.id;
+    }
+    
+    // Overload to add pillar with explicit stem_sides
+    long add_pillar(const Vec3d &endp, double h, double start_radius, double end_radius, uint8_t stem_sides)
+    {
+        std::lock_guard<Mutex> lk(m_mutex);
+        if (m_pillars.capacity() < m_heads.size())
+            m_pillars.reserve(m_heads.size() * 10);
+        
+        m_pillars.emplace_back(endp, h, start_radius, end_radius);
+        m_pillars.back().stem_sides = stem_sides;
         Pillar& pillar = m_pillars.back();
         pillar.id = long(m_pillars.size() - 1);
         pillar.starts_from_head = false;
