@@ -257,19 +257,11 @@ TEST_CASE("3MF SLA round trip preserves support points and drain holes", "[3mf][
     });
     object->sla_support_points.push_back(SupportPoint{
         Vec3f{15.0f, 15.0f, 8.0f},
-        2.0f,
-        0.f,
-        0.f,
-        0.f,
-        SupportPointType::island
+        2.0f, SupportPointType::island
     });
     object->sla_support_points.push_back(SupportPoint{
         Vec3f{5.0f, 5.0f, 12.0f},
-        1.0f,
-        0.f,
-        0.f,
-        0.f,
-        SupportPointType::slope
+        1.0f, SupportPointType::slope
     });
     // Point with per-point overrides
     object->sla_support_points.push_back(SupportPoint{
