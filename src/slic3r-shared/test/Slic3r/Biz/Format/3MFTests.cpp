@@ -250,9 +250,6 @@ TEST_CASE("3MF SLA round trip preserves support points and drain holes", "[3mf][
     object->sla_support_points.push_back(SupportPoint{
         Vec3f{10.0f, 10.0f, 5.0f},  // pos
         1.5f,                        // head_front_radius
-        0.f,                         // pillar_diameter (0 = use global)
-        0.f,                         // base_diameter (0 = use global)
-        0.f,                         // base_height (0 = use global)
         SupportPointType::manual_add // type
     });
     object->sla_support_points.push_back(SupportPoint{
@@ -267,10 +264,10 @@ TEST_CASE("3MF SLA round trip preserves support points and drain holes", "[3mf][
     object->sla_support_points.push_back(SupportPoint{
         Vec3f{20.0f, 20.0f, 10.0f},
         1.2f,
+        SupportPointType::manual_add,
         1.8f,  // pillar_diameter override
         3.5f,  // base_diameter override
-        1.2f,  // base_height override
-        SupportPointType::manual_add
+        1.2f   // base_height override
     });
 
     // sla_points_status is a separate field NOT serialized in 3MF (gap)
