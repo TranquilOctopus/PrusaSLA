@@ -643,6 +643,33 @@ const std::map<std::string, std::vector<Step>> invalidated_by{
     {"initial_exposure_time", steps({propagate(slapsMergeSlicesAndEval)})},
     {"initial_layer_height", all_steps()},
     {"layer_height", steps({propagate(slaposObjectSlice)})},
+    // M0.4 motion and exposure keys. Without an entry diff_to_invalidated_steps throws
+    // from invalidated_by.at() and the process aborts, so every declared SLA key needs
+    // one. These drive the printer's motion and exposure program, which is produced at
+    // the merge step, so they follow tower_speed/use_tilt above.
+    {"bottom_layer_count", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"bottom_lift_height", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"bottom_lift_height_2", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"bottom_lift_speed", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"bottom_lift_speed_2", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"bottom_light_pwm", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"bottom_retract_speed", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"bottom_retract_speed_2", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"bottom_wait_after_lift", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"bottom_wait_after_retract", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"bottom_wait_before_lift", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"lift_height", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"lift_height_2", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"lift_speed", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"lift_speed_2", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"light_pwm", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"retract_speed", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"retract_speed_2", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"wait_after_lift", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"wait_after_retract", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"wait_before_lift", steps({propagate(slapsMergeSlicesAndEval)})},
+    // Provenance note only, like material_notes: nothing to recompute.
+    {"material_source_note", steps({})},
     {"material_colour", steps({})},
     {"material_correction", all_steps()},
     {"material_correction_x", all_steps()},
