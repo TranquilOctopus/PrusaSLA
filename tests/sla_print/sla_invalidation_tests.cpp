@@ -306,7 +306,9 @@ TEST_CASE("SLAInvalidation: diff_to_invalidated_steps returns union for multiple
 
         REQUIRE(print_steps.size() == 1);
         REQUIRE(print_steps.count(slapsMergeSlicesAndEval) == 1);
-        REQUIRE(object_steps.size() == 6);
+        // support_base_diameter only adds steps that layer_height already reaches, so the union
+        // is the same five as layer_height alone (see the section above), not six.
+        REQUIRE(object_steps.size() == 5);
         REQUIRE(object_steps.count(slaposObjectSlice) == 1);
         REQUIRE(object_steps.count(slaposSupportPoints) == 1);
         REQUIRE(object_steps.count(slaposSupportTree) == 1);
