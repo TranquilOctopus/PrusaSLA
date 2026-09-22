@@ -1427,19 +1427,22 @@ json instances_to_json(
 } // namespace InstanceSerialization
 
 namespace ObjectsSerialization {
-constexpr std::string_view ID                 = "id";             // Object_id from 3mf
-constexpr std::string_view OBJECT_UUID        = "object_uuid";    // Universally Unique Identifier of object
-constexpr std::string_view VOLUMES            = "volumes";        // List of volume settings
-constexpr std::string_view INSTANCES          = "instances";      
-constexpr std::string_view OBJECT_SETTINGS    = "object_settings";
-constexpr std::string_view LAYER_HEIGHT_PROFILE="layerHeightProfile";
-constexpr std::string_view RANGES             = "ranges";         // layer ranges configurations
-constexpr std::string_view CUT_OBJECT_ID      = "cutId";          // more in CutSerialization
-constexpr std::string_view SLA_SUPPORT_POINTS = "slaSupportPoints";
-constexpr std::string_view SLA_DRAIN_HOLES    = "slaDrainHoles";
+constexpr std::string_view ID                      = "id";                   // Object_id from 3mf
+constexpr std::string_view OBJECT_UUID             = "object_uuid";          // Universally Unique Identifier of object
+constexpr std::string_view VOLUMES                 = "volumes";              // List of volume settings
+constexpr std::string_view INSTANCES               = "instances";            
+constexpr std::string_view OBJECT_SETTINGS         = "object_settings";
+constexpr std::string_view LAYER_HEIGHT_PROFILE    = "layerHeightProfile";
+constexpr std::string_view RANGES                  = "ranges";               // layer ranges configurations
+constexpr std::string_view CUT_OBJECT_ID           = "cutId";                // more in CutSerialization
+constexpr std::string_view SLA_SUPPORT_POINTS      = "slaSupportPoints";
+constexpr std::string_view SLA_DRAIN_HOLES         = "slaDrainHoles";
+constexpr std::string_view SLA_POINTS_STATUS       = "slaPointsStatus";
+constexpr std::string_view OBJECT_SETTINGS_SLA     = "objectSettingsSla";
 
 const NamesType OBJECT_NAMES{{ID, OBJECT_UUID, VOLUMES, INSTANCES, RANGES, CUT_OBJECT_ID, OBJECT_SETTINGS, 
-                              LAYER_HEIGHT_PROFILE, SLA_SUPPORT_POINTS, SLA_DRAIN_HOLES}};
+                              LAYER_HEIGHT_PROFILE, SLA_SUPPORT_POINTS, SLA_DRAIN_HOLES,
+                              SLA_POINTS_STATUS, OBJECT_SETTINGS_SLA}};
 
 json object_to_json(const ModelObject &object, const StoredStructure &stored_structure) {
     const ObjectToObjectid &o2id = stored_structure.objects;
@@ -1462,6 +1465,10 @@ json object_to_json(const ModelObject &object, const StoredStructure &stored_str
     if (object.is_cut())
         add(object_json, CUT_OBJECT_ID, CutSerialization::cut_to_json(object.cut_id));
     add(object_json, OBJECT_SETTINGS, object.object_settings);
+    if (object.sla_points_status != Domain::SLA::PointsStatus::NoPoints)
+        object_json[SLA_POINTS_STATUS] = static_cast<json::number_integer_t>(object.sla_points_status);
+    if (!object.object_settings_sla.overrides.empty())
+        add(object_json, OBJECT_SETTINGS_SLA, object.object_settings_sla);
     if (const Domain::ZHeightPairs &layer_height_profile = object.layer_height_profile.get();
         !layer_height_profile.empty())
         add(object_json, LAYER_HEIGHT_PROFILE, LayerHeightProfileSerialization::to_json(layer_height_profile));
@@ -1543,6 +1550,29 @@ void load_objects(
             if (! issues.empty()) {
                 // TODO Handle errors.
                 // RT issue = RT::project_object_configuration_issue;
+            }
+        }
+
+        // Read sla_points_status (optional, defaults to NoPoints)
+        if (auto sla_points_status_json = object_json.find(SLA_POINTS_STATUS);
+            sla_points_status_json != object_json.end() && sla_points_status_json->is_number_integer()) {
+            json::number_integer_t status_int = sla_points_status_json->get<json::number_integer_t>();
+            if (status_int >= 0 && status_int <= 3) { // PointsStatus enum range
+                for (ModelObject* mo_ptr : mos)
+                    mo_ptr->sla_points_status = static_cast<Domain::SLA::PointsStatus>(status_int);
+            }
+        }
+
+        // Read object_settings_sla (optional, defaults to empty)
+        if (auto object_settings_sla_json = object_json.find(OBJECT_SETTINGS_SLA);
+            object_settings_sla_json != object_json.end() && object_settings_sla_json->is_object()) {
+            for (ModelObject* mo_ptr : mos) {
+                Domain::SLAObjectSettings object_settings_sla;
+                auto issues = Biz::Config::load_box(*object_settings_sla_json, object_settings_sla);
+                mo_ptr->object_settings_sla = object_settings_sla;
+                if (!issues.empty()) {
+                    // TODO Handle errors.
+                }
             }
         }
 
