@@ -722,6 +722,22 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->min = 0;
     def->init_fn = init_with(0.3);
 
+    def = defs.add("raft_type", typeid(EnumWrapper));
+    def->location = Print;
+    def->overrides_in = Locations{ Object };
+    def->label = L("Raft type");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
+    def->category = ConfigItemDef::Category::Print_Pad;
+    def->gui_type = ConfigItemDef::GUIType::combobox;
+    def->tooltip = L("Select the raft type: None disables the raft, Full creates a plate-wide raft, Around Object creates a raft around the object, Skate creates a raft around the object with a smaller brim and steeper walls.");
+    def->init_fn = init_with(
+        sla::RaftType::Full,
+        {{int(sla::RaftType::None), "none", L("None")},
+         {int(sla::RaftType::Full), "full", L("Full plate")},
+         {int(sla::RaftType::AroundObject), "around_object", L("Around object")},
+         {int(sla::RaftType::Skate), "skate", L("Skate")}}
+    );
+
     def = defs.add("hollowing_enable", typeid(bool));
     def->location = Print;
     def->overrides_in = Locations{ Object };

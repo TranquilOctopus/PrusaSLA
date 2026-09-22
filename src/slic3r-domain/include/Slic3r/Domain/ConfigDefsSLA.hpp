@@ -14,6 +14,7 @@ enum SLAMaterialSpeed { slamsSlow, slamsFast, slamsHighViscosity };
 namespace sla {
     enum class SupportTreeType { Default, Branching, Organic };
     enum class PillarConnectionMode { zigzag, cross, dynamic };
+    enum class RaftType { None, Full, AroundObject, Skate };
 }
 
 enum TowerSpeeds : int {
