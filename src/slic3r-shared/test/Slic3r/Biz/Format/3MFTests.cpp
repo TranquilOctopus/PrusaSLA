@@ -442,7 +442,9 @@ TEST_CASE("3MF SLA round trip with missing optional keys uses defaults", "[3mf][
         // Also strip TYPE from support points to simulate old writer that didn't write it
         if (obj_json.contains("slaSupportPoints") && obj_json["slaSupportPoints"].is_array()) {
             for (auto& pt_json : obj_json["slaSupportPoints"]) {
-                pt_json.erase("type");
+                // The key is "t", not "type": see SlaSupportPointsSerialization::TYPE in
+                // PrusaFile.cpp. Erasing "type" removes nothing and the point keeps its type.
+                pt_json.erase("t");
             }
         }
     }
