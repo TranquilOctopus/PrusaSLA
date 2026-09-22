@@ -7,7 +7,9 @@
 #include "Slic3r/TestUtils/TestTempDir.hpp"
 
 #include <boost/filesystem.hpp>
+#include <cstdint>
 #include <fstream>
+#include <string>
 #include <vector>
 
 namespace fs = boost::filesystem;
@@ -33,7 +35,9 @@ TEST_CASE("PM5 format registry", "[export][sla][pm5]")
     REQUIRE(std::find(exts.begin(), exts.end(), "pm5") != exts.end());
 }
 
-TEST_CASE("PM5 store throws UnsupportedOutputFormat", "[export][sla][pm5]")
+// The container layout itself is checked in detail in AnycubicExportTests.cpp; this checks the
+// format registered for .pm5 now writes a file instead of refusing.
+TEST_CASE("PM5 store writes a Photon Workshop version 517 file", "[export][sla][pm5]")
 {
     register_sla_archive_formats();
     auto& registry = SlaArchiveFormatRegistry::instance();
@@ -71,5 +75,18 @@ TEST_CASE("PM5 store throws UnsupportedOutputFormat", "[export][sla][pm5]")
     Tests::TestTempDir temp_dir;
     fs::path out_path = temp_dir.path() / "out.pm5";
 
-    REQUIRE_THROWS_AS(format->store(out_path.string(), *sla_result), Slic3r::Biz::Slicing::Exception);
+    REQUIRE_NOTHROW(format->store(out_path.string(), *sla_result));
+    REQUIRE(fs::exists(out_path));
+
+    std::ifstream in(out_path.string(), std::ios::binary);
+    std::vector<char> head(20);
+    in.read(head.data(), static_cast<std::streamsize>(head.size()));
+    REQUIRE(in.gcount() == 20);
+    REQUIRE(std::string(head.data(), 12) == std::string("ANYCUBIC\0\0\0\0", 12));
+    const auto u32_at = [&head](size_t o) {
+        return std::uint32_t(std::uint8_t(head[o])) | (std::uint32_t(std::uint8_t(head[o + 1])) << 8) |
+               (std::uint32_t(std::uint8_t(head[o + 2])) << 16) | (std::uint32_t(std::uint8_t(head[o + 3])) << 24);
+    };
+    REQUIRE(u32_at(12) == 517u); // format version
+    REQUIRE(u32_at(16) == 9u);   // number of addresses
 }

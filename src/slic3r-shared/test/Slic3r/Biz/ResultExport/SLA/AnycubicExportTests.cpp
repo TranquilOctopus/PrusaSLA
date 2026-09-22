@@ -270,8 +270,11 @@ TEST_CASE("Anycubic PM5 export", "[export][sla][anycubic][pm5]")
     float initial_exposure_time_s = *reinterpret_cast<const float*>(data.data() + header_body + 16);
     REQUIRE(initial_exposure_time_s == Catch::Approx(35.0f));
 
-    float bottom_layer_count_f = *reinterpret_cast<const float*>(data.data() + header_body + 24);
+    // HEADER +20 is the bottom layer count; +24 is the lift height (pm5.md).
+    float bottom_layer_count_f = *reinterpret_cast<const float*>(data.data() + header_body + 20);
     REQUIRE(bottom_layer_count_f == Catch::Approx(10.0f));
+    float lift_height_mm = *reinterpret_cast<const float*>(data.data() + header_body + 24);
+    REQUIRE(lift_height_mm == Catch::Approx(8.0f));
 
     uint32_t res_x = read_le<uint32_t>(data.data() + header_body + 44);
     uint32_t res_y = read_le<uint32_t>(data.data() + header_body + 48);
