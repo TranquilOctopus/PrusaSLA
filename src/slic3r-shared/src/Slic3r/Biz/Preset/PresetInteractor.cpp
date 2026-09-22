@@ -1885,8 +1885,16 @@ void PresetInteractor::fill_sheet_items(const Domain::Preset::HwPrinterConfig& h
 {
     const auto [items, selected_index]{get_sheet_items(hw_config)};
     m_sheet_items.items().set_items(items);
-    if (!items.empty()) { // SLA doesn't yet have sheets specified
+    if (!items.empty()) {
         m_sheet_items.set_selected_index(selected_index);
+    } else {
+        // SLA doesn't yet have sheets specified. Clear the selection as well: every project
+        // starts on an FFF printer, so without this the index it selected outlives the list it
+        // pointed into, and the next selected_index() call asserts. Opening Preview with an SLA
+        // printer did exactly that, from the sheet combo box in LogicalPrinterSettingsDialog.
+        // This must come after set_items, because items() asserts that a non-empty list has a
+        // selection.
+        m_sheet_items.set_selected_index(Domain::INVALID_ID);
     }
 }
 
