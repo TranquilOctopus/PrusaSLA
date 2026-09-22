@@ -171,9 +171,10 @@ MainFrame::MainFrame(
     m_project_saver(project_saver),
     m_projects_changed_listener_scope(m_project_interactor, *this)
 {
-    // AppInstanceCheck on Windows expects "PrusaSlicer" in the title
-    // (in AppInstanceMessageHandlerWin32.cpp). Better check it.
-    ASSERT(into_u8(this->GetTitle()).find("PrusaSlicer") != std::string::npos);
+    // AppInstanceCheck on Windows finds other instances by searching window titles for
+    // Slic3r::BUILD_ID (AppInstanceMessageHandlerWin32.cpp:87), so the title has to contain it.
+    // Checking BUILD_ID rather than a hard-coded product name keeps this true across renames.
+    ASSERT(into_u8(this->GetTitle()).find(::Slic3r::BUILD_ID) != std::string::npos);
 
     // Load the icon either from the exe, or from the ico file.
 #if _WIN32
