@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Slic3r/Domain/SLA/PrintStatistics.hpp"
+#include "Slic3r/Domain/Config.hpp"
+
 #include <optional>
 #include <string>
 

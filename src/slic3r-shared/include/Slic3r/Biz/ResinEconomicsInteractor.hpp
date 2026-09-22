@@ -40,7 +40,7 @@ struct ProjectResinEconomics
 class ResinEconomicsInteractor
 {
 public:
-    explicit ResinEconomicsInteractor(const ProjectInteractor& project_interactor)
+    explicit ResinEconomicsInteractor(ProjectInteractor& project_interactor)
         : m_project_interactor(project_interactor)
     {}
 
@@ -60,7 +60,7 @@ public:
     BedResinEconomics compute_bed_economics(Domain::SelectionId project_id, Domain::SelectionId bed_instance_id) const;
 
 private:
-    const ProjectInteractor& m_project_interactor;
+    ProjectInteractor& m_project_interactor;
 };
 
 } // namespace Slic3r::Biz

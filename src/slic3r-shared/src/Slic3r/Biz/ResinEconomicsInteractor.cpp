@@ -41,7 +41,8 @@ BedResinEconomics ResinEconomicsInteractor::compute_bed_economics(
 
     // Get the slicing ID for this bed
     const Domain::SlicingId slicing_id = m_project_interactor.slicing_interactor().get_process_id(bed_instance_id);
-    if (slicing_id == Domain::INVALID_ID) {
+    // SlicingId is a pair of ids, not a scalar: compare against a default-constructed one.
+    if (slicing_id == Domain::SlicingId{}) {
         result.economics.summary = "No slicing ID";
         return result;
     }
