@@ -85,6 +85,7 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
   Note: the first attempt (branch `sla/M1.7-sla-first`) was rejected for inventing APIs; this is the redo.
 - [x] **M1.7b** Hide or adapt the FFF-only UI outside the plater toolbar when an SLA printer is active: colour-mix dialog, material and print settings dialogs, logical printer settings, and the menu entries that go with them (M1.7 lists the files). · M · needs M1.7
   Result: the menu commands that open FFF-only tools are now gated by printer technology. The survey found the rest was already covered by M0.8's mechanism: colour mixing, variable layer height, height ranges and the painting tools go through gizmo `enabled()` and `is_tool_visible_for_technology()`, and the settings dialogs already handle both technologies. No new test: the gating predicate is already covered in `SlaToolTypesTests.cpp` and the menu gating is inline lambdas. Open question recorded by the job: whether the text tool should also be FFF-only. Not checked in a running app.
+- [ ] **M1.7c** Hide the FFF-only sections of `LogicalPrinterSettingsDialog` for SLA printers: the Sheet heading and combo, the Nozzles heading, the nozzle list and its "Invalid combination" warning. Follow `update_color_mix_visibility()`, which already gates the colour-mix button on FFF. Evidence: found 2026-09-22 while fixing the Preview crash; SLA has no sheets or nozzles, so both sections are empty. · S · needs M1.7
 - [ ] **M1.8** SLA path in the welcome dialog, plus SLA hints and notifications. Also fix the “Export gcode to a file” tooltip for SLA (evidence: `ux/journeys.md` section H). · M · needs M1.7, M1.3
 - [x] **M1.9** Toolbar icons (`resources/icons/sla_*.svg`) for support points, hollow, orient, inspector and resin import, following PLAN F7. · M · needs M1.3
   Result: 10 `resources/icons/sla_*.svg` icons for the SLA tools, registered through the icon enum; the M0.7 icon test now expects the SLA-specific icons. Not checked in a running app: nobody has seen them rendered.
@@ -277,7 +278,10 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
 
 ## M5: Formats and inspection
 
-- [ ] **M5.1** Import `.sl1`/`.sl1s`/`.slx` archives in the new app, porting the legacy `SLAImportJob` (PLAN C1). · M · needs M0.10
+- [ ] **M5.1** Import `.sl1`/`.sl1s`/`.slx` archives in the new app, porting the legacy `SLAImportJob` (PLAN C1). · L → split · needs M0.10
+  Split 2026-09-22: upstream removed SLA import outright in `d9e89cf564` ("Remove SLA import", 901 lines over 11 files), so there is no reader to wire up; it has to be restored first.
+  - [ ] **M5.1a** Restore the SL1/SL1S archive reader into libslic3r from `d9e89cf564^` (`SLAArchiveReader`, `ZipperArchiveImport`, the reading half of `SL1`), plus the deleted round-trip test. Engine only, no UI. Do not restore the engine-level `SLAArchiveFormatRegistry`: format registration now lives in `Biz/ResultExport/SLA/SlaArchiveFormat` (M0.9). · M · needs M0.10
+  - [ ] **M5.1b** Wire the reader into `FileLoadingLogic` and `get_import_extensions()`, as a job with progress and cancel. · M · needs M5.1a
 - [x] **M5.2** `[human]` Pick which open archive formats to support next, based on target printers (PLAN D2). · S · needs —
   Result (2026-09-19): Elegoo and Anycubic. Elegoo: `.goo` (published spec; Saturn 4 / Mars 5 families), plus `.ctb` for older machines, unencrypted versions only. Anycubic: Photon Workshop family (`.pwmx`/`.pwma`/`.pm3` older, `.pm5`/`.pm5s`/`.pm7` newer).
 - [x] **M5.3** Add one todo per chosen format here (`M5.3.<fmt>`): writer, reader, spec conformance tests, and registration of its resin reader for M3.8. · S · needs M5.2
