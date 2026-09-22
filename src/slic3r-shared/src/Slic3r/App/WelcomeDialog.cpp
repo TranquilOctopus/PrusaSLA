@@ -588,11 +588,30 @@ public:
                         .vendor_data};
 
                 Domain::Preset::HwPrinterConfig config{printer.default_config};
-                config.sheet = Biz::Preset::from_def(
-                    vendor_data,
-                    printer.sheets.sheet_defs.at(printer.sheets.selected_sheet));
+                // SLA printers have no sheets; PresetInteractor::fill_sheet_items guards the same
+                // way. Calling at() here on an empty list aborted the process as soon as an SLA
+                // printer was picked, so keep the default config's sheet when none is offered.
+                if (printer.sheets.selected_sheet < printer.sheets.sheet_defs.size()) {
+                    config.sheet = Biz::Preset::from_def(
+                        vendor_data,
+                        printer.sheets.sheet_defs.at(printer.sheets.selected_sheet));
+                } else if (!printer.sheets.sheet_defs.empty()) {
+                    SPDLOG_WARN(
+                        "Selected sheet {} is out of range ({} available); keeping the default.",
+                        printer.sheets.selected_sheet,
+                        printer.sheets.sheet_defs.size()
+                    );
+                }
                 config.tools.clear();
                 for (std::size_t selected_tool : printer.tools.selected_tools) {
+                    if (selected_tool >= printer.tools.tool_defs.size()) {
+                        SPDLOG_WARN(
+                            "Selected tool {} is out of range ({} available); skipping it.",
+                            selected_tool,
+                            printer.tools.tool_defs.size()
+                        );
+                        continue;
+                    }
                     config.tools.push_back(
                         Biz::Preset::from_def(vendor_data,
                                               printer.tools.tool_defs.at(selected_tool)));
