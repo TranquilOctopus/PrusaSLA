@@ -480,6 +480,8 @@ void LogicalPrinterSettingsDialog::on_about_to_show()
 {
     m_stack_layout->set_current_index(0);
     update_warning();
+    // update_warning() may have shown the nozzle warning again; SLA has no nozzles.
+    update_fff_section_visibility();
 }
 
 void LogicalPrinterSettingsDialog::update_settings_data()
@@ -497,6 +499,7 @@ void LogicalPrinterSettingsDialog::update_settings_data()
     }
 
     update_color_mix_visibility();
+    update_fff_section_visibility();
 }
 
 void LogicalPrinterSettingsDialog::update_color_mix_visibility()
@@ -518,7 +521,9 @@ void LogicalPrinterSettingsDialog::update_color_mix_visibility()
 
 void LogicalPrinterSettingsDialog::update_fff_section_visibility()
 {
-    bool is_fff = false;
+    // With no container selected there is no printer to judge by, so keep the dialog as it was
+    // before this function existed. Only a known SLA printer hides these sections.
+    bool is_fff = true;
     if (m_project_interactor.selected_config_container_id() != Domain::INVALID_ID) {
         const ConfigContainer& config_container = m_project_interactor.selected_config_container();
         is_fff = config_container.print_technology() == PrinterTechnology::FFF;
