@@ -484,6 +484,9 @@ static void write_string_padded(std::ofstream& out, const std::string& str, size
 
 void store_pm5(const std::string& file_path, const Biz::Slicing::SLAResultData& data)
 {
+    if (!data.print_statistics.has_value()) {
+        throw std::runtime_error("Cannot write a .pm5 file: the slicing result has no print statistics.");
+    }
     const auto& stats = *data.print_statistics;
     const Domain::ConfigView& cfg = data.config;
     std::uint32_t layer_count = static_cast<std::uint32_t>(data.files.data.size());
@@ -673,17 +676,13 @@ void store_pm5(const std::string& file_path, const Biz::Slicing::SLAResultData& 
         // Placeholder: offset=0, size, lift params, exposure, layer_height, lit_count, 0
         anycubicsla_write_int32(out, 0); // image_offset (placeholder)
         anycubicsla_write_int32(out, layer_sizes[i]);
-        if (i < bottom_layer_count) {
-            anycubicsla_write_float(out, 8.0f); // lift_distance_mm
-            anycubicsla_write_float(out, 6.0f); // lift_speed
-            anycubicsla_write_float(out, initial_exposure_time_s);
-            anycubicsla_write_float(out, initial_layer_height_mm);
-        } else {
-            anycubicsla_write_float(out, 8.0f);
-            anycubicsla_write_float(out, 6.0f);
-            anycubicsla_write_float(out, exposure_time_s);
-            anycubicsla_write_float(out, layer_height_mm);
-        }
+        anycubicsla_write_float(out, 8.0f); // lift height, mm (sample value, not yet from config)
+        anycubicsla_write_float(out, 6.0f); // lift speed (sample value, not yet from config)
+        anycubicsla_write_float(out, i < bottom_layer_count ? initial_exposure_time_s : exposure_time_s);
+        // Only the first layer is sliced at initial_layer_height; every other layer, bottom layers
+        // included, is sliced at layer_height. The printer moves Z by this value, so giving the
+        // bottom layers initial_layer_height would stretch them whenever the two differ.
+        anycubicsla_write_float(out, i == 0 ? initial_layer_height_mm : layer_height_mm);
         anycubicsla_write_int32(out, layer_lit_counts[i]);
         anycubicsla_write_int32(out, 0);
     }
@@ -717,10 +716,10 @@ void store_pm5(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     anycubicsla_write_int32(out, PM5_MACHINE_DECLARED_SIZE);
     // Printer name (96 bytes)
     write_string_padded(out, "Anycubic Photon Mono M5", 96);
-    // Image format name (16 bytes)
+    // Image format name (16 bytes). The zeros that follow "pw0Img" in the sample are this field's
+    // padding, not separate fields; MACHINE's body is 140 bytes, and the software block starts
+    // right after it.
     write_string_padded(out, "pw0Img", 16);
-    anycubicsla_write_int32(out, 0);
-    anycubicsla_write_int32(out, 0);
     anycubicsla_write_int32(out, 16);
     anycubicsla_write_int32(out, 7);
     anycubicsla_write_float(out, display_width_mm);
@@ -733,44 +732,39 @@ void store_pm5(const std::string& file_path, const Biz::Slicing::SLAResultData& 
 
     // Software block (no section header)
     addr_software = static_cast<std::streamoff>(out.tellp());
-    // NUL-padded software name (12 bytes? Sample says "AC-PC" but we use SLIC3R_APP_NAME)
-    // The sample software block: name "AC-PC" (12 bytes?), u32 164, then strings...
-    // Let's check: "AC-PC" is 5 chars. Padded to what? The sample says "NUL-padded software name AC-PC"
-    // Looking at the old format, tags are 12 bytes. Let's assume 12 bytes for name.
-    write_string_padded(out, SLIC3R_APP_NAME, 12);
-    anycubicsla_write_int32(out, 164); // u32 164
-    // Strings for version, build date, platform, UI lib, cloud lib, OpenGL profile
-    // Each string seems to be NUL-padded to some length. The sample doesn't specify exact lengths.
-    // We'll write our version info, truncating to reasonable lengths.
-    write_string_padded(out, SLIC3R_VERSION, 32);
-    // Build date - use __DATE__ " " __TIME__
-    std::string build_date = __DATE__ " " __TIME__;
-    write_string_padded(out, build_date, 32);
-    write_string_padded(out, "linux-x64", 32); // platform
-    write_string_padded(out, "imgui", 32); // UI library
-    write_string_padded(out, "", 32); // cloud library
-    write_string_padded(out, "core", 32); // OpenGL profile
+    // Measured in the sample: a 32-byte NUL-padded name, a u32 equal to the whole block's length
+    // (164), then 128 bytes of strings. Those strings run together inside three padded areas
+    // (version and build date in the first 32 bytes, platform and libraries in the next 64, the
+    // OpenGL profile in the last 32), so their exact field boundaries are not known. We keep the
+    // same three areas and the same total, with our own identity.
+    constexpr std::uint32_t PM5_SOFTWARE_BLOCK_SIZE = 164;
+    write_string_padded(out, SLIC3R_APP_NAME, 32);
+    anycubicsla_write_int32(out, PM5_SOFTWARE_BLOCK_SIZE);
+    write_string_padded(out, std::string(SLIC3R_VERSION) + " " + __DATE__, 32);
+    write_string_padded(out, "win-x64", 64);
+    write_string_padded(out, "", 32);
 
-    // First layer image data
-    addr_first_layer = static_cast<std::streamoff>(out.tellp());
-    for (std::uint32_t i = 0; i < layer_count; ++i) {
-        const char* img_start = reinterpret_cast<const char*>(data.files.data[i].data());
-        const char* img_end = img_start + data.files.data[i].size();
-        out.write(img_start, data.files.data[i].size());
-    }
-
-    // MODEL section
+    // MODEL section. In the sample it sits after the software block and BEFORE the layer images,
+    // and spans 48 bytes: name, declared length 0, six bounding-box floats, then 8 zero bytes.
     addr_model = static_cast<std::streamoff>(out.tellp());
     out.write(PM5_TAG_MODEL, 12);
     anycubicsla_write_int32(out, PM5_MODEL_DECLARED_SIZE);
-    // 6 floats: bbox min x, y, z, max x, y, z
+    // 6 floats: bbox min x, y, z, max x, y, z (zeros when the result carries no bounding box)
     for (int i = 0; i < 3; ++i) {
         anycubicsla_write_float(out, bbox_min[i]);
     }
     for (int i = 0; i < 3; ++i) {
         anycubicsla_write_float(out, bbox_max[i]);
     }
-    // Note: If the result data has no bounding box, write zeros (as above)
+    anycubicsla_write_int32(out, 0);
+    anycubicsla_write_int32(out, 0);
+
+    // Layer image data, last
+    addr_first_layer = static_cast<std::streamoff>(out.tellp());
+    for (std::uint32_t i = 0; i < layer_count; ++i) {
+        out.write(reinterpret_cast<const char*>(data.files.data[i].data()),
+                  static_cast<std::streamsize>(data.files.data[i].size()));
+    }
 
     // Now go back and fill in the layer entry offsets
     std::streamoff current_layer_offset = addr_first_layer;

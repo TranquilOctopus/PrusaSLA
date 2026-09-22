@@ -358,6 +358,17 @@ TEST_CASE("Anycubic PM5 export", "[export][sla][anycubic][pm5]")
     // Should contain "pw0Img" (NUL-padded)
     REQUIRE(img_format.find("pw0Img") == 0);
 
+    // Physical layout, as measured in the Photon Workshop sample (doc/sla-fork/formats/pm5.md).
+    // The address table alone cannot show these, and each one was wrong in the first version:
+    // MACHINE's body is 140 bytes and the software block follows it directly;
+    REQUIRE(read_le<uint32_t>(data.data() + machine_body + 112) == 16u);
+    REQUIRE(addr_software == machine_body + 140);
+    // the software block is a 32-byte name, then its own total length (164);
+    REQUIRE(read_le<uint32_t>(data.data() + addr_software + 32) == 164u);
+    // MODEL comes right after the software block and spans 48 bytes, and the layer images follow.
+    REQUIRE(addr_model == addr_software + 164);
+    REQUIRE(addr_first_layer == addr_model + 48);
+
     // Verify MODEL section
     REQUIRE(data.size() >= addr_model + 12);
     std::string model_tag(reinterpret_cast<const char*>(data.data() + addr_model), 12);
