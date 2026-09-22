@@ -1644,6 +1644,7 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/Biz/Config/ConfigLegacyTests.cpp
             test/Slic3r/Biz/Config/ConfigLoadTests.cpp
             test/Slic3r/Biz/Config/ConfigRoundtripTests.cpp
+            test/Slic3r/Biz/Config/SlaRaftSettingsTests.cpp
 
             test/Slic3r/Biz/Config/HwConfigJsonTests.cpp
             test/Slic3r/Biz/Config/FeatureStructurizerTests.cpp
