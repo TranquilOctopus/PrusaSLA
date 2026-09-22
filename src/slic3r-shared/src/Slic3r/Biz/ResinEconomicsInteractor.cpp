@@ -39,13 +39,8 @@ BedResinEconomics ResinEconomicsInteractor::compute_bed_economics(
     }
     result.bed_name = bed_instance->name();
 
-    // Get the slicing ID for this bed
-    const Domain::SlicingId slicing_id = m_project_interactor.slicing_interactor().get_process_id(bed_instance_id);
-    // SlicingId is a pair of ids, not a scalar: compare against a default-constructed one.
-    if (slicing_id == Domain::SlicingId{}) {
-        result.economics.summary = "No slicing ID";
-        return result;
-    }
+    // get_process_id is private; build the id the way the SLA tools do (SlaSupportPointsGizmo.cpp:569).
+    const Domain::SlicingId slicing_id{m_project_interactor.selected_project_id(), bed_instance_id};
 
     // Get the cached SLA result
     const SLAResultCache& sla_cache = m_project_interactor.sla_result_cache();
