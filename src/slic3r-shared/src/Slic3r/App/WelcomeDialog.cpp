@@ -296,11 +296,10 @@ static ItemPtr create_changelog_screen(const Theme& theme, std::function<void()>
 
     auto introduction{result->content()->emplace_back<Paragraph>(
         Biz::_u8L(
-            "PrusaSlicer 3.0.0 is the biggest update in the project's history. It brings multi-project support,"
-            " different printers within one project, a new UI, a new profile system for multi-tool machines,"
-            " plus early plugin support and built-in calibration prints. Things the old architecture simply couldn't handle."
-            " It's still rough in places, but this is the version we've been building toward."
-            " Your testing makes it real and helps us move forward faster."
+            "ResinSlicer is an SLA-focused fork of PrusaSlicer 3.0 for resin printers: support point"
+            " editing, hollowing and drain holes, and export to Elegoo and Anycubic formats. It is an"
+            " independent project and is not affiliated with Prusa Research. It is early and unfinished,"
+            " and reports of what breaks help the most."
         ),
         18_fpx
     )};
@@ -323,16 +322,23 @@ static ItemPtr create_changelog_screen(const Theme& theme, std::function<void()>
         green,
         std::initializer_list<std::initializer_list<ColoredText>>{
             {
-                {Biz::_u8L("Your existing PrusaSlicer 2.x 3MF projects load and work.")},
+                {Biz::_u8L("Support points, hollowing and drain holes can be edited by hand.")},
                 {
-                    Biz::_u8L("Configuration is automatically converted to the new format."),
+                    Biz::_u8L("Point and hole edits can be undone and redone."),
                     secondary_color,
                 },
             },
             {
-                {Biz::_u8L("Profiles are stored separately.")},
+                {Biz::_u8L("Exports SL1/SL1S, Elegoo .goo and older Anycubic Photon formats.")},
                 {
-                    Biz::_u8L("PrusaSlicer 3.0.0 runs safely alongside 2.x with no conflicts."),
+                    Biz::_u8L("Newer Anycubic formats such as .pm5 are not supported yet."),
+                    secondary_color,
+                },
+            },
+            {
+                {Biz::_u8L("Runs offline by default.")},
+                {
+                    Biz::_u8L("Online services stay off unless you turn them on."),
                     secondary_color,
                 },
             },
@@ -344,24 +350,23 @@ static ItemPtr create_changelog_screen(const Theme& theme, std::function<void()>
         red,
         std::initializer_list<std::initializer_list<ColoredText>>{
             {
-                {Biz::_u8L("This is a genuine alpha.")},
+                {Biz::_u8L("This is an early alpha.")},
                 {
-                    Biz::_u8L("Expect instability and unfinished features."),
+                    Biz::_u8L("Expect crashes and unfinished features."),
                     secondary_color,
                 },
             },
             {
-                {Biz::_u8L("Not all PrusaSlicer 2.x features have been ported yet.")},
+                {Biz::_u8L("Filament (FFF) printing is not a focus.")},
                 {
-                    Biz::_u8L("Some are already under development."),
+                    Biz::_u8L("FFF tools are hidden while an SLA printer is selected."),
                     secondary_color,
                 },
             },
-            {{Biz::_u8L("Standalone G-code viewer is not available in this release.")}},
             {
-                {Biz::_u8L("Third-party printer profiles are not included in this alpha.")},
+                {Biz::_u8L("Automatic supports are basic.")},
                 {
-                    Biz::_u8L("They will be added later."),
+                    Biz::_u8L("Better automatic supports are planned but not started."),
                     secondary_color,
                 },
             },
