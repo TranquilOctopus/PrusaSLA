@@ -5,13 +5,17 @@
 #ifndef SLAARCHIVEREADER_HPP
 #define SLAARCHIVEREADER_HPP
 
-#include "Slic3r/Biz/Config/Legacy/PrintConfig.hpp"
+#include <string>
+#include <memory>
+#include <functional>
+
 #include "libslic3r/ExPolygon.hpp"
+#include "Slic3r/Biz/Config/Legacy/PrintConfig.hpp"
 #include "Slic3r/Exception.hpp"
 
 struct indexed_triangle_set;
 
-namespace Slic3r {
+namespace Slic3r::Biz::Format::Sla {
 
 // Bring legacy config types into Slic3r namespace for compatibility
 using Slic3rLegacy::DynamicPrintConfig;
@@ -87,6 +91,6 @@ ConfigSubstitutions import_sla_archive(const std::string  &zipfname,
                                        const std::string  &format_id,
                                        DynamicPrintConfig &out);
 
-} // namespace Slic3r
+} // namespace Slic3r::Biz::Format::Sla
 
 #endif // SLAARCHIVEREADER_HPP

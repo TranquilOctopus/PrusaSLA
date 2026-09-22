@@ -13,7 +13,7 @@
 
 #include "Slic3r/Biz/Config/Legacy/PrintConfig.hpp"
 
-namespace Slic3r {
+namespace Slic3r::Biz::Format::Sla {
 
 // Bring legacy config types into Slic3r namespace for compatibility
 using Slic3rLegacy::DynamicPrintConfig;
@@ -57,6 +57,6 @@ ZipperArchive read_zipper_archive(const std::string &zipfname,
 std::pair<DynamicPrintConfig, ConfigSubstitutions> extract_profile(
     const ZipperArchive &arch, DynamicPrintConfig &inout);
 
-} // namespace Slic3r
+} // namespace Slic3r::Biz::Format::Sla
 
 #endif // ZIPPERARCHIVEIMPORT_HPP

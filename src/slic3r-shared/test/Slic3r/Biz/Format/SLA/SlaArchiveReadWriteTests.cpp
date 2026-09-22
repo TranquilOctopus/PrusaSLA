@@ -12,8 +12,7 @@
 #include "Slic3r/Biz/Config/ConfigSerialize.hpp"
 #include "Slic3r/Biz/Algorithms/Model.hpp"
 #include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
-#include "libslic3r/Format/SLAArchiveReader.hpp"
-#include "libslic3r/Format/SL1.hpp"
+#include "Slic3r/Biz/Format/SLA/SLAArchiveReader.hpp"
 
 #include "Slic3r/Domain/ConfigPack.hpp"
 
@@ -22,6 +21,7 @@
 using namespace Slic3r;
 using namespace Slic3r::Biz::Slicing; // SLAResultData
 using Slic3r::Biz::PrintHost::Sla::store_sl1;
+using Slic3r::Biz::Format::Sla::import_sla_archive;
 
 using Biz::Algorithms::Model::flatten_to_mesh;
 

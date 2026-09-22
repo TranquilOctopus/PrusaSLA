@@ -2,7 +2,7 @@
 //
 // PrusaSlicer is released under the terms of the AGPLv3 or higher
 
-#include "ZipperArchiveImport.hpp"
+#include "Slic3r/Biz/Format/SLA/ZipperArchiveImport.hpp"
 
 #include "libslic3r/miniz_extension.hpp"
 #include "Slic3r/Exception.hpp"
@@ -14,7 +14,7 @@
 
 #include "LocalesUtils.hpp"
 
-namespace Slic3r {
+namespace Slic3r::Biz::Format::Sla {
 
 namespace {
 
@@ -146,4 +146,4 @@ std::pair<DynamicPrintConfig, ConfigSubstitutions> extract_profile(
     return {profile_use, std::move(config_substitutions)};
 }
 
-} // namespace Slic3r
+} // namespace Slic3r::Biz::Format::Sla

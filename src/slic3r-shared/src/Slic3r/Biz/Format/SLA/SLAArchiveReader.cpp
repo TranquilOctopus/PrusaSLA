@@ -2,10 +2,10 @@
 //
 // PrusaSlicer is released under the terms of the AGPLv3 or higher
 
-#include "SLAArchiveReader.hpp"
-#include "SL1.hpp"
-#include "SL1_SVG.hpp"
-#include "libslic3r/I18N.hpp"
+#include "Slic3r/Biz/Format/SLA/SLAArchiveReader.hpp"
+#include "Slic3r/Biz/Format/SLA/SL1Import.hpp"
+#include "Slic3r/Biz/Format/SLA/SL1_SVG.hpp"
+#include "Slic3r/I18N.hpp"
 
 #include "libslic3r/SlicesToTriangleMesh.hpp"
 
@@ -15,7 +15,7 @@
 #include <array>
 #include <set>
 
-namespace Slic3r {
+namespace Slic3r::Biz::Format::Sla {
 
 std::unique_ptr<SLAArchiveReader> SLAArchiveReader::create(
     const std::string       &fname,
@@ -101,4 +101,4 @@ ConfigSubstitutions import_sla_archive(const std::string  &zipfname,
     return ret;
 }
 
-} // namespace Slic3r
+} // namespace Slic3r::Biz::Format::Sla

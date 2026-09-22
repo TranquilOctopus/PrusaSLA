@@ -1154,6 +1154,13 @@ set(SLIC3R_SHARED_FILES
         include/Slic3r/Biz/Format/VirtualExtruder.hpp
         src/Slic3r/Biz/Format/VirtualExtruder.cpp
 
+        include/Slic3r/Biz/Format/SLA/SLAArchiveReader.hpp
+        include/Slic3r/Biz/Format/SLA/ZipperArchiveImport.hpp
+        include/Slic3r/Biz/Format/SLA/SL1Import.hpp
+        src/Slic3r/Biz/Format/SLA/SLAArchiveReader.cpp
+        src/Slic3r/Biz/Format/SLA/ZipperArchiveImport.cpp
+        src/Slic3r/Biz/Format/SLA/SL1Import.cpp
+
         include/Slic3r/Biz/FileLoadingLogic.hpp
         src/Slic3r/Biz/FileLoadingLogic.cpp
         include/Slic3r/Biz/MeshExportLogic.hpp
@@ -1673,6 +1680,7 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/Biz/PresetUpdater/TestPresetUpdaterListener.cpp
 
             test/Slic3r/Biz/Format/3MFTests.cpp
+            test/Slic3r/Biz/Format/SLA/SlaArchiveReadWriteTests.cpp
             test/Slic3r/Biz/Format/STEPTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/SlaArchiveFormatTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/SlaExportIdentityTests.cpp
