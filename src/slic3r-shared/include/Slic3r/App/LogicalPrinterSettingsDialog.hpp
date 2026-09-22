@@ -79,6 +79,7 @@ private:
     void on_about_to_show() override;
     void update_settings_data();
     void update_color_mix_visibility();
+    void update_fff_section_visibility();
 
     void on_config_container_selection_changed(
         Domain::SelectionId project_id,
@@ -153,7 +154,9 @@ private:
     Yoga::Item* m_page_settings{nullptr};
     Yoga::Text* m_text_printer_name{nullptr};
     Yoga::Icon* m_printer_icon{nullptr};
+    Yoga::Text* m_text_sheet_heading{nullptr};
     Yoga::ComboBoxListViewSelection<Domain::Preset::HwSheetConfigDef>* m_combo_sheets;
+    Yoga::Text* m_text_nozzles_heading{nullptr};
     WarningPanel* m_warning{nullptr};
     NozzleListView* m_nozzle_list_view{nullptr};
     Yoga::LayoutButton* m_color_mix_button{nullptr};
