@@ -222,3 +222,157 @@ TEST_CASE("ResinProfileReaderRegistry - a missing file is an error, not a crash"
     const auto result = registry.read_file(missing);
     REQUIRE_FALSE(result.has_value());
 }
+
+TEST_CASE("ChituboxCfgReader - a two-stage lift profile keeps both stages", "[resin_profile][chitubox]")
+{
+    // These key names are our best understanding of Chitubox's two-stage lift keys
+    // and must be checked against the real profiles of M3.1 when they arrive.
+    const std::string two_stage =
+        "normalExposureTime:2.5\n"
+        "bottomLiftHeight:5\n"
+        "bottomLiftSpeed:60\n"
+        "bottomLiftHeight2:3\n"
+        "bottomLiftSpeed2:180\n"
+        "liftHeight:5\n"
+        "liftSpeed:65\n"
+        "liftHeight2:3\n"
+        "liftSpeed2:180\n"
+        "retractSpeed:150\n"
+        "retractSpeed2:60\n";
+
+    const ForeignResinProfile profile = read_ok(two_stage);
+
+    REQUIRE(profile.raw_values.at("normalExposureTime") == "2.5");
+    REQUIRE(profile.raw_values.at("bottomLiftHeight") == "5");
+    REQUIRE(profile.raw_values.at("bottomLiftSpeed") == "60");
+    REQUIRE(profile.raw_values.at("bottomLiftHeight2") == "3");
+    REQUIRE(profile.raw_values.at("bottomLiftSpeed2") == "180");
+    REQUIRE(profile.raw_values.at("liftHeight") == "5");
+    REQUIRE(profile.raw_values.at("liftSpeed") == "65");
+    REQUIRE(profile.raw_values.at("liftHeight2") == "3");
+    REQUIRE(profile.raw_values.at("liftSpeed2") == "180");
+    REQUIRE(profile.raw_values.at("retractSpeed") == "150");
+    REQUIRE(profile.raw_values.at("retractSpeed2") == "60");
+    REQUIRE(profile.warnings.empty());
+}
+
+TEST_CASE("ChituboxCfgReader - a file over the size limit is refused, not read", "[resin_profile][chitubox]")
+{
+    constexpr std::size_t LIMIT = 8 * 1024 * 1024;
+    ChituboxCfgReader reader;
+
+    // Build a file of exactly LIMIT bytes that starts with a valid Chitubox line.
+    // "normalExposureTime:2.5\n" = 22 bytes. Pad with "someKey:1\n" = 10 bytes each.
+    const std::string header = "normalExposureTime:2.5\n";
+    const std::string pad_line = "someKey:1\n";
+    const std::size_t header_size = header.size();
+    const std::size_t pad_line_size = pad_line.size();
+
+    // Exactly LIMIT bytes
+    {
+        std::size_t remaining = LIMIT - header_size;
+        std::size_t pad_count = remaining / pad_line_size;
+        std::size_t extra = remaining % pad_line_size;
+
+        std::string content = header;
+        content.reserve(LIMIT);
+        for (std::size_t i = 0; i < pad_count; ++i) {
+            content += pad_line;
+        }
+        if (extra > 0) {
+            content.append(extra, 'x');
+        }
+
+        REQUIRE(content.size() == LIMIT);
+
+        TempCfg file{content};
+        const auto result = reader.read(file.path);
+        // The check in ChituboxCfgReader::read is file_size > MAX_CFG_FILE_SIZE (strict).
+        // So exactly LIMIT should be accepted.
+        REQUIRE(result.has_value());
+        REQUIRE(result->raw_values.at("normalExposureTime") == "2.5");
+    }
+
+    // LIMIT + 1 byte -> refused by ChituboxCfgReader::read
+    {
+        std::size_t remaining = (LIMIT + 1) - header_size;
+        std::size_t pad_count = remaining / pad_line_size;
+        std::size_t extra = remaining % pad_line_size;
+
+        std::string content = header;
+        content.reserve(LIMIT + 1);
+        for (std::size_t i = 0; i < pad_count; ++i) {
+            content += pad_line;
+        }
+        if (extra > 0) {
+            content.append(extra, 'x');
+        }
+
+        REQUIRE(content.size() == LIMIT + 1);
+
+        TempCfg file{content};
+        const auto result = reader.read(file.path);
+        REQUIRE_FALSE(result.has_value());
+        REQUIRE(result.error() == "File too large (max 8 MB)");
+    }
+}
+
+TEST_CASE("ResinProfileReaderRegistry - a file over the size limit is refused before sniffing", "[resin_profile]")
+{
+    constexpr std::size_t LIMIT = 8 * 1024 * 1024;
+    ResinProfileReaderRegistry registry;
+    registry.register_reader(std::make_unique<ChituboxCfgReader>());
+
+    // Build a file of exactly LIMIT bytes that starts with a valid Chitubox line.
+    const std::string header = "normalExposureTime:2.5\n";
+    const std::string pad_line = "someKey:1\n";
+    const std::size_t header_size = header.size();
+    const std::size_t pad_line_size = pad_line.size();
+
+    // Exactly LIMIT bytes -> accepted by registry (check is file_size > MAX_FILE_SIZE, strict)
+    {
+        std::size_t remaining = LIMIT - header_size;
+        std::size_t pad_count = remaining / pad_line_size;
+        std::size_t extra = remaining % pad_line_size;
+
+        std::string content = header;
+        content.reserve(LIMIT);
+        for (std::size_t i = 0; i < pad_count; ++i) {
+            content += pad_line;
+        }
+        if (extra > 0) {
+            content.append(extra, 'x');
+        }
+
+        REQUIRE(content.size() == LIMIT);
+
+        TempCfg file{content};
+        const auto result = registry.read_file(file.path);
+        REQUIRE(result.has_value());
+        REQUIRE(result->source_format == "chitubox-cfg");
+        REQUIRE(result->raw_values.at("normalExposureTime") == "2.5");
+    }
+
+    // LIMIT + 1 byte -> refused by registry before it ever calls a reader
+    {
+        std::size_t remaining = (LIMIT + 1) - header_size;
+        std::size_t pad_count = remaining / pad_line_size;
+        std::size_t extra = remaining % pad_line_size;
+
+        std::string content = header;
+        content.reserve(LIMIT + 1);
+        for (std::size_t i = 0; i < pad_count; ++i) {
+            content += pad_line;
+        }
+        if (extra > 0) {
+            content.append(extra, 'x');
+        }
+
+        REQUIRE(content.size() == LIMIT + 1);
+
+        TempCfg file{content};
+        const auto result = registry.read_file(file.path);
+        REQUIRE_FALSE(result.has_value());
+        REQUIRE(result.error() == "File too large (max 8 MB)");
+    }
+}
