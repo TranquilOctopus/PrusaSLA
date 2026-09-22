@@ -13,6 +13,10 @@ namespace Slic3r::Biz::ResinProfile {
 
 namespace {
 
+// A reader must not depend on the registry that dispatches to it, so the limit lives here.
+// ResinProfileReaderRegistry applies the same ceiling before it ever picks a reader.
+constexpr std::size_t MAX_CFG_FILE_SIZE = 8 * 1024 * 1024;
+
 /// Trim whitespace from both ends of a string.
 static std::string trim(const std::string& s)
 {
@@ -152,8 +156,11 @@ static bool is_known_numeric_key(const std::string& key)
 bool ChituboxCfgReader::sniff(const std::string& head) const
 {
     // Look for a distinctive Chitubox key in the first 4 KB
-    // normalExposureTime is the most characteristic key
-    std::string normalized = normalize_line_endings(head);
+    // normalExposureTime is the most characteristic key.
+    // The BOM has to be stripped here too: with it still attached the first key reads as
+    // "\xEF\xBB\xBFnormalExposureTime", so a valid file is rejected as unrecognised and read()
+    // (which does strip it) never runs.
+    std::string normalized = normalize_line_endings(remove_bom(head));
     std::string::size_type pos = 0;
     while (pos < normalized.size()) {
         std::string::size_type nl = normalized.find('\n', pos);
@@ -184,7 +191,7 @@ tl::expected<ForeignResinProfile, std::string> ChituboxCfgReader::read(const boo
     if (ec) {
         return tl::make_unexpected(std::string("Cannot get file size: ") + ec.message());
     }
-    if (file_size > static_cast<boost::uintmax_t>(ResinProfileReaderRegistry::MAX_FILE_SIZE)) {
+    if (file_size > static_cast<boost::uintmax_t>(MAX_CFG_FILE_SIZE)) {
         return tl::make_unexpected("File too large (max 8 MB)");
     }
 
@@ -211,9 +218,40 @@ tl::expected<ForeignResinProfile, std::string> ChituboxCfgReader::read(const boo
         std::string::size_type nl = content.find('\n', pos);
         std::string line = content.substr(pos, nl - pos);
         ++line_number;
+        const size_t start_line = line_number;
 
         if (is_key_value_line(line)) {
             auto [key, value] = split_key_value(line);
+
+            // A quoted value may span several lines: Chitubox stores G-code blocks that way.
+            // Without this the value is truncated at the first newline and every continuation
+            // line is then reported as an unrecognised line.
+            if (!value.empty() && value.front() == '"' &&
+                !(value.size() >= 2 && value.back() == '"')) {
+                bool closed = false;
+                while (nl != std::string::npos) {
+                    const std::string::size_type next = content.find('
+', nl + 1);
+                    const std::string continuation = next == std::string::npos
+                        ? content.substr(nl + 1)
+                        : content.substr(nl + 1, next - (nl + 1));
+                    ++line_number;
+                    value += '
+';
+                    value += continuation;
+                    nl = next;
+                    const std::string trimmed = trim(continuation);
+                    if (!trimmed.empty() && trimmed.back() == '"') {
+                        closed = true;
+                        break;
+                    }
+                }
+                if (!closed) {
+                    profile.warnings.push_back(
+                        "Unterminated quoted value for key '" + key + "' starting on line " +
+                        std::to_string(start_line) + "; took the rest of the file");
+                }
+            }
 
             // Check for duplicate keys (keep both spellings)
             if (profile.raw_values.find(key) != profile.raw_values.end()) {
