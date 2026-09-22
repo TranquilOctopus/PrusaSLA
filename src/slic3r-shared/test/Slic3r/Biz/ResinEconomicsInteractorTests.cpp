@@ -1,3 +1,4 @@
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/trompeloeil.hpp>
 
@@ -24,7 +25,7 @@
 #include <boost/filesystem/operations.hpp>
 #include <boost/nowide/filesystem.hpp>
 
-#include <algorithm>
+
 #include <chrono>
 
 using namespace Slic3r::Biz;
@@ -126,7 +127,29 @@ TEST_CASE_METHOD(
 {
     using namespace std::chrono_literals;
 
-    const auto project_id = project_interactor.new_project();
+    // compute_bed_economics resolves the bed through the project's own config containers, so the
+    // project itself has to be the SLA one -- slicing a standalone bed the way the SLA export
+    // fixture does would leave nothing for the project walk to find.
+    Slic3r::Domain::ConfigPackSLA config;
+    config.sla_printer_settings.items.opt("display_pixels_x").set(2560);
+    config.sla_printer_settings.items.opt("display_pixels_y").set(1440);
+    config.sla_printer_settings.items.opt("display_width").set(120.96);
+    config.sla_printer_settings.items.opt("display_height").set(68.04);
+    config.sla_print_settings.items.opt("layer_height").set(0.05);
+    config.sla_material_settings.items.opt("initial_layer_height").set(0.05);
+    config.sla_material_settings.items.opt("exposure_time").set(6.0);
+    config.sla_material_settings.items.opt("initial_exposure_time").set(35.0);
+    // Bottle data is what turns raw volume into grams, cost and bottle fractions.
+    config.sla_material_settings.items.opt("bottle_volume").set(1000.0);
+    config.sla_material_settings.items.opt("bottle_weight").set(1.0);
+    config.sla_material_settings.items.opt("bottle_cost").set(30.0);
+
+    const auto created = project_interactor.new_project_with_preset(
+        Slic3r::Test::get_selected_preset_metadata(),
+        config
+    );
+    REQUIRE(created.has_value());
+    const Slic3r::Domain::SelectionId project_id = *created;
 
     const Slic3r::Domain::Project& project = project_interactor.project(project_id);
     REQUIRE_FALSE(project.config_containers().empty());
@@ -134,12 +157,18 @@ TEST_CASE_METHOD(
     REQUIRE_FALSE(config_container.bed_instances().empty());
     const Slic3r::Domain::BedInstance& bed_instance = *config_container.bed_instances().front();
 
-    ModelOnBed model_on_bed{get_cubes_model(1, 1, Slic3r::Domain::PrinterTechnology::SLA)};
+    // update_process keeps references to these, so they must outlive the slicing interactor.
+    Slic3r::Domain::Model model = Slic3r::Test::generate_cubes(1, 5);
+    Slic3r::Domain::ProjectMetadata project_metadata;
+    Slic3r::Domain::Preset::SelectedPresetMetadata preset_metadata =
+        Slic3r::Test::get_selected_preset_metadata();
+    Slic3r::Domain::ConfigPack config_pack = config;
+
     project_interactor.slicing_interactor().update_process(
-        model_on_bed.model,
-        model_on_bed.project_metadata,
-        model_on_bed.preset_metadata,
-        model_on_bed.config,
+        model,
+        project_metadata,
+        preset_metadata,
+        config_pack,
         bed_instance
     );
     project_interactor.slicing_interactor().slice_all();
@@ -148,22 +177,22 @@ TEST_CASE_METHOD(
         return !events.empty() && events.back().status_code == Slicing::StatusCode::Finished;
     }));
 
-    const ProjectResinEconomics result = economics_interactor.compute_project_economics(project_id);
+    const BedResinEconomics bed =
+        economics_interactor.compute_bed_economics(project_id, bed_instance.id().id);
 
-    REQUIRE(result.beds_with_results == 1);
-    REQUIRE(result.beds.size() == result.beds_with_results + result.beds_skipped);
+    REQUIRE(bed.has_result);
+    REQUIRE(bed.bed_instance_id == bed_instance.id().id);
+    REQUIRE(bed.economics.millilitres.has_value());
+    REQUIRE(*bed.economics.millilitres > 0.0);
+    // The bottle settings above are in the config, so the derived figures must resolve too.
+    REQUIRE(bed.economics.grams.has_value());
+    REQUIRE(bed.economics.cost.has_value());
 
-    const auto sliced = std::ranges::find_if(
-        result.beds,
-        [](const BedResinEconomics& bed) { return bed.has_result; }
-    );
-    REQUIRE(sliced != result.beds.end());
-    REQUIRE(sliced->bed_instance_id == bed_instance.id().id);
-    REQUIRE(sliced->economics.millilitres.has_value());
-    REQUIRE(*sliced->economics.millilitres > 0.0);
+    const ProjectResinEconomics totals = economics_interactor.compute_project_economics(project_id);
 
-    // The project total is the sum over beds that produced a result; with one bed it equals it.
-    REQUIRE(result.total.millilitres.has_value());
-    REQUIRE(*result.total.millilitres == *sliced->economics.millilitres);
-    REQUIRE(result.total.summary != "No data");
+    REQUIRE(totals.beds_with_results == 1);
+    REQUIRE(totals.beds.size() == totals.beds_with_results + totals.beds_skipped);
+    REQUIRE(totals.total.millilitres.has_value());
+    REQUIRE(*totals.total.millilitres == Catch::Approx(*bed.economics.millilitres));
+    REQUIRE(totals.total.summary != "No data");
 }

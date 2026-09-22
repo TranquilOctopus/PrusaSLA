@@ -1,3 +1,4 @@
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/trompeloeil.hpp>
 
@@ -21,16 +22,16 @@ TEST_CASE("ResinEconomics::calculate - normal values", "[resin_economics]")
     ResinEconomicsResult result = ResinEconomics::calculate(input);
 
     REQUIRE(result.millilitres.has_value());
-    REQUIRE(*result.millilitres == 50.0); // 50000 mm³ = 50 ml
+    REQUIRE(*result.millilitres == Catch::Approx(50.0)); // 50000 mm³ = 50 ml
 
     REQUIRE(result.grams.has_value());
-    REQUIRE(*result.grams == 55.0); // 50 ml * 1.1 g/ml
+    REQUIRE(*result.grams == Catch::Approx(55.0)); // 50 ml * 1.1 g/ml
 
     REQUIRE(result.cost.has_value());
-    REQUIRE(*result.cost == 2.5); // (50/1000) * 50 = 2.5
+    REQUIRE(*result.cost == Catch::Approx(2.5)); // (50/1000) * 50 = 2.5
 
     REQUIRE(result.bottles_fraction.has_value());
-    REQUIRE(*result.bottles_fraction == 0.05); // 50/1000
+    REQUIRE(*result.bottles_fraction == Catch::Approx(0.05)); // 50/1000
 }
 
 TEST_CASE("ResinEconomics::calculate - zero bottle volume", "[resin_economics]")
@@ -45,10 +46,10 @@ TEST_CASE("ResinEconomics::calculate - zero bottle volume", "[resin_economics]")
     ResinEconomicsResult result = ResinEconomics::calculate(input);
 
     REQUIRE(result.millilitres.has_value());
-    REQUIRE(*result.millilitres == 50.0);
+    REQUIRE(*result.millilitres == Catch::Approx(50.0));
 
     REQUIRE(result.grams.has_value());
-    REQUIRE(*result.grams == 55.0);
+    REQUIRE(*result.grams == Catch::Approx(55.0));
 
     // Cost and bottles_fraction should not be set due to zero bottle volume
     REQUIRE_FALSE(result.cost.has_value());
@@ -67,17 +68,17 @@ TEST_CASE("ResinEconomics::calculate - missing cost", "[resin_economics]")
     ResinEconomicsResult result = ResinEconomics::calculate(input);
 
     REQUIRE(result.millilitres.has_value());
-    REQUIRE(*result.millilitres == 50.0);
+    REQUIRE(*result.millilitres == Catch::Approx(50.0));
 
     REQUIRE(result.grams.has_value());
-    REQUIRE(*result.grams == 55.0);
+    REQUIRE(*result.grams == Catch::Approx(55.0));
 
     // Cost should not be set
     REQUIRE_FALSE(result.cost.has_value());
 
     // Bottles fraction should be set since volume is available
     REQUIRE(result.bottles_fraction.has_value());
-    REQUIRE(*result.bottles_fraction == 0.05);
+    REQUIRE(*result.bottles_fraction == Catch::Approx(0.05));
 }
 
 TEST_CASE("ResinEconomics::calculate - missing density", "[resin_economics]")
@@ -92,16 +93,16 @@ TEST_CASE("ResinEconomics::calculate - missing density", "[resin_economics]")
     ResinEconomicsResult result = ResinEconomics::calculate(input);
 
     REQUIRE(result.millilitres.has_value());
-    REQUIRE(*result.millilitres == 50.0);
+    REQUIRE(*result.millilitres == Catch::Approx(50.0));
 
     // Grams should not be set
     REQUIRE_FALSE(result.grams.has_value());
 
     REQUIRE(result.cost.has_value());
-    REQUIRE(*result.cost == 2.5);
+    REQUIRE(*result.cost == Catch::Approx(2.5));
 
     REQUIRE(result.bottles_fraction.has_value());
-    REQUIRE(*result.bottles_fraction == 0.05);
+    REQUIRE(*result.bottles_fraction == Catch::Approx(0.05));
 }
 
 TEST_CASE("ResinEconomics::calculate - all missing bottle values", "[resin_economics]")
@@ -116,7 +117,7 @@ TEST_CASE("ResinEconomics::calculate - all missing bottle values", "[resin_econo
     ResinEconomicsResult result = ResinEconomics::calculate(input);
 
     REQUIRE(result.millilitres.has_value());
-    REQUIRE(*result.millilitres == 50.0);
+    REQUIRE(*result.millilitres == Catch::Approx(50.0));
 
     REQUIRE_FALSE(result.grams.has_value());
     REQUIRE_FALSE(result.cost.has_value());
@@ -145,7 +146,7 @@ TEST_CASE("ResinEconomics::calculate - from PrintStatistics and ConfigView", "[r
 
     // Should at least have millilitres from the stats
     REQUIRE(result.millilitres.has_value());
-    REQUIRE(*result.millilitres == 50.0); // 30 + 20 = 50 ml
+    REQUIRE(*result.millilitres == Catch::Approx(50.0)); // 30 + 20 = 50 ml
 }
 
 TEST_CASE("ResinEconomics::calculate - zero used material", "[resin_economics]")
