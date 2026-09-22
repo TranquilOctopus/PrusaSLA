@@ -38,7 +38,11 @@ struct AnycubicSLARasterEncoder
         size_t               span_len;
         std::uint8_t         pixel;
         auto                 size = w * h * num_components;
-        dst.reserve(size);
+        // Do not reserve `size`: every encoded layer is kept until export, and a vector keeps its
+        // capacity. On a 12K display that was about 59 MB per layer for data that encodes to
+        // kilobytes, so slicing a few hundred layers ran out of memory (std::bad_alloc). The
+        // Photon Mono M5 reaches this encoder because pm5 falls back to it. See shrink_to_fit below.
+        dst.reserve(h * 4);
 
         const std::uint8_t *src = reinterpret_cast<const std::uint8_t *>(ptr);
         const std::uint8_t *src_end = src + size;
@@ -57,6 +61,8 @@ struct AnycubicSLARasterEncoder
             }
         }
 
+        // Release the growth slack before the layer is stored alongside all the others.
+        dst.shrink_to_fit();
         return sla::EncodedRaster(std::move(dst), "pwimg");
     }
 };

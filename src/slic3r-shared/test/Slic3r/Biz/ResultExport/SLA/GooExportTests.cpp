@@ -76,6 +76,13 @@ TEST_CASE("Goo export", "[export][sla][goo]")
 
     REQUIRE(sla_result->files.type == FileDataType::goo);
 
+    // Every encoded layer is held in memory until export. The encoder used to reserve room for
+    // the uncompressed image and keep it (about 118 MB per layer at 12K), which ran real slices
+    // out of memory. A layer of this cube encodes to kilobytes, so its capacity must stay small.
+    REQUIRE_FALSE(sla_result->files.data.empty());
+    for (const auto& layer : sla_result->files.data)
+        REQUIRE(layer.capacity() < 1024 * 1024);
+
     Tests::TestTempDir temp_dir;
     fs::path out_path = temp_dir.path() / "out.goo";
 

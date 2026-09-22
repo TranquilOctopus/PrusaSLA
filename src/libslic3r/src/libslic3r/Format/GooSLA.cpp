@@ -22,7 +22,11 @@ struct GooSLARasterEncoder
     {
         std::vector<uint8_t> dst;
         size_t total_pixels = w * h;
-        dst.reserve(total_pixels * 2);
+        // Do not reserve for the uncompressed image. Every encoded layer is kept until export, and
+        // the old reserve(total_pixels * 2) was about 118 MB per layer on a 12K display (the vector
+        // kept that capacity even though a layer encodes to kilobytes), so a few hundred layers
+        // exhausted memory. A few spans per row is a cheap starting point; see shrink_to_fit below.
+        dst.reserve(h * 4);
 
         const std::uint8_t *src = reinterpret_cast<const std::uint8_t *>(ptr);
         const std::uint8_t *src_end = src + total_pixels * num_components;
@@ -102,6 +106,8 @@ struct GooSLARasterEncoder
 
         write_byte(checksum & 0xFF);
 
+        // Release the growth slack before the layer is stored alongside all the others.
+        dst.shrink_to_fit();
         return sla::EncodedRaster(std::move(dst), "gooimg");
     }
 };

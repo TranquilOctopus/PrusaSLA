@@ -70,6 +70,13 @@ TEST_CASE("Anycubic pwmx export", "[export][sla][anycubic]")
 
     REQUIRE(sla_result->files.type == FileDataType::anycubic);
 
+    // Every encoded layer is held in memory until export. The encoder used to reserve room for
+    // the uncompressed image and keep it (about 59 MB per layer at 12K; the Photon Mono M5 uses
+    // this encoder), which ran real slices out of memory. Capacity must stay near the encoded size.
+    REQUIRE_FALSE(sla_result->files.data.empty());
+    for (const auto& layer : sla_result->files.data)
+        REQUIRE(layer.capacity() < 1024 * 1024);
+
     Tests::TestTempDir temp_dir;
     fs::path out_path = temp_dir.path() / "out.pwmx";
 
