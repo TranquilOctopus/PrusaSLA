@@ -341,7 +341,8 @@ TEST_CASE("3MF SLA round trip preserves support points and drain holes", "[3mf][
     CHECK(Domain::is_approx(loaded_object->sla_support_points[2].pillar_diameter, 0.f));
     CHECK(Domain::is_approx(loaded_object->sla_support_points[2].base_diameter, 0.f));
     CHECK(Domain::is_approx(loaded_object->sla_support_points[2].base_height, 0.f));
-    // type round-trips correctly (was a gap, now fixed)
+    // Written as "t": 2 and parsed back as an unsigned number; the signed reader used to reject
+    // that and leave manual_add. See value_from_json(json, number_integer_t&) in PrusaFile.cpp.
     CHECK(loaded_object->sla_support_points[2].type == SupportPointType::slope);
 
     // Point with per-point overrides

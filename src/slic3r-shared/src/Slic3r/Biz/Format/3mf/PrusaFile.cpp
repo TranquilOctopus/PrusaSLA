@@ -1,5 +1,6 @@
 ﻿#include "PrusaFile.hpp"
 #include <string_view>
+#include <limits>
 #include <set>
 #include <type_traits> // enable_if
 #include <boost/assign.hpp>
@@ -180,6 +181,20 @@ template<> bool value_from_json(const json &data_json, json::number_integer_t &v
     if (!data_json.is_number()) {
         collected_issues.add_issue(Read3mfIssue(issue, std::string("Not an integer number"), data_json.dump()));
         return false;
+    }
+    // The json parser stores every non-negative integer literal as number_unsigned, and
+    // get_ptr<number_integer_t> only matches a value stored as number_integer. Without this, any
+    // signed field saved as 0 or more came back as "Can't get value" and kept its default; the
+    // support point type (slope saved as 2, loaded as manual_add) is how it showed up.
+    if (data_json.is_number_unsigned()) {
+        const json::number_unsigned_t unsigned_value = *data_json.get_ptr<const json::number_unsigned_t*>();
+        // Parenthesised so a max macro from windows.h cannot expand here.
+        if (unsigned_value > static_cast<json::number_unsigned_t>((std::numeric_limits<json::number_integer_t>::max)())) {
+            collected_issues.add_issue(Read3mfIssue(issue, std::string("Integer out of range"), data_json.dump()));
+            return false;
+        }
+        value = static_cast<json::number_integer_t>(unsigned_value);
+        return true;
     }
     return get_value(data_json, value, collected_issues, issue);
 }
