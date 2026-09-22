@@ -1,0 +1,39 @@
+id: '*common*'
+kind: sla_print
+values:
+  layer_height: 0.05
+  pad_enable: 1.0
+  pad_max_merge_distance: 50.0
+  pad_wall_height: 0.0
+  pad_wall_slope: 45.0
+  pad_wall_thickness: 1.0
+  slice_closing_radius: 0.005
+  support_base_diameter: 3.0
+  support_base_height: 1.0
+  support_critical_angle: 45.0
+  support_head_front_diameter: 0.4
+  support_head_penetration: 0.4
+  support_head_width: 3.0
+  support_max_bridge_length: 10.0
+  support_object_elevation: 5.0
+  support_pillar_connection_mode: zigzag
+  support_pillar_diameter: 1.0
+  support_pillar_widening_factor: 0.0
+  support_small_pillar_diameter_percent: 60%
+  supports_enable: 1.0
+---
+id: community_sla_print_005
+kind: sla_print
+name: 0.05mm Standard
+inherits:
+- '*common*'
+values:
+  layer_height: 0.05
+---
+id: community_sla_print_003
+kind: sla_print
+name: 0.03mm Detail
+inherits:
+- '*common*'
+values:
+  layer_height: 0.03
