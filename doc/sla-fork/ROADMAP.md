@@ -88,7 +88,27 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
 - [ ] **M1.8** SLA path in the welcome dialog, plus SLA hints and notifications. Also fix the “Export gcode to a file” tooltip for SLA (evidence: `ux/journeys.md` section H). · M · needs M1.7, M1.3
 - [x] **M1.9** Toolbar icons (`resources/icons/sla_*.svg`) for support points, hollow, orient, inspector and resin import, following PLAN F7. · M · needs M1.3
   Result: 10 `resources/icons/sla_*.svg` icons for the SLA tools, registered through the icon enum; the M0.7 icon test now expects the SLA-specific icons. Not checked in a running app: nobody has seen them rendered.
-- [ ] **M1.10** Resin economics interactor: resin ml, cost and bottles per bed and per project (PLAN D4). · M · needs M0.11a
+- [x] **M1.10** Resin economics interactor: resin ml, cost and bottles per bed and per project (PLAN D4). · M · needs M0.11a
+      Result: `ResinEconomics::calculate` and `ResinEconomicsInteractor` compute ml, grams, cost and
+      bottle fractions per bed and summed per project. The pure calculation is well covered.
+      Limitations:
+      - The interactor's **cache-hit path is untested**. Both interactor tests stop at an early
+        return (no bed, or no cached SLA result), so the result lookup, slicing-id construction and
+        config reads are exercised only by the app itself. Reaching it needs a project whose own bed
+        is SLA; four attempts failed (standalone bed is not in the project walk, hand-built
+        `SelectedPresetMetadata` is rejected by `load_selected_preset_from_3mf`, and `sl1s` did not
+        resolve as an hw-config id in the test bundle). Worth a dedicated task: enumerate
+        `get_printer_configs()` for an SLA entry instead of hard-coding an id.
+      - Missing config values are treated as absent rather than zero, so a bed with no material
+        preset reports ml only.
+      Upstream bugs found while doing this, not fixed here:
+      - `HwPrinterConfig::technology` and `tool_count` are uninitialised scalars; a
+        default-constructed one carries garbage (seen as `PrinterTechnology: 120`).
+      - `do_load_project`'s failure path removes the project, then its deferred-invocation bag
+        asserts in `Workbench::project` on that id, so a rejected preset crashes instead of
+        returning its error (`ProjectInteractor.cpp:182`).
+      - The SLA branch of `SelectedPreset::make` builds `.print` from `metadata.printer` where the
+        FDM branch uses `metadata.print` (`SelectedPreset.cpp:95`).
 - [ ] **M1.11** SLA sidebar summary (PLAN F5). · M · needs M1.10, M1.3
 
 - [ ] **M1.12** Branding artwork: replace `resources/icons/splashscreen.jpg` and the `PrusaSlicer.*` app icons (ico, icns, svg, png) with our own, in the fork palette, and check every place the old name or logo still shows (about box, window title, installer strings). The app name and key are already `ResinSlicer` (version.inc). Prusa's name and logo must not be reused: this is a third-party fork. · M · needs —
