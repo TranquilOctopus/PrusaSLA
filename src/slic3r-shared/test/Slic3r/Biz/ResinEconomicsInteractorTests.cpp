@@ -27,6 +27,7 @@
 
 
 #include <chrono>
+#include <variant>
 
 using namespace Slic3r::Biz;
 using namespace trompeloeil;
@@ -129,32 +130,11 @@ TEST_CASE_METHOD(
 
     // compute_bed_economics resolves the bed through the project's own config containers, so the
     // project itself has to be the SLA one -- slicing a standalone bed the way the SLA export
-    // fixture does would leave nothing for the project walk to find.
-    Slic3r::Domain::ConfigPackSLA config;
-    config.sla_printer_settings.items.opt("display_pixels_x").set(2560);
-    config.sla_printer_settings.items.opt("display_pixels_y").set(1440);
-    config.sla_printer_settings.items.opt("display_width").set(120.96);
-    config.sla_printer_settings.items.opt("display_height").set(68.04);
-    config.sla_print_settings.items.opt("layer_height").set(0.05);
-    config.sla_material_settings.items.opt("initial_layer_height").set(0.05);
-    config.sla_material_settings.items.opt("exposure_time").set(6.0);
-    config.sla_material_settings.items.opt("initial_exposure_time").set(35.0);
-    // Bottle data is what turns raw volume into grams, cost and bottle fractions.
-    config.sla_material_settings.items.opt("bottle_volume").set(1000.0);
-    config.sla_material_settings.items.opt("bottle_weight").set(1.0);
-    config.sla_material_settings.items.opt("bottle_cost").set(30.0);
-
-    // SelectedPreset::make asserts on both of these for an SLA config pack
-    // (SelectedPreset.cpp:85). PrinterTechnology is left uninitialised by the default
-    // constructor, so it must be set explicitly or it arrives as garbage.
-    Slic3r::Domain::Preset::SelectedPresetMetadata preset_metadata =
-        Slic3r::Test::get_selected_preset_metadata();
-    preset_metadata.hw_config.technology = Slic3r::Domain::PrinterTechnology::SLA;
-    preset_metadata.materials.resize(1);
-
-    const auto created = project_interactor.new_project_with_preset(preset_metadata, config);
-    REQUIRE(created.has_value());
-    const Slic3r::Domain::SelectionId project_id = *created;
+    // fixture does would leave nothing for the project walk to find. Switch the printer the way
+    // the application does rather than hand-building preset metadata, which has to resolve
+    // against the loaded bundle to survive do_load_project.
+    const auto project_id = project_interactor.new_project();
+    project_interactor.preset_interactor().select_printer_preset("sl1s", "sl1s");
 
     const Slic3r::Domain::Project& project = project_interactor.project(project_id);
     REQUIRE_FALSE(project.config_containers().empty());
@@ -165,7 +145,18 @@ TEST_CASE_METHOD(
     // update_process keeps references to these, so they must outlive the slicing interactor.
     Slic3r::Domain::Model model = Slic3r::Test::generate_cubes(1, 5);
     Slic3r::Domain::ProjectMetadata project_metadata;
-    Slic3r::Domain::ConfigPack config_pack = config;
+    Slic3r::Domain::Preset::SelectedPresetMetadata preset_metadata =
+        config_container.selected_preset().metadata();
+    Slic3r::Domain::ConfigPack config_pack = config_container.build_print_config();
+
+    // Also confirms the printer switch above actually took effect.
+    auto* sla_config = std::get_if<Slic3r::Domain::ConfigPackSLA>(&config_pack);
+    REQUIRE(sla_config != nullptr);
+    // The test bundle's material preset carries no bottle data, and that is what turns raw
+    // volume into grams, cost and bottle fractions.
+    sla_config->sla_material_settings.items.opt("bottle_volume").set(1000.0);
+    sla_config->sla_material_settings.items.opt("bottle_weight").set(1.0);
+    sla_config->sla_material_settings.items.opt("bottle_cost").set(30.0);
 
     project_interactor.slicing_interactor().update_process(
         model,
