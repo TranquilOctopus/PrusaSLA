@@ -49,6 +49,9 @@ using SLASlicingSync::PrintAndObjectSteps;
 using SLASlicingSync::PrintObjectSteps;
 using SLASlicingSync::PrintSteps;
 using SLASlicingSync::StepsPerPrintObject;
+// Now lives in SLASlicingSync rather than the anonymous namespace, so callers further down
+// this file still need the name brought in.
+using SLASlicingSync::diff_to_invalidated_steps;
 using ParserConfig = Biz::Parser::IO::Config;
 using Biz::Algorithms::Scaling::unscaled;
 using Domain::ConfigPack;
@@ -488,6 +491,13 @@ void delete_old_model_objects(const Domain::ModelObjectPtrs& old_objects, const 
     }
 }
 
+} // anonymous namespace
+
+// The invalidation table and its helpers are declared in SLAPrint.hpp so the M4.10 test can
+// check every SLA config key has an entry. They were in the anonymous namespace, which gave
+// them internal linkage and left the test with unresolved externals.
+namespace SLASlicingSync {
+
 using Step = std::variant<SLAPrintStep, SLAPrintObjectStep>;
 
 std::vector<Step> propagate(Step step)
@@ -776,6 +786,15 @@ PrintAndObjectSteps diff_to_invalidated_steps(
     }
     return PrintAndObjectSteps{print_steps, print_object_steps};
 }
+
+const std::map<std::string, std::vector<Step>>& get_invalidated_by_map()
+{
+    return invalidated_by;
+}
+
+} // namespace SLASlicingSync
+
+namespace {
 
 void delete_old_print_objects(const PrintObjects& old_objects, const PrintObjects& new_objects)
 {
