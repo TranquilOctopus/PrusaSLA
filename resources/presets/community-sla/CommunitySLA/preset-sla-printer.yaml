@@ -5,9 +5,9 @@ id: photon_mono_m5
 values:
   bed_shape:
   - 0.5x0.5
-  - 217.5x0.5
-  - 217.5x122.5
-  - 0.5x122.5
+  - 218.38x0.5
+  - 218.38x122.38
+  - 0.5x122.38
   # display_width = 11520 * 19um = 218880um = 218.88mm
   display_width: '218.88'
   # display_height = 5120 * 24um = 122880um = 122.88mm
@@ -36,9 +36,9 @@ id: photon_mono_m5s
 values:
   bed_shape:
   - 0.5x0.5
-  - 218.5x0.5
-  - 218.5x122.5
-  - 0.5x122.5
+  - 218.38x0.5
+  - 218.38x122.38
+  - 0.5x122.38
   # display_width = 11520 * 19um = 218880um = 218.88mm
   display_width: '218.88'
   # display_height = 5120 * 24um = 122880um = 122.88mm
@@ -67,9 +67,9 @@ id: photon_mono_m7_pro
 values:
   bed_shape:
   - 0.5x0.5
-  - 222.5x0.5
-  - 222.5x125.5
-  - 0.5x125.5
+  - 225.94x0.5
+  - 225.94x122.38
+  - 0.5x122.38
   # display_width = 13320 * 17um = 226440um = 226.44mm
   display_width: '226.44'
   # display_height = 5120 * 24um = 122880um = 122.88mm
