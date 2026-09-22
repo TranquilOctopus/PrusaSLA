@@ -18,6 +18,7 @@
 
 #include <cstdlib>
 #include <exception>
+#include <typeinfo>
 #include <string>
 
 #include <CLI/CLI.hpp>
@@ -86,13 +87,18 @@ int main(int argc, char** argv)
             try {
                 std::rethrow_exception(current);
             } catch (const std::exception& e) {
-                SPDLOG_CRITICAL("Terminating on uncaught exception: {}", e.what());
+                SPDLOG_CRITICAL(
+                    "Terminating on uncaught exception: {} ({})", e.what(), typeid(e).name()
+                );
             } catch (...) {
                 SPDLOG_CRITICAL("Terminating on an uncaught exception of unknown type");
             }
         } else {
             SPDLOG_CRITICAL("Terminating without an active exception");
         }
+        // MSVC calls terminate without unwinding for an uncaught exception, so this is still the
+        // stack of the throw site rather than of main.
+        SPDLOG_CRITICAL("Stack at termination:\n{}", libassert::stacktrace());
         spdlog::default_logger()->flush();
         std::abort();
     });
