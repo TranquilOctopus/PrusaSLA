@@ -35,6 +35,7 @@
 #endif
 
 #include "libslic3r/I18N_private.hpp"
+#include "Slic3r/Domain/SLA/RaftPreset.hpp"
 
 namespace Slic3r {
 
@@ -64,6 +65,25 @@ using Slic3r::Domain::SlicingId;
 
 bool is_zero_elevation(const SLAPrintObjectConfigView &c)
 {
+    using Domain::SLA::raft_preset_to_pad_values;
+    using Domain::sla::RaftType;
+
+    // Check if raft_type setting exists (for backward compatibility)
+    const bool has_raft_type = c.values().count("raft_type") > 0;
+    if (has_raft_type) {
+        auto raft_type = c.get<RaftType>("raft_type");
+        auto vals = raft_preset_to_pad_values(
+            raft_type,
+            c.get<double>("pad_wall_height"),
+            c.get<double>("pad_wall_thickness"),
+            c.get<double>("pad_brim_size"),
+            c.get<double>("pad_wall_slope"),
+            c.get<double>("pad_object_gap")
+        );
+        return vals.pad_enable && vals.pad_around_object;
+    }
+
+    // Legacy behavior
     return c.get<bool>("pad_enable") && c.get<bool>("pad_around_object");
 }
 
@@ -137,11 +157,41 @@ sla::SupportTreeConfig make_support_cfg(const SLAPrintObjectConfigView& c)
 
 sla::PadConfig::EmbedObject builtin_pad_cfg(const SLAPrintObjectConfigView& c)
 {
+    using Domain::SLA::raft_preset_to_pad_values;
+    using Domain::SLA::RaftPadValues;
+    using Domain::sla::RaftType;
+
     sla::PadConfig::EmbedObject ret;
 
+    const bool has_raft_type = c.values().count("raft_type") > 0;
+    if (has_raft_type) {
+        auto raft_type = c.get<RaftType>("raft_type");
+        RaftPadValues vals = raft_preset_to_pad_values(
+            raft_type,
+            c.get<double>("pad_wall_height"),
+            c.get<double>("pad_wall_thickness"),
+            c.get<double>("pad_brim_size"),
+            c.get<double>("pad_wall_slope"),
+            c.get<double>("pad_object_gap")
+        );
+
+        ret.enabled = vals.pad_enable && vals.pad_around_object;
+
+        if (ret.enabled) {
+            ret.everywhere           = c.get<bool>("pad_around_object_everywhere");
+            ret.object_gap_mm        = vals.pad_object_gap_mm;
+            ret.stick_width_mm       = c.get<double>("pad_object_connector_width");
+            ret.stick_stride_mm      = c.get<double>("pad_object_connector_stride");
+            ret.stick_penetration_mm = c.get<double>("pad_object_connector_penetration");
+        }
+
+        return ret;
+    }
+
+    // Legacy behavior
     ret.enabled = is_zero_elevation(c);
 
-    if(ret.enabled) {
+    if (ret.enabled) {
         ret.everywhere           = c.get<bool>("pad_around_object_everywhere");
         ret.object_gap_mm        = c.get<double>("pad_object_gap");
         ret.stick_width_mm       = c.get<double>("pad_object_connector_width");
@@ -154,8 +204,41 @@ sla::PadConfig::EmbedObject builtin_pad_cfg(const SLAPrintObjectConfigView& c)
 
 sla::PadConfig make_pad_cfg(const SLAPrintObjectConfigView& c)
 {
+    using Domain::SLA::raft_preset_to_pad_values;
+    using Domain::SLA::RaftPadValues;
+    using Domain::sla::RaftType;
+
     sla::PadConfig pcfg;
 
+    const bool has_raft_type = c.values().count("raft_type") > 0;
+    if (has_raft_type) {
+        auto raft_type = c.get<RaftType>("raft_type");
+        RaftPadValues vals = raft_preset_to_pad_values(
+            raft_type,
+            c.get<double>("pad_wall_height"),
+            c.get<double>("pad_wall_thickness"),
+            c.get<double>("pad_brim_size"),
+            c.get<double>("pad_wall_slope"),
+            c.get<double>("pad_object_gap")
+        );
+
+        pcfg.wall_thickness_mm = vals.pad_wall_thickness_mm;
+        pcfg.wall_slope = vals.pad_wall_slope_deg * PI / 180.0;
+        pcfg.max_merge_dist_mm = c.get<double>("pad_max_merge_distance");
+        pcfg.wall_height_mm = vals.pad_wall_height_mm;
+        pcfg.brim_size_mm = vals.pad_brim_size_mm;
+
+        pcfg.embed_object = builtin_pad_cfg(c);
+
+        // If raft type is None, disable the pad entirely
+        if (!vals.pad_enable) {
+            pcfg.embed_object.enabled = false;
+        }
+
+        return pcfg;
+    }
+
+    // Legacy behavior
     pcfg.wall_thickness_mm = c.get<double>("pad_wall_thickness");
     pcfg.wall_slope = c.get<double>("pad_wall_slope") * PI / 180.0;
 
@@ -588,6 +671,7 @@ const std::map<std::string, std::vector<Step>> invalidated_by{
     {"pad_wall_height", steps({propagate(slaposPad)})},
     {"pad_wall_slope", steps({propagate(slaposPad)})},
     {"pad_wall_thickness", steps({propagate(slaposObjectSlice)})},
+    {"raft_type", steps({propagate(slaposObjectSlice), propagate(slaposPad)})},
     {"printer_model", steps({})},
     {"printer_notes", steps({})},
     {"printer_technology", steps({})},
