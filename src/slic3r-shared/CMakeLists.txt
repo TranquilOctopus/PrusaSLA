@@ -1049,6 +1049,10 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/Biz/SLAResultCache.cpp
         include/Slic3r/Biz/SLAObjectCache.hpp
         src/Slic3r/Biz/SLAObjectCache.cpp
+        include/Slic3r/Biz/ResinEconomics.hpp
+        src/Slic3r/Biz/ResinEconomics.cpp
+        include/Slic3r/Biz/ResinEconomicsInteractor.hpp
+        src/Slic3r/Biz/ResinEconomicsInteractor.cpp
 
         include/Slic3r/Biz/UserAccount/IUserAccountListener.hpp
         include/Slic3r/Biz/UserAccount/IUserAccountSessionListener.hpp
@@ -1608,6 +1612,8 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/Biz/ExportGcodeTests.cpp
             test/Slic3r/Biz/SlaFixture.hpp
             test/Slic3r/Biz/SlaFixture.cpp
+            test/Slic3r/Biz/ResinEconomicsTests.cpp
+            test/Slic3r/Biz/ResinEconomicsInteractorTests.cpp
             test/Slic3r/Biz/Scene/SceneInteractorTests.cpp
             test/Slic3r/Biz/Scene/VirtualBedPreviewTests.cpp
             test/Slic3r/Biz/WeakerPointerTests.cpp
