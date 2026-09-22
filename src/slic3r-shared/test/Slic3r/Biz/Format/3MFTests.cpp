@@ -7,9 +7,15 @@
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
 #include "Slic3r/Biz/Config/3mf_legacy.hpp"
 #include "Slic3r/Biz/Config/ConfigLegacy.hpp"
+#include "Slic3r/Biz/Algorithms/MiniZWrapper.hpp"
+#include "Slic3r/Biz/Config/ConfigSerialize.hpp"
 
 #include <boost/filesystem.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <map>
+#include <nlohmann/json.hpp>
+
+using json = nlohmann::ordered_json;
 
 using namespace Slic3r;
 using namespace Slic3r::Biz;
@@ -334,10 +340,8 @@ TEST_CASE("3MF SLA round trip preserves support points and drain holes", "[3mf][
     CHECK(Domain::is_approx(loaded_object->sla_support_points[2].pillar_diameter, 0.f));
     CHECK(Domain::is_approx(loaded_object->sla_support_points[2].base_diameter, 0.f));
     CHECK(Domain::is_approx(loaded_object->sla_support_points[2].base_height, 0.f));
-    // M2.7b open: the per-point float overrides round-trip, but `type` does not. Ruled out:
-    // a second serialiser, key collisions, the legacy support-points file, and the int width
-    // (now written as json::number_integer_t). Needs a dump of the written json to go further.
-    CHECK(loaded_object->sla_support_points[2].type == SupportPointType::manual_add);
+    // type round-trips correctly (was a gap, now fixed)
+    CHECK(loaded_object->sla_support_points[2].type == SupportPointType::slope);
 
     // Point with per-point overrides
     CHECK(Domain::is_approx(loaded_object->sla_support_points[3].pos.x(), 20.0f));
@@ -349,9 +353,8 @@ TEST_CASE("3MF SLA round trip preserves support points and drain holes", "[3mf][
     CHECK(Domain::is_approx(loaded_object->sla_support_points[3].base_height, 1.2f));
     CHECK(loaded_object->sla_support_points[3].type == SupportPointType::manual_add);
 
-    // GAP: sla_points_status is NOT serialized - it resets to default (NoPoints)
-    CHECK(loaded_object->sla_points_status == PointsStatus::NoPoints);
-    // REQUIRE_FALSE(loaded_object->sla_points_status == PointsStatus::UserModified); // Expected to fail - not serialized
+    // sla_points_status round-trips (was a gap, now fixed)
+    CHECK(loaded_object->sla_points_status == PointsStatus::UserModified);
 
     // ---- Drain holes round-trip ----
     REQUIRE(loaded_object->sla_drain_holes.size() == 2);
@@ -370,7 +373,114 @@ TEST_CASE("3MF SLA round trip preserves support points and drain holes", "[3mf][
     CHECK(Domain::is_approx(loaded_object->sla_drain_holes[1].radius, 1.5f));
     CHECK(Domain::is_approx(loaded_object->sla_drain_holes[1].height, 3.0f));
 
-    // GAP: object_settings_sla is NOT serialized - overrides remain empty
+    // object_settings_sla round-trips (was a gap, now fixed)
+    REQUIRE_FALSE(loaded_object->object_settings_sla.overrides.empty());
+    CHECK(loaded_object->object_settings_sla.overrides.get("support_points_density_relative")->get<int>() == 150);
+    CHECK(loaded_object->object_settings_sla.overrides.get("hollowing_enable")->get<bool>() == true);
+    CHECK(Domain::is_approx(loaded_object->object_settings_sla.overrides.get("hollowing_min_thickness")->get<double>(), 2.0));
+}
+
+TEST_CASE("3MF SLA round trip with missing optional keys uses defaults", "[3mf][sla]")
+{
+    // This test simulates loading a 3MF written by an older build that doesn't have
+    // slaPointsStatus, objectSettingsSla, or support point TYPE keys.
+    // The defaults must survive: PointsStatus::NoPoints, empty overrides, SupportPointType::manual_add.
+
+    Project project;
+    project.model() = Test::generate_cubes(1, 1);
+
+    ModelObject* object = project.model().objects[0];
+
+    // Add a support point with type slope (will be written with TYPE key)
+    object->sla_support_points.clear();
+    object->sla_support_points.push_back(SupportPoint{
+        Vec3f{10.0f, 10.0f, 5.0f},
+        1.5f,
+        SupportPointType::slope
+    });
+
+    // Set non-default status and overrides
+    object->sla_points_status = PointsStatus::UserModified;
+    object->object_settings_sla.overrides.set("support_points_density_relative", 150);
+
+    const fs::path temp_dir =
+        fs::temp_directory_path() / fs::unique_path("slic3r-3mf-sla-missing-keys-%%%%-%%%%");
+    fs::create_directories(temp_dir);
+    const fs::path file_path = temp_dir / "sla_original.3mf";
+    store_3mf(file_path.string(), project);
+
+    // Extract all files from the original 3MF
+    mz_zip_archive archive{};
+    mz_zip_zero_struct(&archive);
+    REQUIRE(mz_zip_reader_init_file(&archive, file_path.string().c_str(), 0));
+
+    // Map to hold all file contents: filename -> content
+    std::map<std::string, std::string> file_contents;
+
+    for (int i = 0; i < (int)mz_zip_reader_get_num_files(&archive); ++i) {
+        mz_zip_archive_file_stat stat;
+        REQUIRE(mz_zip_reader_file_stat(&archive, i, &stat));
+        std::string filename(stat.m_filename);
+
+        size_t uncomp_size = static_cast<size_t>(stat.m_uncomp_size);
+        std::unique_ptr<char[]> buffer(new char[uncomp_size + 1]);
+        REQUIRE(mz_zip_reader_extract_to_mem(&archive, i, buffer.get(), uncomp_size, 0) == MZ_TRUE);
+        buffer[uncomp_size] = '\0';
+        file_contents[filename] = std::string(buffer.get(), uncomp_size);
+    }
+    mz_zip_reader_end(&archive);
+
+    // Modify the project JSON to strip the new keys
+    const std::string meta_filename = "Metadata/Slic3r_project.json";
+    REQUIRE(file_contents.count(meta_filename) > 0);
+    json meta_json = json::parse(file_contents[meta_filename]);
+
+    if (meta_json.contains("objects") && meta_json["objects"].is_array() && !meta_json["objects"].empty()) {
+        json& obj_json = meta_json["objects"][0];
+        obj_json.erase("slaPointsStatus");
+        obj_json.erase("objectSettingsSla");
+        // Also strip TYPE from support points to simulate old writer that didn't write it
+        if (obj_json.contains("slaSupportPoints") && obj_json["slaSupportPoints"].is_array()) {
+            for (auto& pt_json : obj_json["slaSupportPoints"]) {
+                // The key is "t", not "type": see SlaSupportPointsSerialization::TYPE in
+                // PrusaFile.cpp. Erasing "type" removes nothing and the point keeps its type.
+                pt_json.erase("t");
+            }
+        }
+    }
+
+    file_contents[meta_filename] = Biz::beautify_json(meta_json, 2);
+
+    // Create a new 3MF with the modified JSON
+    const fs::path file_path2 = temp_dir / "sla_missing_keys.3mf";
+    mz_zip_archive archive2{};
+    mz_zip_zero_struct(&archive2);
+    REQUIRE(mz_zip_writer_init_file(&archive2, file_path2.string().c_str(), 0));
+
+    for (const auto& [filename, content] : file_contents) {
+        REQUIRE(mz_zip_writer_add_mem(&archive2, filename.c_str(),
+            content.data(), content.size(), MZ_DEFAULT_COMPRESSION));
+    }
+
+    REQUIRE(mz_zip_writer_finalize_archive(&archive2));
+    mz_zip_writer_end(&archive2);
+
+    // Now load the modified file
+    const Loaded3MF loaded = load_3mf(file_path2.string());
+
+    boost::system::error_code cleanup_error;
+    fs::remove_all(temp_dir, cleanup_error);
+
+    REQUIRE(loaded.model.objects.size() == 1);
+    const ModelObject* loaded_object = loaded.model.objects[0];
+
+    // Support point should default to manual_add when TYPE key is missing
+    REQUIRE(loaded_object->sla_support_points.size() == 1);
+    CHECK(loaded_object->sla_support_points[0].type == SupportPointType::manual_add);
+
+    // sla_points_status should default to NoPoints
+    CHECK(loaded_object->sla_points_status == PointsStatus::NoPoints);
+
+    // object_settings_sla should default to empty overrides
     CHECK(loaded_object->object_settings_sla.overrides.empty());
-    // REQUIRE_FALSE(loaded_object->object_settings_sla.overrides.empty()); // Expected to fail - not serialized
 }
