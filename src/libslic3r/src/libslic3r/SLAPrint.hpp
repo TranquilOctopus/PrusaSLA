@@ -477,6 +477,14 @@ sla::PadConfig make_pad_cfg(const SLAPrintObjectConfigView& c);
 
 bool validate_pad(const indexed_triangle_set &pad, const sla::PadConfig &pcfg);
 
+namespace SLASlicingSync {
+using Step = std::variant<SLAPrintStep, SLAPrintObjectStep>;
+std::vector<Step> propagate(Step step);
+std::vector<Step> steps(const std::vector<std::vector<Step>>& steps);
+std::vector<Step> all_steps();
+const std::map<std::string, std::vector<Step>>& get_invalidated_by_map();
+PrintAndObjectSteps diff_to_invalidated_steps(const std::vector<std::string>& diff);
+}
 
 } // namespace Slic3r
 
