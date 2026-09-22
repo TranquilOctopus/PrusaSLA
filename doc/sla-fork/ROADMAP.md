@@ -276,6 +276,7 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
 - [ ] **M4.10** Invalidation test: a table-driven test for every SLA config key, checking that only the expected steps re-run (PLAN B9). · M · needs M0.4
 - [ ] **M4.11** SLA auto-orientation algorithm (PLAN B7). · L → split · needs M4.1
 - [ ] **M4.12** Auto-orient plater action, as a job with progress, cancel and undo (PLAN E5). · M · needs M4.11
+- [ ] **M4.14** Peak memory when slicing for 12K and 16K displays (Photon Mono M5: 11520 × 5120, about 59 megapixels per layer), on an otherwise idle 8 GB machine. Record peak working set per step for a small and a tall model, and find which step holds full-resolution layer buffers. Evidence: 2026-09-22 a slice on the M5 profile ended in `std::bad_alloc`, with steps taking 3–6 minutes; a compiler build was running at the same time, so this is not yet known to be a real limit. · M · needs —
 - [ ] **M4.13** Z-correction and anti-aliasing review. Layer hash changes must be intentional and documented (PLAN B8). · M · needs M4.1
 
 ## M5: Formats and inspection
@@ -326,6 +327,7 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
 - [ ] **M6.5** Retune default presets after the M4 changes. · M · needs M4.4, M4.5
 - [ ] **M6.6** Fork README and user guide. · S · needs M6.4
 - [ ] **M6.7** `[human]` Release candidate: version bump, packaging, known-issues list. · M · needs M6.1–M6.6
+- [ ] **M6.8** A failed slice must not close the app. Today any exception on the slicing thread, including running out of memory, is re-raised on the main thread as `FatalSlicingError` (`BackgroundProcess.cpp:274`, `SlicingInteractor.cpp:234`) and terminates the process, losing unsaved work. Report it on the bed and keep the project open; keep genuinely unrecoverable cases fatal. · M · needs —
 
 ## M7: Excellent auto-supports
 

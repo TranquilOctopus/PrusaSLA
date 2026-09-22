@@ -13,7 +13,7 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 ## Progress
 
-**49 of 122 todos done (40%)** · updated 2026-09-22 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**49 of 124 todos done (40%)** · updated 2026-09-22 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
@@ -21,9 +21,9 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 | M1: Look, feel and SLA-first shell | 10/17 | `███████░░░░░` 59% |
 | M2: SLA editing tools (porting the legacy gizmos) | 15/20 | `█████████░░░` 75% |
 | M3: Resin profile import (Chitubox, Lychee and others) | 0/15 | `░░░░░░░░░░░░` 0% |
-| M4: Engine quality (measure first; every PR includes before/after metrics) | 3/15 | `██░░░░░░░░░░` 20% |
+| M4: Engine quality (measure first; every PR includes before/after metrics) | 3/16 | `██░░░░░░░░░░` 19% |
 | M5: Formats and inspection | 4/16 | `███░░░░░░░░░` 25% |
-| M6: Quality gates and release | 0/7 | `░░░░░░░░░░░░` 0% |
+| M6: Quality gates and release | 0/8 | `░░░░░░░░░░░░` 0% |
 | M7: Excellent auto-supports *(parked)* | 5/17 | `████░░░░░░░░` 29% |
 
 ### Waiting on you
@@ -84,7 +84,7 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 </details>
 
-<details><summary>M4: Engine quality (measure first; every PR includes before/after metrics) — 12 open</summary>
+<details><summary>M4: Engine quality (measure first; every PR includes before/after metrics) — 13 open</summary>
 
 - [ ] **M4.1** Tracy profiling run over the benchmark set. Write a hotspot report in `doc/sla-fork/profiling/`. No code ch…
 - [ ] **M4.2** Re-rank M4.3–M4.10 based on the M4.1 report. *(needs you)*
@@ -97,6 +97,7 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 - [ ] **M4.10** Invalidation test: a table-driven test for every SLA config key, checking that only the expected steps re-r…
 - [ ] **M4.11** SLA auto-orientation algorithm (PLAN B7).
 - [ ] **M4.12** Auto-orient plater action, as a job with progress, cancel and undo (PLAN E5).
+- [ ] **M4.14** Peak memory when slicing for 12K and 16K displays (Photon Mono M5: 11520 × 5120, about 59 megapixels per la…
 - [ ] **M4.13** Z-correction and anti-aliasing review. Layer hash changes must be intentional and documented (PLAN B8).
 
 </details>
@@ -118,7 +119,7 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 </details>
 
-<details><summary>M6: Quality gates and release — 7 open</summary>
+<details><summary>M6: Quality gates and release — 8 open</summary>
 
 - [ ] **M6.1** Robustness mesh set with no crashes or hangs (PLAN G2).
 - [ ] **M6.2** Visual regression renders, including the grayscale lightness check (PLAN G3).
@@ -127,6 +128,7 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 - [ ] **M6.5** Retune default presets after the M4 changes.
 - [ ] **M6.6** Fork README and user guide.
 - [ ] **M6.7** Release candidate: version bump, packaging, known-issues list. *(needs you)*
+- [ ] **M6.8** A failed slice must not close the app. Today any exception on the slicing thread, including running out of…
 
 </details>
 
