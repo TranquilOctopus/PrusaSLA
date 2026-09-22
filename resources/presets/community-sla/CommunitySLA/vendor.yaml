@@ -14,10 +14,6 @@ model:
   base_model: Photon Mono M5
   model: Photon Mono M5
 tool_count: 1
-visual:
-  bed_model: photon_mono_m5_bed.stl
-  bed_texture: photon_mono_m5.svg
-  thumbnail: photon_mono_m5_thumbnail.svg
 ---
 kind: printer
 technology: SLA
@@ -27,10 +23,6 @@ model:
   base_model: Photon Mono M5
   model: Photon Mono M5s
 tool_count: 1
-visual:
-  bed_model: photon_mono_m5s_bed.stl
-  bed_texture: photon_mono_m5s.svg
-  thumbnail: photon_mono_m5s_thumbnail.svg
 ---
 kind: printer
 technology: SLA
@@ -40,10 +32,6 @@ model:
   base_model: Photon Mono M7 Pro
   model: Photon Mono M7 Pro
 tool_count: 1
-visual:
-  bed_model: photon_mono_m7_pro_bed.stl
-  bed_texture: photon_mono_m7_pro.svg
-  thumbnail: photon_mono_m7_pro_thumbnail.svg
 ---
 kind: printer
 technology: SLA
@@ -53,10 +41,6 @@ model:
   base_model: Saturn 4 Ultra
   model: Saturn 4 Ultra 12K
 tool_count: 1
-visual:
-  bed_model: saturn_4_ultra_12k_bed.stl
-  bed_texture: saturn_4_ultra_12k.svg
-  thumbnail: saturn_4_ultra_12k_thumbnail.svg
 ---
 kind: printer
 technology: SLA
@@ -66,10 +50,6 @@ model:
   base_model: Saturn 4 Ultra
   model: Saturn 4 Ultra 16K
 tool_count: 1
-visual:
-  bed_model: saturn_4_ultra_16k_bed.stl
-  bed_texture: saturn_4_ultra_16k.svg
-  thumbnail: saturn_4_ultra_16k_thumbnail.svg
 ---
 kind: printer
 technology: SLA
@@ -79,10 +59,6 @@ model:
   base_model: Mars 5 Ultra
   model: Mars 5 Ultra
 tool_count: 1
-visual:
-  bed_model: mars_5_ultra_bed.stl
-  bed_texture: mars_5_ultra.svg
-  thumbnail: mars_5_ultra_thumbnail.svg
 ---
 kind: tool
 technology: SLA
