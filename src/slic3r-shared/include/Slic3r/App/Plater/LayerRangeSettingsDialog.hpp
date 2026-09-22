@@ -33,6 +33,8 @@ public:
     void open_at_category(Domain::ConfigItemDef::Category category);
     void clear_settings();
 
+    void set_printer_technology(Domain::PrinterTechnology technology);
+
 private:
     void on_about_to_show() override;
 
@@ -49,6 +51,7 @@ private:
     Yoga::Text* m_options_category_text{nullptr};
 
     std::vector<Yoga::Item*> m_setting_rows;
+    Domain::PrinterTechnology m_printer_technology = Domain::PrinterTechnology::FFF;
 };
 
 } // namespace Slic3r::App::Plater

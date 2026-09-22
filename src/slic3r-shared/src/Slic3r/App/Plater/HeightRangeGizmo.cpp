@@ -149,6 +149,7 @@ HeightRangeGizmo::HeightRangeGizmo(
 {
     m_config_setter = std::make_unique<ConfigBoxSetterImpl>(*this);
     m_dialog        = std::make_unique<HeightRangeDialog>(m_config_setter.get());
+    m_dialog->set_printer_technology(m_project_interactor.selected_config_container().print_technology());
 
     m_dialog->callbacks().revert_clicked = [this]() { this->perform_height_ranges_restart(); };
 
@@ -253,6 +254,8 @@ void HeightRangeGizmo::on_activated()
     const ConfigContainer& config_container = m_project_interactor.selected_config_container();
     Project& project                        = m_project_interactor.selected_project();
     Scene::Scene& scene                     = m_scene_presenter.scene();
+
+    m_dialog->set_printer_technology(config_container.print_technology());
 
     if (object_selection.empty() || object_selection.mode != Biz::Scene::SelectionMode::Instance) {
         on_deactivated();

@@ -243,7 +243,7 @@ int SearchObservableList::score_item(const Domain::ConfigItem* item)
                         Biz::_u8(
                             Domain::ConfigItemDef::translate_category(
                                 item->def().category,
-                                Domain::PrinterTechnology::FFF
+                                m_preset_interactor.selected_config_container().print_technology()
                             )
                         )
                     ),

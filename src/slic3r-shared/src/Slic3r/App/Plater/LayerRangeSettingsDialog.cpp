@@ -55,7 +55,7 @@ void LayerRangeSettingsDialog::init_categories_page()
 
         category_names.emplace(
             category,
-            Biz::_u8(ConfigItemDef::translate_category(category, PrinterTechnology::FFF))
+            Biz::_u8(ConfigItemDef::translate_category(category, m_printer_technology))
         );
     }
 
@@ -111,6 +111,11 @@ void LayerRangeSettingsDialog::set_config_box(const ConfigBox* config_box)
     m_config_box = config_box;
 }
 
+void LayerRangeSettingsDialog::set_printer_technology(Domain::PrinterTechnology technology)
+{
+    m_printer_technology = technology;
+}
+
 void LayerRangeSettingsDialog::open_at_category(const ConfigItemDef::Category category)
 {
     this->open();
@@ -126,7 +131,7 @@ void LayerRangeSettingsDialog::on_about_to_show()
 void LayerRangeSettingsDialog::select_category(const ConfigItemDef::Category category)
 {
     const std::string& category_name =
-        Biz::_u8(ConfigItemDef::translate_category(category, PrinterTechnology::FFF));
+        Biz::_u8(ConfigItemDef::translate_category(category, m_printer_technology));
 
     this->clear_settings();
     this->create_settings_page_for_category(category);

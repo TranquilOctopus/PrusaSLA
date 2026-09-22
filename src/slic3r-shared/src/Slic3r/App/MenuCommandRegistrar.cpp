@@ -672,8 +672,10 @@ void MenuCommandRegistrar::register_object_menu_add_volume_commands()
 
     auto add_volume_text = [this](VolumeType volume_type)
     {
+        const Domain::PrinterTechnology tech =
+            m_project_interactor.selected_config_container().print_technology();
         Plater::TextGizmo* text_gizmo = dynamic_cast<Plater::TextGizmo*>(
-            m_render_module.tool_gizmo(Scene::ToolType::TextGizmo, Domain::PrinterTechnology::FFF)
+            m_render_module.tool_gizmo(Scene::ToolType::TextGizmo, tech)
         );
         ASSERT(text_gizmo);
         text_gizmo->set_next_volume_type(volume_type);
@@ -734,6 +736,13 @@ void MenuCommandRegistrar::register_object_menu_add_volume_commands()
             {
                 add_volume_text(VolumeType::MODEL_PART);
                 m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::AddVolumeText);
+            },
+            UIItemCommandExtraOpts{
+                .enabled = [this]()
+                {
+                    return m_project_interactor.selected_config_container().print_technology() ==
+                           Domain::PrinterTechnology::FFF;
+                }
             }
         )
         .append_item(
@@ -815,6 +824,13 @@ void MenuCommandRegistrar::register_object_menu_add_volume_commands()
                 m_project_interactor.undo_provider().take_snapshot(
                     UndoSnapshotType::AddNegativeVolumeText
                 );
+            },
+            UIItemCommandExtraOpts{
+                .enabled = [this]()
+                {
+                    return m_project_interactor.selected_config_container().print_technology() ==
+                           Domain::PrinterTechnology::FFF;
+                }
             }
         )
         .append_item(
@@ -898,6 +914,13 @@ void MenuCommandRegistrar::register_object_menu_add_volume_commands()
                 m_project_interactor.undo_provider().take_snapshot(
                     UndoSnapshotType::AddModifierText
                 );
+            },
+            UIItemCommandExtraOpts{
+                .enabled = [this]()
+                {
+                    return m_project_interactor.selected_config_container().print_technology() ==
+                           Domain::PrinterTechnology::FFF;
+                }
             }
         )
         .append_item(

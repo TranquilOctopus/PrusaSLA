@@ -89,6 +89,8 @@ public:
 
     void highlight_range(const std::optional<Domain::LayerHeightRange>& range_to_highlight);
 
+    void set_printer_technology(Domain::PrinterTechnology technology);
+
 private:
     Biz::IConfigBoxSetter* m_config_box_setter               = nullptr;
     HeightRangeControl* m_layer_height_profile_control = nullptr;
@@ -109,6 +111,8 @@ private:
     std::optional<Domain::LayerHeightRange> m_dragged_height_range;
     std::optional<size_t> m_selected_row_index;
     std::optional<size_t> m_highlighted_row_index;
+
+    Domain::PrinterTechnology m_printer_technology = Domain::PrinterTechnology::FFF;
 
     Callbacks m_callbacks;
 

@@ -291,7 +291,7 @@ void HeightRangeDialog::add_override_category_section(
     this->add_separator(parent);
 
     const std::string category_name =
-        Biz::_u8(ConfigItemDef::translate_category(category, PrinterTechnology::FFF));
+        Biz::_u8(ConfigItemDef::translate_category(category, m_printer_technology));
 
     LayoutButton* add_override_button =
         parent->emplace_back<LayoutButton>(_u8L(category_name), Render::Icon::PlusModifier);
@@ -498,6 +498,15 @@ void HeightRangeDialog::set_max_layer_height(const float max_layer_height)
 void HeightRangeDialog::set_default_layer_height(const float default_layer_height)
 {
     m_layer_height_profile_control->set_default_layer_height(default_layer_height);
+}
+
+void HeightRangeDialog::set_printer_technology(Domain::PrinterTechnology technology)
+{
+    m_printer_technology = technology;
+    // Also propagate to LayerRangeSettingsDialog if it exists
+    if (m_layer_range_settings_dialog) {
+        m_layer_range_settings_dialog->set_printer_technology(technology);
+    }
 }
 
 void HeightRangeDialog::set_height_range_min_z(const double min_z)
