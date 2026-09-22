@@ -125,6 +125,7 @@ void LogicalPrinterSettingsDialog::on_hw_item_selection_changed(
         && type == HwItemType::ToolItem)
     {
         this->update_color_mix_visibility();
+        this->update_fff_section_visibility();
     }
 }
 
@@ -133,6 +134,7 @@ void LogicalPrinterSettingsDialog::
 {
     this->update_warning();
     this->update_color_mix_visibility();
+    this->update_fff_section_visibility();
 }
 
 void LogicalPrinterSettingsDialog::update_warning()
@@ -396,7 +398,7 @@ void LogicalPrinterSettingsDialog::create_page_settings()
     m_printer_icon->set_margin({0, 5_fpx});
     m_printer_icon->set_fill_mode(Icon::FillMode::PreservedAspectCentered);
 
-    m_page_settings->emplace_back<Text>(_u8L("Sheet"), Render::ImguiFontType::Bold);
+    m_text_sheet_heading = m_page_settings->emplace_back<Text>(_u8L("Sheet"), Render::ImguiFontType::Bold);
     m_combo_sheets =
         m_page_settings
             ->emplace_back<Yoga::ComboBoxListViewSelection<Domain::Preset::HwSheetConfigDef>>();
@@ -416,6 +418,7 @@ void LogicalPrinterSettingsDialog::create_page_settings()
 
     Text* label = m_page_settings->emplace_back<Text>(_u8L("Nozzles"), Render::ImguiFontType::Bold);
     label->set_margin(Margins(0, 10_fpx, 0, 0));
+    m_text_nozzles_heading = label;
 
     auto validation_updated = [this](bool valid) { m_warning->set_visible(!valid); };
     m_nozzle_list_view =
@@ -470,12 +473,15 @@ void LogicalPrinterSettingsDialog::create_page_settings()
     m_color_mix_dialog->callbacks().closed = [this] { m_color_mix_button->set_checked(false); };
 
     this->update_color_mix_visibility();
+    this->update_fff_section_visibility();
 }
 
 void LogicalPrinterSettingsDialog::on_about_to_show()
 {
     m_stack_layout->set_current_index(0);
     update_warning();
+    // update_warning() may have shown the nozzle warning again; SLA has no nozzles.
+    update_fff_section_visibility();
 }
 
 void LogicalPrinterSettingsDialog::update_settings_data()
@@ -493,6 +499,7 @@ void LogicalPrinterSettingsDialog::update_settings_data()
     }
 
     update_color_mix_visibility();
+    update_fff_section_visibility();
 }
 
 void LogicalPrinterSettingsDialog::update_color_mix_visibility()
@@ -509,6 +516,36 @@ void LogicalPrinterSettingsDialog::update_color_mix_visibility()
 
     if (!can_mix_colors && m_color_mix_dialog->opened()) {
         m_navigator.set_opened_dialog(this);
+    }
+}
+
+void LogicalPrinterSettingsDialog::update_fff_section_visibility()
+{
+    // With no container selected there is no printer to judge by, so keep the dialog as it was
+    // before this function existed. Only a known SLA printer hides these sections.
+    bool is_fff = true;
+    if (m_project_interactor.selected_config_container_id() != Domain::INVALID_ID) {
+        const ConfigContainer& config_container = m_project_interactor.selected_config_container();
+        is_fff = config_container.print_technology() == PrinterTechnology::FFF;
+    }
+
+    if (m_text_sheet_heading) {
+        m_text_sheet_heading->set_visible(is_fff);
+    }
+    if (m_combo_sheets) {
+        m_combo_sheets->set_visible(is_fff);
+    }
+    if (m_text_nozzles_heading) {
+        m_text_nozzles_heading->set_visible(is_fff);
+    }
+    if (m_nozzle_list_view) {
+        m_nozzle_list_view->set_visible(is_fff);
+    }
+
+    // m_warning is shared with update_warning(). For SLA, hide it; for FFF leave whatever
+    // update_warning() decided. Do not force it visible here.
+    if (!is_fff && m_warning) {
+        m_warning->set_visible(false);
     }
 }
 
