@@ -91,6 +91,8 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
 - [ ] **M1.10** Resin economics interactor: resin ml, cost and bottles per bed and per project (PLAN D4). · M · needs M0.11a
 - [ ] **M1.11** SLA sidebar summary (PLAN F5). · M · needs M1.10, M1.3
 
+- [ ] **M1.12** Branding artwork: replace `resources/icons/splashscreen.jpg` and the `PrusaSlicer.*` app icons (ico, icns, svg, png) with our own, in the fork palette, and check every place the old name or logo still shows (about box, window title, installer strings). The app name and key are already `ResinSlicer` (version.inc). Prusa's name and logo must not be reused: this is a third-party fork. · M · needs —
+
 ## M2: SLA editing tools (porting the legacy gizmos)
 
 - [x] **M2.1** Support points tool, part 1: dialog, Generate (slice until `slaposSupportPoints`, read the points from `Biz::SLAObjectCache` → `Sla::Object::support_points`), and apply/discard. · M · needs M0.7
