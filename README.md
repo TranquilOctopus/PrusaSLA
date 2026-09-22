@@ -32,6 +32,10 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 - **M3.1** Put a few real `.cfg`, `.cfgx`, `.lyr` and `.lyp` files in `local-samples/`, exported from your own Chitubo…
 - **M5.3.samples** Provide one sliced sample archive per target printer (from Chitubox/Lychee/Photon Workshop) and list the pr…
 
+### Blocked
+
+- **M5.1a** Restore the SL1/SL1S archive reader into libslic3r from `d9e89cf564^` (`SLAArchiveReader`, `ZipperArchiveIm… — (2026-09-23) the restored reader is on `sla/M5.1a-sl1-reader` but does not build. It depends on both layers: the legacy `DynamicPrintConfig` (Biz) and ten engine headers that are all private to libslic3r (`MarchingSquares`, `SlicesToTriangleMesh`, `SLA/RasterBase`, `ExPolygon`, `ClipperUtils`, …), plus `miniz_extension.hpp`, which no longer exists (3.0 has `Slic3r/Biz/Algorithms/MiniZWrapper.hpp`). Moving it all into libslic3r breaks layering; moving it all into Biz (tried, at the reviewer's instruction) cannot reach the private headers. Needed split: a small **public** engine function in `src/libslic3r/include/libslic3r/` that turns decoded layer images plus pixel size and layer heights into a mesh, with no config types; and the rest in Biz: opening the zip through MiniZWrapper, parsing `config.ini`/`prusaslicer.ini`, calling the engine function. Keep the existing round-trip test.
+
 ### Open todos
 
 <details><summary>M0: Foundation — 3 open</summary>
@@ -106,7 +110,7 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 <details><summary>M5: Formats and inspection — 17 open</summary>
 
 - [ ] **M5.1** Import `.sl1`/`.sl1s`/`.slx` archives in the new app, porting the legacy `SLAImportJob` (PLAN C1).
-  - [ ] **M5.1a** Restore the SL1/SL1S archive reader into libslic3r from `d9e89cf564^` (`SLAArchiveReader`, `ZipperArchiveIm…
+  - [ ] **M5.1a** Restore the SL1/SL1S archive reader into libslic3r from `d9e89cf564^` (`SLAArchiveReader`, `ZipperArchiveIm… *(blocked)*
   - [ ] **M5.1b** Wire the reader into `FileLoadingLogic` and `get_import_extensions()`, as a job with progress and cancel.
 - [ ] **M5.3.ctb** Chitubox `.ctb` writer for older Elegoo machines, and possibly the Anycubic Photon Mono M5 (see the M5.3.pw…
 - [ ] **M5.3.pw-b** Anycubic newer formats (`.pm5`, `.pm5s`, `.pm7`) — **`.pm5` first: it is the format the maintainer's Photon…
