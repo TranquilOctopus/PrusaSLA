@@ -133,8 +133,11 @@ TEST_CASE("ResinEconomics::calculate - from PrintStatistics and ConfigView", "[r
     // Note: FullConfigSLA::defaults() should include the SLA config definitions with bottle settings
     
     ConfigView config_view(full_config, {});
+    // Until finalize() runs, values() is empty and every config lookup misses, which would make
+    // this test silently cover the no-config fallback instead of the config path.
+    config_view.finalize();
 
-    PrintStatistics stats;
+    SLA::PrintStatistics stats;
     stats.objects_used_material = 30000.0; // 30 ml
     stats.support_used_material = 20000.0; // 20 ml
 
