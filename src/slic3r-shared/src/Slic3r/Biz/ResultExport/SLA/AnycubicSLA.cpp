@@ -14,6 +14,8 @@
 #include <boost/filesystem/path.hpp>
 #include <boost/algorithm/string.hpp>
 #include "Slic3r/Log.hpp"
+#include <array>
+#include <algorithm>
 
 using namespace Slic3r::Biz::Slicing;
 using Slic3r::Domain::EnumVectorWrapper;
@@ -418,6 +420,379 @@ void store_anycubic(const std::string& file_path, const Biz::Slicing::SLAResultD
         SPDLOG_ERROR("Anycubic export failed: {}", e.what());
         throw;
     }
+}
+
+namespace {
+
+constexpr std::uint32_t PM5_FORMAT_VERSION = 517;
+constexpr std::uint32_t PM5_AREA_NUM = 9;
+constexpr std::uint32_t PM5_PREVIEW_W = 224;
+constexpr std::uint32_t PM5_PREVIEW_H = 168;
+constexpr std::uint32_t PM5_PREVIEW_DPI = 120;
+constexpr std::uint32_t PM5_LAYER_COLOR_LEVELS = 16;
+constexpr std::uint32_t PM5_LAYERDEF_ENTRY_SIZE = 32;
+constexpr std::uint32_t PM5_HEADER_PAYLOAD_SIZE = 92;
+constexpr std::uint32_t PM5_PREVIEW_DECLARED_SIZE = 75292;
+constexpr std::uint32_t PM5_EXTRA_DECLARED_SIZE = 24;
+constexpr std::uint32_t PM5_MACHINE_DECLARED_SIZE = 156;
+constexpr std::uint32_t PM5_MODEL_DECLARED_SIZE = 0;
+
+const char PM5_TAG_INTRO[12] = "ANYCUBIC\0\0\0\0";
+const char PM5_TAG_HEADER[12] = "HEADER\0\0\0\0\0\0";
+const char PM5_TAG_PREVIEW[12] = "PREVIEW\0\0\0\0\0";
+const char PM5_TAG_LAYERDEF[12] = "LAYERDEF\0\0\0\0";
+const char PM5_TAG_EXTRA[12] = "EXTRA\0\0\0\0\0\0\0";
+const char PM5_TAG_MACHINE[12] = "MACHINE\0\0\0\0\0";
+const char PM5_TAG_MODEL[12] = "MODEL\0\0\0\0\0\0\0";
+
+const std::uint8_t PM5_COLOR_TABLE[16] = {
+    0x0F, 0x1F, 0x2F, 0x3F, 0x4F, 0x5F, 0x6F, 0x7F,
+    0x8F, 0x9F, 0xAF, 0xBF, 0xCF, 0xDF, 0xEF, 0xFF
+};
+
+static uint32_t count_lit_pixels_pw0(const uint8_t* data, size_t size) {
+    uint32_t lit_count = 0;
+    size_t i = 0;
+    while (i < size) {
+        uint8_t byte = data[i++];
+        uint8_t grey = byte >> 4;
+        uint8_t run_low = byte & 0x0F;
+        uint32_t run_len;
+        if (grey == 0x0 || grey == 0xF) {
+            if (i >= size) break;
+            run_len = (static_cast<uint32_t>(run_low) << 8) | data[i++];
+        } else {
+            run_len = run_low;
+        }
+        if (grey != 0) {
+            lit_count += run_len;
+        }
+    }
+    return lit_count;
+}
+
+static void write_string_padded(std::ofstream& out, const std::string& str, size_t size) {
+    size_t len = std::min(str.size(), size);
+    out.write(str.c_str(), len);
+    if (len < size) {
+        std::vector<char> pad(size - len, '\0');
+        out.write(pad.data(), size - len);
+    }
+}
+
+} // namespace
+
+void store_pm5(const std::string& file_path, const Biz::Slicing::SLAResultData& data)
+{
+    const auto& stats = *data.print_statistics;
+    const Domain::ConfigView& cfg = data.config;
+    std::uint32_t layer_count = static_cast<std::uint32_t>(data.files.data.size());
+
+    // Compute values from config
+    float pixel_size_um = 0.0f;
+    {
+        float display_w = get_cfg_value_f(cfg, "display_width");
+        int res_x = get_cfg_value_i(cfg, "display_pixels_x");
+        if (display_w > 0 && res_x > 0) {
+            pixel_size_um = (display_w * 1000.0f) / res_x; // mm to um
+        } else {
+            pixel_size_um = 19.0f; // fallback for M5
+        }
+    }
+
+    float layer_height_mm = get_cfg_value_f(cfg, "layer_height");
+    float initial_layer_height_mm = get_cfg_value_f(cfg, "initial_layer_height");
+    float exposure_time_s = get_cfg_value_f(cfg, "exposure_time");
+    float initial_exposure_time_s = get_cfg_value_f(cfg, "initial_exposure_time");
+    std::uint32_t bottom_layer_count = static_cast<std::uint32_t>(get_cfg_value_i(cfg, "faded_layers"));
+    if (layer_count < bottom_layer_count) {
+        bottom_layer_count = layer_count;
+    }
+    std::uint32_t res_x = static_cast<std::uint32_t>(get_cfg_value_i(cfg, "display_pixels_x"));
+    std::uint32_t res_y = static_cast<std::uint32_t>(get_cfg_value_i(cfg, "display_pixels_y"));
+
+    float bottle_weight_g = get_cfg_value_f(cfg, "bottle_weight") * 1000.0f;
+    float bottle_volume_ml = get_cfg_value_f(cfg, "bottle_volume");
+    float bottle_cost = get_cfg_value_f(cfg, "bottle_cost");
+    float material_density = (bottle_volume_ml > 0) ? (bottle_weight_g / bottle_volume_ml) : 1.0f;
+
+    float volume_ml = (stats.objects_used_material + stats.support_used_material) / 1000.0f;
+    float weight_g = volume_ml * material_density;
+    float price = (bottle_volume_ml > 0) ? (volume_ml * bottle_cost / bottle_volume_ml) : 0.0f;
+
+    std::uint32_t print_time_s = static_cast<std::uint32_t>(
+        (bottom_layer_count * initial_exposure_time_s) +
+        ((layer_count - bottom_layer_count) * exposure_time_s) +
+        (layer_count * 8.0f / 3.0f) + // lift_distance / retract_speed (using defaults)
+        (layer_count * 8.0f / 6.0f) + // lift_distance / lift_speed
+        (layer_count * 0.5f) // delay_before_exposure
+    );
+
+    float display_width_mm = get_cfg_value_f(cfg, "display_width");
+    float display_height_mm = get_cfg_value_f(cfg, "display_height");
+    float max_print_height_mm = get_cfg_value_f(cfg, "max_print_height");
+
+    // Bounding box from result data
+    float bbox_min[3] = {0, 0, 0};
+    float bbox_max[3] = {0, 0, 0};
+    bool has_bbox = false;
+    if (!data.files.data.empty()) {
+        // The slices are in data.slices, but we don't have direct access here.
+        // Check if there's bounding box info in the result.
+        // For now, write zeros as per spec: "If the result data has no bounding box, write zeros"
+    }
+
+    // Open file
+    std::ofstream out;
+    out.open(file_path, std::ios::binary | std::ios::out | std::ios::trunc);
+    if (!out) {
+        throw std::runtime_error("Failed to open file for writing: " + file_path);
+    }
+
+    // Record positions for the 9 address table entries
+    // Order in address table: header, software, preview, color_table, layerdef, extra, machine, first_layer, model
+    std::streamoff addr_header = 0;
+    std::streamoff addr_software = 0;
+    std::streamoff addr_preview = 0;
+    std::streamoff addr_color_table = 0;
+    std::streamoff addr_layerdef = 0;
+    std::streamoff addr_extra = 0;
+    std::streamoff addr_machine = 0;
+    std::streamoff addr_first_layer = 0;
+    std::streamoff addr_model = 0;
+
+    // Write intro (placeholder, will seek back to fill)
+    std::streamoff intro_pos = out.tellp();
+    out.write(PM5_TAG_INTRO, 12);
+    anycubicsla_write_int32(out, PM5_FORMAT_VERSION);
+    anycubicsla_write_int32(out, PM5_AREA_NUM);
+    // 9 addresses - write zeros for now
+    for (int i = 0; i < 9; ++i) {
+        anycubicsla_write_int32(out, 0);
+    }
+
+    // HEADER section
+    addr_header = static_cast<std::streamoff>(out.tellp());
+    out.write(PM5_TAG_HEADER, 12);
+    anycubicsla_write_int32(out, PM5_HEADER_PAYLOAD_SIZE);
+    anycubicsla_write_float(out, pixel_size_um);
+    anycubicsla_write_float(out, layer_height_mm);
+    anycubicsla_write_float(out, exposure_time_s);
+    anycubicsla_write_float(out, 0.5f); // delay_before_exposure_s
+    anycubicsla_write_float(out, initial_exposure_time_s);
+    anycubicsla_write_float(out, static_cast<float>(bottom_layer_count));
+    anycubicsla_write_float(out, 8.0f); // lift_height_mm
+    anycubicsla_write_float(out, 6.0f); // lift_speed
+    anycubicsla_write_float(out, 6.0f); // retract_speed (sample value, likely)
+    anycubicsla_write_float(out, volume_ml);
+    anycubicsla_write_int32(out, PM5_LAYER_COLOR_LEVELS);
+    anycubicsla_write_int32(out, res_x);
+    anycubicsla_write_int32(out, res_y);
+    anycubicsla_write_float(out, weight_g);
+    anycubicsla_write_float(out, price);
+    anycubicsla_write_int32(out, '$');
+    anycubicsla_write_int32(out, 0); // per_layer_override
+    anycubicsla_write_int32(out, print_time_s);
+    anycubicsla_write_int32(out, 10); // transition_layer_count
+    anycubicsla_write_int32(out, 0); // transition_type
+    anycubicsla_write_int32(out, 0); // unknown
+    anycubicsla_write_int32(out, 0x00030000); // unknown
+    anycubicsla_write_int32(out, 10); // unknown
+
+    // PREVIEW section
+    addr_preview = static_cast<std::streamoff>(out.tellp());
+    out.write(PM5_TAG_PREVIEW, 12);
+    anycubicsla_write_int32(out, PM5_PREVIEW_DECLARED_SIZE);
+    anycubicsla_write_int32(out, PM5_PREVIEW_W);
+    anycubicsla_write_int32(out, PM5_PREVIEW_DPI);
+    anycubicsla_write_int32(out, PM5_PREVIEW_H);
+    
+    // Generate preview pixels (RGB565, bottom-up)
+    std::vector<uint8_t> preview_pixels(PM5_PREVIEW_W * PM5_PREVIEW_H * 2, 0);
+    if (!data.thumbnails.empty()) {
+        const auto& t = data.thumbnails[0];
+        if (t.pixels.size() == PM5_PREVIEW_W * PM5_PREVIEW_H * 4) {
+            size_t dst_index = PM5_PREVIEW_W * (PM5_PREVIEW_H - 1) * 2;
+            size_t pixel_x = 0;
+            for (size_t i = 0; i < t.pixels.size(); i += 4) {
+                uint32_t r = t.pixels[i];
+                uint32_t g = t.pixels[i + 1];
+                uint32_t b = t.pixels[i + 2];
+                uint32_t pixel = ((b >> 3) << 11) | ((g >> 2) << 5) | (r >> 3);
+                preview_pixels[dst_index++] = pixel & 0xFF;
+                preview_pixels[dst_index++] = (pixel >> 8) & 0xFF;
+                pixel_x++;
+                if (pixel_x == PM5_PREVIEW_W) {
+                    pixel_x = 0;
+                    dst_index -= PM5_PREVIEW_W * 4;
+                }
+            }
+        }
+    }
+    out.write(reinterpret_cast<const char*>(preview_pixels.data()), preview_pixels.size());
+    // 16 zero bytes after pixel data
+    std::array<uint8_t, 16> preview_padding = {0};
+    out.write(reinterpret_cast<const char*>(preview_padding.data()), preview_padding.size());
+
+    // Layer image colour table (no section header)
+    addr_color_table = static_cast<std::streamoff>(out.tellp());
+    anycubicsla_write_int32(out, 0); // use full greyscale = off
+    anycubicsla_write_int32(out, PM5_LAYER_COLOR_LEVELS);
+    out.write(reinterpret_cast<const char*>(PM5_COLOR_TABLE), 16);
+    anycubicsla_write_int32(out, 0);
+
+    // LAYERDEF section
+    addr_layerdef = static_cast<std::streamoff>(out.tellp());
+    out.write(PM5_TAG_LAYERDEF, 12);
+    // Payload size: 4 (layer_count) + layer_count * 32
+    std::uint32_t layerdef_payload_size = 4 + layer_count * PM5_LAYERDEF_ENTRY_SIZE;
+    anycubicsla_write_int32(out, layerdef_payload_size);
+    anycubicsla_write_int32(out, layer_count);
+
+    // We need to compute layer offsets and lit pixel counts
+    // First, collect all layer data sizes and lit counts
+    std::vector<std::uint32_t> layer_sizes(layer_count);
+    std::vector<std::uint32_t> layer_lit_counts(layer_count);
+    std::uint64_t total_layer_data_size = 0;
+    for (std::uint32_t i = 0; i < layer_count; ++i) {
+        layer_sizes[i] = static_cast<std::uint32_t>(data.files.data[i].size());
+        layer_lit_counts[i] = count_lit_pixels_pw0(data.files.data[i].data(), data.files.data[i].size());
+        total_layer_data_size += layer_sizes[i];
+    }
+
+    // First layer image offset will be after MACHINE and software block
+    // But we don't know those sizes yet. We'll write layerdef entries with placeholder offsets,
+    // then come back and fix them, OR compute all offsets upfront.
+    // Let's compute all section sizes first to determine offsets.
+
+    // For now, write placeholder layer entries, then fix later
+    std::vector<std::streamoff> layer_entry_positions(layer_count);
+    // Write placeholder layer entries
+    for (std::uint32_t i = 0; i < layer_count; ++i) {
+        layer_entry_positions[i] = static_cast<std::streamoff>(out.tellp());
+        // Placeholder: offset=0, size, lift params, exposure, layer_height, lit_count, 0
+        anycubicsla_write_int32(out, 0); // image_offset (placeholder)
+        anycubicsla_write_int32(out, layer_sizes[i]);
+        if (i < bottom_layer_count) {
+            anycubicsla_write_float(out, 8.0f); // lift_distance_mm
+            anycubicsla_write_float(out, 6.0f); // lift_speed
+            anycubicsla_write_float(out, initial_exposure_time_s);
+            anycubicsla_write_float(out, initial_layer_height_mm);
+        } else {
+            anycubicsla_write_float(out, 8.0f);
+            anycubicsla_write_float(out, 6.0f);
+            anycubicsla_write_float(out, exposure_time_s);
+            anycubicsla_write_float(out, layer_height_mm);
+        }
+        anycubicsla_write_int32(out, layer_lit_counts[i]);
+        anycubicsla_write_int32(out, 0);
+    }
+
+    // EXTRA section
+    addr_extra = static_cast<std::streamoff>(out.tellp());
+    out.write(PM5_TAG_EXTRA, 12);
+    anycubicsla_write_int32(out, PM5_EXTRA_DECLARED_SIZE);
+    // Sample values: u32 2, then floats 5, 2, 3, 3, 3, 4, then u32 2, then floats 2, 2, 2, 6, 4, 6
+    anycubicsla_write_int32(out, 2);
+    anycubicsla_write_float(out, 5.0f);
+    anycubicsla_write_float(out, 2.0f);
+    anycubicsla_write_float(out, 3.0f);
+    anycubicsla_write_float(out, 3.0f);
+    anycubicsla_write_float(out, 3.0f);
+    anycubicsla_write_float(out, 4.0f);
+    anycubicsla_write_int32(out, 2);
+    anycubicsla_write_float(out, 2.0f);
+    anycubicsla_write_float(out, 2.0f);
+    anycubicsla_write_float(out, 2.0f);
+    anycubicsla_write_float(out, 6.0f);
+    anycubicsla_write_float(out, 4.0f);
+    anycubicsla_write_float(out, 6.0f);
+    // Note: declared 24 bytes but actual span is 56 bytes before MACHINE.
+    // The above writes 4 + 6*4 + 4 + 6*4 = 4 + 24 + 4 + 24 = 56 bytes payload.
+    // But declared size is 24. We write the actual bytes as in sample.
+
+    // MACHINE section
+    addr_machine = static_cast<std::streamoff>(out.tellp());
+    out.write(PM5_TAG_MACHINE, 12);
+    anycubicsla_write_int32(out, PM5_MACHINE_DECLARED_SIZE);
+    // Printer name (96 bytes)
+    write_string_padded(out, "Anycubic Photon Mono M5", 96);
+    // Image format name (16 bytes)
+    write_string_padded(out, "pw0Img", 16);
+    anycubicsla_write_int32(out, 0);
+    anycubicsla_write_int32(out, 0);
+    anycubicsla_write_int32(out, 16);
+    anycubicsla_write_int32(out, 7);
+    anycubicsla_write_float(out, display_width_mm);
+    anycubicsla_write_float(out, display_height_mm);
+    anycubicsla_write_float(out, max_print_height_mm);
+    anycubicsla_write_int32(out, PM5_FORMAT_VERSION);
+    // 4 bytes: 01 47 63 00
+    std::array<uint8_t, 4> machine_unknown = {0x01, 0x47, 0x63, 0x00};
+    out.write(reinterpret_cast<const char*>(machine_unknown.data()), 4);
+
+    // Software block (no section header)
+    addr_software = static_cast<std::streamoff>(out.tellp());
+    // NUL-padded software name (12 bytes? Sample says "AC-PC" but we use SLIC3R_APP_NAME)
+    // The sample software block: name "AC-PC" (12 bytes?), u32 164, then strings...
+    // Let's check: "AC-PC" is 5 chars. Padded to what? The sample says "NUL-padded software name AC-PC"
+    // Looking at the old format, tags are 12 bytes. Let's assume 12 bytes for name.
+    write_string_padded(out, SLIC3R_APP_NAME, 12);
+    anycubicsla_write_int32(out, 164); // u32 164
+    // Strings for version, build date, platform, UI lib, cloud lib, OpenGL profile
+    // Each string seems to be NUL-padded to some length. The sample doesn't specify exact lengths.
+    // We'll write our version info, truncating to reasonable lengths.
+    write_string_padded(out, SLIC3R_VERSION, 32);
+    // Build date - use __DATE__ " " __TIME__
+    std::string build_date = __DATE__ " " __TIME__;
+    write_string_padded(out, build_date, 32);
+    write_string_padded(out, "linux-x64", 32); // platform
+    write_string_padded(out, "imgui", 32); // UI library
+    write_string_padded(out, "", 32); // cloud library
+    write_string_padded(out, "core", 32); // OpenGL profile
+
+    // First layer image data
+    addr_first_layer = static_cast<std::streamoff>(out.tellp());
+    for (std::uint32_t i = 0; i < layer_count; ++i) {
+        const char* img_start = reinterpret_cast<const char*>(data.files.data[i].data());
+        const char* img_end = img_start + data.files.data[i].size();
+        out.write(img_start, data.files.data[i].size());
+    }
+
+    // MODEL section
+    addr_model = static_cast<std::streamoff>(out.tellp());
+    out.write(PM5_TAG_MODEL, 12);
+    anycubicsla_write_int32(out, PM5_MODEL_DECLARED_SIZE);
+    // 6 floats: bbox min x, y, z, max x, y, z
+    for (int i = 0; i < 3; ++i) {
+        anycubicsla_write_float(out, bbox_min[i]);
+    }
+    for (int i = 0; i < 3; ++i) {
+        anycubicsla_write_float(out, bbox_max[i]);
+    }
+    // Note: If the result data has no bounding box, write zeros (as above)
+
+    // Now go back and fill in the layer entry offsets
+    std::streamoff current_layer_offset = addr_first_layer;
+    for (std::uint32_t i = 0; i < layer_count; ++i) {
+        out.seekp(layer_entry_positions[i]);
+        anycubicsla_write_int32(out, static_cast<std::uint32_t>(current_layer_offset));
+        current_layer_offset += static_cast<std::streamoff>(layer_sizes[i]);
+    }
+
+    // Finally, go back and fill the intro address table
+    out.seekp(intro_pos + 12 + 4 + 4); // after tag, version, area_num
+    anycubicsla_write_int32(out, static_cast<std::uint32_t>(addr_header));
+    anycubicsla_write_int32(out, static_cast<std::uint32_t>(addr_software));
+    anycubicsla_write_int32(out, static_cast<std::uint32_t>(addr_preview));
+    anycubicsla_write_int32(out, static_cast<std::uint32_t>(addr_color_table));
+    anycubicsla_write_int32(out, static_cast<std::uint32_t>(addr_layerdef));
+    anycubicsla_write_int32(out, static_cast<std::uint32_t>(addr_extra));
+    anycubicsla_write_int32(out, static_cast<std::uint32_t>(addr_machine));
+    anycubicsla_write_int32(out, static_cast<std::uint32_t>(addr_first_layer));
+    anycubicsla_write_int32(out, static_cast<std::uint32_t>(addr_model));
+
+    out.close();
 }
 
 } // namespace Slic3r::Biz::PrintHost::Sla
