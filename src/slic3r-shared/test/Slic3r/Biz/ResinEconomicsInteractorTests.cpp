@@ -144,10 +144,15 @@ TEST_CASE_METHOD(
     config.sla_material_settings.items.opt("bottle_weight").set(1.0);
     config.sla_material_settings.items.opt("bottle_cost").set(30.0);
 
-    const auto created = project_interactor.new_project_with_preset(
-        Slic3r::Test::get_selected_preset_metadata(),
-        config
-    );
+    // SelectedPreset::make asserts on both of these for an SLA config pack
+    // (SelectedPreset.cpp:85). PrinterTechnology is left uninitialised by the default
+    // constructor, so it must be set explicitly or it arrives as garbage.
+    Slic3r::Domain::Preset::SelectedPresetMetadata preset_metadata =
+        Slic3r::Test::get_selected_preset_metadata();
+    preset_metadata.hw_config.technology = Slic3r::Domain::PrinterTechnology::SLA;
+    preset_metadata.materials.resize(1);
+
+    const auto created = project_interactor.new_project_with_preset(preset_metadata, config);
     REQUIRE(created.has_value());
     const Slic3r::Domain::SelectionId project_id = *created;
 
@@ -160,8 +165,6 @@ TEST_CASE_METHOD(
     // update_process keeps references to these, so they must outlive the slicing interactor.
     Slic3r::Domain::Model model = Slic3r::Test::generate_cubes(1, 5);
     Slic3r::Domain::ProjectMetadata project_metadata;
-    Slic3r::Domain::Preset::SelectedPresetMetadata preset_metadata =
-        Slic3r::Test::get_selected_preset_metadata();
     Slic3r::Domain::ConfigPack config_pack = config;
 
     project_interactor.slicing_interactor().update_process(
