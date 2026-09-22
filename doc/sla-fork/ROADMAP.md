@@ -70,7 +70,8 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
 - [ ] **M1.1b** Runtime screen audit with an SLA printer selected, following the R1–R10 checklist in `ux/journeys.md`. Reconcile source findings with observed screens and finish the `ux/journeys.md` audit. · S · needs M0.1
 - [x] **M1.2** UX spec, part 2: wireframes for the support tool, hollow tool, layer inspector, sidebar summary, and the resin import dialog (M3.10), using palette tokens only. · M · needs M1.1a
   Result: → this commit. Text wireframes W1–W5 with interaction specs in [ux/wireframes.md](ux/wireframes.md); palette tokens only; open questions listed for M1.3 review.
-- [ ] **M1.3** `[human]` Review and approve the M1.1a/M1.1b and M1.2 spec. · S · needs M1.1b, M1.2
+- [x] **M1.3** `[human]` Review and approve the M1.1a/M1.1b and M1.2 spec. · S · needs M1.1b, M1.2
+  Result: wireframes approved 2026-09-22 with five decisions recorded in [ux/wireframes.md](ux/wireframes.md): two separate SLA tools, right-docked panels, layer panel hidden until toggled, real values in the summary, import report as summary plus scrollable detail. The runtime screen audit (M1.1b) is still open and needs the app binary, which is building now.
 - [x] **M1.4** Palette sweep: move RGB literals in `App/` and `libvgcode` onto theme tokens. · M · needs M0.5
   Result: swept `src/slic3r-shared/src/Slic3r/App/`: 20 colour literals found, 1 moved to a token (`LayerHeightProfileControl.cpp` → AccentTertiary), 19 left because no existing token matches and ThemeTypes.hpp is a hotspot header. Full table with reasons in [ux/palette-sweep.md](ux/palette-sweep.md). The "no RGB literals outside Theme.cpp" goal is NOT met; closing it needs new tokens, which M1.5 can add.
   Done when: a grep finds no RGB literals in `App/` outside `Theme.cpp`.

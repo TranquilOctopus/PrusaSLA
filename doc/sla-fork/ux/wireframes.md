@@ -158,6 +158,14 @@ Interaction spec:
 
 ---
 
+## Decisions (M1.3, 2026-09-22)
+
+1. Support points and hollow are **two separate toolbar tools**, matching `ToolType::SlaSupportPoints` and `ToolType::SlaHollow` in the code.
+2. Their panels **dock on the right**, beside the canvas, like the existing gizmo dialogs.
+3. The 2D layer panel is **hidden until toggled**, so slicing does not rearrange the view.
+4. Summary rows **show real values**: resin economics (M1.10) and per-layer stats (M4.9) have landed, so no placeholders.
+5. The import report is a **summary with a scrollable detail section**, not summary-only.
+
 ## Open questions for M1.3 review
 
 1. W1/W2 as tabs inside one dock (spec's current assumption) vs. two separate toolbar tools — which is how the `ToolType::SlaSupportPoints` and `ToolType::SlaHollow` slots reserved in M0.7 should appear?
