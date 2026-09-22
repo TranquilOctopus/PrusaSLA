@@ -13,12 +13,12 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 ## Progress
 
-**49 of 120 todos done (41%)** · updated 2026-09-22 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**49 of 122 todos done (40%)** · updated 2026-09-22 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
 | M0: Foundation | 12/15 | `██████████░░` 80% |
-| M1: Look, feel and SLA-first shell | 10/15 | `████████░░░░` 67% |
+| M1: Look, feel and SLA-first shell | 10/17 | `███████░░░░░` 59% |
 | M2: SLA editing tools (porting the legacy gizmos) | 15/20 | `█████████░░░` 75% |
 | M3: Resin profile import (Chitubox, Lychee and others) | 0/15 | `░░░░░░░░░░░░` 0% |
 | M4: Engine quality (measure first; every PR includes before/after metrics) | 3/15 | `██░░░░░░░░░░` 20% |
@@ -42,11 +42,13 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 </details>
 
-<details><summary>M1: Look, feel and SLA-first shell — 5 open</summary>
+<details><summary>M1: Look, feel and SLA-first shell — 7 open</summary>
 
 - [ ] **M1.1b** Runtime screen audit with an SLA printer selected, following the R1–R10 checklist in `ux/journeys.md`. Reco…
 - [ ] **M1.7c** Hide the FFF-only sections of `LogicalPrinterSettingsDialog` for SLA printers: the Sheet heading and combo,…
 - [ ] **M1.8** SLA path in the welcome dialog, plus SLA hints and notifications. Also fix the “Export gcode to a file” too…
+  - [ ] **M1.8a** Welcome and export wording: replace the welcome dialog's "what's new" screen, which still shows upstream Pr…
+  - [ ] **M1.8b** SLA hints and notifications along the first-run and plater flow.
 - [ ] **M1.11** SLA sidebar summary (PLAN F5).
 - [ ] **M1.12** Branding artwork: replace `resources/icons/splashscreen.jpg` and the `PrusaSlicer.*` app icons (ico, icns,…
 
