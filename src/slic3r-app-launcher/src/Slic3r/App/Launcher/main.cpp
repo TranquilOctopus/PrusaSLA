@@ -17,6 +17,7 @@
 #include "SentryScope.hpp"
 
 #include <cstdlib>
+#include <exception>
 #include <string>
 
 #include <CLI/CLI.hpp>
@@ -78,6 +79,24 @@ std::string app_description()
 
 int main(int argc, char** argv)
 {
+    // An uncaught exception otherwise aborts silently (fail-fast 0xC0000409) with nothing in the
+    // log, which makes crash reports useless. Log what was thrown before the process dies.
+    std::set_terminate([]() {
+        if (auto current = std::current_exception()) {
+            try {
+                std::rethrow_exception(current);
+            } catch (const std::exception& e) {
+                SPDLOG_CRITICAL("Terminating on uncaught exception: {}", e.what());
+            } catch (...) {
+                SPDLOG_CRITICAL("Terminating on an uncaught exception of unknown type");
+            }
+        } else {
+            SPDLOG_CRITICAL("Terminating without an active exception");
+        }
+        spdlog::default_logger()->flush();
+        std::abort();
+    });
+
     CLI::App app{app_description(), app_name};
     argv = app.ensure_utf8(argv);
 
