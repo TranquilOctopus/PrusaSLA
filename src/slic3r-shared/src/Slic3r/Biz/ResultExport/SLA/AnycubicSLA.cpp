@@ -437,13 +437,16 @@ constexpr std::uint32_t PM5_EXTRA_DECLARED_SIZE = 24;
 constexpr std::uint32_t PM5_MACHINE_DECLARED_SIZE = 156;
 constexpr std::uint32_t PM5_MODEL_DECLARED_SIZE = 0;
 
-const char PM5_TAG_INTRO[12] = "ANYCUBIC\0\0\0\0";
-const char PM5_TAG_HEADER[12] = "HEADER\0\0\0\0\0\0";
-const char PM5_TAG_PREVIEW[12] = "PREVIEW\0\0\0\0\0";
-const char PM5_TAG_LAYERDEF[12] = "LAYERDEF\0\0\0\0";
-const char PM5_TAG_EXTRA[12] = "EXTRA\0\0\0\0\0\0\0";
-const char PM5_TAG_MACHINE[12] = "MACHINE\0\0\0\0\0";
-const char PM5_TAG_MODEL[12] = "MODEL\0\0\0\0\0\0\0";
+// Each literal is 12 characters plus the terminating NUL, so the arrays are 13 bytes; C++ rejects
+// [12] ("array bounds overflow"), unlike C. Every write passes an explicit length of 12.
+constexpr char PM5_TAG_INTRO[] = "ANYCUBIC\0\0\0\0";
+constexpr char PM5_TAG_HEADER[] = "HEADER\0\0\0\0\0\0";
+constexpr char PM5_TAG_PREVIEW[] = "PREVIEW\0\0\0\0\0";
+constexpr char PM5_TAG_LAYERDEF[] = "LAYERDEF\0\0\0\0";
+constexpr char PM5_TAG_EXTRA[] = "EXTRA\0\0\0\0\0\0\0";
+constexpr char PM5_TAG_MACHINE[] = "MACHINE\0\0\0\0\0";
+constexpr char PM5_TAG_MODEL[] = "MODEL\0\0\0\0\0\0\0";
+static_assert(sizeof(PM5_TAG_INTRO) == 13 && sizeof(PM5_TAG_LAYERDEF) == 13);
 
 const std::uint8_t PM5_COLOR_TABLE[16] = {
     0x0F, 0x1F, 0x2F, 0x3F, 0x4F, 0x5F, 0x6F, 0x7F,
