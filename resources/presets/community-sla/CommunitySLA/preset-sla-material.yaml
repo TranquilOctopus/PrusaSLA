@@ -1,7 +1,6 @@
 id: '*common*'
 kind: sla_material
 values:
-  material_correction: [1.0, 1.0]
   initial_layer_height: 0.05
   exposure_time: 2.5
   initial_exposure_time: 30.0
