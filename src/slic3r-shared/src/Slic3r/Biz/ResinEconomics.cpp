@@ -62,40 +62,26 @@ ResinEconomicsResult ResinEconomics::calculate(const ResinEconomicsInput& input)
     return result;
 }
 
+// ConfigView::get asserts on a missing key: it panics, it does not throw, so a try/catch
+// around it would not help. Look the key up and leave the value unset when it is absent,
+// not a double, or not positive.
+static std::optional<double> positive_double(const Domain::ConfigView& config, const std::string& key)
+{
+    const auto it = config.values().find(key);
+    if (it == config.values().end() || !it->second.holds_alternative<double>())
+        return std::nullopt;
+    const double value = it->second.get<double>();
+    return value > 0.0 ? std::optional<double>{value} : std::nullopt;
+}
+
 ResinEconomicsResult ResinEconomics::calculate(const Domain::SLA::PrintStatistics& stats, const Domain::ConfigView& config)
 {
     ResinEconomicsInput input;
     input.used_material_mm3 = stats.objects_used_material + stats.support_used_material;
 
-    // Read bottle_volume (ml)
-    try {
-        const double bottle_volume = config.get<double>("bottle_volume");
-        if (bottle_volume > 0.0) {
-            input.bottle_volume_ml = bottle_volume;
-        }
-    } catch (...) {
-        // Key not found or type mismatch, leave as nullopt
-    }
-
-    // Read bottle_weight (kg)
-    try {
-        const double bottle_weight = config.get<double>("bottle_weight");
-        if (bottle_weight > 0.0) {
-            input.bottle_weight_kg = bottle_weight;
-        }
-    } catch (...) {
-        // Key not found or type mismatch, leave as nullopt
-    }
-
-    // Read bottle_cost
-    try {
-        const double bottle_cost = config.get<double>("bottle_cost");
-        if (bottle_cost > 0.0) {
-            input.bottle_cost = bottle_cost;
-        }
-    } catch (...) {
-        // Key not found or type mismatch, leave as nullopt
-    }
+    input.bottle_volume_ml = positive_double(config, "bottle_volume");
+    input.bottle_weight_kg = positive_double(config, "bottle_weight");
+    input.bottle_cost      = positive_double(config, "bottle_cost");
 
     // Read material_density (g/ml)
     try {
