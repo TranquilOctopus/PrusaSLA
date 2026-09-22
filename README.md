@@ -13,7 +13,7 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 ## Progress
 
-**49 of 128 todos done (38%)** · updated 2026-09-22 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**50 of 132 todos done (38%)** · updated 2026-09-22 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
@@ -22,7 +22,7 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 | M2: SLA editing tools (porting the legacy gizmos) | 15/24 | `████████░░░░` 62% |
 | M3: Resin profile import (Chitubox, Lychee and others) | 0/15 | `░░░░░░░░░░░░` 0% |
 | M4: Engine quality (measure first; every PR includes before/after metrics) | 3/16 | `██░░░░░░░░░░` 19% |
-| M5: Formats and inspection | 4/16 | `███░░░░░░░░░` 25% |
+| M5: Formats and inspection | 5/20 | `███░░░░░░░░░` 25% |
 | M6: Quality gates and release | 0/8 | `░░░░░░░░░░░░` 0% |
 | M7: Excellent auto-supports *(parked)* | 5/17 | `████░░░░░░░░` 29% |
 
@@ -106,12 +106,15 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 </details>
 
-<details><summary>M5: Formats and inspection — 12 open</summary>
+<details><summary>M5: Formats and inspection — 15 open</summary>
 
 - [ ] **M5.1** Import `.sl1`/`.sl1s`/`.slx` archives in the new app, porting the legacy `SLAImportJob` (PLAN C1).
   - [ ] **M5.1a** Restore the SL1/SL1S archive reader into libslic3r from `d9e89cf564^` (`SLAArchiveReader`, `ZipperArchiveIm…
   - [ ] **M5.1b** Wire the reader into `FileLoadingLogic` and `get_import_extensions()`, as a job with progress and cancel.
 - [ ] **M5.3.ctb** Chitubox `.ctb` writer for older Elegoo machines, and possibly the Anycubic Photon Mono M5 (see the M5.3.pw…
+- [ ] **M5.3.pw-b** Anycubic newer formats (`.pm5`, `.pm5s`, `.pm7`) — **`.pm5` first: it is the format the maintainer's Photon…
+  - [ ] **M5.3.pw-b1** `.pm5` writer following `doc/sla-fork/formats/pm5.md`: the version-517 container (file mark and address tab…
+- [ ] **M5.3.profiles-b** Community resin presets per layer height, so the first layer matches the rest. `initial_layer_height` is a…
 - [ ] **M5.3.samples** Provide one sliced sample archive per target printer (from Chitubox/Lychee/Photon Workshop) and list the pr… *(needs you)*
 - [ ] **M5.4** Display mirroring and orientation test pattern for every format (PLAN C3).
 - [ ] **M5.5** Upload SLA archives to print hosts and removable drives (PLAN C4).
