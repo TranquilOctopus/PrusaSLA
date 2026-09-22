@@ -25,6 +25,10 @@ Address table as found, in order: `0x38` HEADER, `0x14BF4` software block, `0xA4
 `0x14CC8` first layer image, `0x14C98` MODEL. The order of the table is **not** the order in the
 file; a writer should fill each slot with the right block's offset.
 
+Physical order of the blocks in the file (confirmed): HEADER, PREVIEW, colour table, LAYERDEF,
+EXTRA, MACHINE, software block, MODEL, then the layer images. Write them in this order.
+`doc/sla-fork/tools/pm5_layout.py --compare` checks it, along with the other layout constants.
+
 ## Named sections
 
 Named sections start with a 12-byte NUL-padded name and a u32 length. The length does **not**
