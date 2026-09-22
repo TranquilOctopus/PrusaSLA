@@ -77,7 +77,7 @@ name: Photon Mono M5
 legacy_printer_model: [Photon Mono M5]
 tools:
 - tool: sla_default
-  sheet: sla_default
+sheet: sla_default
 ---
 kind: printer_config
 id: photon_mono_m5s
@@ -86,7 +86,7 @@ name: Photon Mono M5s
 legacy_printer_model: [Photon Mono M5s]
 tools:
 - tool: sla_default
-  sheet: sla_default
+sheet: sla_default
 ---
 kind: printer_config
 id: photon_mono_m7_pro
@@ -95,7 +95,7 @@ name: Photon Mono M7 Pro
 legacy_printer_model: [Photon Mono M7 Pro]
 tools:
 - tool: sla_default
-  sheet: sla_default
+sheet: sla_default
 ---
 kind: printer_config
 id: saturn_4_ultra_12k
@@ -104,7 +104,7 @@ name: Saturn 4 Ultra 12K
 legacy_printer_model: [Saturn 4 Ultra 12K]
 tools:
 - tool: sla_default
-  sheet: sla_default
+sheet: sla_default
 ---
 kind: printer_config
 id: saturn_4_ultra_16k
@@ -113,7 +113,7 @@ name: Saturn 4 Ultra 16K
 legacy_printer_model: [Saturn 4 Ultra 16K]
 tools:
 - tool: sla_default
-  sheet: sla_default
+sheet: sla_default
 ---
 kind: printer_config
 id: mars_5_ultra
@@ -122,4 +122,4 @@ name: Mars 5 Ultra
 legacy_printer_model: [Mars 5 Ultra]
 tools:
 - tool: sla_default
-  sheet: sla_default
+sheet: sla_default
