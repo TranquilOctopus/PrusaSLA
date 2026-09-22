@@ -12,7 +12,7 @@ values:
   display_width: '218.88'
   # display_height = 5120 * 24um = 122880um = 122.88mm
   display_height: '122.88'
-  display_orientation: portrait
+  display_orientation: landscape
   display_pixels_x: '11520'
   display_pixels_y: '5120'
   max_print_height: '200'
@@ -43,7 +43,7 @@ values:
   display_width: '218.88'
   # display_height = 5120 * 24um = 122880um = 122.88mm
   display_height: '122.88'
-  display_orientation: portrait
+  display_orientation: landscape
   display_pixels_x: '11520'
   display_pixels_y: '5120'
   max_print_height: '200'
@@ -74,7 +74,7 @@ values:
   display_width: '226.44'
   # display_height = 5120 * 24um = 122880um = 122.88mm
   display_height: '122.88'
-  display_orientation: portrait
+  display_orientation: landscape
   display_pixels_x: '13320'
   display_pixels_y: '5120'
   max_print_height: '230'
@@ -105,7 +105,7 @@ values:
   display_width: '218.88'
   # display_height = 5120 * 24um = 122880um = 122.88mm
   display_height: '122.88'
-  display_orientation: portrait
+  display_orientation: landscape
   display_pixels_x: '11520'
   display_pixels_y: '5120'
   max_print_height: '220'
@@ -136,7 +136,7 @@ values:
   display_width: '211.68'
   # display_height = 6230 * 19um = 118370um = 118.37mm
   display_height: '118.37'
-  display_orientation: portrait
+  display_orientation: landscape
   display_pixels_x: '15120'
   display_pixels_y: '6230'
   max_print_height: '220'
@@ -167,7 +167,7 @@ values:
   display_width: '153.36'
   # display_height = 4320 * 18um = 77760um = 77.76mm
   display_height: '77.76'
-  display_orientation: portrait
+  display_orientation: landscape
   display_pixels_x: '8520'
   display_pixels_y: '4320'
   max_print_height: '165'
