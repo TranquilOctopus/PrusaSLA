@@ -7,6 +7,9 @@
 #include "Slic3r/App/ResultExport/ExportActions.hpp"
 #include "Slic3r/App/AppServices.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
+#include "Slic3r/Domain/ConfigContainer.hpp"
+#include "Slic3r/Domain/PrinterTechnology.hpp"
+#include "Slic3r/Domain/SelectionId.hpp"
 
 using namespace Slic3r::App::Yoga;
 
@@ -89,7 +92,14 @@ void SidebarPreviewActionButtons::on_removable_drive_status_changed(
 
 void SidebarPreviewActionButtons::update_buttons()
 {
-    const std::string export_tooltip{Biz::_u8L("Export gcode to a file")};
+    // Determine export tooltip based on printer technology
+    std::string export_tooltip{Biz::_u8L("Export gcode to a file")};
+    if (m_project_interactor->selected_config_container_id() != Domain::INVALID_ID) {
+        const Domain::ConfigContainer& config_container = m_project_interactor->selected_config_container();
+        if (config_container.print_technology() == Domain::PrinterTechnology::SLA) {
+            export_tooltip = Biz::_u8L("Export print file");
+        }
+    }
 
     const Domain::SlicingId slicing_id{m_project_interactor->selected_bed_slicing_id()};
     const auto optional_status{m_project_interactor->status_cache().get_status(slicing_id)};
