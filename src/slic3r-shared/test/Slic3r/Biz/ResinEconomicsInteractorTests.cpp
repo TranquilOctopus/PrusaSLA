@@ -12,6 +12,9 @@
 #include "Slic3r/App/Plater/ThumbnailImageGenerator.hpp"
 #include "Slic3r/App/Platform/StdMainThreadDispatcher.hpp"
 
+#include "Slic3r/Domain/ProjectMetadata.hpp"
+#include "Slic3r/Domain/Preset/SelectedPreset.hpp"
+
 #include "Slic3r/Directories.hpp"
 #include "Slic3r/TestUtils/AppInstanceMessageHandlerScope.hpp"
 #include "Slic3r/TestUtils/JobManagerScope.hpp"
@@ -20,27 +23,17 @@
 
 #include <boost/filesystem/operations.hpp>
 #include <boost/nowide/filesystem.hpp>
-#include <boost/dll/runtime_symbol_info.hpp>
-#include <boost/nowide/fstream.hpp>
+
+#include <algorithm>
+#include <chrono>
 
 using namespace Slic3r::Biz;
 using namespace trompeloeil;
-namespace fs = boost::filesystem;
 
-class MockThumbnailImageGenerator : public Slic3r::Biz::Slicing::IThumbnailImageGenerator
-{
-public:
-    virtual std::future<Slic3r::Biz::Slicing::ThumbnailImageResults> enqueue_thumbnail_requests(
-        const Slic3r::Biz::Slicing::ThumbnailImageRequests& requests
-    ) override
-    {
-        std::promise<Slic3r::Biz::Slicing::ThumbnailImageResults> promise;
-        promise.set_value(Slic3r::Biz::Slicing::ThumbnailImageResults{});
-        return promise.get_future();
-    }
-
-    void handle_enqueued_requests() override {}
-};
+using Slic3r::Test::ModelOnBed;
+using Slic3r::Test::StatusEvents;
+using Slic3r::Test::get_cubes_model;
+using Slic3r::Test::wait_for_status;
 
 struct ResinEconomicsInteractorFixture
 {
@@ -56,75 +49,121 @@ struct ResinEconomicsInteractorFixture
         project_interactor.preset_interactor().load_preset_bundle(
             Preset::IO::BundlePaths::make_test_runtime(Tests::get_datadir())
         );
+        project_interactor.slicing_interactor().add_listener<Slicing::IStatusListener>(&status_listener);
     }
 
     Slic3r::Domain::Workbench workbench;
     Slic3r::App::Platform::StdMainThreadDispatcher dispatcher;
     Tests::AppInstanceMessageHandlerScope app_instance_message_handler_scope{dispatcher};
     Tests::JobManagerScope job_manager_scope{dispatcher};
-    MockThumbnailImageGenerator thumbnail_image_generator;
+    Slic3r::Test::MockThumbnailImageGenerator thumbnail_image_generator;
     ProjectInteractor project_interactor{workbench, dispatcher, thumbnail_image_generator};
+    Slic3r::Test::StatusListener status_listener;
     Tests::ScopedThreadDispatcher thread_dispatcher{dispatcher};
     ResinEconomicsInteractor economics_interactor{project_interactor};
 };
 
-TEST_CASE_METHOD(ResinEconomicsInteractorFixture, "ResinEconomicsInteractor - project with no beds", "[resin_economics_interactor]")
+// The bed counters must always account for every bed that was walked, whatever the project holds.
+TEST_CASE_METHOD(
+    ResinEconomicsInteractorFixture,
+    "ResinEconomicsInteractor - unsliced project reports no economics",
+    "[resin_economics_interactor]"
+)
 {
-    auto project_id = project_interactor.new_project();
+    const auto project_id = project_interactor.new_project();
 
-    ProjectResinEconomics result = economics_interactor.compute_project_economics(project_id);
+    const ProjectResinEconomics result = economics_interactor.compute_project_economics(project_id);
 
-    REQUIRE(result.beds.empty());
     REQUIRE(result.beds_with_results == 0);
-    REQUIRE(result.beds_skipped == 0);
+    REQUIRE(result.beds.size() == result.beds_skipped);
     REQUIRE_FALSE(result.total.millilitres.has_value());
+    REQUIRE_FALSE(result.total.grams.has_value());
+    REQUIRE_FALSE(result.total.cost.has_value());
+    REQUIRE(result.total.summary == "No data");
 }
 
-TEST_CASE_METHOD(ResinEconomicsInteractorFixture, "ResinEconomicsInteractor - bed with no SLA result", "[resin_economics_interactor]")
+TEST_CASE_METHOD(
+    ResinEconomicsInteractorFixture,
+    "ResinEconomicsInteractor - bed with a model but no slicing is skipped",
+    "[resin_economics_interactor]"
+)
 {
-    auto project_id = project_interactor.new_project();
+    const auto project_id = project_interactor.new_project();
 
-    // Create a simple SLA config
-    Domain::ConfigPackSLA config;
-    auto model = Slic3r::Test::generate_cubes(1, 5);
+    const Slic3r::Domain::Project& project = project_interactor.project(project_id);
+    REQUIRE_FALSE(project.config_containers().empty());
+    const Slic3r::Domain::ConfigContainer& config_container = *project.config_containers().front();
+    REQUIRE_FALSE(config_container.bed_instances().empty());
+    const Slic3r::Domain::BedInstance& bed_instance = *config_container.bed_instances().front();
 
-    // Get the first bed instance from the first config container
-    const Domain::Project& project = project_interactor.project(project_id);
-    const Domain::ConfigContainer* cc = project.config_containers().empty() ? nullptr : project.config_containers().front().get();
-    if (!cc || cc->bed_instances().empty()) {
-        // No bed instances to test with
-        return;
-    }
-    const Domain::BedInstance& bed_instance = *cc->bed_instances().front();
-
-    // Update process but don't slice
+    ModelOnBed model_on_bed{get_cubes_model(1, 1, Slic3r::Domain::PrinterTechnology::SLA)};
     project_interactor.slicing_interactor().update_process(
-        model,
-        Domain::ProjectMetadata{},
-        Domain::Preset::SelectedPresetMetadata{},
-        config,
+        model_on_bed.model,
+        model_on_bed.project_metadata,
+        model_on_bed.preset_metadata,
+        model_on_bed.config,
         bed_instance
     );
 
-    // No slicing done, so no result in cache
-    ProjectResinEconomics result = economics_interactor.compute_project_economics(project_id);
+    const ProjectResinEconomics result = economics_interactor.compute_project_economics(project_id);
 
-    // Should have one bed but it's skipped
-    REQUIRE(result.beds.size() >= 1);
     REQUIRE(result.beds_with_results == 0);
     REQUIRE(result.beds_skipped >= 1);
-    REQUIRE_FALSE(result.beds[0].has_result);
+    REQUIRE_FALSE(result.beds.empty());
+    REQUIRE_FALSE(result.beds.front().has_result);
+    // The bed is still identified even when there is nothing to report for it.
+    REQUIRE(result.beds.front().bed_instance_id == bed_instance.id().id);
+    REQUIRE_FALSE(result.beds.front().economics.summary.empty());
 }
 
-TEST_CASE_METHOD(ResinEconomicsInteractorFixture, "ResinEconomicsInteractor - two beds summing", "[resin_economics_interactor][timeout]")
+// The only test that exercises the wiring end to end: a real slice, then the cache lookup,
+// the slicing-id construction and the config reads that feed ResinEconomics::calculate.
+TEST_CASE_METHOD(
+    ResinEconomicsInteractorFixture,
+    "ResinEconomicsInteractor - sliced bed reports resin usage",
+    "[resin_economics_interactor][timeout]"
+)
 {
-    // This test would require actual slicing to populate the cache
-    // For now, we test the structure without slicing
-    auto project_id = project_interactor.new_project();
+    using namespace std::chrono_literals;
 
-    ProjectResinEconomics result = economics_interactor.compute_project_economics(project_id);
+    const auto project_id = project_interactor.new_project();
 
-    // Verify structure
-    REQUIRE(result.beds_with_results == 0);
-    REQUIRE(result.beds_skipped >= 1); // At least one bed from default project
+    const Slic3r::Domain::Project& project = project_interactor.project(project_id);
+    REQUIRE_FALSE(project.config_containers().empty());
+    const Slic3r::Domain::ConfigContainer& config_container = *project.config_containers().front();
+    REQUIRE_FALSE(config_container.bed_instances().empty());
+    const Slic3r::Domain::BedInstance& bed_instance = *config_container.bed_instances().front();
+
+    ModelOnBed model_on_bed{get_cubes_model(1, 1, Slic3r::Domain::PrinterTechnology::SLA)};
+    project_interactor.slicing_interactor().update_process(
+        model_on_bed.model,
+        model_on_bed.project_metadata,
+        model_on_bed.preset_metadata,
+        model_on_bed.config,
+        bed_instance
+    );
+    project_interactor.slicing_interactor().slice_all();
+
+    REQUIRE(wait_for_status(dispatcher, status_listener, 120s, [](const StatusEvents& events) {
+        return !events.empty() && events.back().status_code == Slicing::StatusCode::Finished;
+    }));
+
+    const ProjectResinEconomics result = economics_interactor.compute_project_economics(project_id);
+
+    REQUIRE(result.beds_with_results == 1);
+    REQUIRE(result.beds.size() == result.beds_with_results + result.beds_skipped);
+
+    const auto sliced = std::ranges::find_if(
+        result.beds,
+        [](const BedResinEconomics& bed) { return bed.has_result; }
+    );
+    REQUIRE(sliced != result.beds.end());
+    REQUIRE(sliced->bed_instance_id == bed_instance.id().id);
+    REQUIRE(sliced->economics.millilitres.has_value());
+    REQUIRE(*sliced->economics.millilitres > 0.0);
+
+    // The project total is the sum over beds that produced a result; with one bed it equals it.
+    REQUIRE(result.total.millilitres.has_value());
+    REQUIRE(*result.total.millilitres == *sliced->economics.millilitres);
+    REQUIRE(result.total.summary != "No data");
 }

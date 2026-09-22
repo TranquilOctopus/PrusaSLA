@@ -39,8 +39,10 @@ BedResinEconomics ResinEconomicsInteractor::compute_bed_economics(
     }
     result.bed_name = bed_instance->name();
 
-    // get_process_id is private; build the id the way the SLA tools do (SlaSupportPointsGizmo.cpp:569).
-    const Domain::SlicingId slicing_id{m_project_interactor.selected_project_id(), bed_instance_id};
+    // get_process_id is private; build the id from its parts as PlaterScenePresenter.cpp:1577 does.
+    // Use the requested project, not the selected one, or querying a background project reports
+    // "no result cached" for beds that have in fact been sliced.
+    const Domain::SlicingId slicing_id{project_id, bed_instance_id};
 
     // Get the cached SLA result
     const SLAResultCache& sla_cache = m_project_interactor.sla_result_cache();
