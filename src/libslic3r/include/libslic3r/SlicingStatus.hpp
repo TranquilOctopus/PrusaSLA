@@ -102,6 +102,8 @@ enum class ErrorCode
     NoPadGenerated, // _u8L("No pad can be generated for this model with the current configuration")
     UnprintableObjects, // _u8L("There are unprintable objects. Try to adjust support settings to make the objects printable.")
     UnsupportedOutputFormat, // _u8L("Unsupported output format")
+    OutOfMemory,      // _u8L("Not enough memory to slice this bed")
+    InternalError,    // _u8L("Slicing failed because of an internal error")
 };
 
 using PlaceholderParserErrorPayload = std::map<std::string, std::string>;

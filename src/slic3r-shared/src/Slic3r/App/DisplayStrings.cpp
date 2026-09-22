@@ -195,6 +195,10 @@ std::string to_display_string(Biz::Slicing::ErrorCode code)
         return _u8L("Unable to parse custom parameters.");
     case ErrorCode::UnsupportedOutputFormat:
         return _u8L("Unsupported output format.");
+    case ErrorCode::OutOfMemory:
+        return _u8L("Not enough memory to slice this bed. Try fewer or smaller objects, or close other programs, then slice again.");
+    case ErrorCode::InternalError:
+        return _u8L("Slicing failed because of an internal error. The details are in the log.");
     }
     return _u8L("Unknown error.");
 }

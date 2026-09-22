@@ -270,6 +270,12 @@ void BackgroundProcess::slice(
                     slicing_error = exception.error();
                 } catch (CanceledException&) {
                     /* Intentionally pass. */
+                } catch (const std::bad_alloc&) {
+                    SPDLOG_ERROR("Out of memory during slicing");
+                    slicing_error = Error{ErrorCode::OutOfMemory};
+                } catch (const std::exception& e) {
+                    SPDLOG_ERROR("Internal error during slicing: {}", e.what());
+                    slicing_error = Error{ErrorCode::InternalError};
                 } catch (...) {
                     SPDLOG_CRITICAL("Unhandled exception on background thread!");
                     m_on_exception(std::current_exception());
