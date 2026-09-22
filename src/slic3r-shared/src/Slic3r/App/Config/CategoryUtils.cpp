@@ -28,6 +28,19 @@ Render::Icon category_render_icon(
     case Domain::ConfigItemDef::Category::Print_Supports:
         icon = Render::Icon::Support;
         break;
+    // SLA categories. ConfigDefsSLA.cpp puts keys in all of these, and without a case here
+    // category_render_icon panics as soon as the SLA settings pages are built.
+    case Domain::ConfigItemDef::Category::Print_Pad:
+        // The pad is what an SLA print sticks to, so it shares the bed adhesion icon.
+        icon = Render::Icon::BedAdhesion;
+        break;
+    case Domain::ConfigItemDef::Category::Print_Hollowing:
+        // Hollowing is about what is inside the object; Infill is the nearest existing icon.
+        icon = Render::Icon::Infill;
+        break;
+    case Domain::ConfigItemDef::Category::Filament_MaterialPrintingProfile:
+        icon = Render::Icon::MaterialIconMarker;
+        break;
     case Domain::ConfigItemDef::Category::Print_Speed:
         icon = Render::Icon::Time;
         break;
@@ -85,6 +98,7 @@ Render::Icon category_render_icon(
     case Domain::ConfigItemDef::Category::Printer_SingleExtruderMMSetup:
         icon = Render::Icon::SingleExtruder;
         break;
+    case Domain::ConfigItemDef::Category::Hidden: [[fallthrough]];
     case Domain::ConfigItemDef::Category::AppConfig_General: [[fallthrough]];
     case Domain::ConfigItemDef::Category::AppConfig_Services: [[fallthrough]];
     case Domain::ConfigItemDef::Category::PhysicalPrinter_General :
