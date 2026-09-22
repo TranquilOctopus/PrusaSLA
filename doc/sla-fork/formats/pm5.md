@@ -108,21 +108,30 @@ and normal layers (likely), but the grouping is unconfirmed.
 
 ### MACHINE (body at 0x14B68)
 
-A NUL-padded printer name, `Anycubic Photon Mono M5` (96 bytes), a NUL-padded layer image format
-name, `pw0Img` (16 bytes), u32 0, u32 0, u32 16, u32 7, then f32 218.88, 122.88, 200.0 (display
-width, display height and maximum Z, confirmed against the printer's specs), u32 517, and 4 bytes
-`01 47 63 00` (unknown). Whether the printer checks the name or the image format string is unknown.
+140 bytes (confirmed: the software block starts right after them). A NUL-padded printer name,
+`Anycubic Photon Mono M5` (96 bytes); a NUL-padded layer image format name, `pw0Img` (16 bytes;
+the zeros after `pw0Img` are this field's padding, not separate fields); u32 16, u32 7; f32 218.88,
+122.88, 200.0 (display width, display height and maximum Z, confirmed against the printer's
+specs); u32 517; and 4 bytes `01 47 63 00` (unknown). Whether the printer checks the name or the
+image format string is unknown.
+
+An earlier version of this section listed "u32 0, u32 0" before the 16 and 7. That misread the
+format field's padding, and a writer following it put 8 extra bytes into MACHINE.
 
 ### Software block (0x14BF4, no section header)
 
-A NUL-padded software name `AC-PC`, a u32 164, then strings for the Photon Workshop version and
-build date, the platform (`win-x64`), UI and cloud libraries, and the OpenGL profile. A writer
-should put its own software identity here. Whether the printer reads this block is unknown.
+164 bytes in total (confirmed: MODEL starts right after). A 32-byte NUL-padded software name
+`AC-PC`; a u32 holding the block's own total length, 164 (confirmed by the arithmetic); then 128
+bytes of strings in three NUL-padded areas: 32 bytes with the Photon Workshop version and build
+date run together (`4.2.0` then `2026-08-31 21:34:28`), 64 bytes with the platform and library
+names run together (`win-x64`, `Qt6`, `Cloud4.x`), and 32 bytes with the OpenGL profile
+(`3.3-CoreProfile`). Field boundaries inside each area are unknown. A writer should keep the same
+three areas and total, with its own identity. Whether the printer reads this block is unknown.
 
 ### MODEL (0x14C98)
 
-Name `MODEL`, declared length 0, then six floats: the model's bounding box, minimum X, Y, Z and
-maximum X, Y, Z, in mm (likely).
+48 bytes before the first layer image (confirmed). Name `MODEL`, declared length 0, six floats
+(the model's bounding box, minimum X, Y, Z and maximum X, Y, Z, in mm; likely), then 8 zero bytes.
 
 ## Layer images
 
