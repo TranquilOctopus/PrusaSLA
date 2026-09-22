@@ -230,14 +230,12 @@ tl::expected<ForeignResinProfile, std::string> ChituboxCfgReader::read(const boo
                 !(value.size() >= 2 && value.back() == '"')) {
                 bool closed = false;
                 while (nl != std::string::npos) {
-                    const std::string::size_type next = content.find('
-', nl + 1);
+                    const std::string::size_type next = content.find('\n', nl + 1);
                     const std::string continuation = next == std::string::npos
                         ? content.substr(nl + 1)
                         : content.substr(nl + 1, next - (nl + 1));
                     ++line_number;
-                    value += '
-';
+                    value += '\n';
                     value += continuation;
                     nl = next;
                     const std::string trimmed = trim(continuation);
