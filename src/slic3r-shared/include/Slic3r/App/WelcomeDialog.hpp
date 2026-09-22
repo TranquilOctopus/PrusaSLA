@@ -33,7 +33,10 @@ private:
     LogInScreen* m_login_screen{nullptr};
     PrinterScreen* m_printer_screen{nullptr};
 
-    bool m_online{true};
+    // Offline by default: sync_config() writes this choice into enable_printables,
+    // enable_prusa_account, enable_preset_update and sentry, so the dialog's default decides
+    // whether a first run goes online, whatever the preference defaults say.
+    bool m_online{false};
     bool m_sentry_enabled{false};
 
     void finalize(const std::vector<PrinterToAdd>& printers);

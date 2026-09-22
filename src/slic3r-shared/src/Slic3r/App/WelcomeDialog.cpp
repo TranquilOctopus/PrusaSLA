@@ -1011,6 +1011,9 @@ ItemPtr WelcomeDialog::create_online_decision_screen(const Theme& theme,
 
     m_offline_button = emplace_online_decision_button(picker, "offline-button");
     m_offline_button->append(create_offline_button_content());
+    // Pre-select Offline. The group auto-checks the first button inserted (Online); a button that
+    // is already checked when inserted takes the check over instead. Online stays first on screen.
+    m_offline_button->set_checked(true);
     m_online_decision_button_group.insert_button(m_offline_button);
 
     result->content()->emplace_back<Note>(
