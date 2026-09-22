@@ -114,7 +114,9 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
         returning its error (`ProjectInteractor.cpp:182`).
       - The SLA branch of `SelectedPreset::make` builds `.print` from `metadata.printer` where the
         FDM branch uses `metadata.print` (`SelectedPreset.cpp:95`).
-- [ ] **M1.11** SLA sidebar summary (PLAN F5). · M · needs M1.10, M1.3
+- [ ] **M1.11** SLA sidebar summary (PLAN F5). · M → split · needs M1.10, M1.3
+  - [ ] **M1.11a** Print summary figures for the selected bed, per wireframe W4: resin ml, cost, bottles and layer count, an en dash where a value is not available, visible only for SLA. Lives in its own files and is embedded in the bed sidebar section, so the PlaterRenderModule hotspot is not touched. · M · needs M1.10, M1.3
+  - [ ] **M1.11b** The W4 issues list (islands, cups) with jump-to-layer links into the layer view. · M · needs M1.11a, M5.6
 
 - [ ] **M1.12** Branding artwork: replace `resources/icons/splashscreen.jpg` and the `PrusaSlicer.*` app icons (ico, icns, svg, png) with our own, in the fork palette, and check every place the old name or logo still shows (about box, window title, installer strings). The app name and key are already `ResinSlicer` (version.inc). Prusa's name and logo must not be reused: this is a third-party fork. · M · needs —
 
@@ -325,6 +327,8 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
 - [ ] **M5.3.samples** `[human]` Provide one sliced sample archive per target printer (from Chitubox/Lychee/Photon Workshop) and list the printer models, so the writers can be checked. Samples stay local, like the M7 dataset. · S · needs —
   Progress: Photon Mono M5 `.pm5` received 2026-09-22 (`local-samples/anycubic-photon-mono-m5/`). Still wanted: Photon Mono M5s (`.pm5s`), M7 Pro (`.pm7`), Saturn 4 Ultra 12K and 16K, Mars 5 Ultra (`.goo`). A sample with an asymmetric shape placed off-centre would also settle mirroring (M5.4).
 - [ ] **M5.4** Display mirroring and orientation test pattern for every format (PLAN C3). · M · needs M5.3
+  - [ ] **M5.4a** Tests that pin how a model's position on the plate maps to the decoded layer image, for both orientations and all four mirror settings, in the .goo and PW0 formats. They record today's convention so it can be checked against a real printer, and would have caught the portrait preset that transposed every layer. · S · needs M5.3
+  - [ ] **M5.4b** A printable test pattern (an asymmetric shape placed off-centre) per format, to confirm orientation and mirroring on each real printer. · S · needs M5.4a
 - [ ] **M5.5** Upload SLA archives to print hosts and removable drives (PLAN C4). · M · needs M0.10
 - [ ] **M5.6** Preview layer inspector: 2D layer view with a pixel grid (PLAN F4). Use mock data until M4.9 lands. · L → split · needs M0.11b, M1.3
 - [ ] **M5.7** Per-layer area and peel-force chart beside the layer slider. · M · needs M5.6, M4.9
