@@ -178,6 +178,10 @@ set(SLIC3R_SOURCES
     src/libslic3r/Format/SL1.hpp
     src/libslic3r/Format/SL1_SVG.cpp
     src/libslic3r/Format/SL1_SVG.hpp
+    src/libslic3r/Format/SLAArchiveReader.cpp
+    src/libslic3r/Format/SLAArchiveReader.hpp
+    src/libslic3r/Format/ZipperArchiveImport.cpp
+    src/libslic3r/Format/ZipperArchiveImport.hpp
     src/libslic3r/Format/AnycubicSLA.cpp
     src/libslic3r/Format/AnycubicSLA.hpp
     src/libslic3r/Format/GooSLA.cpp
