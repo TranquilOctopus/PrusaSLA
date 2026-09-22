@@ -52,8 +52,10 @@ std::vector<ExPolygons> make_layers_with_empty(const std::vector<double>& sizes_
     layers.reserve(sizes_mm.size() + 1);
     for (size_t i = 0; i <= sizes_mm.size(); ++i) {
         ExPolygons layer;
-        if (i != empty_layer_idx && i < sizes_mm.size()) {
-            layer.push_back(make_square(sizes_mm[i < empty_layer_idx ? i : i - 1]));
+        if (i != empty_layer_idx) {
+            const size_t size_idx = i < empty_layer_idx ? i : i - 1;
+            if (size_idx < sizes_mm.size())
+                layer.push_back(make_square(sizes_mm[size_idx]));
         }
         layers.push_back(std::move(layer));
     }
