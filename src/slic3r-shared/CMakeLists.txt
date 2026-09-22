@@ -754,6 +754,11 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Preview/AbstractViewerWrapper.cpp
         include/Slic3r/App/Preview/AbstractViewerWrapper.hpp
 
+        src/Slic3r/App/Preview/SlaLayerViewCache.cpp
+        include/Slic3r/App/Preview/SlaLayerViewCache.hpp
+        src/Slic3r/App/Preview/SlaLayerViewPanel.cpp
+        include/Slic3r/App/Preview/SlaLayerViewPanel.hpp
+
         src/Slic3r/App/AbstractRenderLayout.cpp
         include/Slic3r/App/AbstractRenderLayout.hpp
         include/Slic3r/App/ResourceResolver.hpp
@@ -1559,6 +1564,8 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/App/ThemeTests.cpp
 
             test/Slic3r/App/SlaFirstPreferenceTests.cpp
+
+            test/Slic3r/App/SlaLayerViewCacheTests.cpp
 
             test/Slic3r/App/Scene/Node.cpp
             test/Slic3r/App/Scene/Ray.cpp

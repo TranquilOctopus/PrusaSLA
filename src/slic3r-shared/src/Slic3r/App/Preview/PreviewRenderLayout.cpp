@@ -6,6 +6,7 @@
 #include "Slic3r/App/Preview/DoubleSliderForGCode.hpp"
 #include "Slic3r/App/Preview/SidebarAutoReslice.hpp"
 #include "Slic3r/App/Preview/SidebarPreviewActionButtons.hpp"
+#include "Slic3r/App/Preview/SlaLayerViewPanel.hpp"
 #include "Slic3r/App/InvalidDataDialog.hpp"
 #include "Slic3r/App/SidebarStackLayout.hpp"
 
@@ -30,6 +31,7 @@ PreviewRenderLayout::PreviewRenderLayout(
     std::unique_ptr<DoubleSliderForLayers> sla_double_slider_layers,
     std::unique_ptr<DoubleSliderForGcode> double_slider_gcode,
     std::unique_ptr<SidebarAutoReslice> sidebar_auto_reslice,
+    std::unique_ptr<SlaLayerViewPanel> sla_layer_view_panel,
     std::unique_ptr<NumberEntryDialog> numbers_entry_dialog,
     std::unique_ptr<InvalidDataDialog> invalid_data_dialog,
     std::unique_ptr<CrashedProjectsDialog> crashed_projects_dialog,
@@ -56,6 +58,7 @@ PreviewRenderLayout::PreviewRenderLayout(
     m_double_slider_gcode(std::move(double_slider_gcode)),
     m_sidebar_auto_reslice(std::move(sidebar_auto_reslice)),
     m_sidebar_action_buttons(std::move(sidebar_action_buttons)),
+    m_sla_layer_view_panel(std::move(sla_layer_view_panel)),
     m_invalid_data_dialog(std::move(invalid_data_dialog))
 {}
 
@@ -104,6 +107,13 @@ void PreviewRenderLayout::init_right_column()
     );
     m_gcode_window->set_visible(false);
     m_gcode_window->set_flex_grow(1);
+
+    m_layout_sidebar_stack_layout->insert_item(
+        SidebarStackLayout::ItemType::SlaLayerView,
+        m_sla_layer_view_panel.release()
+    );
+    m_sla_layer_view_panel->set_visible(false);
+    m_sla_layer_view_panel->set_flex_grow(1);
 
     m_layout_right_column->append(m_sidebar_auto_reslice.release());
 

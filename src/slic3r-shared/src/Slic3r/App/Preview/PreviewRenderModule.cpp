@@ -875,6 +875,8 @@ void PreviewRenderModule::init_scene_layout()
         std::make_unique<SidebarPreviewActionButtons>(m_render_module_navigator);
     m_sidebar_action_buttons->on_init(&m_project_interactor);
 
+    m_sla_layer_view_panel = std::make_unique<SlaLayerViewPanel>();
+
     m_layout.reset(new PreviewRenderLayout(
         *m_render_module_navigator,
         m_top_bar.release(),
@@ -892,6 +894,7 @@ void PreviewRenderModule::init_scene_layout()
         m_sla_slider_layers.release(),
         m_slider_gcode.release(),
         m_sidebar_auto_reslice.release(),
+        m_sla_layer_view_panel.release(),
         m_number_entry_dialog.release(),
         m_invalid_data_dialog.release(),
         m_crashed_projects_dialog.release(),
@@ -1015,6 +1018,14 @@ void PreviewRenderModule::init_scene_layout()
         _u8L("G-code inspect")
     );
 
+    m_button_sla_layer_view = m_layout->add_toolbar_item_checkable(
+        ToolbarID::Mode,
+        Render::Icon::EyeOpen,
+        _u8L("2D Layer View")
+    );
+    m_button_sla_layer_view->set_checked(false);
+    m_button_sla_layer_view->callbacks().value_changed = [this]() { toggle_sla_layer_view(); };
+
     // Initialize toolbar buttons visibility
     update_toolbar_visibility();
     // <<
@@ -1042,6 +1053,13 @@ void PreviewRenderModule::update_toolbar_visibility()
     m_button_shells
         ->set_visible(fdm_has_gcode /*m_fdm_viewer.mode() != FdmViewerWrapperMode::GCodeViewer*/);
     m_button_wipes->set_visible(fdm_has_gcode);
+
+    bool sla_has_data = m_sla_viewer.has_data();
+    m_button_sla_layer_view->set_visible(sla_has_data);
+    if (m_button_sla_layer_view->checked() && !sla_has_data) {
+        m_button_sla_layer_view->set_checked(false);
+        toggle_sla_layer_view();
+    }
 
     // m_button_gcode_inspect
 }
@@ -1191,12 +1209,19 @@ void PreviewRenderModule::update_sla_viewer_result_data(const Domain::SlicingId 
 
     if (!sla_result) {
         m_sla_viewer.reset_result();
+        if (m_sla_layer_view_panel)
+            m_sla_layer_view_panel->set_sla_result(nullptr);
     } else {
         const Domain::BedInstance* bed_instance = m_project_interactor.workbench()
                                                       .project(id.project_id)
                                                       .find_bed_instance_by_id(id.bed_instance_id);
         ASSERT(bed_instance != nullptr);
         m_sla_viewer.load_from_result(sla_result->get(), bed_instance->transformation.get_matrix());
+
+        if (m_sla_layer_view_panel && m_sla_layer_view_panel->is_visible()) {
+            m_sla_layer_view_panel->set_sla_result(sla_result->get());
+            update_sla_layer_view();
+        }
     }
 }
 
@@ -1271,6 +1296,45 @@ void PreviewRenderModule::on_gcode_view_type_changed()
 void PreviewRenderModule::on_slider_layers_on_thumb_move()
 {
     update_scene_aabb();
+    update_sla_layer_view();
+}
+
+void PreviewRenderModule::toggle_sla_layer_view()
+{
+    if (!m_sla_layer_view_panel)
+        return;
+
+    bool visible = m_button_sla_layer_view->checked();
+    m_sla_layer_view_panel->set_visible(visible);
+
+    if (visible) {
+        m_layout->sidebar_stack_layout()->switch_to_item(
+            SidebarStackLayout::ItemType::SlaLayerView);
+        update_sla_layer_view();
+    }
+}
+
+void PreviewRenderModule::update_sla_layer_view()
+{
+    if (!m_sla_layer_view_panel || !m_sla_layer_view_panel->is_visible())
+        return;
+
+    if (!m_sla_viewer.has_data())
+        return;
+
+    int layer_idx = m_sla_slider_layers->lower_pos();
+    const auto& layers_zs = m_sla_viewer.layers_zs();
+    if (layer_idx < 0 || static_cast<size_t>(layer_idx) >= layers_zs.size())
+        return;
+
+    auto sla_result_opt = m_project_interactor.sla_result_cache().get_result(
+        m_project_interactor.selected_bed_slicing_id());
+    if (!sla_result_opt)
+        return;
+
+    float layer_z = layers_zs[static_cast<size_t>(layer_idx)];
+    m_sla_layer_view_panel->set_sla_result(sla_result_opt->get());
+    m_sla_layer_view_panel->set_current_layer(static_cast<size_t>(layer_idx), layer_z);
 }
 
 void PreviewRenderModule::on_slider_layers_ticks_changed()

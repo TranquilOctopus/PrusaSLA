@@ -15,6 +15,7 @@
 #include "Slic3r/App/Preview/SlaViewerWrapper.hpp"
 #include "Slic3r/App/Preview/SidebarPreviewActionButtons.hpp"
 #include "Slic3r/App/Preview/SidebarAutoReslice.hpp"
+#include "Slic3r/App/Preview/SlaLayerViewPanel.hpp"
 #include <Slic3r/App/Preview/LegendWindow.hpp>
 #include <Slic3r/App/Preview/GCodeWindow.hpp>
 #include <Slic3r/App/Preview/DoubleSliderForGCode.hpp>
@@ -241,6 +242,7 @@ private:
     Yoga::Passthrough<DoubleSliderForLayers> m_slider_layers;
     Yoga::Passthrough<DoubleSliderForLayers> m_sla_slider_layers;
     Yoga::Passthrough<SidebarAutoReslice> m_sidebar_auto_reslice;
+    Yoga::Passthrough<SlaLayerViewPanel> m_sla_layer_view_panel;
     Yoga::Passthrough<PreferencesDialog> m_preferences_dialog;
     Yoga::Passthrough<NumberEntryDialog> m_number_entry_dialog;
     Yoga::Passthrough<InvalidDataDialog> m_invalid_data_dialog;
@@ -263,6 +265,8 @@ private:
     ToolBarButton* m_button_plater_switch     = nullptr;
 
     ToolBarButton* m_button_gcode_inspect = nullptr;
+
+    ToolBarButton* m_button_sla_layer_view = nullptr;
 
     std::shared_ptr<ThumbnailStore> m_thumbnail_store;
     std::shared_ptr<ThumbnailStoreUpdater> m_thumbnail_store_updater;
@@ -305,6 +309,9 @@ private:
     void update_bed_instances();
     void update_viewer();
     void update_scene_aabb();
+
+    void toggle_sla_layer_view();
+    void update_sla_layer_view();
 };
 
 } // namespace Slic3r::App::Preview
