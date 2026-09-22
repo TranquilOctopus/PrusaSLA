@@ -12,6 +12,7 @@
 
 #include <boost/filesystem.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <functional>
 #include <map>
 #include <nlohmann/json.hpp>
 
@@ -430,23 +431,58 @@ TEST_CASE("3MF SLA round trip with missing optional keys uses defaults", "[3mf][
     }
     mz_zip_reader_end(&archive);
 
-    // Modify the project JSON to strip the new keys
-    const std::string meta_filename = "Metadata/Slic3r_project.json";
-    REQUIRE(file_contents.count(meta_filename) > 0);
+    // Find the archive entry that holds the object data by its content rather than guessing its
+    // name: the first version of this test assumed "Metadata/Slic3r_project.json", which does not
+    // exist, so it failed before testing anything.
+    std::string meta_filename;
+    std::string entry_names;
+    for (const auto& [name, content] : file_contents) {
+        entry_names += name + "\n";
+        if (meta_filename.empty() && content.find("slaSupportPoints") != std::string::npos)
+            meta_filename = name;
+    }
+    INFO("3MF entries:\n" << entry_names);
+    REQUIRE_FALSE(meta_filename.empty());
+    INFO("object data is in " << meta_filename);
     json meta_json = json::parse(file_contents[meta_filename]);
 
-    if (meta_json.contains("objects") && meta_json["objects"].is_array() && !meta_json["objects"].empty()) {
-        json& obj_json = meta_json["objects"][0];
-        obj_json.erase("slaPointsStatus");
-        obj_json.erase("objectSettingsSla");
-        // Also strip TYPE from support points to simulate old writer that didn't write it
-        if (obj_json.contains("slaSupportPoints") && obj_json["slaSupportPoints"].is_array()) {
-            for (auto& pt_json : obj_json["slaSupportPoints"]) {
-                // The key is "t", not "type": see SlaSupportPointsSerialization::TYPE in
-                // PrusaFile.cpp. Erasing "type" removes nothing and the point keeps its type.
-                pt_json.erase("t");
-            }
+    // The object json can sit at any depth in that file; find the one owning the points.
+    std::function<json*(json&)> find_object = [&](json& node) -> json* {
+        if (node.is_object()) {
+            if (node.contains("slaSupportPoints"))
+                return &node;
+            for (auto& [key, child] : node.items())
+                if (json* found = find_object(child))
+                    return found;
+        } else if (node.is_array()) {
+            for (auto& child : node)
+                if (json* found = find_object(child))
+                    return found;
         }
+        return nullptr;
+    };
+    json* obj_json = find_object(meta_json);
+    REQUIRE(obj_json != nullptr);
+    REQUIRE((*obj_json)["slaSupportPoints"].is_array());
+    REQUIRE((*obj_json)["slaSupportPoints"].size() == 1);
+
+    // Before stripping, check the writer really wrote the type. The round-trip test above sees a
+    // slope point come back as manual_add; this tells writer and reader apart.
+    const json& written_point = (*obj_json)["slaSupportPoints"][0];
+    INFO("written point: " << written_point.dump());
+    CHECK(written_point.contains("t"));
+    if (written_point.contains("t"))
+        CHECK(written_point["t"].get<json::number_integer_t>() ==
+              static_cast<json::number_integer_t>(SupportPointType::slope));
+    CHECK(obj_json->contains("slaPointsStatus"));
+    CHECK(obj_json->contains("objectSettingsSla"));
+
+    // Now simulate a file from an older writer by removing all three new keys.
+    obj_json->erase("slaPointsStatus");
+    obj_json->erase("objectSettingsSla");
+    for (auto& pt_json : (*obj_json)["slaSupportPoints"]) {
+        // The key is "t", not "type": see SlaSupportPointsSerialization::TYPE in PrusaFile.cpp.
+        pt_json.erase("t");
     }
 
     file_contents[meta_filename] = Biz::beautify_json(meta_json, 2);
