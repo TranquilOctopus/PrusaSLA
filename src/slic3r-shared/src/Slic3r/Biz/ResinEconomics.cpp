@@ -83,15 +83,7 @@ ResinEconomicsResult ResinEconomics::calculate(const Domain::SLA::PrintStatistic
     input.bottle_weight_kg = positive_double(config, "bottle_weight");
     input.bottle_cost      = positive_double(config, "bottle_cost");
 
-    // Read material_density (g/ml)
-    try {
-        const double material_density = config.get<double>("material_density");
-        if (material_density > 0.0) {
-            input.material_density_g_ml = material_density;
-        }
-    } catch (...) {
-        // Key not found or type mismatch, leave as nullopt
-    }
+    input.material_density_g_ml = positive_double(config, "material_density");
 
     return calculate(input);
 }
