@@ -121,6 +121,7 @@ private:
     PageListView* m_extruder_page_list_view{nullptr};
 
     Yoga::Text* m_bed_name{nullptr};
+    Yoga::Text* m_extruders_label{nullptr};
     Yoga::LayoutButton* m_print_tab_button{nullptr};
 
     Biz::UnsharedPointer<ToolPrintCategorizer> m_tool_print_categorizer;
