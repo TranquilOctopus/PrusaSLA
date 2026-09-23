@@ -94,6 +94,7 @@ private:
     size_t m_material_index = Domain::INVALID_ID;
     Yoga::ButtonGroup m_material_type_button_group;
     std::map<std::string, Yoga::LayoutButton*> m_type_filter_buttons;
+    std::map<Yoga::LayoutButton*, std::string> m_type_filter_values;
     std::vector<Yoga::LayoutButton*> m_fff_type_filter_buttons;
     std::vector<Yoga::LayoutButton*> m_sla_type_filter_buttons;
     Yoga::InputText* m_input_text_search                 = nullptr;
