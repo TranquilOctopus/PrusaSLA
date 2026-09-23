@@ -259,9 +259,9 @@ SlaHollowGizmo::SlaHollowGizmo(
 ) :
     m_scene_presenter(scene_presenter),
     m_project_interactor(project_interactor),
-    m_device(device),
-    m_dialog(std::make_unique<SlaHollowDialog>())
+    m_device(device)
 {
+    m_dialog.reset(std::make_unique<SlaHollowDialog>());
     m_dialog->set_title(_u8L("SLA Hollow"));
     m_dialog->set_shortcut("H");
 
@@ -1196,7 +1196,7 @@ Scene::GizmoActivationState SlaHollowGizmo::on_mouse(Scene::GizmoEventContext& c
 
 std::unique_ptr<GizmoWindow> SlaHollowGizmo::release_ui_window()
 {
-    return std::move(m_dialog);
+    return m_dialog.release();
 }
 
 void SlaHollowGizmo::render_scene(Render::CommandBuffer& cmd_buffer)

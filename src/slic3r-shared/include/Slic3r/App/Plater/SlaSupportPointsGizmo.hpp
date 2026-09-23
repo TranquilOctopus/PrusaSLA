@@ -13,6 +13,7 @@
 #include "Slic3r/Biz/Algorithms/AABBMesh.hpp"
 #include "Slic3r/App/Scene/Clipper.hpp"
 #include "Slic3r/App/Scene/ClipperPresenter.hpp"
+#include "Slic3r/App/Yoga/Item.hpp"
 
 #include <memory>
 #include <optional>
@@ -165,7 +166,7 @@ private:
     PlaterScenePresenter& m_scene_presenter;
     Biz::ProjectInteractor& m_project_interactor;
     Render::Device& m_device;
-    std::unique_ptr<SlaSupportPointsDialog> m_dialog;
+    Yoga::Passthrough<SlaSupportPointsDialog> m_dialog;
     std::unique_ptr<Biz::SlaSupportPointsRequest> m_support_points_request;
     std::optional<Domain::SlicingId> m_generation_slicing_id;
     Domain::ObjectID m_selected_object_id;

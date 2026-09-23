@@ -11,6 +11,7 @@
 #include "Slic3r/App/Render/GeometryManager.hpp"
 #include "Slic3r/Biz/Algorithms/AABBMesh.hpp"
 #include "Slic3r/Biz/Slicing/SlicingInteractor.hpp"
+#include "Slic3r/App/Yoga/Item.hpp"
 
 #include <memory>
 #include <optional>
@@ -147,7 +148,7 @@ private:
     PlaterScenePresenter& m_scene_presenter;
     Biz::ProjectInteractor& m_project_interactor;
     Render::Device& m_device;
-    std::unique_ptr<SlaHollowDialog> m_dialog;
+    Yoga::Passthrough<SlaHollowDialog> m_dialog;
     std::unique_ptr<Biz::SlaHollowRequest> m_hollow_request;
     std::optional<Domain::SlicingId> m_preview_slicing_id;
     Domain::ObjectID m_selected_object_id;
