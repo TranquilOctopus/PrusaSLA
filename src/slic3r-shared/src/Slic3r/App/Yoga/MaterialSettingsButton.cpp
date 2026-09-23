@@ -5,6 +5,7 @@
 #include "Slic3r/App/Yoga/Separator.hpp"
 #include "Slic3r/App/Yoga/ButtonGroup.hpp"
 #include "Slic3r/App/Yoga/LayoutButton.hpp"
+#include "Slic3r/App/IsSlaActive.hpp"
 
 #include "Slic3r/Biz/I18N/I18N.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
@@ -92,8 +93,8 @@ MaterialSettingsButton::MaterialSettingsButton(
     m_cog_btn->callbacks().hovered_changed = [this](bool) { update_cog_visibility(); };
 
     m_nozzle_separator =
-        emplace_back<Separator>(Orientation::Vertical)
-            ->set_fill(m_theme->color_imgui(Platform::Color::WindowBg));
+        emplace_back<Separator>(Orientation::Vertical);
+    m_nozzle_separator->set_fill(m_theme->color_imgui(Platform::Color::WindowBg));
 
     m_nozzle_btn =
         emplace_back<LayoutButton>(std::string{}, Render::Icon::None, _u8L("Change nozzle size"));
@@ -272,7 +273,10 @@ void MaterialSettingsButton::update_cog_visibility()
 
 void MaterialSettingsButton::update_nozzle_visibility()
 {
-    const bool is_sla = m_project_interactor.selected_config_container().print_technology() == Domain::PrinterTechnology::SLA;
+    if (!m_nozzle_btn || !m_nozzle_separator) {
+        return;
+    }
+    const bool is_sla = is_sla_active(m_project_interactor);
     m_nozzle_btn->set_visible(!is_sla);
     m_nozzle_separator->set_visible(!is_sla);
 }

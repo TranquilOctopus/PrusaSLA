@@ -1,5 +1,6 @@
 #include "Slic3r/App/Plater/PlaceOnBedButton.hpp"
 
+#include "Slic3r/App/IsSlaActive.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
 #include "Slic3r/Biz/Scene/Selection.hpp"
 
@@ -7,7 +8,7 @@ namespace Slic3r::App::Plater {
 using Biz::_u8L;
 
 PlaceOnBedButton::PlaceOnBedButton(Biz::ProjectInteractor& project_interactor) :
-    Yoga::LayoutButton{is_sla() ? _u8L("Place on build plate") : _u8L("Place on bed")},
+    Yoga::LayoutButton{_u8L("Place on bed")},
     m_project_interactor(project_interactor),
     m_scene_interactor(project_interactor.scene_interactor()),
     m_selected_project_listener_scope(m_project_interactor, *this),
@@ -16,11 +17,14 @@ PlaceOnBedButton::PlaceOnBedButton(Biz::ProjectInteractor& project_interactor) :
     set_background_color(Platform::Color::AccentPrimary);
     set_label_font_type(Render::ImguiFontType::Bold);
     reload();
+    if (is_sla_active(m_project_interactor)) {
+        set_label(_u8L("Place on build plate"));
+    }
 }
 
 bool PlaceOnBedButton::is_sla() const
 {
-    return m_project_interactor.selected_config_container().print_technology() == Domain::PrinterTechnology::SLA;
+    return is_sla_active(m_project_interactor);
 }
 
 void PlaceOnBedButton::on_scene_selection_bounding_box_updated(

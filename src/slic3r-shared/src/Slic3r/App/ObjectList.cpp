@@ -9,6 +9,7 @@
 #include "Slic3r/Biz/Algorithms/Color.hpp"
 #include "Slic3r/Biz/Scene/SceneInteractor.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
+#include "Slic3r/App/IsSlaActive.hpp"
 #include "Slic3r/App/Imgui/ImguiExtension.hpp"
 #include "Slic3r/App/Render/ImguiRender.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
@@ -998,7 +999,7 @@ bool ObjectList::render_out_of_beds()
 
     bool is_changed_selection = false;
 
-    const bool is_sla = m_project_interactor->selected_config_container().print_technology() == Domain::PrinterTechnology::SLA;
+    const bool is_sla = is_sla_active(*m_project_interactor);
     render_group_name(is_sla ? _u8L("Out of build plate") : _u8L("Out of bed"));
 
     BedsTable table;
