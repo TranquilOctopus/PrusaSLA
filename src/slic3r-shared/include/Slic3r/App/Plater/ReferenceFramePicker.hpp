@@ -44,6 +44,7 @@ public:
 private:
     void reload(std::optional<Domain::SelectionId> project_id = std::nullopt);
     Biz::Scene::SelectionReferenceFrame get_checked_frame() const;
+    bool is_sla() const;
 
     std::function<void()> m_on_change;
     Biz::ProjectInteractor& m_project_interactor;

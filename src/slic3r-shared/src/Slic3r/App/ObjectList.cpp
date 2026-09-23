@@ -998,7 +998,8 @@ bool ObjectList::render_out_of_beds()
 
     bool is_changed_selection = false;
 
-    render_group_name(_u8L("Out of bed"));
+    const bool is_sla = m_project_interactor->selected_config_container().print_technology() == Domain::PrinterTechnology::SLA;
+    render_group_name(is_sla ? _u8L("Out of build plate") : _u8L("Out of bed"));
 
     BedsTable table;
     if (table.begin(

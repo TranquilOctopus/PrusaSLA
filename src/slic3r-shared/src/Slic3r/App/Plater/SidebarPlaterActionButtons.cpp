@@ -196,8 +196,9 @@ void SidebarPlaterActionButtons::update_slice_button(const BedSelection& selecti
         for (const BedStatus& bed_status : statuses) {
             if (bed_status.status == StatusCode::Modified) {
                 std::string bed_warning;
+                const bool is_sla = m_project_interactor->selected_config_container().print_technology() == Domain::PrinterTechnology::SLA;
                 for (const std::string& warning : bed_status.warrnings) {
-                    bed_warning += fmt::format("Bed {}:\n", bed_status.bed_index);
+                    bed_warning += fmt::format(fmt::runtime(is_sla ? _u8L("Build plate {}:\n") : _u8L("Bed {}:\n")), bed_status.bed_index);
                     bed_warning += warning + "\n";
                 }
                 bed_warning += bed_warning.empty() ? "" : "\n";

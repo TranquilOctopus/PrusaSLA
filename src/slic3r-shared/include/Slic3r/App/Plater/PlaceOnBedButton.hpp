@@ -30,6 +30,8 @@ public:
         const Biz::Scene::ObjectSelection&
     ) override;
 
+    bool is_sla() const;
+
 protected:
     void action_internal() override;
 
