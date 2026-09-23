@@ -54,6 +54,7 @@ public:
     void set_base_height_use_global(bool use_global);
     void set_clipping_plane_position(double pos);
     void set_lock_island_supports(bool locked);
+    void set_active_preset(int index);
 
 private:
     Yoga::SliderWithInput* m_density_slider = nullptr;
