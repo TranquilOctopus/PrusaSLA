@@ -123,7 +123,7 @@ void MaterialSettingsDialog::on_reset()
         std::string tab_name = m_project_interactor.selected_config_container().print_technology()
                 == Domain::PrinterTechnology::FFF ?
             _u8L("Filament") :
-            _u8L("Material");
+            _u8L("Resin");
 
         Tab* tab = append_tab(fmt::format("{} {}", tab_name, material_cbi_index + 1));
         m_config_tabs.emplace_back(

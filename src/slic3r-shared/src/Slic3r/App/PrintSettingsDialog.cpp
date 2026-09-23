@@ -46,7 +46,8 @@ PrintSettingsDialog::PrintSettingsDialog(
     // Only preserve 1px bottom padding
     content()->set_padding(Paddings(0, 0, 0, 1));
 
-    append_tab(Biz::_u8L("Print"));
+    m_print_tab_button = append_tab(Biz::_u8L("Print"));
+    update_print_tab_label();
 
     Item* center_row = content()->emplace_back<Item>();
     center_row->set_orientation(Orientation::Horizontal);
@@ -330,6 +331,9 @@ void PrintSettingsDialog::on_preset_selection_changed(
     {
         update_dirty_state();
     }
+    if (type == Biz::Preset::PresetItemType::PrinterPreset) {
+        update_print_tab_label();
+    }
 }
 
 void PrintSettingsDialog::on_preset_value_changed(
@@ -371,6 +375,14 @@ void PrintSettingsDialog::on_preset_bundles_loaded()
     update_dirty_state();
     ASSERT(m_tool_print_transformer->size() > 1);
     m_tool_print_transformer->on_updated({0, m_tool_print_transformer->size()-1});
+}
+
+void PrintSettingsDialog::update_print_tab_label()
+{
+    const bool is_sla = m_project_interactor.selected_config_container().print_technology() == Domain::PrinterTechnology::SLA;
+    if (m_print_tab_button) {
+        m_print_tab_button->set_label(is_sla ? Biz::_u8L("Supports & raft") : Biz::_u8L("Print"));
+    }
 }
 
 } // namespace Slic3r::App

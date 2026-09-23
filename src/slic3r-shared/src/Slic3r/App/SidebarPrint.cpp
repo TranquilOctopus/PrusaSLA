@@ -62,7 +62,8 @@ SidebarPrint::SidebarPrint(Biz::ProjectInteractor& project_interactor, Navigator
     text_rect->set_align_items(YGAlignCenter);
     text_rect->set_flags(ImDrawFlags_RoundCornersTopLeft | ImDrawFlags_RoundCornersBottomLeft);
     text_rect->set_padding(Paddings(5, 0));
-    text_rect->emplace_back<Text>(Biz::_u8L("Print preset"));
+    m_print_preset_label = text_rect->emplace_back<Text>(Biz::_u8L("Print preset"));
+    update_print_preset_label();
 
     m_combo_print =
         layer_height_row->emplace_back<ComboBoxListViewSelection<Biz::Preset::PresetItem>>();
@@ -163,6 +164,12 @@ void SidebarPrint::refresh_print_combobox_label_color()
     ));
 }
 
+void SidebarPrint::update_print_preset_label()
+{
+    const bool is_sla = m_project_interactor.selected_config_container().print_technology() == Domain::PrinterTechnology::SLA;
+    m_print_preset_label->set_text(is_sla ? Biz::_u8L("Supports & raft") : Biz::_u8L("Print preset"));
+}
+
 void SidebarPrint::refresh_tools_comboboxes_label_colors()
 {
     const size_t tool_cnt = m_project_interactor.preset_interactor().tool_presets().size();
@@ -197,6 +204,7 @@ void SidebarPrint::on_preset_selection_changed(
         switch (type) {
         case Biz::Preset::PresetItemType::PrinterPreset:
             update_tools_visibility();
+            update_print_preset_label();
             break;
         case Biz::Preset::PresetItemType::PrintPreset:
             refresh_print_combobox_label_color();
@@ -247,6 +255,7 @@ void SidebarPrint::on_config_container_selection_changed(
         && m_project_interactor.selected_config_container_id() == config_container_id)
     {
         update_tools_visibility();
+        update_print_preset_label();
     }
 }
 

@@ -56,6 +56,7 @@ private:
     void create_favorite_params();
 
     void update_tools_visibility();
+    void update_print_preset_label();
     void refresh_print_combobox_label_color();
     void refresh_tools_comboboxes_label_colors();
 
@@ -85,6 +86,8 @@ private:
     ToolHeadListView* m_tool_head_list_view{nullptr};
 
     PrintSettingsDialog* m_print_settings_dialog{nullptr};
+
+    Yoga::Text* m_print_preset_label{nullptr};
 
     int m_last_selected_index{-1};
 };
