@@ -1495,113 +1495,26 @@ void SlaSupportPointsGizmo::apply_base_height_to_selected()
 
 void SlaSupportPointsGizmo::apply_preset_light()
 {
-    DialogSyncGuard guard(*this);
-
-    if (!m_edit_state.has_value()) {
-        return;
-    }
-    take_undo_snapshot();
-
-    constexpr float head_diameter = 0.30f;
-    constexpr float pillar_diameter = 0.8f;
-    constexpr float base_diameter = 2.0f;
-    constexpr float base_height = 0.5f;
-
-    m_edit_state->editing.head_diameter_mm = head_diameter;
-    m_edit_state->editing.pillar_diameter_mm = pillar_diameter;
-    m_edit_state->editing.base_diameter_mm = base_diameter;
-    m_edit_state->editing.base_height_mm = base_height;
-    m_edit_state->editing.head_diameter_use_global = false;
-    m_edit_state->editing.pillar_diameter_use_global = false;
-    m_edit_state->editing.base_diameter_use_global = false;
-    m_edit_state->editing.base_height_use_global = false;
-
-    m_dialog->set_head_diameter(head_diameter);
-    m_dialog->set_pillar_diameter(pillar_diameter);
-    m_dialog->set_base_diameter(base_diameter);
-    m_dialog->set_base_height(base_height);
-    m_dialog->set_head_diameter_use_global(false);
-    m_dialog->set_pillar_diameter_use_global(false);
-    m_dialog->set_base_diameter_use_global(false);
-    m_dialog->set_base_height_use_global(false);
-
-    if (m_edit_state->editing.selected_point_indices.empty()) {
-        for (size_t i = 0; i < m_edit_state->editing.points.size(); ++i) {
-            m_edit_state->editing.points[i].head_front_radius = head_diameter / 2.0f;
-            m_edit_state->editing.points[i].pillar_diameter = pillar_diameter;
-            m_edit_state->editing.points[i].base_diameter = base_diameter;
-            m_edit_state->editing.points[i].base_height = base_height;
-        }
-    } else {
-        m_edit_state->editing.apply_head_diameter_to_selected();
-        m_edit_state->editing.apply_pillar_diameter_to_selected();
-        m_edit_state->editing.apply_base_diameter_to_selected();
-        m_edit_state->editing.apply_base_height_to_selected();
-    }
-    update_point_visuals();
+    apply_support_preset(0.30f, 0.8f, 2.0f, 0.5f, 0);
 }
 
 void SlaSupportPointsGizmo::apply_preset_medium()
 {
-    DialogSyncGuard guard(*this);
-
-    if (!m_edit_state.has_value()) {
-        return;
-    }
-    take_undo_snapshot();
-
-    constexpr float head_diameter = 0.45f;
-    constexpr float pillar_diameter = 1.2f;
-    constexpr float base_diameter = 3.0f;
-    constexpr float base_height = 0.7f;
-
-    m_edit_state->editing.head_diameter_mm = head_diameter;
-    m_edit_state->editing.pillar_diameter_mm = pillar_diameter;
-    m_edit_state->editing.base_diameter_mm = base_diameter;
-    m_edit_state->editing.base_height_mm = base_height;
-    m_edit_state->editing.head_diameter_use_global = false;
-    m_edit_state->editing.pillar_diameter_use_global = false;
-    m_edit_state->editing.base_diameter_use_global = false;
-    m_edit_state->editing.base_height_use_global = false;
-
-    m_dialog->set_head_diameter(head_diameter);
-    m_dialog->set_pillar_diameter(pillar_diameter);
-    m_dialog->set_base_diameter(base_diameter);
-    m_dialog->set_base_height(base_height);
-    m_dialog->set_head_diameter_use_global(false);
-    m_dialog->set_pillar_diameter_use_global(false);
-    m_dialog->set_base_diameter_use_global(false);
-    m_dialog->set_base_height_use_global(false);
-
-    if (m_edit_state->editing.selected_point_indices.empty()) {
-        for (size_t i = 0; i < m_edit_state->editing.points.size(); ++i) {
-            m_edit_state->editing.points[i].head_front_radius = head_diameter / 2.0f;
-            m_edit_state->editing.points[i].pillar_diameter = pillar_diameter;
-            m_edit_state->editing.points[i].base_diameter = base_diameter;
-            m_edit_state->editing.points[i].base_height = base_height;
-        }
-    } else {
-        m_edit_state->editing.apply_head_diameter_to_selected();
-        m_edit_state->editing.apply_pillar_diameter_to_selected();
-        m_edit_state->editing.apply_base_diameter_to_selected();
-        m_edit_state->editing.apply_base_height_to_selected();
-    }
-    update_point_visuals();
+    apply_support_preset(0.45f, 1.2f, 3.0f, 0.7f, 1);
 }
 
 void SlaSupportPointsGizmo::apply_preset_heavy()
+{
+    apply_support_preset(0.60f, 1.8f, 4.0f, 1.0f, 2);
+}
+
+void SlaSupportPointsGizmo::apply_support_preset(float head_diameter, float pillar_diameter, float base_diameter, float base_height, int preset_index)
 {
     DialogSyncGuard guard(*this);
 
     if (!m_edit_state.has_value()) {
         return;
     }
-    take_undo_snapshot();
-
-    constexpr float head_diameter = 0.60f;
-    constexpr float pillar_diameter = 1.8f;
-    constexpr float base_diameter = 4.0f;
-    constexpr float base_height = 1.0f;
 
     m_edit_state->editing.head_diameter_mm = head_diameter;
     m_edit_state->editing.pillar_diameter_mm = pillar_diameter;
@@ -1620,21 +1533,16 @@ void SlaSupportPointsGizmo::apply_preset_heavy()
     m_dialog->set_pillar_diameter_use_global(false);
     m_dialog->set_base_diameter_use_global(false);
     m_dialog->set_base_height_use_global(false);
+    m_dialog->set_active_preset(preset_index);
 
-    if (m_edit_state->editing.selected_point_indices.empty()) {
-        for (size_t i = 0; i < m_edit_state->editing.points.size(); ++i) {
-            m_edit_state->editing.points[i].head_front_radius = head_diameter / 2.0f;
-            m_edit_state->editing.points[i].pillar_diameter = pillar_diameter;
-            m_edit_state->editing.points[i].base_diameter = base_diameter;
-            m_edit_state->editing.points[i].base_height = base_height;
-        }
-    } else {
+    if (!m_edit_state->editing.selected_point_indices.empty()) {
+        take_undo_snapshot();
         m_edit_state->editing.apply_head_diameter_to_selected();
         m_edit_state->editing.apply_pillar_diameter_to_selected();
         m_edit_state->editing.apply_base_diameter_to_selected();
         m_edit_state->editing.apply_base_height_to_selected();
+        update_point_visuals();
     }
-    update_point_visuals();
 }
 
 // Rectangle selection
