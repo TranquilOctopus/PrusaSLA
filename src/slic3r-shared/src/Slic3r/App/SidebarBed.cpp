@@ -8,6 +8,7 @@
 #include "Slic3r/App/MaterialSelectionDialog.hpp"
 #include "Slic3r/App/MaterialSettingsDialog.hpp"
 #include "Slic3r/App/PrinterAddDialog.hpp"
+#include "Slic3r/App/SidebarSlaSummary.hpp"
 
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
@@ -130,6 +131,9 @@ SidebarBed::SidebarBed(Biz::ProjectInteractor& project_interactor, Navigator& na
             m_navigator.set_opened_dialog(nullptr);
         }
     };
+
+    // SLA print summary - visible only for SLA printers
+    emplace_back<SidebarSlaSummary>(m_project_interactor);
 
     m_project_interactor.preset_interactor()
         .printer_presets()
