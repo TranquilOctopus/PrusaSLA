@@ -1,6 +1,7 @@
 #include "Slic3r/App/Scene/VolumeColor.hpp"
 
 #include "Slic3r/App/AppServices.hpp"
+#include "Slic3r/App/Theme.hpp"
 #include "Slic3r/App/ThemeTypes.hpp"
 #include "Slic3r/Biz/Algorithms/VirtualExtruder.hpp"
 #include "Slic3r/Domain/ConfigContainer.hpp"
