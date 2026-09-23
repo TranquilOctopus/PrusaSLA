@@ -271,9 +271,9 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
 ) :
     m_scene_presenter(scene_presenter),
     m_project_interactor(project_interactor),
-    m_device(device),
-    m_dialog(std::make_unique<SlaSupportPointsDialog>())
+    m_device(device)
 {
+    m_dialog.reset(std::make_unique<SlaSupportPointsDialog>());
     m_dialog->set_title(_u8L("SLA Support Points"));
     m_dialog->set_shortcut("P");
 
@@ -1132,7 +1132,7 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
 
 std::unique_ptr<GizmoWindow> SlaSupportPointsGizmo::release_ui_window()
 {
-    return std::move(m_dialog);
+    return m_dialog.release();
 }
 
 // Visuals
