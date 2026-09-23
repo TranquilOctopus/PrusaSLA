@@ -273,12 +273,13 @@ void MaterialSettingsButton::update_cog_visibility()
 
 void MaterialSettingsButton::update_nozzle_visibility()
 {
-    if (!m_nozzle_btn || !m_nozzle_separator) {
+    if (!m_nozzle_btn || !m_nozzle_separator || !m_color_marker) {
         return;
     }
     const bool is_sla = is_sla_active(m_project_interactor);
     m_nozzle_btn->set_visible(!is_sla);
     m_nozzle_separator->set_visible(!is_sla);
+    m_color_marker->set_visible(!is_sla);
 }
 
 void MaterialSettingsButton::on_preset_value_changed(
