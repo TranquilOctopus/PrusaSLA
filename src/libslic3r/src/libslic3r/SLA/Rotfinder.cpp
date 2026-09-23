@@ -29,6 +29,8 @@ using Domain::TriangleMesh;
 
 namespace BB = Slic3r::Biz::Algorithms::BoundingBox;
 using Domain::BoundingBoxf3;
+using Domain::Transform3f;
+using Domain::Transform3d;
 
 namespace {
 
