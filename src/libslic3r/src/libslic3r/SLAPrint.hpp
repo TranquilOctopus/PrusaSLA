@@ -145,6 +145,9 @@ public:
     // pad is not, then without the pad, otherwise the full value is returned.
     double get_current_elevation() const;
 
+    // Supports are enabled and the object has points, or the support tool is generating them now.
+    bool has_supports() const;
+
     // The public Slice record structure. It corresponds to one printable layer.
     class SliceRecord {
     public:

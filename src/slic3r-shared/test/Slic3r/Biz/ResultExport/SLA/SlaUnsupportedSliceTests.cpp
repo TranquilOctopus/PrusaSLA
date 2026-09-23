@@ -45,6 +45,7 @@ TEST_CASE("SLA slicing with supports disabled", "[slicing][sla][supports]")
 // slice was requested with SliceUntilStep{slaposSupportPoints, <that object's id}> (the
 // support tool's "Generate" button path). Every other slice uses the model's own points as
 // they are. A model with no points gets no support points (an empty list), not generated ones.
+// With this change, an unsupported cube sits on the plate (no elevation), so layer 10 is inside the cube.
 TEST_CASE("SLA slicing never generates support points", "[slicing][sla][supports]")
 {
     using Slic3r::Domain::sla::RaftType;
@@ -68,7 +69,38 @@ TEST_CASE("SLA slicing never generates support points", "[slicing][sla][supports
     auto sla_result = fixture.slice_sla_model(model, config);
     REQUIRE(sla_result != nullptr);
     REQUIRE(sla_result->files.data.size() > 20);
-    // Layer 10 is inside the elevation gap: with no generated pillars it is all black, and an
-    // all-black .goo layer encodes to a handful of bytes.
-    CHECK(sla_result->files.data[10].size() < 64);
+    // Unsupported cube now sits on the plate: no elevation gap, no pillars.
+    CHECK(sla_result->files.data.size() < 450);
+}
+
+// An object without supports sits on the build plate:
+// - elevation 0;
+// - no raft under it, unless the raft is "around the object" (zero elevation mode);
+// - slicing succeeds (no NoPadGenerated for such an object).
+TEST_CASE("SLA slicing an unsupported model with the default raft", "[slicing][sla][supports]")
+{
+    using Slic3r::Domain::sla::RaftType;
+
+    Slic3r::Test::SlaSlicingFixture fixture;
+    auto model = Slic3r::Test::generate_cubes(1, 1);
+    // Model has no support points (sla_support_points is empty).
+
+    auto config = Slic3r::Domain::ConfigPackSLA{};
+    config.sla_printer_settings.items.opt("sla_archive_format").set(std::string("goo"));
+    config.sla_printer_settings.items.opt("display_pixels_x").set(1440);
+    config.sla_printer_settings.items.opt("display_pixels_y").set(800);
+    config.sla_printer_settings.items.opt("display_width").set(144.0);
+    config.sla_printer_settings.items.opt("display_height").set(80.0);
+    config.sla_print_settings.items.opt("layer_height").set(0.05);
+    config.sla_material_settings.items.opt("initial_layer_height").set(0.05);
+    config.sla_print_settings.items.opt("supports_enable").set(true);
+    config.sla_print_settings.items.opt("pad_enable").set(true);
+    config.sla_print_settings.items.opt("raft_type").set(RaftType::Full);
+
+    auto sla_result = fixture.slice_sla_model(model, config);
+    REQUIRE(sla_result != nullptr);          // no NoPadGenerated
+    // The 20 mm cube now sits on the plate: about 400 layers at 0.05 mm, not 400 + the
+    // 5 mm support elevation (about 500).
+    CHECK(sla_result->files.data.size() < 450);
+    CHECK(sla_result->files.data.size() >= 390);
 }

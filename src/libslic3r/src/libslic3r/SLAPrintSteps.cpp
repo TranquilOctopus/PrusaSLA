@@ -981,6 +981,12 @@ void SLAPrint::Steps::generate_pad(SLAPrintObject& po)
         return; // pad is unwanted
     }
 
+    // An object without supports sits on the plate; only a raft around it (zero elevation) fits.
+    if (!po.has_supports() && !is_zero_elevation(po.config())) {
+        po.m_preview->pad = nullptr;
+        return;
+    }
+
     // Get the distilled pad configuration from the config
     // (Again, despite it was retrieved in the previous step. Note that
     // on a param change event, the previous step might not be executed

@@ -444,10 +444,18 @@ ModelObjectsSyncResult sync_model_objects(
         const bool switching_to_auto_from_man{old_user_modified && !new_user_modified};
         const bool switching_to_man_from_auto{!old_user_modified && new_user_modified};
 
+        // Supports are now always explicit: invalidate slaposSupportPoints whenever
+        // the points differ or the user-modified status switched.
         if (switching_to_auto_from_man
             || switching_to_man_from_auto
-            || (new_user_modified && !supports_equal)) {
+            || !supports_equal) {
             invalidated_steps.insert(slaposSupportPoints);
+        }
+
+        // If the list switches between empty and non-empty, the elevation changes,
+        // so we also need to re-slice the object.
+        if (model_object->sla_support_points.empty() != model_object_new->sla_support_points.empty()) {
+            invalidated_steps.insert(slaposObjectSlice);
         }
 
         // Invalidate hollowing if drain holes have changed
@@ -1421,20 +1429,27 @@ bool SLAPrintObject::invalidate_all_steps()
 double SLAPrintObject::get_elevation() const {
     if (is_zero_elevation(m_config)) return 0.;
 
-    bool en = m_config.get<bool>("supports_enable");
+    bool en = has_supports();
 
     double ret = en ? m_config.get<double>("support_object_elevation") : 0.;
 
-    if(m_config.get<bool>("pad_enable")) {
+    if (en && m_config.get<bool>("pad_enable")) {
         // Normally the elevation for the pad itself would be the thickness of
         // its walls but currently it is half of its thickness. Whatever it
         // will be in the future, we provide the config to the get_pad_elevation
         // method and we will have the correct value
         sla::PadConfig pcfg = make_pad_cfg(m_config);
-        if(!pcfg.embed_object) ret += pcfg.required_elevation();
+        if (!pcfg.embed_object) ret += pcfg.required_elevation();
     }
 
     return ret;
+}
+
+// Supports are enabled and the object has points, or the support tool is generating them now.
+bool SLAPrintObject::has_supports() const {
+    return m_config.get<bool>("supports_enable")
+        && (!model_object()->sla_support_points.empty()
+            || m_print->m_generate_support_points_for == model_object()->id());
 }
 
 double SLAPrintObject::get_current_elevation() const
