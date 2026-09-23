@@ -130,10 +130,13 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
   - [ ] **M1.13d** Audit the SLA settings panels and hide every option that does nothing for SLA (hide, don't delete). List what was hidden and why in the result note. · M · needs —
   - [x] **M1.13e** The resin picker showed the FFF plastic types (PLA, PETG, ASA) and crashed when one was chosen: its filter read `filament_type`, which resins do not have (`ConfigItems::opt` panics). · S · needs —
     Result: by OpenCode, reviewed. SLA printers get the resin types (Tough, Flexible, Casting, Dental, Heat-resistant) filtered on `material_type`, with a non-panicking lookup. Known gap: the button labels are translated and compared with the untranslated preset value, so the filter only works in English.
+  - [x] **M1.13e2** The resin type filter compares untranslated `material_type` values, so it works in every language. · S · needs M1.13e
+    Result: by OpenCode, reviewed.
   - [ ] **M1.13f** Finish "build plate" for the strings M1.13a could not reach (arrange dialog, menu items, undo names, two error texts): give those places a way to ask for the printer technology. · S · needs M1.13a
   - [x] **M1.13g** Model colour for SLA: one fixed high-contrast colour (from the theme tokens), no per-resin colour picker; resin printers print one colour. (User feedback 2026-09-23.) · S · needs —
     Result: By OpenCode, reviewed. For SLA, `color_from_extruder_slot` returns the theme's `SlaModelResin` token, so models draw in one colour, and the sidebar colour picker is hidden. Not yet seen in the running app.
-  - [ ] **M1.13h** "Supports & raft" settings for SLA: remove the FFF "extruders" section, and replace the support options shown there (about 15 "branching" settings that do nothing useful) with the real SLA support settings. (User feedback 2026-09-23.) · M · needs M1.13d
+  - [x] **M1.13h** "Supports & raft" settings for SLA: remove the FFF "extruders" section, and replace the support options shown there (about 15 "branching" settings that do nothing useful) with the real SLA support settings. (User feedback 2026-09-23.) · M · needs M1.13d
+    Result: By OpenCode, reviewed. The 17 duplicate "branching" support options are hidden (definitions kept), and the "Extruders" column of the Supports & raft dialog is hidden for SLA (M1.13h2).
     Progress: the 17 "branching" duplicates are hidden (category Hidden, definitions kept). Still open: the "Extruders" section is not a config category; PrintSettingsDialog builds it from the tool list, which needs hiding for SLA.
   - [x] **M1.13i** The output filename template still defaults to `.gcode` in "Output options" for SLA: give the community SLA print presets an extension-free template (the export picks the printer's file type since M5.11), and hide the option if it only confuses. (User feedback 2026-09-23.) · S · needs M5.11
     Result: By OpenCode. `output_filename_format` defaults to `[input_filename_base]` for SLA (FFF keeps `.gcode`); the export adds the printer's extension (M5.11).
@@ -190,6 +193,10 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
     Note 2026-09-23 (second test): the support settings should all live in Preview and open by default when you go into supporting an object; today no supports can be placed from Preview at all.
   - [x] **M2.17d1** Preview never slices by itself for SLA (user, 2026-09-23: "Preview should *never* auto slice"). · S · needs —
     Result: by OpenCode, reviewed. `SidebarAutoReslice` ignores and hides the Auto-reslice toggle while an SLA printer is active, so only the Slice button slices; FFF is unchanged. Known gap: PreviewRenderModule has no printer-change handler, so switching FFF to SLA mid-session keeps auto-slicing until Preview is re-entered.
+- [ ] **M2.18** Manual supports from presets (user, 2026-09-23): pick Light, Medium or Heavy in the support tool and every click places a support of that preset; the preset dimensions are set in the Supports & raft settings. · M · needs M2.3
+  - [x] **M2.18a** Preset buttons choose the size for new points and resize only selected points (before, with nothing selected, they resized every point); the active preset is shown checked. · S · needs —
+    Result: by OpenCode, reviewed; one `apply_support_preset()` helper. New points already take the current editing dimensions. Values are still the hard-coded ones (Light 0.30 mm tip, ...).
+  - [ ] **M2.18b** Preset dimensions as settings: tip diameter, penetration, pillar diameter and base size for each of Light, Medium, Heavy in "Supports & raft", read by the tool instead of constants. · M · needs M2.18a
 
 ## M3: Resin profile import (Chitubox, Lychee and others)
 
@@ -313,6 +320,7 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
 - [x] **M4.10** Invalidation test: a table-driven test for every SLA config key, checking that only the expected steps re-run (PLAN B9). · M · needs M0.4
   Result: a table-driven test over 151 declared SLA config keys. It found 22 keys with no entry in invalidated_by (the M0.4 motion keys and material_source_note); changing any of them made diff_to_invalidated_steps throw and closed the app. Entries added by precedent from the same table, not measured. The helpers moved from the anonymous namespace into SLASlicingSync so the test links.
 - [ ] **M4.11** SLA auto-orientation algorithm (PLAN B7). · L → split · needs M4.1
+    Blocked (2026-09-23): the M4.11a port (`sla/M4.11a-rotfinder-port`) still fails to compile: every `Transform3f` parameter gives "missing type specifier" even with `using Domain::Transform3f`. Needs someone with a compiler to untangle the Domain vs libslic3r `Point.hpp` aliases; taken out of the batch twice.
 - [ ] **M4.12** Auto-orient plater action, as a job with progress, cancel and undo (PLAN E5). · M · needs M4.11
   Note 2026-09-23: asked for again in user testing ("there should be an auto orient function").
 - [ ] **M4.14** Peak memory when slicing for 12K and 16K displays (Photon Mono M5: 11520 × 5120, about 59 megapixels per layer), on an otherwise idle 8 GB machine. Record peak working set per step for a small and a tall model, and find which step holds full-resolution layer buffers. Evidence: 2026-09-22 a slice on the M5 profile ended in `std::bad_alloc`, with steps taking 3–6 minutes; a compiler build was running at the same time, so this is not yet known to be a real limit. · M · needs —
@@ -384,6 +392,7 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
 - [x] **M6.10** Opening "SLA Support Points" crashed the app with nothing in the log (a native crash, not an exception). The launcher now logs the exception code and stack for native crashes; reproduce once with that build to find the cause. · M · needs —
   Result: The native-crash log pinned it to `SlaSupportPointsDialog::set_clipping_plane_position`: both SLA gizmos gave their dialog away with `std::move` in `release_ui_window()` and kept using the null pointer (the hollow tool had the same latent bug). By OpenCode: they now hold it in `Yoga::Passthrough` like SimplifyGizmo. Not yet confirmed in the running app.
     Update: after the dialog fix, the tool crashed one step later: the gizmo used a private `Scene::Clipper` never given an object. M6.10b routes every call through the presenter's shared clipper and ignores slider changes with no object selected. Awaiting a retest in the app.
+    Update 2: opening the tool also started a slice: pushing the object's values into the dialog fired the sliders' callbacks, and density_changed auto-generated. M6.10c adds a nested `DialogSyncGuard` that suppresses callbacks while syncing, and density changes no longer generate. (Two agent follow-ups fixed the guard's access/nesting and a class header the first edit deleted.) Awaiting a retest.
 
 ## M7: Excellent auto-supports
 
