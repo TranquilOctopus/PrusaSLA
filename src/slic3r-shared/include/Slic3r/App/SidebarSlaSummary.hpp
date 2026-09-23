@@ -30,7 +30,8 @@ public:
     void on_selected_project_changed(size_t index) override;
     void on_selected_project_changed_final(size_t index) override;
     void on_selected_bed_instances_changed(Domain::SelectionId project_id, const Biz::Scene::BedSelection& bed_selection) override;
-    void on_status_changed(const Biz::Slicing::StatusUpdate, const Domain::SlicingId&) override;
+    // By value, matching IStatusListener exactly; a reference does not override it.
+    void on_status_changed(const Biz::Slicing::StatusUpdate, const Domain::SlicingId) override;
 
 private:
     void refresh();
@@ -49,11 +50,12 @@ private:
     Yoga::Item* m_rows_container{nullptr};
 };
 
-namespace Slic3r::App::SidebarSlaSummaryFormat {
+// Already inside Slic3r::App: a qualified name here would nest as Slic3r::App::Slic3r::App::...
+namespace SidebarSlaSummaryFormat {
 std::string format_resin_ml(std::optional<double> ml);
 std::string format_cost(std::optional<double> cost);
 std::string format_bottles(std::optional<double> bottles);
 std::string format_layers(std::optional<size_t> layers);
-} // namespace Slic3r::App::SidebarSlaSummaryFormat
+} // namespace SidebarSlaSummaryFormat
 
 } // namespace Slic3r::App

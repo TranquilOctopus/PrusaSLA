@@ -74,7 +74,7 @@ void SidebarSlaSummary::on_selected_bed_instances_changed(Domain::SelectionId pr
     }
 }
 
-void SidebarSlaSummary::on_status_changed(const Biz::Slicing::StatusUpdate, const Domain::SlicingId& slicing_id)
+void SidebarSlaSummary::on_status_changed(const Biz::Slicing::StatusUpdate, const Domain::SlicingId slicing_id)
 {
     // Only refresh if this status change is for the currently selected bed
     if (m_current_project_id != Domain::INVALID_ID
