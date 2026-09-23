@@ -171,7 +171,7 @@ void init_common_fdm_sla_config_items(ConfigDefinitions& defs, const PrinterTech
                    "[year], [month], [day], [hour], [minute], [second], [version], "
                    "[input_filename_base], [default_output_extension].");
     def->full_width = true;
-    def->init_fn = init_with("[input_filename_base].gcode");
+    def->init_fn = init_with(technology == FFF ? std::string("[input_filename_base].gcode") : std::string("[input_filename_base]"));
 
     def = defs.add("slice_closing_radius", typeid(double));
     def->location = print;
