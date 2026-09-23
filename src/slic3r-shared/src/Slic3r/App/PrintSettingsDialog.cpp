@@ -48,7 +48,6 @@ PrintSettingsDialog::PrintSettingsDialog(
     content()->set_padding(Paddings(0, 0, 0, 1));
 
     m_print_tab_button = append_tab(Biz::_u8L("Print"));
-    update_print_tab_label();
 
     Item* center_row = content()->emplace_back<Item>();
     center_row->set_orientation(Orientation::Horizontal);
@@ -151,10 +150,10 @@ PrintSettingsDialog::PrintSettingsDialog(
         &m_project_interactor.preset_interactor().tool_items()
     );
 
-    Text* extruders_label =
+    m_extruders_label =
         left_column->emplace_back<Text>(Biz::_u8L("Extruders"), Render::ImguiFontType::Bold);
-    extruders_label->set_margin({5, 0});
-    extruders_label->set_flex_shrink(0);
+    m_extruders_label->set_margin({5, 0});
+    m_extruders_label->set_flex_shrink(0);
 
     m_extruder_page_list_view =
         left_column->emplace_back<PageListView>(std::move(factory_extruder));
@@ -164,6 +163,8 @@ PrintSettingsDialog::PrintSettingsDialog(
     m_extruder_page_list_view->set_flex_shrink(0);
     m_extruder_page_list_view->set_flex_grow(1);
     m_extruder_page_list_view->set_source_list(m_extruder_menu_transformer.get());
+
+    update_print_tab_label();
 
     center_row->emplace_back<Separator>(Orientation::Vertical);
 
@@ -384,6 +385,9 @@ void PrintSettingsDialog::update_print_tab_label()
     if (m_print_tab_button) {
         m_print_tab_button->set_label(is_sla ? Biz::_u8L("Supports & raft") : Biz::_u8L("Print"));
     }
+    const bool show_extruders = !is_sla;
+    if (m_extruders_label) m_extruders_label->set_visible(show_extruders);
+    if (m_extruder_page_list_view) m_extruder_page_list_view->set_visible(show_extruders);
 }
 
 } // namespace Slic3r::App
