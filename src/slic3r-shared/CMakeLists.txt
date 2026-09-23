@@ -1679,6 +1679,7 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/Biz/ResultExport/SLA/AnycubicExportTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/PM5ExportTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/GooExportTests.cpp
+            test/Slic3r/Biz/ResultExport/SLA/SlaRasterOrientationTests.cpp
 
             test/Slic3r/Biz/BundleCacheTests.cpp
 
