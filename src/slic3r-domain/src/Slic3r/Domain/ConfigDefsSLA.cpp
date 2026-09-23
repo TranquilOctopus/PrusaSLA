@@ -1286,7 +1286,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->overrides_in = Locations{ Material, Object };
         def->row_group = L("Pinhead front diameter");
         def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportHead;
-        def->category = ConfigItemDef::Category::Print_Supports;
+        def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
         def->gui_type = ConfigItemDef::GUIType::textfield;
         def->tooltip = L("Diameter of the pointing side of the head");
         def->units = {L("mm")};
@@ -1299,7 +1299,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->overrides_in = Locations{ Material, Object };
         def->row_group = L("Head penetration");
         def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportHead;
-        def->category = ConfigItemDef::Category::Print_Supports;
+        def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
         def->gui_type = ConfigItemDef::GUIType::textfield;
         def->tooltip = L("How much the pinhead has to penetrate the model surface");
         def->units = {L("mm")};
@@ -1312,7 +1312,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->overrides_in = Locations{ Material, Object };
         def->row_group = L("Pinhead width");
         def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportHead;
-        def->category = ConfigItemDef::Category::Print_Supports;
+        def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
         def->gui_type = ConfigItemDef::GUIType::textfield;
         def->tooltip = L("Width from the back sphere center to the front sphere center");
         def->units = {L("mm")};
@@ -1326,7 +1326,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->overrides_in = Locations{ Material, Object };
         def->row_group = L("Pillar diameter");
         def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
-        def->category = ConfigItemDef::Category::Print_Supports;
+        def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
         def->gui_type = ConfigItemDef::GUIType::textfield;
         def->tooltip = L("Diameter in mm of the support pillars");
         def->units = {L("mm")};
@@ -1340,7 +1340,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->overrides_in = Locations{ Object };
         def->row_group = L("Small pillar diameter percent");
         def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
-        def->category = ConfigItemDef::Category::Print_Supports;
+        def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
         def->gui_type = ConfigItemDef::GUIType::textfield;
         def->tooltip = L("The percentage of smaller pillars compared to the normal pillar diameter "
             "which are used in problematic areas where a normal pilla cannot fit.");
@@ -1355,7 +1355,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->overrides_in = Locations{ Object };
         def->row_group = L("Max bridges on a pillar");
         def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
-        def->category = ConfigItemDef::Category::Print_Supports;
+        def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
         def->gui_type = ConfigItemDef::GUIType::spinbox;
         def->tooltip = L(
             "Maximum number of bridges that can be placed on a pillar. Bridges "
@@ -1373,7 +1373,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->overrides_in = Locations{ Object };
         def->row_group = L("Max weight on model");
         def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
-        def->category = ConfigItemDef::Category::Print_Supports;
+        def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
         def->gui_type = ConfigItemDef::GUIType::textfield;
         def->tooltip = L(
             "Maximum weight of sub-trees that terminate on the model instead of the print bed. The weight is the sum of the lenghts of all "
@@ -1388,7 +1388,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->overrides_in = Locations{ Object };
         def->row_group = L("Pillar connection mode");
         def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
-        def->category = ConfigItemDef::Category::Print_Supports;
+        def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
         def->gui_type = ConfigItemDef::GUIType::combobox;
         def->tooltip = L("Controls the bridge type between two neighboring pillars."
             " Can be zig-zag, cross (double zig-zag) or dynamic which"
@@ -1407,7 +1407,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->overrides_in = Locations{ Object };
         def->row_group = L("Support on build plate only");
         def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
-        def->category = ConfigItemDef::Category::Print_Supports;
+        def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
         def->gui_type = ConfigItemDef::GUIType::checkbox;
         def->tooltip = L("Only create support if it lies on a build plate. Don't create support on a print.");
         def->init_fn = init_with(false);
@@ -1418,7 +1418,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->overrides_in = Locations{ Object };
         def->row_group = L("Pillar widening factor");
         def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
-        def->category = ConfigItemDef::Category::Print_Supports;
+        def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
         def->gui_type = ConfigItemDef::GUIType::textfield;
         def->tooltip =
             L("Merging bridges or pillars into another pillars can "
@@ -1435,7 +1435,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->overrides_in = Locations{ Object };
         def->row_group = L("Support base diameter");
         def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
-        def->category = ConfigItemDef::Category::Print_Supports;
+        def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
         def->gui_type = ConfigItemDef::GUIType::textfield;
         def->tooltip = L("Diameter in mm of the pillar base");
         def->units = {L("mm")};
@@ -1449,7 +1449,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->overrides_in = Locations{ Object };
         def->row_group = L("Support base height");
         def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
-        def->category = ConfigItemDef::Category::Print_Supports;
+        def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
         def->gui_type = ConfigItemDef::GUIType::textfield;
         def->tooltip = L("The height of the pillar base cone");
         def->units = {L("mm")};
@@ -1462,7 +1462,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->overrides_in = Locations{ Object };
         def->row_group = L("Support base safety distance");
         def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
-        def->category = ConfigItemDef::Category::Print_Supports;
+def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
         def->gui_type = ConfigItemDef::GUIType::textfield;
         def->tooltip = L(
             "The minimum distance of the pillar base from the model in mm. "
@@ -1479,7 +1479,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->overrides_in = Locations{ Object };
         def->row_group = L("Critical angle");
         def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SticksJunctions;
-        def->category = ConfigItemDef::Category::Print_Supports;
+        def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
         def->gui_type = ConfigItemDef::GUIType::textfield;
         def->tooltip = L("The default angle for connecting support sticks and junctions.");
         def->units = {L("°")};
@@ -1493,7 +1493,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->overrides_in = Locations{ Object };
         def->row_group = L("Max bridge length");
         def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SticksJunctions;
-        def->category = ConfigItemDef::Category::Print_Supports;
+        def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
         def->gui_type = ConfigItemDef::GUIType::textfield;
         def->tooltip = L("The max length of a bridge");
         def->units = {L("mm")};
@@ -1509,7 +1509,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->overrides_in = Locations{ Object };
         def->row_group = L("Max pillar linking distance");
         def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SticksJunctions;
-        def->category = ConfigItemDef::Category::Print_Supports;
+        def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
         def->gui_type = ConfigItemDef::GUIType::textfield;
         def->tooltip = L("The max distance of two pillars to get linked with each other."
             " A zero value will prohibit pillar cascading.");
@@ -1522,7 +1522,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->location = Print;
         def->overrides_in = Locations{ Object };
         def->row_group = L("Object elevation");
-        def->category = ConfigItemDef::Category::Print_Supports;
+        def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
         def->gui_type = ConfigItemDef::GUIType::textfield;
         def->tooltip = L("How much the supports should lift up the supported object. "
             "If \"Pad around object\" is enabled, this value is ignored.");
