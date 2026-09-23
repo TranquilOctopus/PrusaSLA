@@ -10,6 +10,7 @@
 #include "Slic3r/Domain/ConfigContainer.hpp"
 #include "Slic3r/Domain/PrinterTechnology.hpp"
 #include "Slic3r/Domain/SelectionId.hpp"
+#include "Slic3r/App/IsSlaActive.hpp"
 
 using namespace Slic3r::App::Yoga;
 
@@ -126,7 +127,7 @@ void SidebarPreviewActionButtons::update_buttons()
         m_primary_button->callbacks().action = [this, slicing_id]()
         {
             m_project_interactor->slicing_interactor().stop_slicing_bed(slicing_id);
-            const auto auto_reslice{AppServices::instance().app_config().get<bool>("auto_reslice")};
+            const auto auto_reslice{!is_sla_active(*m_project_interactor) && AppServices::instance().app_config().get<bool>("auto_reslice")};
             if (auto_reslice) {
                 navigate_to_other();
             }

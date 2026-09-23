@@ -10,7 +10,8 @@ using Biz::ProjectInteractor;
 using Biz::Slicing::SlicingInteractor;
 
 SidebarAutoReslice::SidebarAutoReslice(ProjectInteractor& project_interactor) :
-    Window("SidebarAutoReslice")
+    Window("SidebarAutoReslice"),
+    m_project_interactor(project_interactor)
 {
     set_min_width(220);
 
@@ -35,11 +36,18 @@ SidebarAutoReslice::SidebarAutoReslice(ProjectInteractor& project_interactor) :
     };
     m_auto_reslice_chb->set_margin({ 0.f, -5.f });
     m_auto_reslice_chb->set_checked(m_app_config.get<bool>("auto_reslice"));
+
+    update_visibility();
 }
 
 bool SidebarAutoReslice::is_enabled() const
 {
-    return m_auto_reslice_chb->checked();
+    return !is_sla_active(m_project_interactor) && m_auto_reslice_chb->checked();
+}
+
+void SidebarAutoReslice::update_visibility()
+{
+    set_visible(!is_sla_active(m_project_interactor));
 }
 
 } // namespace Slic3r::App::Preview
