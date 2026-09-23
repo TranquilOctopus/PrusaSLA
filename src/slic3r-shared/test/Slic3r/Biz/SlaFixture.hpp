@@ -25,6 +25,9 @@
 #include <boost/dll/runtime_symbol_info.hpp>
 #include <boost/nowide/fstream.hpp>
 
+#include <sstream>
+#include <string>
+
 using namespace Slic3r::Biz;
 using namespace trompeloeil;
 namespace fs = boost::filesystem;
@@ -49,16 +52,29 @@ private:
 
         void on_status_changed(const Biz::Slicing::StatusUpdate status_update, const Domain::SlicingId id) override
         {
+            if (m_done)
+                return;
+            // A failed slice never reports Finished. Keep every update that carries errors so a
+            // timeout can say why; an early one may be transient (the fresh project validates
+            // before the test's config is applied), so do not stop waiting on it.
+            if (!status_update.errors_to_append.empty()) {
+                std::ostringstream ss;
+                ss << status_update << '\n';
+                errors += ss.str();
+            }
             if (status_update.code && *status_update.code == Biz::Slicing::StatusCode::Finished) {
                 const std::optional<Biz::SLAResultRef> sla_result{m_pi.sla_result_cache().get_result(id)};
                 if (sla_result) {
+                    m_done = true;
                     m_promise.set_value(sla_result.value().get().export_data);
                 }
             }
         }
 
+        std::string errors;
         Biz::ProjectInteractor& m_pi;
         std::promise<std::shared_ptr<const Biz::Slicing::SLAResultData>>& m_promise;
+        bool m_done{false};
     };
 
     Domain::Workbench workbench;

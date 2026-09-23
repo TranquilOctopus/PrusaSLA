@@ -68,6 +68,7 @@ std::shared_ptr<const Biz::Slicing::SLAResultData> SlaSlicingFixture::slice_sla_
     // The listener lives on this stack frame: unregister it and drain queued events before returning.
     project_interactor.slicing_interactor().remove_listener<Biz::Slicing::IStatusListener>(&listener);
     dispatcher.dispatch_enqueued();
+    INFO("Status updates with errors:\n" << listener.errors);
     REQUIRE(ready);
 
     return future.get();

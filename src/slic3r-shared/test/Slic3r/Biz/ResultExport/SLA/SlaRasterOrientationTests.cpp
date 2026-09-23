@@ -90,12 +90,14 @@ static std::vector<uint8_t> decode_goo_layer(const std::vector<uint8_t>& encoded
         }
         else if (type == 0x2 || type == 0xE) { // black or white, len <= 1M
             if (i + 1 >= end) break;
-            run_len = (len_low << 16) | (encoded[i++] << 8) | encoded[i++];
+            run_len = (uint32_t(len_low) << 16) | (uint32_t(encoded[i]) << 8) | encoded[i + 1];
+            i += 2;
             pixel_val = (type == 0x2) ? 0x00 : 0xFF;
         }
         else if (type == 0x3 || type == 0xF) { // black or white, len > 1M
             if (i + 2 >= end) break;
-            run_len = (len_low << 24) | (encoded[i++] << 16) | (encoded[i++] << 8) | encoded[i++];
+            run_len = (uint32_t(len_low) << 24) | (uint32_t(encoded[i]) << 16) | (uint32_t(encoded[i + 1]) << 8) | encoded[i + 2];
+            i += 3;
             pixel_val = (type == 0x3) ? 0x00 : 0xFF;
         }
         else if (type == 0x4) { // gray, len <= 15
@@ -113,14 +115,16 @@ static std::vector<uint8_t> decode_goo_layer(const std::vector<uint8_t>& encoded
         }
         else if (type == 0x6) { // gray, len <= 1M
             if (i + 1 >= end) break;
-            run_len = (len_low << 16) | (encoded[i++] << 8) | encoded[i++];
+            run_len = (uint32_t(len_low) << 16) | (uint32_t(encoded[i]) << 8) | encoded[i + 1];
+            i += 2;
             if (i >= end) break;
             uint8_t gray_val = encoded[i++];
             pixel_val = gray_val * 16;
         }
         else if (type == 0x7) { // gray, len > 1M
             if (i + 2 >= end) break;
-            run_len = (len_low << 24) | (encoded[i++] << 16) | (encoded[i++] << 8) | encoded[i++];
+            run_len = (uint32_t(len_low) << 24) | (uint32_t(encoded[i]) << 16) | (uint32_t(encoded[i + 1]) << 8) | encoded[i + 2];
+            i += 3;
             if (i >= end) break;
             uint8_t gray_val = encoded[i++];
             pixel_val = gray_val * 16;
@@ -223,9 +227,10 @@ static std::vector<uint8_t> slice_and_decode(const std::string& format,
     auto model = Slic3r::Test::generate_cubes(1, 1);
     REQUIRE(model.objects.size() == 1);
     REQUIRE(model.objects[0]->instances.size() == 1);
-    // The plate is 144 x 80 mm, centred on the origin. This offset puts the cube wholly in the
-    // +X, -Y quarter, clear of both centre lines, so every flip of an axis is visible.
-    model.objects[0]->instances[0]->set_offset(Vec3d{40.0, -20.0, 0.0});
+    // The raster covers 0..144 x 0..80 mm from the bed origin. The 20 mm cube starts at the origin,
+    // so this offset puts it at 100..120 x 50..70: wholly on the display and clear of both centre
+    // lines, so every flip of an axis is visible.
+    model.objects[0]->instances[0]->set_offset(Vec3d{100.0, 50.0, 0.0});
 
     auto config = Slic3r::Domain::ConfigPackSLA{};
     config.sla_printer_settings.items.opt("sla_archive_format").set(format);
@@ -245,7 +250,10 @@ static std::vector<uint8_t> slice_and_decode(const std::string& format,
     config.sla_material_settings.items.opt("bottle_weight").set(1.0);
     config.sla_material_settings.items.opt("bottle_volume").set(1000.0);
     config.sla_material_settings.items.opt("bottle_cost").set(0.0);
-    config.sla_print_settings.items.opt("supports_enable").set(false); // a plain square layer
+    // No supports and no pad: every layer is a plain square.
+    config.sla_print_settings.items.opt("supports_enable").set(false);
+    config.sla_print_settings.items.opt("pad_enable").set(false);
+    config.sla_print_settings.items.opt("raft_type").set(Slic3r::Domain::sla::RaftType::None);
 
     auto sla_result = fixture.slice_sla_model(model, config);
     REQUIRE(sla_result != nullptr);

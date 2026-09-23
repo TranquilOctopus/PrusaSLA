@@ -13,7 +13,7 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 ## Progress
 
-**55 of 136 todos done (40%)** · updated 2026-09-23 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**56 of 136 todos done (41%)** · updated 2026-09-23 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
@@ -22,7 +22,7 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 | M2: SLA editing tools (porting the legacy gizmos) | 16/24 | `████████░░░░` 67% |
 | M3: Resin profile import (Chitubox, Lychee and others) | 1/15 | `█░░░░░░░░░░░` 7% |
 | M4: Engine quality (measure first; every PR includes before/after metrics) | 4/16 | `███░░░░░░░░░` 25% |
-| M5: Formats and inspection | 5/22 | `███░░░░░░░░░` 23% |
+| M5: Formats and inspection | 6/22 | `███░░░░░░░░░` 27% |
 | M6: Quality gates and release | 0/8 | `░░░░░░░░░░░░` 0% |
 | M7: Excellent auto-supports *(parked)* | 5/17 | `████░░░░░░░░` 29% |
 
@@ -107,7 +107,7 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 </details>
 
-<details><summary>M5: Formats and inspection — 17 open</summary>
+<details><summary>M5: Formats and inspection — 16 open</summary>
 
 - [ ] **M5.1** Import `.sl1`/`.sl1s`/`.slx` archives in the new app, porting the legacy `SLAImportJob` (PLAN C1).
   - [ ] **M5.1a** Restore the SL1/SL1S archive reader into libslic3r from `d9e89cf564^` (`SLAArchiveReader`, `ZipperArchiveIm… *(blocked)*
@@ -118,7 +118,6 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 - [ ] **M5.3.profiles-b** Community resin presets per layer height, so the first layer matches the rest. `initial_layer_height` is a…
 - [ ] **M5.3.samples** Provide one sliced sample archive per target printer (from Chitubox/Lychee/Photon Workshop) and list the pr… *(needs you)*
 - [ ] **M5.4** Display mirroring and orientation test pattern for every format (PLAN C3).
-  - [ ] **M5.4a** Tests that pin how a model's position on the plate maps to the decoded layer image, for both orientations a…
   - [ ] **M5.4b** A printable test pattern (an asymmetric shape placed off-centre) per format, to confirm orientation and mir…
 - [ ] **M5.5** Upload SLA archives to print hosts and removable drives (PLAN C4).
 - [ ] **M5.6** Preview layer inspector: 2D layer view with a pixel grid (PLAN F4). Use mock data until M4.9 lands.

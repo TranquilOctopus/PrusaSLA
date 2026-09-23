@@ -915,6 +915,14 @@ void SLAPrint::Steps::support_points(SLAPrintObject &po)
     po.m_supportable_mesh->pts = po.m_preview->support_points;
 }
 
+// With supports disabled the support tree step leaves no mesh, but the pad can still be enabled:
+// it is then generated and sliced under the bare object. Read the tree as empty in that case.
+static const indexed_triangle_set& support_tree_its(const std::shared_ptr<const TriangleMesh>& tree)
+{
+    static const indexed_triangle_set empty;
+    return tree ? tree->its : empty;
+}
+
 void SLAPrint::Steps::support_tree(SLAPrintObject &po)
 {
     // it must be created by previous step slaposSupportPoints
@@ -977,7 +985,7 @@ void SLAPrint::Steps::generate_pad(SLAPrintObject& po)
     // AABBMesh is created in the previous step(support_points)
     po.m_supportable_mesh->pad_cfg = pcfg;
 
-    const indexed_triangle_set& tree_its = po.m_preview->support_structure->its;
+    const indexed_triangle_set& tree_its = support_tree_its(po.m_preview->support_structure);
     indexed_triangle_set its = sla::create_pad(*po.m_supportable_mesh, tree_its, ctl);
     if (!validate_pad(its, po.m_supportable_mesh->pad_cfg)) {
         throw Biz::Slicing::Exception{
@@ -1006,7 +1014,7 @@ void SLAPrint::Steps::slice_supports(SLAPrintObject &po) {
     ctl.stopcondition = [this]() { return canceled(); };
     ctl.cancelfn = [this]() { throw_if_canceled(); };
 
-    const indexed_triangle_set& tree_its = po.m_preview->support_structure->its;
+    const indexed_triangle_set& tree_its = support_tree_its(po.m_preview->support_structure);
     const indexed_triangle_set& pad_its = po.m_preview->pad ? po.m_preview->pad->its : indexed_triangle_set{};
     float closing_radius = float(po.config().get<double>("slice_closing_radius"));
     po.m_support_slices = sla::slice(tree_its, pad_its, heights, closing_radius, ctl);
