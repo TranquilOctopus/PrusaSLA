@@ -55,9 +55,7 @@ using Slic3r::Domain::SLA::PointsStatus;
 
 namespace Slic3r::Biz {
 
-} // namespace Slic3r::Biz
-
-namespace Slic3r::App::Plater {
+class SlaSupportPointsRequest :
     public ISLAObjectCacheChangedListener,
     public IStatusCacheChangedListener
 {
