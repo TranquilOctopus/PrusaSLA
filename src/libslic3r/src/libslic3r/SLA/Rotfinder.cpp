@@ -1,10 +1,9 @@
 ///|/ Copyright (c) Prusa Research 2020 - 2023 Enrico Turri @enricoturri1966, Tomáš Mészáros @tamasmeszaros, Vojtěch Bubník @bubnikv, Lukáš Matěna @lukasmatena
 ///|/
 ///|/ PrusaSlicer is released under the terms of the AGPLv3 or higher
-///|/
 #include <libslic3r/SLA/Rotfinder.hpp>
 #include "Slic3r/Biz/Algorithms/Execution/ExecutionTBB.hpp"
-#include <libslic3r/Optimize/BruteforceOptimizer.hpp>
+#include "Slic3r/Biz/Algorithms/Optimize/BruteforceOptimizer.hpp"
 #include <libslic3r/Geometry.hpp>
 #include <limits>
 #include <thread>
@@ -16,11 +15,9 @@
 #include <cinttypes>
 #include <cstdlib>
 
-#include "libslic3r/PrintConfig.hpp"
-#include "admesh/stl.h"
 #include "Slic3r/Biz/Algorithms/Execution/Execution.hpp"
-#include "libslic3r/Model.hpp"
-#include "libslic3r/Optimize/Optimizer.hpp"
+#include "Slic3r/Domain/Model.hpp"
+#include "Slic3r/Biz/Algorithms/Optimize/Optimizer.hpp"
 #include "libslic3r/Point.hpp"
 #include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
 #include "libslic3r/libslic3r.h"
@@ -30,7 +27,8 @@ namespace Slic3r { namespace sla {
 namespace tm = Slic3r::Biz::Algorithms::TriangleMesh;
 using Domain::TriangleMesh;
 
-namespace BB = Biz::Algorithms::BoundingBox;
+namespace BB = Slic3r::Biz::Algorithms::BoundingBox;
+using Domain::BoundingBoxf3;
 
 namespace {
 
@@ -166,32 +164,6 @@ float find_ground_level(const TriangleMesh &mesh,
     return execution::reduce(execution::ex_tbb, size_t(0), vsize, zmin, minfn, accessfn, granularity);
 }
 
-double get_supportedness_onfloor_score(const TriangleMesh &mesh,
-                                       const Transform3f  &tr)
-{
-    if (mesh.its.vertices.empty()) return NaNd;
-
-    size_t Nthreads = std::thread::hardware_concurrency();
-
-    float zmin = find_ground_level(mesh, tr, Nthreads);
-    float zlvl = zmin + 0.1f; // Set up a slight tolerance from z level
-
-    auto accessfn = [&mesh, &tr, zlvl](size_t fi) {
-        std::array<Vec3f, 3> tri = get_transformed_triangle(mesh, tr, fi);
-        Facestats fc{tri};
-
-        if (tri[0].z() <= zlvl && tri[1].z() <= zlvl && tri[2].z() <= zlvl)
-            return -2 * fc.area * POINTS_PER_UNIT_AREA;
-
-        return get_supportedness_score(fc);
-    };
-
-    size_t facecount = mesh.its.indices.size();
-    double S = unscaled(sum_score<int_fast64_t>(accessfn, facecount, Nthreads));
-
-    return S / facecount;
-}
-
 using XYRotation = std::array<double, 2>;
 
 // prepare the rotation transformation
@@ -204,9 +176,15 @@ Transform3f to_transform3f(const XYRotation &rot)
     return rt;
 }
 
+// Public helper: convert Vec2d angles to Transform3f
+Transform3f rotation_angles_to_transform(const Vec2d &angles)
+{
+    return to_transform3f({angles.x(), angles.y()});
+}
+
 XYRotation from_transform3f(const Transform3f &tr)
 {
-    Vec3d rot3 = Geometry::Transformation{tr.cast<double>()}.get_rotation();
+    Vec3d rot3 = Domain::extract_rotation(tr.cast<double>());
     return {rot3.x(), rot3.y()};
 }
 
@@ -292,7 +270,6 @@ std::array<double, N> find_min_score(Fn &&fn, It from, It to, StopCond &&stopfn)
 } // namespace
 
 
-
 template<unsigned MAX_ITER>
 struct RotfinderBoilerplate {
     static constexpr unsigned MAX_TRIES = MAX_ITER;
@@ -309,7 +286,7 @@ struct RotfinderBoilerplate {
         TriangleMesh mesh = mo.raw_mesh();
 
         Domain::ModelInstance *mi = mo.instances[0];
-        const Geometry::Transformation trafo = mi->get_transformation();
+        const Domain::Transformation trafo = mi->get_transformation();
         Transform3d trafo_instance = trafo.get_scaling_factor_matrix() * trafo.get_mirror_matrix();
         mesh.transform(trafo_instance);
 
@@ -342,8 +319,9 @@ Vec2d find_best_misalignment_rotation(const Domain::ModelObject &mo,
 
     // Preparing the optimizer.
     size_t gridsize = std::sqrt(bp.max_tries);
-    opt::Optimizer<opt::AlgBruteForce> solver(
-        opt::StopCriteria{}.max_iterations(bp.max_tries)
+    using OptNS = Slic3r::Biz::Algorithms::Optimize;
+    OptNS::Optimizer<OptNS::AlgBruteForce> solver(
+        OptNS::StopCriteria{}.max_iterations(bp.max_tries)
                            .stop_condition([&bp] { return bp.stopcond(); }),
         gridsize
     );
@@ -351,91 +329,16 @@ Vec2d find_best_misalignment_rotation(const Domain::ModelObject &mo,
     // We are searching rotations around only two axes x, y. Thus the
     // problem becomes a 2 dimensional optimization task.
     // We can specify the bounds for a dimension in the following way:
-    auto bounds = opt::bounds({ {-PI, PI}, {-PI, PI} });
+    auto bounds = OptNS::bounds({ {-PI, PI}, {-PI, PI} });
 
     auto result = solver.to_max().optimize(
         [&bp] (const XYRotation &rot)
         {
             bp.statusfn();
             return get_misalginment_score(bp.mesh, to_transform3f(rot));
-        }, opt::initvals({0., 0.}), bounds);
+        }, OptNS::initvals({0., 0.}), bounds);
 
     return {result.optimum[0], result.optimum[1]};
-}
-
-inline bool is_on_floor(const SLAPrintObjectConfig &cfg, const Domain::SLAObjectSettings &object_settings_sla)
-{
-    double support_object_elevation = cfg.support_object_elevation.getFloat();
-    bool   pad_around_object        = cfg.pad_around_object.getBool();
-
-    if (object_settings_sla.overrides.get("support_object_elevation").has_value()) {
-        support_object_elevation = object_settings_sla.overrides.get("support_object_elevation")->get<double>();
-    }
-
-    if (object_settings_sla.overrides.get("pad_around_object").has_value()) {
-        pad_around_object = object_settings_sla.overrides.get("pad_around_object")->get<bool>();
-    }
-
-    return support_object_elevation < EPSILON || pad_around_object;
-}
-
-Vec2d find_least_supports_rotation(const Domain::ModelObject &mo,
-                                   const RotOptimizeParams   &params)
-{
-    RotfinderBoilerplate<1000> bp{mo, params};
-
-    SLAPrintObjectConfig pocfg;
-    if (params.print_config()) {
-        pocfg.apply(*params.print_config(), true);
-    }
-
-    XYRotation rot;
-
-    // Different search methods have to be used depending on the model elevation
-    if (is_on_floor(pocfg, mo.object_settings_sla)) {
-
-        std::vector<XYRotation> inputs = get_chull_rotations(bp.mesh, bp.max_tries);
-        bp.max_tries = inputs.size();
-
-        // If the model can be placed on the bed directly, we only need to
-        // check the 3D convex hull face rotations.
-
-        auto objfn = [&bp](const XYRotation &rot) {
-            bp.statusfn();
-            Transform3f tr = to_transform3f(rot);
-            return get_supportedness_onfloor_score(bp.mesh, tr);
-        };
-
-        rot = find_min_score<2>(objfn, inputs.begin(), inputs.end(), [&bp] {
-            return bp.stopcond();
-        });
-
-    } else {
-        // Preparing the optimizer.
-        size_t gridsize = std::sqrt(bp.max_tries); // 2D grid has gridsize^2 calls
-        opt::Optimizer<opt::AlgBruteForce> solver(
-            opt::StopCriteria{}.max_iterations(bp.max_tries)
-                               .stop_condition([&bp] { return bp.stopcond(); }),
-            gridsize
-        );
-
-        // We are searching rotations around only two axes x, y. Thus the
-        // problem becomes a 2 dimensional optimization task.
-        // We can specify the bounds for a dimension in the following way:
-        auto bounds = opt::bounds({ {-PI, PI}, {-PI, PI} });
-
-        auto result = solver.to_min().optimize(
-            [&bp] (const XYRotation &rot)
-            {
-                bp.statusfn();
-                return get_supportedness_score(bp.mesh, to_transform3f(rot));
-            }, opt::initvals({0., 0.}), bounds);
-
-        // Save the result
-        rot = result.optimum;
-    }
-
-    return {rot[0], rot[1]};
 }
 
 inline BoundingBoxf3 bounding_box_with_tr(const indexed_triangle_set &its,

@@ -1,11 +1,10 @@
 ///|/ Copyright (c) Prusa Research 2020 - 2021 Tomáš Mészáros @tamasmeszaros
 ///|/
 ///|/ PrusaSlicer is released under the terms of the AGPLv3 or higher
-///|/
 #ifndef SLA_ROTFINDER_HPP
 #define SLA_ROTFINDER_HPP
 
-#include <libslic3r/Point.hpp>
+#include <Slic3r/Domain/Point.hpp>
 #include <functional>
 #include <array>
 #include <utility>
@@ -17,7 +16,6 @@ class ModelObject;
 namespace Slic3r {
 
 class SLAPrintObject;
-class DynamicPrintConfig;
 
 namespace sla {
 
@@ -25,17 +23,11 @@ using RotOptimizeStatusCB = std::function<bool(int)>;
 
 class RotOptimizeParams {
     float m_accuracy = 1.;
-    const DynamicPrintConfig *m_print_config = nullptr;
     RotOptimizeStatusCB m_statuscb = [](int) { return true; };
 
 public:
 
     RotOptimizeParams &accuracy(float a) { m_accuracy = a; return *this; }
-    RotOptimizeParams &print_config(const DynamicPrintConfig *c)
-    {
-        m_print_config = c;
-        return *this;
-    }
     RotOptimizeParams &statucb(RotOptimizeStatusCB cb)
     {
         m_statuscb = std::move(cb);
@@ -43,7 +35,6 @@ public:
     }
 
     float accuracy() const { return m_accuracy; }
-    const DynamicPrintConfig * print_config() const { return m_print_config; }
     const RotOptimizeStatusCB &statuscb() const { return m_statuscb; }
 };
 
@@ -66,11 +57,11 @@ public:
 Vec2d find_best_misalignment_rotation(const Domain::ModelObject &modelobj,
                                       const RotOptimizeParams & = {});
 
-Vec2d find_least_supports_rotation(const Domain::ModelObject &modelobj,
-                                   const RotOptimizeParams & = {});
-
 Vec2d find_min_z_height_rotation(const Domain::ModelObject &mo,
                                  const RotOptimizeParams &params = {});
+
+// Helper to convert XY rotation angles to a Transform3f
+Transform3f rotation_angles_to_transform(const Vec2d &angles);
 
 } // namespace sla
 } // namespace Slic3r
