@@ -131,9 +131,12 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
   - [x] **M1.13e** The resin picker showed the FFF plastic types (PLA, PETG, ASA) and crashed when one was chosen: its filter read `filament_type`, which resins do not have (`ConfigItems::opt` panics). · S · needs —
     Result: by OpenCode, reviewed. SLA printers get the resin types (Tough, Flexible, Casting, Dental, Heat-resistant) filtered on `material_type`, with a non-panicking lookup. Known gap: the button labels are translated and compared with the untranslated preset value, so the filter only works in English.
   - [ ] **M1.13f** Finish "build plate" for the strings M1.13a could not reach (arrange dialog, menu items, undo names, two error texts): give those places a way to ask for the printer technology. · S · needs M1.13a
-  - [ ] **M1.13g** Model colour for SLA: one fixed high-contrast colour (from the theme tokens), no per-resin colour picker; resin printers print one colour. (User feedback 2026-09-23.) · S · needs —
+  - [x] **M1.13g** Model colour for SLA: one fixed high-contrast colour (from the theme tokens), no per-resin colour picker; resin printers print one colour. (User feedback 2026-09-23.) · S · needs —
+    Result: By OpenCode, reviewed. For SLA, `color_from_extruder_slot` returns the theme's `SlaModelResin` token, so models draw in one colour, and the sidebar colour picker is hidden. Not yet seen in the running app.
   - [ ] **M1.13h** "Supports & raft" settings for SLA: remove the FFF "extruders" section, and replace the support options shown there (about 15 "branching" settings that do nothing useful) with the real SLA support settings. (User feedback 2026-09-23.) · M · needs M1.13d
-  - [ ] **M1.13i** The output filename template still defaults to `.gcode` in "Output options" for SLA: give the community SLA print presets an extension-free template (the export picks the printer's file type since M5.11), and hide the option if it only confuses. (User feedback 2026-09-23.) · S · needs M5.11
+    Progress: the 17 "branching" duplicates are hidden (category Hidden, definitions kept). Still open: the "Extruders" section is not a config category; PrintSettingsDialog builds it from the tool list, which needs hiding for SLA.
+  - [x] **M1.13i** The output filename template still defaults to `.gcode` in "Output options" for SLA: give the community SLA print presets an extension-free template (the export picks the printer's file type since M5.11), and hide the option if it only confuses. (User feedback 2026-09-23.) · S · needs M5.11
+    Result: By OpenCode. `output_filename_format` defaults to `[input_filename_base]` for SLA (FFF keeps `.gcode`); the export adds the printer's extension (M5.11).
 
 ## M2: SLA editing tools (porting the legacy gizmos)
 
@@ -185,6 +188,8 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
   - [ ] **M2.17c** After slicing, a notification naming every model that was sliced without supports, reusing the M4.8c issue notification. · S · needs M2.17a
   - [ ] **M2.17d** Supports are done in Preview (user feedback 2026-09-23). Entering Preview must not slice and must not auto-support. It shows the models with their support points and opens a support panel with the manual support tools and **Auto support** (selected models or all). Slicing runs only from an explicit **Slice** button, after which the layer view takes over. · L → split · needs M2.17a, M2.17b
     Note 2026-09-23 (second test): the support settings should all live in Preview and open by default when you go into supporting an object; today no supports can be placed from Preview at all.
+  - [x] **M2.17d1** Preview never slices by itself for SLA (user, 2026-09-23: "Preview should *never* auto slice"). · S · needs —
+    Result: by OpenCode, reviewed. `SidebarAutoReslice` ignores and hides the Auto-reslice toggle while an SLA printer is active, so only the Slice button slices; FFF is unchanged. Known gap: PreviewRenderModule has no printer-change handler, so switching FFF to SLA mid-session keeps auto-slicing until Preview is re-entered.
 
 ## M3: Resin profile import (Chitubox, Lychee and others)
 
@@ -378,6 +383,7 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
   Result: a preset without conditions is saved without one; `PresetSaverTests.cpp` covers both cases.
 - [x] **M6.10** Opening "SLA Support Points" crashed the app with nothing in the log (a native crash, not an exception). The launcher now logs the exception code and stack for native crashes; reproduce once with that build to find the cause. · M · needs —
   Result: The native-crash log pinned it to `SlaSupportPointsDialog::set_clipping_plane_position`: both SLA gizmos gave their dialog away with `std::move` in `release_ui_window()` and kept using the null pointer (the hollow tool had the same latent bug). By OpenCode: they now hold it in `Yoga::Passthrough` like SimplifyGizmo. Not yet confirmed in the running app.
+    Update: after the dialog fix, the tool crashed one step later: the gizmo used a private `Scene::Clipper` never given an object. M6.10b routes every call through the presenter's shared clipper and ignores slider changes with no object selected. Awaiting a retest in the app.
 
 ## M7: Excellent auto-supports
 

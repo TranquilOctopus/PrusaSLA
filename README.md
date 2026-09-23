@@ -13,13 +13,13 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 ## Progress
 
-**67 of 151 todos done (44%)** · updated 2026-09-23 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**70 of 152 todos done (46%)** · updated 2026-09-23 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
 | M0: Foundation | 12/15 | `██████████░░` 80% |
-| M1: Look, feel and SLA-first shell | 16/29 | `███████░░░░░` 55% |
-| M2: SLA editing tools (porting the legacy gizmos) | 17/26 | `████████░░░░` 65% |
+| M1: Look, feel and SLA-first shell | 18/29 | `███████░░░░░` 62% |
+| M2: SLA editing tools (porting the legacy gizmos) | 18/27 | `████████░░░░` 67% |
 | M3: Resin profile import (Chitubox, Lychee and others) | 2/15 | `██░░░░░░░░░░` 13% |
 | M4: Engine quality (measure first; every PR includes before/after metrics) | 4/16 | `███░░░░░░░░░` 25% |
 | M5: Formats and inspection | 8/23 | `████░░░░░░░░` 35% |
@@ -46,7 +46,7 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 </details>
 
-<details><summary>M1: Look, feel and SLA-first shell — 13 open</summary>
+<details><summary>M1: Look, feel and SLA-first shell — 11 open</summary>
 
 - [ ] **M1.1b** Runtime screen audit with an SLA printer selected, following the R1–R10 checklist in `ux/journeys.md`. Reco…
 - [ ] **M1.8** SLA path in the welcome dialog, plus SLA hints and notifications. Also fix the “Export gcode to a file” too…
@@ -58,9 +58,7 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
   - [ ] **M1.13c** Move the exposure and layer settings into the resin preset, so a resin preset is one resin on one printer:…
   - [ ] **M1.13d** Audit the SLA settings panels and hide every option that does nothing for SLA (hide, don't delete). List wh…
   - [ ] **M1.13f** Finish "build plate" for the strings M1.13a could not reach (arrange dialog, menu items, undo names, two er…
-  - [ ] **M1.13g** Model colour for SLA: one fixed high-contrast colour (from the theme tokens), no per-resin colour picker; r…
   - [ ] **M1.13h** "Supports & raft" settings for SLA: remove the FFF "extruders" section, and replace the support options sho…
-  - [ ] **M1.13i** The output filename template still defaults to `.gcode` in "Output options" for SLA: give the community SLA…
 
 </details>
 
