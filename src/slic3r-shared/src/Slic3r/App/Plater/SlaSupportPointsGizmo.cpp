@@ -649,7 +649,7 @@ void SlaSupportPointsGizmo::start_generation()
     const Domain::BedRef bed_ref = instance->get_last_bed();
     if (project.find_bed_instance_by_id(bed_ref.instance_id) == nullptr) {
         AppServices::instance().dialog_manager().show_warning_dialog(
-            _u8L("Automatic generation requires the object to be placed on a bed."),
+            _u8L("Automatic generation requires the object to be placed on the build plate."),
             _u8L("Warning")
         );
         return;

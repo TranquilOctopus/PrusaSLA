@@ -37,7 +37,7 @@ ReferenceFramePicker::ReferenceFramePicker(
     m_mode_buttons.insert_button(m_volume_radio_button);
     m_instance_radio_button = row->emplace_back<RadioButton>(_u8L("Object"));
     m_mode_buttons.insert_button(m_instance_radio_button);
-    m_bed_radio_button = row->emplace_back<RadioButton>(_u8L("Bed"));
+    m_bed_radio_button = row->emplace_back<RadioButton>(is_sla() ? _u8L("Build plate") : _u8L("Bed"));
     m_mode_buttons.insert_button(m_bed_radio_button);
 
     using Frame = Biz::Scene::SelectionReferenceFrame;
@@ -149,4 +149,10 @@ Biz::Scene::SelectionReferenceFrame ReferenceFramePicker::get_checked_frame() co
         return Frame::Bed;
     }
 }
+
+bool ReferenceFramePicker::is_sla() const
+{
+    return m_project_interactor.selected_config_container().print_technology() == Domain::PrinterTechnology::SLA;
+}
+
 } // namespace Slic3r::App::Plater

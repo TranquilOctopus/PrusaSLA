@@ -464,7 +464,7 @@ void SlaHollowGizmo::on_scene_selection_changed(
     if (project.find_bed_instance_by_id(bed_ref.instance_id) == nullptr) {
         m_dialog->set_enable(false);
         m_dialog->set_preview_enabled(false);
-        m_dialog->set_status(_u8L("Object must be placed on a bed."));
+        m_dialog->set_status(_u8L("Object must be placed on the build plate."));
         return;
     }
 
@@ -559,7 +559,7 @@ void SlaHollowGizmo::start_preview()
     const Domain::BedRef bed_ref = instance->get_last_bed();
     if (project.find_bed_instance_by_id(bed_ref.instance_id) == nullptr) {
         AppServices::instance().dialog_manager().show_warning_dialog(
-            _u8L("Preview requires the object to be placed on a bed."),
+            _u8L("Preview requires the object to be placed on the build plate."),
             _u8L("Warning")
         );
         return;
