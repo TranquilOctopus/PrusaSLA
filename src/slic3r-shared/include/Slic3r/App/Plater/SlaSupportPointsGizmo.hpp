@@ -203,6 +203,20 @@ private:
 
     // Guard to prevent dialog setters from triggering value-change callbacks
     bool m_syncing_dialog{false};
+
+    class DialogSyncGuard
+    {
+    public:
+        explicit DialogSyncGuard(SlaSupportPointsGizmo& gizmo)
+            : m_gizmo(gizmo), m_previous(gizmo.m_syncing_dialog)
+        { m_gizmo.m_syncing_dialog = true; }
+        ~DialogSyncGuard() { m_gizmo.m_syncing_dialog = m_previous; }
+        DialogSyncGuard(const DialogSyncGuard&) = delete;
+        DialogSyncGuard& operator=(const DialogSyncGuard&) = delete;
+    private:
+        SlaSupportPointsGizmo& m_gizmo;
+        bool m_previous;
+    };
 };
 
 } // namespace Slic3r::App::Plater

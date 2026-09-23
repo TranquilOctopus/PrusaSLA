@@ -55,15 +55,9 @@ using Slic3r::Domain::SLA::PointsStatus;
 
 namespace Slic3r::Biz {
 
-// RAII guard for dialog syncing
-struct DialogSyncGuard
-{
-    SlaSupportPointsGizmo& gizmo;
-    DialogSyncGuard(SlaSupportPointsGizmo& g) : gizmo(g) { gizmo.m_syncing_dialog = true; }
-    ~DialogSyncGuard() { gizmo.m_syncing_dialog = false; }
-};
+} // namespace Slic3r::Biz
 
-class SlaSupportPointsRequest :
+namespace Slic3r::App::Plater {
     public ISLAObjectCacheChangedListener,
     public IStatusCacheChangedListener
 {
