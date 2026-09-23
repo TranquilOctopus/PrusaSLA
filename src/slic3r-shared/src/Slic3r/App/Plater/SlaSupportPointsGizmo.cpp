@@ -55,6 +55,14 @@ using Slic3r::Domain::SLA::PointsStatus;
 
 namespace Slic3r::Biz {
 
+// RAII guard for dialog syncing
+struct DialogSyncGuard
+{
+    SlaSupportPointsGizmo& gizmo;
+    DialogSyncGuard(SlaSupportPointsGizmo& g) : gizmo(g) { gizmo.m_syncing_dialog = true; }
+    ~DialogSyncGuard() { gizmo.m_syncing_dialog = false; }
+};
+
 class SlaSupportPointsRequest :
     public ISLAObjectCacheChangedListener,
     public IStatusCacheChangedListener
@@ -289,6 +297,9 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     m_dialog->callbacks().discard = [this]() { this->discard_generated_points(); };
     m_dialog->callbacks().density_changed = [this](double value)
     {
+        if (m_syncing_dialog) {
+            return;
+        }
         const int density = static_cast<int>(value);
         if (m_selected_object_id.valid()) {
             Domain::Project& project = m_project_interactor.selected_project();
@@ -299,12 +310,14 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
                 if (result.item) {
                     result.item->set<int>(density);
                 }
-                this->start_generation();
             }
         }
     };
     m_dialog->callbacks().head_diameter_changed = [this](double value)
     {
+        if (m_syncing_dialog) {
+            return;
+        }
         if (m_edit_state.has_value()) {
             m_edit_state->editing.head_diameter_mm = value;
             this->apply_head_diameter_to_selected();
@@ -312,6 +325,9 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     };
     m_dialog->callbacks().pillar_diameter_changed = [this](double value)
     {
+        if (m_syncing_dialog) {
+            return;
+        }
         if (m_edit_state.has_value()) {
             m_edit_state->editing.pillar_diameter_mm = value;
             m_edit_state->editing.pillar_diameter_use_global = false;
@@ -321,6 +337,9 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     };
     m_dialog->callbacks().base_diameter_changed = [this](double value)
     {
+        if (m_syncing_dialog) {
+            return;
+        }
         if (m_edit_state.has_value()) {
             m_edit_state->editing.base_diameter_mm = value;
             m_edit_state->editing.base_diameter_use_global = false;
@@ -330,6 +349,9 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     };
     m_dialog->callbacks().base_height_changed = [this](double value)
     {
+        if (m_syncing_dialog) {
+            return;
+        }
         if (m_edit_state.has_value()) {
             m_edit_state->editing.base_height_mm = value;
             m_edit_state->editing.base_height_use_global = false;
@@ -339,6 +361,9 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     };
     m_dialog->callbacks().head_diameter_use_global_changed = [this](bool value)
     {
+        if (m_syncing_dialog) {
+            return;
+        }
         if (m_edit_state.has_value()) {
             m_edit_state->editing.head_diameter_use_global = value;
             if (value) {
@@ -348,6 +373,9 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     };
     m_dialog->callbacks().pillar_diameter_use_global_changed = [this](bool value)
     {
+        if (m_syncing_dialog) {
+            return;
+        }
         if (m_edit_state.has_value()) {
             m_edit_state->editing.pillar_diameter_use_global = value;
             if (value) {
@@ -357,6 +385,9 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     };
     m_dialog->callbacks().base_diameter_use_global_changed = [this](bool value)
     {
+        if (m_syncing_dialog) {
+            return;
+        }
         if (m_edit_state.has_value()) {
             m_edit_state->editing.base_diameter_use_global = value;
             if (value) {
@@ -366,6 +397,9 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     };
     m_dialog->callbacks().base_height_use_global_changed = [this](bool value)
     {
+        if (m_syncing_dialog) {
+            return;
+        }
         if (m_edit_state.has_value()) {
             m_edit_state->editing.base_height_use_global = value;
             if (value) {
@@ -378,6 +412,9 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     m_dialog->callbacks().preset_heavy = [this]() { this->apply_preset_heavy(); };
     m_dialog->callbacks().clipping_plane_changed = [this](double value)
     {
+        if (m_syncing_dialog) {
+            return;
+        }
         if (!m_selected_object_id.valid()) {
             return;
         }
@@ -386,6 +423,9 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     };
     m_dialog->callbacks().lock_island_supports_changed = [this](bool value)
     {
+        if (m_syncing_dialog) {
+            return;
+        }
         if (m_edit_state.has_value()) {
             m_edit_state->editing.lock_island_supports = value;
         }
@@ -463,6 +503,7 @@ void SlaSupportPointsGizmo::on_deactivated()
     clear_point_visuals();
     m_hovered_point_idx.reset();
 
+    DialogSyncGuard guard(*this);
     m_dialog->set_generate_enabled(false);
     m_dialog->set_apply_enabled(false);
     m_dialog->set_point_count(0);
@@ -514,6 +555,8 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     const Biz::Scene::ObjectSelection& selection
 )
 {
+    DialogSyncGuard guard(*this);
+
     if (m_generation_slicing_id.has_value()) {
         m_support_points_request->cancel();
         m_generation_slicing_id.reset();
@@ -682,6 +725,8 @@ void SlaSupportPointsGizmo::start_generation()
     }
 
     m_generation_slicing_id = slicing_id;
+
+    DialogSyncGuard guard(*this);
     m_dialog->set_generate_enabled(false);
     m_dialog->set_apply_enabled(false);
 
@@ -694,6 +739,8 @@ void SlaSupportPointsGizmo::start_generation()
 
 void SlaSupportPointsGizmo::on_generation_completed(std::optional<Domain::SLA::SupportPoints> support_points)
 {
+    DialogSyncGuard guard(*this);
+
     m_generation_slicing_id.reset();
 
     if (support_points.has_value()) {
@@ -738,6 +785,7 @@ void SlaSupportPointsGizmo::apply_generated_points()
     model_object->sla_support_points = std::move(domain_points);
     model_object->sla_points_status = PointsStatus::AutoGenerated;
 
+    DialogSyncGuard guard(*this);
     m_has_generated_points = false;
     m_dialog->set_apply_enabled(false);
     m_dialog->set_point_count(model_object->sla_support_points.size());
@@ -749,6 +797,8 @@ void SlaSupportPointsGizmo::apply_generated_points()
 
 void SlaSupportPointsGizmo::discard_generated_points()
 {
+    DialogSyncGuard guard(*this);
+
     m_has_generated_points = false;
     m_generated_support_points.reset();
     m_generation_slicing_id.reset();
@@ -762,6 +812,8 @@ void SlaSupportPointsGizmo::discard_generated_points()
 
 void SlaSupportPointsGizmo::begin_editing()
 {
+    DialogSyncGuard guard(*this);
+
     Domain::Project& project = m_project_interactor.selected_project();
     Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
     if (!model_object) {
@@ -827,6 +879,8 @@ void SlaSupportPointsGizmo::end_editing()
 
 void SlaSupportPointsGizmo::apply_edited_points()
 {
+    DialogSyncGuard guard(*this);
+
     if (!m_edit_state.has_value() || !m_selected_object_id.valid()) {
         return;
     }
@@ -852,6 +906,8 @@ void SlaSupportPointsGizmo::apply_edited_points()
 
 void SlaSupportPointsGizmo::discard_edited_points()
 {
+    DialogSyncGuard guard(*this);
+
     end_editing();
     m_dialog->set_apply_enabled(false);
 
@@ -884,6 +940,8 @@ std::optional<size_t> SlaSupportPointsGizmo::find_nearest_point(const Domain::Ve
 
 void SlaSupportPointsGizmo::add_point_at_mesh_pos(const Domain::Vec3d& mesh_pos)
 {
+    DialogSyncGuard guard(*this);
+
     if (!m_edit_state.has_value()) {
         return;
     }
@@ -896,6 +954,8 @@ void SlaSupportPointsGizmo::add_point_at_mesh_pos(const Domain::Vec3d& mesh_pos)
 
 void SlaSupportPointsGizmo::remove_point_at_index(size_t idx)
 {
+    DialogSyncGuard guard(*this);
+
     if (!m_edit_state.has_value() || idx >= m_edit_state->editing.points.size()) {
         return;
     }
@@ -908,6 +968,8 @@ void SlaSupportPointsGizmo::remove_point_at_index(size_t idx)
 
 void SlaSupportPointsGizmo::move_point_to_mesh_pos(size_t idx, const Domain::Vec3d& mesh_pos)
 {
+    DialogSyncGuard guard(*this);
+
     if (!m_edit_state.has_value() || idx >= m_edit_state->editing.points.size()) {
         return;
     }
@@ -1018,7 +1080,10 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
             pos = (wheel_rotation > 0.f) ? std::min(1., pos + 0.01) : std::max(0., pos - 0.01);
             m_clipping_plane_presenter.set_position_by_ratio(pos, true);
             update_clipping_plane();
+
+            DialogSyncGuard guard(*this);
             m_dialog->set_clipping_plane_position(pos);
+
             return Scene::GizmoActivationState::Done;
         }
     }
@@ -1335,6 +1400,8 @@ void SlaSupportPointsGizmo::update_clipping_plane()
 
 void SlaSupportPointsGizmo::reset_clipping_plane()
 {
+    DialogSyncGuard guard(*this);
+
     m_clipping_plane_presenter.set_position_by_ratio(-1., false);
     update_clipping_plane();
     m_dialog->set_clipping_plane_position(m_clipping_plane_presenter.clipper().get_position());
@@ -1434,6 +1501,8 @@ void SlaSupportPointsGizmo::apply_base_height_to_selected()
 
 void SlaSupportPointsGizmo::apply_preset_light()
 {
+    DialogSyncGuard guard(*this);
+
     if (!m_edit_state.has_value()) {
         return;
     }
@@ -1480,6 +1549,8 @@ void SlaSupportPointsGizmo::apply_preset_light()
 
 void SlaSupportPointsGizmo::apply_preset_medium()
 {
+    DialogSyncGuard guard(*this);
+
     if (!m_edit_state.has_value()) {
         return;
     }
@@ -1526,6 +1597,8 @@ void SlaSupportPointsGizmo::apply_preset_medium()
 
 void SlaSupportPointsGizmo::apply_preset_heavy()
 {
+    DialogSyncGuard guard(*this);
+
     if (!m_edit_state.has_value()) {
         return;
     }

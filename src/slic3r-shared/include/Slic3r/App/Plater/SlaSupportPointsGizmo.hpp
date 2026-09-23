@@ -200,6 +200,9 @@ private:
 
     // Hovered point index (for highlight)
     std::optional<size_t> m_hovered_point_idx;
+
+    // Guard to prevent dialog setters from triggering value-change callbacks
+    bool m_syncing_dialog{false};
 };
 
 } // namespace Slic3r::App::Plater
