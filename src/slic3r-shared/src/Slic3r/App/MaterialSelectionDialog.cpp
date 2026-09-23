@@ -49,12 +49,12 @@ void MaterialSelectionDialog::update_current_context()
 
     // Show/hide the appropriate button set (excluding shared "All")
     for (auto* btn : m_fff_type_filter_buttons) {
-        if (btn->label() != _u8L("All")) {
+        if (m_type_filter_values.at(btn) != "") {
             btn->set_visible(!sla_active);
         }
     }
     for (auto* btn : m_sla_type_filter_buttons) {
-        if (btn->label() != _u8L("All")) {
+        if (m_type_filter_values.at(btn) != "") {
             btn->set_visible(sla_active);
         }
     }
@@ -63,18 +63,15 @@ void MaterialSelectionDialog::update_current_context()
         m_current_context = context();
         if (LayoutButton* checked_type_button =
                 dynamic_cast<LayoutButton*>(m_material_type_button_group.checked_button());
-            m_current_context.type_filter != checked_type_button->label())
+            m_current_context.type_filter != m_type_filter_values.at(checked_type_button))
         {
-            m_type_filter_buttons
-                .at(m_current_context.type_filter.empty() ? Biz::_u8L("All") :
-                                                            m_current_context.type_filter)
-                ->set_checked(true);
+            m_type_filter_buttons.at(m_current_context.type_filter)->set_checked(true);
         }
         // If the currently checked filter belongs to the hidden set (and is not "All"), reset to "All"
         if (LayoutButton* checked_type_button =
                 dynamic_cast<LayoutButton*>(m_material_type_button_group.checked_button())) {
-            const std::string& checked_label = checked_type_button->label();
-            if (checked_label != _u8L("All")) {
+            const std::string& checked_value = m_type_filter_values.at(checked_type_button);
+            if (!checked_value.empty()) {
                 bool is_fff_button = std::find(m_fff_type_filter_buttons.begin(),
                                                m_fff_type_filter_buttons.end(),
                                                checked_type_button) != m_fff_type_filter_buttons.end();
@@ -82,7 +79,7 @@ void MaterialSelectionDialog::update_current_context()
                                                m_sla_type_filter_buttons.end(),
                                                checked_type_button) != m_sla_type_filter_buttons.end();
                 if ((sla_active && is_fff_button) || (!sla_active && is_sla_button)) {
-                    m_type_filter_buttons.at(_u8L("All"))->set_checked(true);
+                    m_type_filter_buttons.at("")->set_checked(true);
                 }
             }
         }
@@ -122,11 +119,12 @@ MaterialSelectionDialog::MaterialSelectionDialog(
     filters_wrap->set_gap(5.f);
     filters_wrap->set_flex_grow(1.f);
 
-    // Shared "All" button
+// Shared "All" button
     LayoutButton* all_btn = filters_wrap->emplace_back<LayoutButton>(_u8L("All"));
     all_btn->set_checkable(true);
     all_btn->set_flex_grow(1.f);
-    m_type_filter_buttons[_u8L("All")] = all_btn;
+    m_type_filter_buttons[""] = all_btn;
+    m_type_filter_values[all_btn] = "";
     m_material_type_button_group.insert_button(all_btn);
     m_fff_type_filter_buttons.push_back(all_btn);
     m_sla_type_filter_buttons.push_back(all_btn);
@@ -135,41 +133,42 @@ MaterialSelectionDialog::MaterialSelectionDialog(
     for (const std::string& filter_btn_name :
          std::initializer_list<std::string>{"PLA", "PETG", "ASA"})
     {
-        LayoutButton* btn = filters_wrap->emplace_back<LayoutButton>(filter_btn_name);
+        LayoutButton* btn = filters_wrap->emplace_back<LayoutButton>(_u8L(filter_btn_name));
         btn->set_checkable(true);
         btn->set_flex_grow(1.f);
         m_type_filter_buttons[filter_btn_name] = btn;
+        m_type_filter_values[btn] = filter_btn_name;
         m_material_type_button_group.insert_button(btn);
         m_fff_type_filter_buttons.push_back(btn);
     }
 
     // SLA type filter buttons (excluding "All")
     for (const std::string& filter_btn_name :
-         std::initializer_list<std::string>{_u8L("Tough"), _u8L("Flexible"),
-                                             _u8L("Casting"), _u8L("Dental"), _u8L("Heat-resistant")})
+         std::initializer_list<std::string>{"Tough", "Flexible",
+                                              "Casting", "Dental", "Heat-resistant"})
     {
-        LayoutButton* btn = filters_wrap->emplace_back<LayoutButton>(filter_btn_name);
+        LayoutButton* btn = filters_wrap->emplace_back<LayoutButton>(_u8L(filter_btn_name));
         btn->set_checkable(true);
         btn->set_flex_grow(1.f);
         btn->set_visible(false);
         m_type_filter_buttons[filter_btn_name] = btn;
+        m_type_filter_values[btn] = filter_btn_name;
         m_material_type_button_group.insert_button(btn);
         m_sla_type_filter_buttons.push_back(btn);
     }
     m_material_type_button_group.callbacks().checked_changed =
         [this](AbstractButton* current_checked, AbstractButton*)
     {
-        context().type_filter = dynamic_cast<LayoutButton*>(current_checked)->label();
+        context().type_filter = m_type_filter_values.at(dynamic_cast<LayoutButton*>(current_checked));
         update_current_context();
         update_preset_list();
     };
 
-    m_material_filter->set_filter_fn(
+m_material_filter->set_filter_fn(
         [this](const Biz::Preset::PresetItem& data) -> bool
         {
-            const std::string& type_filter =
-                m_current_context.type_filter.empty() ? _u8L("All") : m_current_context.type_filter;
-            if (type_filter != _u8L("All")) {
+            const std::string& type_filter = m_current_context.type_filter;
+            if (!type_filter.empty()) {
                 const auto& selected_preset =
                     m_project_interactor.preset_interactor().selected_printer_preset();
                 const auto& config = m_project_interactor.preset_interactor()
