@@ -1,4 +1,5 @@
 #include "Slic3r/Biz/PrintHost/PrintHostJobData.hpp"
+#include "Slic3r/Biz/ResultExport/SLA/SlaExportFileTypes.hpp"
 #include "Slic3r/Assert.hpp"
 #include "Slic3r/Log.hpp"
 
@@ -17,6 +18,9 @@ PrintHostExportFormat get_export_format_from_extension(const std::string& extens
     }
     if (extension == ".sl1s") {
         return PrintHostExportFormat::Sl1s;
+    }
+    if (Sla::is_sla_export_extension(extension)) {
+        return PrintHostExportFormat::SlaArchive;
     }
     ASSERT(false, "Unknown data format. Add it to PrintHostResultFormat");
     return PrintHostExportFormat::Undefined;

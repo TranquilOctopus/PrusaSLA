@@ -8,6 +8,7 @@
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include <Slic3r/Biz/Platform/PlatformServices.hpp>
 #include "Slic3r/Biz/I18N/I18N.hpp"
+#include "Slic3r/Biz/ResultExport/SLA/SlaExportFileTypes.hpp"
 
 #include "boost/filesystem/path.hpp"
 
@@ -71,7 +72,31 @@ std::string post_upload_action_label(Biz::PrintHost::PrintHostAfterUploadAction 
     return {};
 }
 
-std::string gen_wildcards(const std::string& extension, Technology tech, bool bgcode_allowed)
+// The printer's `sla_archive_format`, which decides how the layers are encoded (e.g. "pm5").
+std::string sla_archive_format(const Biz::ProjectInteractor& project_interactor)
+{
+    const auto& cbox = project_interactor.preset_interactor().selected_printer_preset().printer.config_box();
+    if (const auto* item = cbox.find("sla_archive_format").item; item) {
+        return item->get<std::string>();
+    }
+    return {};
+}
+
+std::string sla_wildcards(const std::string& archive_format, const std::string& extension)
+{
+    std::string result;
+    for (const auto& type : Biz::PrintHost::Sla::sla_export_file_types(archive_format, extension)) {
+        if (!result.empty()) {
+            result += "|";
+        }
+        result += fmt::format("{} (*.{})|*.{}", type.description, type.extension, type.extension);
+    }
+    return result;
+}
+
+std::string gen_wildcards(
+    const std::string& extension, Technology tech, bool bgcode_allowed, const std::string& archive_format
+)
 {
     if (tech == Technology::Fdm) {
         // If bgcode not allowed in printer setting, show just gcode
@@ -84,12 +109,8 @@ std::string gen_wildcards(const std::string& extension, Technology tech, bool bg
         }
         return Wildcards::generate_wildcards(Wildcards::TypeFlag::GCode | Wildcards::TypeFlag::BinaryGCode, Wildcards::TypeFlag::GCode);
     } else if (tech == Technology::Sla) {
-        if (extension == ".sl1" || extension == ".SL1") {
-            return Wildcards::generate_wildcards(Wildcards::TypeFlag::Sl1);  
-        } else if (extension == ".sl1s" || extension == ".SL1S") {
-            return Wildcards::generate_wildcards(Wildcards::TypeFlag::Sl1S);  
-        }
-        return Wildcards::generate_wildcards(Wildcards::TypeFlag::Sl1 | Wildcards::TypeFlag::Sl1S);
+        // Every SLA file type, the printer's own first so it is the default.
+        return sla_wildcards(archive_format, extension);
     } else {
         ASSERT(false);
     }
@@ -160,8 +181,20 @@ ExportNameData get_export_name_data(const Biz::ProjectInteractor& project_intera
             apply_extension(".gcode");
         }
 
-    } else if (last_used_ext_lower == ".sl1" || last_used_ext_lower == ".sl1s") { 
-        apply_extension(ext);
+    } else {
+        // SLA layers are encoded for the printer's format when slicing, so the file type follows
+        // the printer, not the filename template (which defaults to .gcode) or another printer's
+        // last export. The last used extension still wins when it is a type of this format
+        // (e.g. .sl1 against .sl1s).
+        const std::string archive_format = sla_archive_format(project_interactor);
+        if (Biz::PrintHost::Sla::sla_extension_matches_format(last_used_ext_lower, archive_format)) {
+            apply_extension(last_used_ext_lower);
+        } else if (const std::string default_ext = Biz::PrintHost::Sla::sla_default_export_extension(
+                       archive_format, name_data.preferred_extension
+                   );
+                   !default_ext.empty()) {
+            apply_extension(default_ext);
+        }
     }
 
     return name_data;
@@ -221,19 +254,46 @@ void show_export_modal_dialog(
         bgcode_allowed = item->get<bool>();
     }
 
+    const std::string archive_format = sla_archive_format(project_interactor);
+    const bool is_sla = name_data.technology == Technology::Sla;
     std::string wildcards = wildcards_overide.empty() ?
-        gen_wildcards(name_data.preferred_extension, name_data.technology, bgcode_allowed) :
+        gen_wildcards(name_data.preferred_extension, name_data.technology, bgcode_allowed, archive_format) :
         wildcards_overide;
 
     std::string filename = name_data.filename;
 
     Biz::Platform::PlatformServices::instance().main_thread_dispatcher().dispatch_on_main_thread(
         [pi_raw = &project_interactor, default_path_at_removable, wildcards_overide, 
-         default_folder, filename, wildcards, callback, bgcode_allowed]()
+         default_folder, filename, wildcards, callback, bgcode_allowed, is_sla, archive_format]()
         {
-            auto wrapped_callback = [callback, bgcode_allowed, pi_raw, default_path_at_removable, wildcards_overide](bool result, const std::vector<boost::filesystem::path>& file_paths) {
+            auto wrapped_callback = [callback, bgcode_allowed, pi_raw, default_path_at_removable, wildcards_overide, is_sla, archive_format](bool result, const std::vector<boost::filesystem::path>& file_paths) {
                 if (!result || file_paths.empty()) {
                     callback(result, file_paths);
+                    return;
+                }
+
+                // The layers were encoded for the printer's format when slicing. Writing them
+                // under another format's extension would produce a file no printer can read.
+                const std::string chosen_ext = file_paths.front().extension().string();
+                if (is_sla && !Biz::PrintHost::Sla::sla_extension_matches_format(chosen_ext, archive_format)) {
+                    AppServices::instance().dialog_manager().show_yesno_dialog(
+                        Biz::_u8L("Different file type"),
+                        fmt::format(
+                            fmt::runtime(Biz::_u8L("This build plate was sliced for the printer's {} format, so it can't be saved as {}. "
+                                                   "To get a {} file, select a printer that uses it and slice again.\n\n"
+                                                   "Choose another file name?")),
+                            Biz::PrintHost::Sla::sla_default_export_extension(archive_format),
+                            chosen_ext,
+                            chosen_ext
+                        ),
+                        [pi_raw, default_path_at_removable, callback, wildcards_overide](bool yes) {
+                            if (yes) {
+                                show_export_modal_dialog(*pi_raw, default_path_at_removable, callback, wildcards_overide);
+                            } else {
+                                callback(false, {});
+                            }
+                        }
+                    );
                     return;
                 }
 

@@ -41,6 +41,9 @@ enum class PrintHostExportFormat
     BGCode,
     Sl1,
     Sl1s,
+    // Any other registered SLA archive (.pm5, .goo, .pwmx, ...). The sliced data decides how it
+    // is written, so the file type needs no finer distinction.
+    SlaArchive,
 };
 
 PrintHostExportFormat get_export_format_from_extension(const std::string& extension);

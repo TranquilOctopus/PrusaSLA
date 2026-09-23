@@ -45,10 +45,14 @@ Domain::Preset::RootPresetNode transform_for_saving(
         main.unconditional_inherits = {std::get<std::string>(it->second)};
     }
 
-    main.condition = Domain::Preset::ParsedExpr{
-        SourceLocatedExpr{Expr::simplify(Details::and_chain_exprs(source.conditions))}
-    };
-    main.condition.value().expr_str = Domain::Expr::to_string(*main.condition.value().expr);
+    // A preset without a condition (the community SLA resins, for one) applies everywhere; its
+    // user copy must too, so it gets no condition rather than an empty chain.
+    if (!source.conditions.empty()) {
+        main.condition = Domain::Preset::ParsedExpr{
+            SourceLocatedExpr{Expr::simplify(Details::and_chain_exprs(source.conditions))}
+        };
+        main.condition.value().expr_str = Domain::Expr::to_string(*main.condition.value().expr);
+    }
     main.id = source.id;
     main.name = source.name;
     main.features = source.features;

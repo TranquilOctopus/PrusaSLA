@@ -135,6 +135,22 @@ int main(int argc, char** argv)
 
     Slic3r::init_assert();
 
+#ifdef _WIN32
+    // A native crash (access violation and the like) bypasses std::terminate and used to leave
+    // nothing in the log. Log the exception and the stack; returning EXCEPTION_CONTINUE_SEARCH
+    // still lets Windows end the process as before.
+    SetUnhandledExceptionFilter([](EXCEPTION_POINTERS* info) -> LONG {
+        const EXCEPTION_RECORD& record = *info->ExceptionRecord;
+        SPDLOG_CRITICAL(
+            "Native crash: exception 0x{:08X} at address {}",
+            static_cast<unsigned>(record.ExceptionCode), record.ExceptionAddress
+        );
+        SPDLOG_CRITICAL("Stack at crash:\n{}", libassert::stacktrace());
+        spdlog::default_logger()->flush();
+        return EXCEPTION_CONTINUE_SEARCH;
+    });
+#endif
+
     auto& app_services{Slic3r::App::AppServices::instance()};
     app_services.set_app_config(Slic3r::App::AppConfig::create_app_config());
 

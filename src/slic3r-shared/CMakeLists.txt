@@ -964,6 +964,7 @@ set(SLIC3R_SHARED_FILES
         include/Slic3r/Biz/ResultExport/ResultExportDataFinalizer.hpp
         include/Slic3r/Biz/ResultExport/SLA/SL1.hpp
         include/Slic3r/Biz/ResultExport/SLA/SlaArchiveFormat.hpp
+        include/Slic3r/Biz/ResultExport/SLA/SlaExportFileTypes.hpp
         include/Slic3r/Biz/ResultExport/SLA/Zipper.hpp
         include/Slic3r/Biz/ResultExport/SLA/AnycubicSLA.hpp
         include/Slic3r/Biz/ResultExport/SLA/GooSLA.hpp
@@ -972,6 +973,7 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/Biz/ResultExport/SLA/SL1.cpp
         src/Slic3r/Biz/ResultExport/SLA/SL1Format.cpp
         src/Slic3r/Biz/ResultExport/SLA/SlaArchiveFormat.cpp
+        src/Slic3r/Biz/ResultExport/SLA/SlaExportFileTypes.cpp
         src/Slic3r/Biz/ResultExport/SLA/Zipper.cpp
         src/Slic3r/Biz/ResultExport/SLA/AnycubicSLA.cpp
         src/Slic3r/Biz/ResultExport/SLA/GooSLA.cpp
@@ -1643,6 +1645,7 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/Biz/Yaml/YamlTests.cpp
             test/Slic3r/Biz/Preset/IO/HwConfigDefLoaderTests.cpp
             test/Slic3r/Biz/Preset/IO/PresetLoaderTests.cpp
+            test/Slic3r/Biz/Preset/IO/PresetSaverTests.cpp
             test/Slic3r/Biz/Preset/IO/PresetMetadataLegacyLoaderTests.cpp
             test/Slic3r/Biz/Preset/PresetCollectionEvaluatorTests.cpp
             test/Slic3r/Biz/Preset/PresetEvaluatorTests.cpp
@@ -1680,6 +1683,7 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/Biz/Format/3MFTests.cpp
             test/Slic3r/Biz/Format/STEPTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/SlaArchiveFormatTests.cpp
+            test/Slic3r/Biz/ResultExport/SLA/SlaExportFileTypesTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/SlaExportIdentityTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/AnycubicExportTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/PM5ExportTests.cpp
