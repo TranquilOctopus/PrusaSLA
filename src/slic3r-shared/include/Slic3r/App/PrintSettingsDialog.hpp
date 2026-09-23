@@ -104,6 +104,7 @@ private:
     void on_about_to_close() override;
 
     void update_dirty_state();
+    void update_print_tab_label();
 
 private:
     Biz::ProjectInteractor& m_project_interactor;
@@ -120,6 +121,7 @@ private:
     PageListView* m_extruder_page_list_view{nullptr};
 
     Yoga::Text* m_bed_name{nullptr};
+    Yoga::LayoutButton* m_print_tab_button{nullptr};
 
     Biz::UnsharedPointer<ToolPrintCategorizer> m_tool_print_categorizer;
     Biz::UnsharedPointer<DirtyToolPrintCategorizer> m_dirty_tool_print_categorizer;

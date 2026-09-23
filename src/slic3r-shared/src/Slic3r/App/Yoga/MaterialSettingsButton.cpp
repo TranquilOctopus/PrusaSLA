@@ -91,8 +91,9 @@ MaterialSettingsButton::MaterialSettingsButton(
 
     m_cog_btn->callbacks().hovered_changed = [this](bool) { update_cog_visibility(); };
 
-    emplace_back<Separator>(Orientation::Vertical)
-        ->set_fill(m_theme->color_imgui(Platform::Color::WindowBg));
+    m_nozzle_separator =
+        emplace_back<Separator>(Orientation::Vertical)
+            ->set_fill(m_theme->color_imgui(Platform::Color::WindowBg));
 
     m_nozzle_btn =
         emplace_back<LayoutButton>(std::string{}, Render::Icon::None, _u8L("Change nozzle size"));
@@ -175,6 +176,8 @@ void MaterialSettingsButton::on_list_selection_changed(Domain::SelectionId new_s
     const Biz::Preset::ToolConfigItemObservableList& tool_config_item_ol =
         m_project_interactor.preset_interactor().tool_items().at(tool_index);
     set_nozzle(tool_config_item_ol.items().at(tool_config_item_ol.selected_index()).name);
+
+    update_nozzle_visibility();
 }
 
 void MaterialSettingsButton::on_hw_item_selection_changed(
@@ -199,6 +202,8 @@ void MaterialSettingsButton::on_hw_item_selection_changed(
         const Biz::Preset::ToolConfigItemObservableList& tool_config_item_ol =
             m_project_interactor.preset_interactor().tool_items().at(tool_index);
         set_nozzle(tool_config_item_ol.items().at(tool_config_item_ol.selected_index()).name);
+
+        update_nozzle_visibility();
     }
 }
 
@@ -263,6 +268,13 @@ void MaterialSettingsButton::hovered_updated_internal()
 void MaterialSettingsButton::update_cog_visibility()
 {
     m_cog_btn->set_visible(this->hovered() || m_cog_btn->hovered());
+}
+
+void MaterialSettingsButton::update_nozzle_visibility()
+{
+    const bool is_sla = m_project_interactor.selected_config_container().print_technology() == Domain::PrinterTechnology::SLA;
+    m_nozzle_btn->set_visible(!is_sla);
+    m_nozzle_separator->set_visible(!is_sla);
 }
 
 void MaterialSettingsButton::on_preset_value_changed(

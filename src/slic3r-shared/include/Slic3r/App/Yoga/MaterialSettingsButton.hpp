@@ -24,6 +24,7 @@ class ColorPickerButton;
 class ButtonGroup;
 class LayoutButton;
 class AbstractButton;
+class Separator;
 
 class MaterialSettingsButton :
     public RectangleButton,
@@ -79,6 +80,7 @@ protected:
 
 private:
     void update_cog_visibility();
+    void update_nozzle_visibility();
 
 private:
     Biz::ListenerScope<
@@ -90,6 +92,7 @@ private:
     ColorPickerButton* m_color_marker{nullptr};
     Text* m_material_name{nullptr};
     LayoutButton* m_cog_btn{nullptr};
+    Separator* m_nozzle_separator{nullptr};
     LayoutButton* m_nozzle_btn{nullptr};
     std::weak_ptr<ButtonGroup> m_button_group;
     FnIndexClicked m_on_cog_clicked;
