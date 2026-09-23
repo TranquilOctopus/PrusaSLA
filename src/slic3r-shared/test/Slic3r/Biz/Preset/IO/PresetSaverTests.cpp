@@ -25,7 +25,7 @@ EvaluatedMaterialPreset::Preset make_resin(std::vector<std::string> conditions)
 // saver asserted that every preset has at least one.
 TEST_CASE("Saving a preset without a condition keeps it unconditional", "[preset][saver]")
 {
-    const auto saved = Slic3r::Biz::Preset::IO::transform_for_saving(make_resin({}), nullptr, {});
+    const auto saved = Slic3r::Biz::Preset::IO::transform_for_saving(make_resin({}), static_cast<const EvaluatedMaterialPreset::Preset*>(nullptr), {});
     REQUIRE(saved.variants.size() == 1);
     CHECK_FALSE(saved.variants[0].condition.has_value());
 }
@@ -33,7 +33,7 @@ TEST_CASE("Saving a preset without a condition keeps it unconditional", "[preset
 TEST_CASE("Saving a preset with conditions keeps them", "[preset][saver]")
 {
     const auto saved = Slic3r::Biz::Preset::IO::transform_for_saving(
-        make_resin({"printer.model == \"Photon Mono M5\""}), nullptr, {}
+        make_resin({"printer.model == \"Photon Mono M5\""}), static_cast<const EvaluatedMaterialPreset::Preset*>(nullptr), {}
     );
     REQUIRE(saved.variants.size() == 1);
     REQUIRE(saved.variants[0].condition.has_value());
