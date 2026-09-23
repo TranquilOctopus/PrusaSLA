@@ -264,6 +264,7 @@ private:
     auto mesh_to_slice() const { return range(m_mesh_to_slice); }
 
     sla::InteriorPtr m_hollowing_data;
+    bool m_support_points_generated{false};
 };
 
 Biz::Slicing::Sla::Object::InstanceTrafos get_instance_trafos(const SLAPrintObject& object);
@@ -463,6 +464,8 @@ public:
     } m_report_status;
 
     friend SLAPrintObject;
+
+    std::optional<Domain::ObjectID> m_generate_support_points_for;
 };
 
 // Helper functions:
