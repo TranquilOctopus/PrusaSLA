@@ -182,7 +182,6 @@ private:
     SupportPointPaintableVolumes m_paintable_volumes;
 
     // Clipping plane (like PaintOnGizmoBase)
-    Scene::Clipper m_clipping_plane_clipper;
     Scene::ClipperPresenter m_clipping_plane_presenter;
 
     // Scene nodes for point visuals

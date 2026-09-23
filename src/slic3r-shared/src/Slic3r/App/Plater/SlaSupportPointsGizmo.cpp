@@ -378,7 +378,10 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     m_dialog->callbacks().preset_heavy = [this]() { this->apply_preset_heavy(); };
     m_dialog->callbacks().clipping_plane_changed = [this](double value)
     {
-        m_clipping_plane_clipper.set_position_by_ratio(value, true);
+        if (!m_selected_object_id.valid()) {
+            return;
+        }
+        m_clipping_plane_presenter.set_position_by_ratio(value, true);
         update_clipping_plane();
     };
     m_dialog->callbacks().lock_island_supports_changed = [this](bool value)
@@ -611,8 +614,8 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
         Scene::BuildMeshesNodes::No
     );
     m_clipping_plane_presenter.set_behavior(true, true, 0.);
-    m_clipping_plane_presenter.set_position_by_ratio(m_clipping_plane_clipper.get_position(), true);
-    m_dialog->set_clipping_plane_position(m_clipping_plane_clipper.get_position());
+    m_clipping_plane_presenter.set_position_by_ratio(m_clipping_plane_presenter.clipper().get_position(), true);
+    m_dialog->set_clipping_plane_position(m_clipping_plane_presenter.clipper().get_position());
 
     m_dialog->set_generate_enabled(true);
     m_dialog->set_apply_enabled(false);
@@ -925,8 +928,8 @@ std::optional<SlaSupportPointsGizmo::VolumeHitPoint> SlaSupportPointsGizmo::rayc
 
     // Get the clipping plane for raycasting
     std::optional<Biz::ClippingPlane> clipping_plane_opt;
-    if (m_clipping_plane_clipper.get_position() != 0.) {
-        clipping_plane_opt = m_clipping_plane_clipper.get_clipping_plane();
+    if (m_clipping_plane_presenter.clipper().get_position() != 0.) {
+        clipping_plane_opt = m_clipping_plane_presenter.clipper().get_clipping_plane();
     }
 
     Domain::Vec3d closest_hit_position = Domain::Vec3d::Zero();
@@ -1011,9 +1014,9 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
         if (ctrl_down) {
             const float wheel_rotation =
                 mouse_event.wheel_delta_y() / std::abs(mouse_event.wheel_delta_y());
-            double pos = m_clipping_plane_clipper.get_position();
+            double pos = m_clipping_plane_presenter.clipper().get_position();
             pos = (wheel_rotation > 0.f) ? std::min(1., pos + 0.01) : std::max(0., pos - 0.01);
-            m_clipping_plane_clipper.set_position_by_ratio(pos, true);
+            m_clipping_plane_presenter.set_position_by_ratio(pos, true);
             update_clipping_plane();
             m_dialog->set_clipping_plane_position(pos);
             return Scene::GizmoActivationState::Done;
@@ -1321,19 +1324,20 @@ Domain::ColorRGBA SlaSupportPointsGizmo::get_point_color(const Domain::SLA::Supp
 void SlaSupportPointsGizmo::update_clipping_plane()
 {
     // Update the clipper presenter which updates the scene nodes
+    const auto& clipper = m_clipping_plane_presenter.clipper();
     m_clipping_plane_presenter.update_clipper(
-        m_clipping_plane_clipper.get_clipping_plane().get_normal(),
-        m_clipping_plane_clipper.get_clipping_plane().get_offset(),
-        m_clipping_plane_clipper.get_position(),
+        clipper.get_clipping_plane().get_normal(),
+        clipper.get_clipping_plane().get_offset(),
+        clipper.get_position(),
         false
     );
 }
 
 void SlaSupportPointsGizmo::reset_clipping_plane()
 {
-    m_clipping_plane_clipper.set_position_by_ratio(-1., false);
+    m_clipping_plane_presenter.set_position_by_ratio(-1., false);
     update_clipping_plane();
-    m_dialog->set_clipping_plane_position(m_clipping_plane_clipper.get_position());
+    m_dialog->set_clipping_plane_position(m_clipping_plane_presenter.clipper().get_position());
 }
 
 // Selection helpers
