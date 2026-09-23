@@ -1362,6 +1362,19 @@ void SLAPrint::slice(
         }
     };
 
+    m_generate_support_points_for.reset();
+    if (slice_until_step.has_value()
+        && std::holds_alternative<SLAPrintObjectStep>(slice_until_step->step)
+        && std::get<SLAPrintObjectStep>(slice_until_step->step) == slaposSupportPoints)
+        m_generate_support_points_for = slice_until_step->model_object_id;
+
+    // Invalidate the support_points step for objects where the generation mode has changed.
+    for (SLAPrintObject* po : m_objects) {
+        const bool generate = m_generate_support_points_for == po->model_object()->id();
+        if (po->is_step_done(slaposSupportPoints) && po->m_support_points_generated != generate)
+            po->invalidate_step(slaposSupportPoints);
+    }
+
     if (slice_until_step.has_value()) {
         ASSERT(std::holds_alternative<SLAPrintObjectStep>(slice_until_step->step));
         const SLAPrintObjectStep until_object_step =

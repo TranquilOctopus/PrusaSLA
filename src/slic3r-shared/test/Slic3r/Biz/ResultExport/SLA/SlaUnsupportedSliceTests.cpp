@@ -40,3 +40,35 @@ TEST_CASE("SLA slicing with supports disabled", "[slicing][sla][supports]")
     // so there are about 400 layers at 0.05 mm.
     REQUIRE(sla_result->files.data.size() >= 390);
 }
+
+// Slicing must never generate support points on its own. The generator runs ONLY when the
+// slice was requested with SliceUntilStep{slaposSupportPoints, <that object's id}> (the
+// support tool's "Generate" button path). Every other slice uses the model's own points as
+// they are. A model with no points gets no support points (an empty list), not generated ones.
+TEST_CASE("SLA slicing never generates support points", "[slicing][sla][supports]")
+{
+    using Slic3r::Domain::sla::RaftType;
+
+    Slic3r::Test::SlaSlicingFixture fixture;
+    auto model = Slic3r::Test::generate_cubes(1, 1);
+    // Model has no support points (sla_support_points is empty).
+
+    auto config = Slic3r::Domain::ConfigPackSLA{};
+    config.sla_printer_settings.items.opt("sla_archive_format").set(std::string("goo"));
+    config.sla_printer_settings.items.opt("display_pixels_x").set(1440);
+    config.sla_printer_settings.items.opt("display_pixels_y").set(800);
+    config.sla_printer_settings.items.opt("display_width").set(144.0);
+    config.sla_printer_settings.items.opt("display_height").set(80.0);
+    config.sla_print_settings.items.opt("layer_height").set(0.05);
+    config.sla_material_settings.items.opt("initial_layer_height").set(0.05);
+    config.sla_print_settings.items.opt("supports_enable").set(true);
+    config.sla_print_settings.items.opt("pad_enable").set(false);
+    config.sla_print_settings.items.opt("raft_type").set(RaftType::None);
+
+    auto sla_result = fixture.slice_sla_model(model, config);
+    REQUIRE(sla_result != nullptr);
+    REQUIRE(sla_result->files.data.size() > 20);
+    // Layer 10 is inside the elevation gap: with no generated pillars it is all black, and an
+    // all-black .goo layer encodes to a handful of bytes.
+    CHECK(sla_result->files.data[10].size() < 64);
+}

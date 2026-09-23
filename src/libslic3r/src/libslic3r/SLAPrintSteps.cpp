@@ -809,10 +809,18 @@ void SLAPrint::Steps::support_points(SLAPrintObject &po)
 
 
     po.m_supportable_mesh->zoffset = csgmesh_positive_bb(po.m_mesh_to_slice).min.z();
-    // Unless the user modified the points or we already did the calculation,
-    // we will do the autoplacement. Otherwise we will just blindly copy the
-    // frontend data into the backend cache.
-    // if (mo.sla_points_status != PointsStatus::UserModified) 
+    const bool generate = m_print->m_generate_support_points_for == po.model_object()->id();
+    po.m_support_points_generated = generate;
+    if (!generate) {
+        // Supports are an explicit step: slicing uses the model's own points as they are.
+        SupportPoints support_points;
+        prepare_permanent_support_points(
+            support_points, po.model_object()->sla_support_points, po.trafo(),
+            po.m_supportable_mesh->emesh);
+        po.m_preview->support_points = std::make_shared<const SupportPoints>(std::move(support_points));
+        po.m_supportable_mesh->pts = po.m_preview->support_points;
+        return;
+    }
 
     throw_if_canceled();
     const SLAPrintObjectConfigView& cfg = po.config();
