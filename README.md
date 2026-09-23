@@ -13,17 +13,17 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 ## Progress
 
-**56 of 136 todos done (41%)** · updated 2026-09-23 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**60 of 137 todos done (44%)** · updated 2026-09-23 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
 | M0: Foundation | 12/15 | `██████████░░` 80% |
-| M1: Look, feel and SLA-first shell | 12/19 | `████████░░░░` 63% |
-| M2: SLA editing tools (porting the legacy gizmos) | 16/24 | `████████░░░░` 67% |
-| M3: Resin profile import (Chitubox, Lychee and others) | 1/15 | `█░░░░░░░░░░░` 7% |
+| M1: Look, feel and SLA-first shell | 13/19 | `████████░░░░` 68% |
+| M2: SLA editing tools (porting the legacy gizmos) | 16/25 | `████████░░░░` 64% |
+| M3: Resin profile import (Chitubox, Lychee and others) | 2/15 | `██░░░░░░░░░░` 13% |
 | M4: Engine quality (measure first; every PR includes before/after metrics) | 4/16 | `███░░░░░░░░░` 25% |
-| M5: Formats and inspection | 6/22 | `███░░░░░░░░░` 27% |
-| M6: Quality gates and release | 0/8 | `░░░░░░░░░░░░` 0% |
+| M5: Formats and inspection | 7/22 | `████░░░░░░░░` 32% |
+| M6: Quality gates and release | 1/8 | `██░░░░░░░░░░` 12% |
 | M7: Excellent auto-supports *(parked)* | 5/17 | `████░░░░░░░░` 29% |
 
 ### Waiting on you
@@ -46,23 +46,23 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 </details>
 
-<details><summary>M1: Look, feel and SLA-first shell — 7 open</summary>
+<details><summary>M1: Look, feel and SLA-first shell — 6 open</summary>
 
 - [ ] **M1.1b** Runtime screen audit with an SLA printer selected, following the R1–R10 checklist in `ux/journeys.md`. Reco…
 - [ ] **M1.8** SLA path in the welcome dialog, plus SLA hints and notifications. Also fix the “Export gcode to a file” too…
   - [ ] **M1.8b** SLA hints and notifications along the first-run and plater flow.
 - [ ] **M1.11** SLA sidebar summary (PLAN F5).
-  - [ ] **M1.11a** Print summary figures for the selected bed, per wireframe W4: resin ml, cost, bottles and layer count, an e…
   - [ ] **M1.11b** The W4 issues list (islands, cups) with jump-to-layer links into the layer view.
 - [ ] **M1.12** Branding artwork: replace `resources/icons/splashscreen.jpg` and the `PrusaSlicer.*` app icons (ico, icns,…
 
 </details>
 
-<details><summary>M2: SLA editing tools (porting the legacy gizmos) — 8 open</summary>
+<details><summary>M2: SLA editing tools (porting the legacy gizmos) — 9 open</summary>
 
 - [ ] **M2.9** Plater SLA visuals: resin tint, support and pad materials, and overlay styling (PLAN F3).
 - [ ] **M2.14b** Raft shapes the pad generator cannot make today: grid or honeycomb infill, a tapered skate profile, and a s…
 - [ ] **M2.14c** Raft UI: the raft type dropdown and its knobs in the SLA print settings, with the preset bundles from M2.14a.
+- [ ] **M2.14d** Make `raft_type` the single source of truth. Engine: `generate_pad`, `slice_supports`, `SLAPrintObject::get…
 - [ ] **M2.15** Bracing and cross-bracing controls beyond `support_pillar_connection_mode`, if M2.11 marks them missing.
 - [ ] **M2.17** Supports are an explicit step before slicing, never done by the slicer. The workflow (decided 2026-09-22):…
   - [ ] **M2.17a** Engine: slicing uses each model's `sla_support_points` exactly as they are, with no generation at slice tim…
@@ -71,11 +71,10 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 </details>
 
-<details><summary>M3: Resin profile import (Chitubox, Lychee and others) — 14 open</summary>
+<details><summary>M3: Resin profile import (Chitubox, Lychee and others) — 13 open</summary>
 
 - [ ] **M3.1** Put a few real `.cfg`, `.cfgx`, `.lyr` and `.lyp` files in `local-samples/`, exported from your own Chitubo… *(needs you)*
 - [ ] **M3.2** Add `local-samples/` to `.gitignore`. Document the observed structure of each sample format in `doc/sla-for…
-- [ ] **M3.4** `ChituboxCfgReader`, with hand-written fixtures covering: old and new key spellings, two-stage lift, quoted…
 - [ ] **M3.5** `ResinProfileMapper` for tilt printers (SL1/SL1S). Implement the mapping table with statuses and unit conve…
 - [ ] **M3.6** `ResinProfileMapper` for generic MSLA printers, using the M0.4 motion keys.
 - [ ] **M3.7** `ResinProfileImportInteractor`: read, map, pick a base material, save as a user preset, handle name collisi…
@@ -107,14 +106,13 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 </details>
 
-<details><summary>M5: Formats and inspection — 16 open</summary>
+<details><summary>M5: Formats and inspection — 15 open</summary>
 
 - [ ] **M5.1** Import `.sl1`/`.sl1s`/`.slx` archives in the new app, porting the legacy `SLAImportJob` (PLAN C1).
   - [ ] **M5.1a** Restore the SL1/SL1S archive reader into libslic3r from `d9e89cf564^` (`SLAArchiveReader`, `ZipperArchiveIm… *(blocked)*
   - [ ] **M5.1b** Wire the reader into `FileLoadingLogic` and `get_import_extensions()`, as a job with progress and cancel.
 - [ ] **M5.3.ctb** Chitubox `.ctb` writer for older Elegoo machines, and possibly the Anycubic Photon Mono M5 (see the M5.3.pw…
 - [ ] **M5.3.pw-b** Anycubic newer formats (`.pm5`, `.pm5s`, `.pm7`) — **`.pm5` first: it is the format the maintainer's Photon…
-  - [ ] **M5.3.pw-b1** `.pm5` writer following `doc/sla-fork/formats/pm5.md`: the version-517 container (file mark and address tab…
 - [ ] **M5.3.profiles-b** Community resin presets per layer height, so the first layer matches the rest. `initial_layer_height` is a…
 - [ ] **M5.3.samples** Provide one sliced sample archive per target printer (from Chitubox/Lychee/Photon Workshop) and list the pr… *(needs you)*
 - [ ] **M5.4** Display mirroring and orientation test pattern for every format (PLAN C3).
@@ -128,7 +126,7 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 </details>
 
-<details><summary>M6: Quality gates and release — 8 open</summary>
+<details><summary>M6: Quality gates and release — 7 open</summary>
 
 - [ ] **M6.1** Robustness mesh set with no crashes or hangs (PLAN G2).
 - [ ] **M6.2** Visual regression renders, including the grayscale lightness check (PLAN G3).
@@ -137,7 +135,6 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 - [ ] **M6.5** Retune default presets after the M4 changes.
 - [ ] **M6.6** Fork README and user guide.
 - [ ] **M6.7** Release candidate: version bump, packaging, known-issues list. *(needs you)*
-- [ ] **M6.8** A failed slice must not close the app. Today any exception on the slicing thread, including running out of…
 
 </details>
 
