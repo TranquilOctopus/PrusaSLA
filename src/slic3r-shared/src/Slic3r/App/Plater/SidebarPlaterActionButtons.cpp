@@ -3,6 +3,7 @@
 #include "Slic3r/App/DisplayStrings.hpp"
 #include "Slic3r/App/Yoga/LayoutButton.hpp"
 #include "Slic3r/App/Imgui/ImguiExtension.hpp"
+#include "Slic3r/App/IsSlaActive.hpp"
 
 #include "Slic3r/Biz/I18N/I18N.hpp"
 
@@ -196,7 +197,7 @@ void SidebarPlaterActionButtons::update_slice_button(const BedSelection& selecti
         for (const BedStatus& bed_status : statuses) {
             if (bed_status.status == StatusCode::Modified) {
                 std::string bed_warning;
-                const bool is_sla = m_project_interactor->selected_config_container().print_technology() == Domain::PrinterTechnology::SLA;
+                const bool is_sla = is_sla_active(*m_project_interactor);
                 for (const std::string& warning : bed_status.warrnings) {
                     bed_warning += fmt::format(fmt::runtime(is_sla ? _u8L("Build plate {}:\n") : _u8L("Bed {}:\n")), bed_status.bed_index);
                     bed_warning += warning + "\n";

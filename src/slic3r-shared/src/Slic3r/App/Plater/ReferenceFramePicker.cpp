@@ -1,5 +1,6 @@
 #include "Slic3r/App/Plater/ReferenceFramePicker.hpp"
 #include "Slic3r/App/Yoga/Text.hpp"
+#include "Slic3r/App/IsSlaActive.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/Biz/Scene/Selection.hpp"
@@ -152,7 +153,7 @@ Biz::Scene::SelectionReferenceFrame ReferenceFramePicker::get_checked_frame() co
 
 bool ReferenceFramePicker::is_sla() const
 {
-    return m_project_interactor.selected_config_container().print_technology() == Domain::PrinterTechnology::SLA;
+    return is_sla_active(m_project_interactor);
 }
 
 } // namespace Slic3r::App::Plater

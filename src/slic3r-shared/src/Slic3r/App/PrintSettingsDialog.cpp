@@ -1,5 +1,6 @@
 #include "Slic3r/App/PrintSettingsDialog.hpp"
 #include "Slic3r/App/Yoga/AbstractSettingsDialog.hpp"
+#include "Slic3r/App/IsSlaActive.hpp"
 
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
@@ -379,7 +380,7 @@ void PrintSettingsDialog::on_preset_bundles_loaded()
 
 void PrintSettingsDialog::update_print_tab_label()
 {
-    const bool is_sla = m_project_interactor.selected_config_container().print_technology() == Domain::PrinterTechnology::SLA;
+    const bool is_sla = is_sla_active(m_project_interactor);
     if (m_print_tab_button) {
         m_print_tab_button->set_label(is_sla ? Biz::_u8L("Supports & raft") : Biz::_u8L("Print"));
     }

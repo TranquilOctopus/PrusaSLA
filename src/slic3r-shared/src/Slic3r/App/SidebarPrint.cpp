@@ -11,6 +11,7 @@
 #include "Slic3r/App/Yoga/ScrollArea.hpp"
 #include "Slic3r/App/Navigator.hpp"
 #include "Slic3r/App/PrintSettingsDialog.hpp"
+#include "Slic3r/App/IsSlaActive.hpp"
 
 #include "Slic3r/App/Config/PrintToolFavoritesItem.hpp"
 
@@ -166,7 +167,7 @@ void SidebarPrint::refresh_print_combobox_label_color()
 
 void SidebarPrint::update_print_preset_label()
 {
-    const bool is_sla = m_project_interactor.selected_config_container().print_technology() == Domain::PrinterTechnology::SLA;
+    const bool is_sla = is_sla_active(m_project_interactor);
     m_print_preset_label->set_text(is_sla ? Biz::_u8L("Supports & raft") : Biz::_u8L("Print preset"));
 }
 
