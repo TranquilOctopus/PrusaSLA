@@ -1,7 +1,10 @@
 #include "Slic3r/App/Scene/VolumeColor.hpp"
 
+#include "Slic3r/App/AppServices.hpp"
+#include "Slic3r/App/ThemeTypes.hpp"
 #include "Slic3r/Biz/Algorithms/VirtualExtruder.hpp"
 #include "Slic3r/Domain/ConfigContainer.hpp"
+#include "Slic3r/Domain/PrinterTechnology.hpp"
 
 #include "libslic3r/ExtruderCandidates.hpp"
 
@@ -9,12 +12,15 @@
 #include <set>
 #include <variant>
 
+using Slic3r::App::AppServices;
+using Slic3r::App::Platform::Color;
 using Slic3r::Domain::ColorRGB;
 using Slic3r::Domain::ColorRGBA;
 using Slic3r::Domain::ConfigContainer;
 using Slic3r::Domain::ModelObject;
 using Slic3r::Domain::ModelVolume;
 using Slic3r::Domain::PrintSettings;
+using Slic3r::Domain::PrinterTechnology;
 using Slic3r::Domain::VirtualExtruder;
 using Slic3r::Domain::VirtualExtruders;
 
@@ -97,6 +103,11 @@ std::optional<ColorRGBA> color_from_extruder_slot(
     const ConfigContainer& config_container
 )
 {
+    // For SLA printers, models are drawn in a fixed high-contrast colour from the theme
+    if (config_container.print_technology() == PrinterTechnology::SLA) {
+        return AppServices::instance().theme().color(Color::SlaModelResin);
+    }
+
     const std::optional<ColorRGBA> assigned_virtual_extruder_color = virtual_extruder_color(
         slot_colors,
         volume.extruder_id(),
