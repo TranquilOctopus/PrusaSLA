@@ -328,6 +328,7 @@ void PreviewRenderModule::on_selected_bed_instances_changed(
 
     m_object_list->update_sliced_info();
 
+    m_sidebar_auto_reslice->update_visibility();
     if (m_active && m_sidebar_auto_reslice->is_enabled()) {
         m_project_interactor.slicing_interactor().enable_auto_slicing(
             m_project_interactor.selected_bed_slicing_id()
@@ -512,6 +513,7 @@ void PreviewRenderModule::on_activated()
     update_viewer();
     update_scene_aabb();
 
+    m_sidebar_auto_reslice->update_visibility();
     if (m_sidebar_auto_reslice->is_enabled()) {
         m_project_interactor.slicing_interactor().enable_auto_slicing(
             m_project_interactor.selected_bed_slicing_id()
