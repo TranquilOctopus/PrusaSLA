@@ -94,6 +94,8 @@ private:
     size_t m_material_index = Domain::INVALID_ID;
     Yoga::ButtonGroup m_material_type_button_group;
     std::map<std::string, Yoga::LayoutButton*> m_type_filter_buttons;
+    std::vector<Yoga::LayoutButton*> m_fff_type_filter_buttons;
+    std::vector<Yoga::LayoutButton*> m_sla_type_filter_buttons;
     Yoga::InputText* m_input_text_search                 = nullptr;
     Yoga::LayoutButton* m_only_favorites_button          = nullptr;
     SelectionRowListView* m_selection_row_list_view      = nullptr;
