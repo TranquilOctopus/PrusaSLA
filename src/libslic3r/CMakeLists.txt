@@ -352,8 +352,6 @@ set(SLIC3R_SOURCES
     src/libslic3r/SLA/SupportIslands/UniformSupportIsland.cpp
     src/libslic3r/SLA/SupportIslands/UniformSupportIsland.hpp
     src/libslic3r/SLA/SupportPointGenerator.cpp
-    src/libslic3r/SLA/Rotfinder.cpp
-    src/libslic3r/SLA/Rotfinder.hpp
     src/libslic3r/SLA/SupportTree.cpp
     src/libslic3r/SLA/SupportTreeBuilder.cpp
     src/libslic3r/SLA/SupportTreeBuilder.hpp
