@@ -1495,17 +1495,45 @@ void SlaSupportPointsGizmo::apply_base_height_to_selected()
 
 void SlaSupportPointsGizmo::apply_preset_light()
 {
-    apply_support_preset(0.30f, 0.8f, 2.0f, 0.5f, 0);
+    const auto [head_diameter, pillar_diameter, base_diameter, base_height] = get_support_preset_values("light");
+    apply_support_preset(static_cast<float>(head_diameter), static_cast<float>(pillar_diameter),
+                         static_cast<float>(base_diameter), static_cast<float>(base_height), 0);
 }
 
 void SlaSupportPointsGizmo::apply_preset_medium()
 {
-    apply_support_preset(0.45f, 1.2f, 3.0f, 0.7f, 1);
+    const auto [head_diameter, pillar_diameter, base_diameter, base_height] = get_support_preset_values("medium");
+    apply_support_preset(static_cast<float>(head_diameter), static_cast<float>(pillar_diameter),
+                         static_cast<float>(base_diameter), static_cast<float>(base_height), 1);
 }
 
 void SlaSupportPointsGizmo::apply_preset_heavy()
 {
-    apply_support_preset(0.60f, 1.8f, 4.0f, 1.0f, 2);
+    const auto [head_diameter, pillar_diameter, base_diameter, base_height] = get_support_preset_values("heavy");
+    apply_support_preset(static_cast<float>(head_diameter), static_cast<float>(pillar_diameter),
+                         static_cast<float>(base_diameter), static_cast<float>(base_height), 2);
+}
+
+std::tuple<double, double, double, double> SlaSupportPointsGizmo::get_support_preset_values(const std::string& preset_name) const
+{
+    const auto& config_box = m_project_interactor.preset_interactor().selected_printer_preset().print.config_box();
+    const std::string prefix = "support_preset_" + preset_name + "_";
+
+    auto get_value = [&](const std::string& suffix, double fallback) -> double {
+        auto it = config_box.items.find(prefix + suffix);
+        return (it != config_box.items.end() && it->second) ? it->second->get<double>() : fallback;
+    };
+
+    const double head_diameter = get_value("head_diameter",
+        preset_name == "light" ? 0.30 : (preset_name == "medium" ? 0.45 : 0.60));
+    const double pillar_diameter = get_value("pillar_diameter",
+        preset_name == "light" ? 0.8 : (preset_name == "medium" ? 1.2 : 1.8));
+    const double base_diameter = get_value("base_diameter",
+        preset_name == "light" ? 2.0 : (preset_name == "medium" ? 3.0 : 4.0));
+    const double base_height = get_value("base_height",
+        preset_name == "light" ? 0.5 : (preset_name == "medium" ? 0.7 : 1.0));
+
+    return {head_diameter, pillar_diameter, base_diameter, base_height};
 }
 
 void SlaSupportPointsGizmo::apply_support_preset(float head_diameter, float pillar_diameter, float base_diameter, float base_height, int preset_index)

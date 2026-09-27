@@ -154,6 +154,7 @@ private:
     void apply_preset_medium();
     void apply_preset_heavy();
     void apply_support_preset(float head_diameter, float pillar_diameter, float base_diameter, float base_height, int preset_index);
+    std::tuple<double, double, double, double> get_support_preset_values(const std::string& preset_name) const;
 
     // Rectangle selection
     void start_rectangle_selection(const Domain::Vec2d& mouse_pos, bool is_add);
