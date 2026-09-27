@@ -33,6 +33,7 @@
 #include <Eigen/Geometry>
 #include <fmt/format.h>
 #include <magic_enum/magic_enum_flags.hpp>
+#include <spdlog/spdlog.h>
 
 using namespace Slic3r;
 using namespace Slic3r::App::Yoga;
@@ -287,6 +288,7 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     m_dialog->callbacks().generate = [this]() { this->start_generation(); };
     m_dialog->callbacks().apply = [this]() { this->apply_generated_points(); };
     m_dialog->callbacks().discard = [this]() { this->discard_generated_points(); };
+    m_dialog->callbacks().auto_support_all = [this]() { this->start_auto_support_all(); };
     m_dialog->callbacks().density_changed = [this](double value)
     {
         if (m_syncing_dialog) {
@@ -482,6 +484,12 @@ void SlaSupportPointsGizmo::on_deactivated()
     m_has_generated_points = false;
     m_generated_support_points.reset();
 
+    // Cancel auto-support all queue
+    if (!m_auto_support_queue.empty()) {
+        m_auto_support_queue.clear();
+        m_auto_support_keep_existing.reset();
+    }
+
     if (m_edit_state.has_value()) {
         discard_edited_points();
     }
@@ -498,6 +506,7 @@ void SlaSupportPointsGizmo::on_deactivated()
     DialogSyncGuard guard(*this);
     m_dialog->set_generate_enabled(false);
     m_dialog->set_apply_enabled(false);
+    m_dialog->set_auto_support_all_enabled(false);
     m_dialog->set_point_count(0);
 }
 
@@ -556,6 +565,12 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     m_has_generated_points = false;
     m_generated_support_points.reset();
 
+    // Cancel auto-support all queue on selection change
+    if (!m_auto_support_queue.empty()) {
+        m_auto_support_queue.clear();
+        m_auto_support_keep_existing.reset();
+    }
+
     if (m_edit_state.has_value()) {
         discard_edited_points();
     }
@@ -564,6 +579,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     if (!enabled() || selection.elements.empty()) {
         m_dialog->set_generate_enabled(false);
         m_dialog->set_apply_enabled(false);
+        m_dialog->set_auto_support_all_enabled(false);
         m_dialog->set_point_count(0);
         return;
     }
@@ -572,6 +588,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     if (element.volume_id != 0) {
         m_dialog->set_generate_enabled(false);
         m_dialog->set_apply_enabled(false);
+        m_dialog->set_auto_support_all_enabled(false);
         m_dialog->set_point_count(0);
         return;
     }
@@ -581,6 +598,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     if (!model_object) {
         m_dialog->set_generate_enabled(false);
         m_dialog->set_apply_enabled(false);
+        m_dialog->set_auto_support_all_enabled(false);
         m_dialog->set_point_count(0);
         return;
     }
@@ -592,6 +610,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     if (!instance) {
         m_dialog->set_generate_enabled(false);
         m_dialog->set_apply_enabled(false);
+        m_dialog->set_auto_support_all_enabled(false);
         m_dialog->set_point_count(0);
         return;
     }
@@ -600,6 +619,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     if (project.find_bed_instance_by_id(bed_ref.instance_id) == nullptr) {
         m_dialog->set_generate_enabled(false);
         m_dialog->set_apply_enabled(false);
+        m_dialog->set_auto_support_all_enabled(false);
         m_dialog->set_point_count(0);
         return;
     }
@@ -622,6 +642,9 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
         head_diameter = head_result.item->get<double>();
     }
     m_dialog->set_head_diameter(head_diameter);
+
+    // Auto support all is available when we have a valid selection
+    m_dialog->set_auto_support_all_enabled(true);
 
     // Collect paintable volumes for raycasting
     this->collect_paintable_volumes(project_id, element);
@@ -655,6 +678,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     m_dialog->set_clipping_plane_position(m_clipping_plane_presenter.clipper().get_position());
 
     m_dialog->set_generate_enabled(true);
+    m_dialog->set_auto_support_all_enabled(true);
     m_dialog->set_apply_enabled(false);
 }
 
@@ -746,12 +770,14 @@ void SlaSupportPointsGizmo::on_generation_completed(std::optional<Domain::SLA::S
         m_dialog->set_point_count(count);
         m_dialog->set_apply_enabled(true);
         m_dialog->set_generate_enabled(true);
+        m_dialog->set_auto_support_all_enabled(true);
     } else {
         m_has_generated_points = false;
         m_generated_support_points.reset();
         m_dialog->set_point_count(0);
         m_dialog->set_apply_enabled(false);
         m_dialog->set_generate_enabled(true);
+        m_dialog->set_auto_support_all_enabled(true);
 
         AppServices::instance().dialog_manager().show_warning_dialog(
             _u8L("Failed to generate support points."),
@@ -798,10 +824,163 @@ void SlaSupportPointsGizmo::discard_generated_points()
     m_generation_slicing_id.reset();
     m_dialog->set_apply_enabled(false);
     m_dialog->set_generate_enabled(true);
+    m_dialog->set_auto_support_all_enabled(true);
 
     if (m_gizmo_controller) {
         m_gizmo_controller->deactivate_current_tool();
     }
+}
+
+void SlaSupportPointsGizmo::start_auto_support_all()
+{
+    if (m_generation_slicing_id.has_value() || !m_auto_support_queue.empty()) {
+        return;
+    }
+
+    Domain::Project& project = m_project_interactor.selected_project();
+    Domain::SelectionId project_id = m_project_interactor.selected_project_id();
+
+    // Collect all model objects with at least one printable instance on a bed
+    for (Domain::ModelObject* model_object : project.objects) {
+        if (!model_object) {
+            continue;
+        }
+
+        bool has_printable_on_bed = false;
+        for (const Domain::ModelInstance* instance : model_object->instances) {
+            if (!instance || !instance->is_printable()) {
+                continue;
+            }
+            const Domain::BedRef bed_ref = instance->get_last_bed();
+            if (project.find_bed_instance_by_id(bed_ref.instance_id) != nullptr) {
+                has_printable_on_bed = true;
+                break;
+            }
+        }
+
+        if (has_printable_on_bed) {
+            m_auto_support_queue.push_back(model_object->id());
+        }
+    }
+
+    if (m_auto_support_queue.empty()) {
+        return;
+    }
+
+    // Check if any queued object already has support points
+    bool any_has_points = false;
+    for (const Domain::ObjectID& obj_id : m_auto_support_queue) {
+        Domain::ModelObject* model_object = project.find_object_by_id(obj_id);
+        if (model_object && !model_object->sla_support_points.empty()) {
+            any_has_points = true;
+            break;
+        }
+    }
+
+    if (any_has_points) {
+        // Ask user once: keep existing points or replace them
+        // Using show_yesno_dialog since show_yesnocancel_dialog has a different API
+        AppServices::instance().dialog_manager().show_yesno_dialog(
+            _u8L("Auto Support All"),
+            _u8L("Some models already have supports. Keep them and add around them? (No = replace)"),
+            [this](bool answer) {
+                m_auto_support_keep_existing = answer;
+                this->process_auto_support_queue();
+            }
+        );
+    } else {
+        m_auto_support_keep_existing = true; // Keep (no existing points to worry about)
+        process_auto_support_queue();
+    }
+}
+
+void SlaSupportPointsGizmo::process_auto_support_queue()
+{
+    if (m_auto_support_queue.empty()) {
+        // Queue finished, re-enable buttons
+        DialogSyncGuard guard(*this);
+        m_dialog->set_generate_enabled(true);
+        m_dialog->set_auto_support_all_enabled(true);
+        m_auto_support_keep_existing.reset();
+        return;
+    }
+
+    Domain::ObjectID obj_id = m_auto_support_queue.front();
+    m_auto_support_queue.pop_front();
+
+    Domain::Project& project = m_project_interactor.selected_project();
+    Domain::ModelObject* model_object = project.find_object_by_id(obj_id);
+    if (!model_object) {
+        SPDLOG_WARN("Auto support all: Model object {} not found, skipping", obj_id.id);
+        process_auto_support_queue();
+        return;
+    }
+
+    // Find a printable instance on a bed for this object
+    const Domain::ModelInstance* instance = nullptr;
+    for (const Domain::ModelInstance* inst : model_object->instances) {
+        if (!inst || !inst->is_printable()) {
+            continue;
+        }
+        const Domain::BedRef bed_ref = inst->get_last_bed();
+        if (project.find_bed_instance_by_id(bed_ref.instance_id) != nullptr) {
+            instance = inst;
+            break;
+        }
+    }
+
+    if (!instance) {
+        SPDLOG_WARN("Auto support all: No printable instance on bed for object {}, skipping", obj_id.id);
+        process_auto_support_queue();
+        return;
+    }
+
+    const Domain::BedRef bed_ref = instance->get_last_bed();
+    const Domain::SlicingId slicing_id{project_id, bed_ref.instance_id};
+    const StatusCode status = m_project_interactor.slicing_interactor().get_status(slicing_id);
+    if (status == StatusCode::InvalidData || status == StatusCode::Empty) {
+        SPDLOG_WARN("Auto support all: Invalid slicing status for object {}, skipping", obj_id.id);
+        process_auto_support_queue();
+        return;
+    }
+
+    // Clear existing points if user chose to replace
+    if (m_auto_support_keep_existing.has_value() && !*m_auto_support_keep_existing) {
+        model_object->sla_support_points.clear();
+    }
+
+    m_generation_slicing_id = slicing_id;
+
+    DialogSyncGuard guard(*this);
+    m_dialog->set_generate_enabled(false);
+    m_dialog->set_auto_support_all_enabled(false);
+
+    m_support_points_request->callbacks().completed =
+        [this, obj_id](const std::optional<Domain::SLA::SupportPoints> support_points) {
+            this->on_auto_support_completed(obj_id, support_points);
+        };
+
+    m_support_points_request->start(slicing_id, obj_id);
+}
+
+void SlaSupportPointsGizmo::on_auto_support_completed(Domain::ObjectID obj_id, std::optional<Domain::SLA::SupportPoints> support_points)
+{
+    if (support_points.has_value()) {
+        Domain::Project& project = m_project_interactor.selected_project();
+        Domain::ModelObject* model_object = project.find_object_by_id(obj_id);
+        if (model_object) {
+            m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SlaSupportPointsApply);
+            model_object->sla_support_points = std::move(*support_points);
+            model_object->sla_points_status = PointsStatus::AutoGenerated;
+        }
+    } else {
+        SPDLOG_WARN("Auto support all: Failed to generate support points for object {}", obj_id.id);
+    }
+
+    m_generation_slicing_id.reset();
+
+    // Continue with next object in queue
+    process_auto_support_queue();
 }
 
 void SlaSupportPointsGizmo::begin_editing()
@@ -860,6 +1039,7 @@ void SlaSupportPointsGizmo::begin_editing()
 
     m_dialog->set_apply_enabled(true);
     m_dialog->set_generate_enabled(true);
+    m_dialog->set_auto_support_all_enabled(true);
 
     update_point_visuals();
 }
@@ -904,6 +1084,8 @@ void SlaSupportPointsGizmo::discard_edited_points()
 
     end_editing();
     m_dialog->set_apply_enabled(false);
+    m_dialog->set_generate_enabled(true);
+    m_dialog->set_auto_support_all_enabled(true);
 
     Domain::Project& project = m_project_interactor.selected_project();
     Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);

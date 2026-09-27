@@ -145,6 +145,10 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     m_generate_button->callbacks().action = [this]()
     { m_callbacks.generate(); };
 
+    add_row_with_button(content(), &m_auto_support_all_button, _u8L("Auto support all"));
+    m_auto_support_all_button->callbacks().action = [this]()
+    { m_callbacks.auto_support_all(); };
+
     this->add_separator(this->content());
 
     Item* button_row = content()->emplace_back<Item>();
@@ -191,6 +195,11 @@ void SlaSupportPointsDialog::set_density(int density)
 void SlaSupportPointsDialog::set_generate_enabled(bool enabled)
 {
     m_generate_button->set_enabled(enabled);
+}
+
+void SlaSupportPointsDialog::set_auto_support_all_enabled(bool enabled)
+{
+    m_auto_support_all_button->set_enabled(enabled);
 }
 
 void SlaSupportPointsDialog::set_apply_enabled(bool enabled)
