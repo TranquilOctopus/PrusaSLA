@@ -1531,8 +1531,7 @@ def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : 
         def->min = 0;
         def->max = 150; // This is the max height of print on SL1
         def->init_fn = init_with(5.);
-}
-}
+    }
 
     // Support presets for the SLA Support Points tool (Light, Medium, Heavy)
     // Each preset has 4 dimensions: head_diameter, pillar_diameter, base_diameter, base_height
@@ -1606,5 +1605,6 @@ def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : 
         else
             def->init_fn = init_with(1.0);
     }
+}
 
 } // namespace Slic3r::Domain

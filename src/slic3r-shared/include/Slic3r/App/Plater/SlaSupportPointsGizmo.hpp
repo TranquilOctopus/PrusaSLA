@@ -106,6 +106,8 @@ public:
 private:
     void start_generation();
     void start_auto_support_all();
+    void process_auto_support_queue();
+    void on_auto_support_completed(Domain::ObjectID obj_id, std::optional<Domain::SLA::SupportPoints> support_points);
     void on_generation_completed(std::optional<Slic3r::Domain::SLA::SupportPoints> support_points);
     void apply_generated_points();
     void discard_generated_points();
