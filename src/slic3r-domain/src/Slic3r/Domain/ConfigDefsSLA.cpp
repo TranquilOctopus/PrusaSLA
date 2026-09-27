@@ -1530,9 +1530,80 @@ def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : 
         def->min = 0;
         def->max = 150; // This is the max height of print on SL1
         def->init_fn = init_with(5.);
-    }
+}
 }
 
+    // Support presets for the SLA Support Points tool (Light, Medium, Heavy)
+    // Each preset has 4 dimensions: head_diameter, pillar_diameter, base_diameter, base_height
+    for (const std::pair<std::string, std::string> preset :
+         { std::make_pair("light", L("Light")), std::make_pair("medium", L("Medium")), std::make_pair("heavy", L("Heavy")) }) {
+        def = defs.add("support_preset_" + preset.first + "_head_diameter", typeid(double));
+        def->label = preset.second;
+        def->location = Print;
+        def->row_group = L("Head diameter");
+        def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportHead;
+        def->category = ConfigItemDef::Category::Print_Supports;
+        def->gui_type = ConfigItemDef::GUIType::textfield;
+        def->tooltip = L("Head diameter for the " + preset.second + " support preset");
+        def->units = {L("mm")};
+        def->min = 0;
+        if (preset.first == "light")
+            def->init_fn = init_with(0.30);
+        else if (preset.first == "medium")
+            def->init_fn = init_with(0.45);
+        else
+            def->init_fn = init_with(0.60);
 
+        def = defs.add("support_preset_" + preset.first + "_pillar_diameter", typeid(double));
+        def->label = preset.second;
+        def->location = Print;
+        def->row_group = L("Pillar diameter");
+        def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
+        def->category = ConfigItemDef::Category::Print_Supports;
+        def->gui_type = ConfigItemDef::GUIType::textfield;
+        def->tooltip = L("Pillar diameter for the " + preset.second + " support preset");
+        def->units = {L("mm")};
+        def->min = 0;
+        if (preset.first == "light")
+            def->init_fn = init_with(0.8);
+        else if (preset.first == "medium")
+            def->init_fn = init_with(1.2);
+        else
+            def->init_fn = init_with(1.8);
+
+        def = defs.add("support_preset_" + preset.first + "_base_diameter", typeid(double));
+        def->label = preset.second;
+        def->location = Print;
+        def->row_group = L("Base diameter");
+        def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
+        def->category = ConfigItemDef::Category::Print_Supports;
+        def->gui_type = ConfigItemDef::GUIType::textfield;
+        def->tooltip = L("Base diameter for the " + preset.second + " support preset");
+        def->units = {L("mm")};
+        def->min = 0;
+        if (preset.first == "light")
+            def->init_fn = init_with(2.0);
+        else if (preset.first == "medium")
+            def->init_fn = init_with(3.0);
+        else
+            def->init_fn = init_with(4.0);
+
+        def = defs.add("support_preset_" + preset.first + "_base_height", typeid(double));
+        def->label = preset.second;
+        def->location = Print;
+        def->row_group = L("Base height");
+        def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
+        def->category = ConfigItemDef::Category::Print_Supports;
+        def->gui_type = ConfigItemDef::GUIType::textfield;
+        def->tooltip = L("Base height for the " + preset.second + " support preset");
+        def->units = {L("mm")};
+        def->min = 0;
+        if (preset.first == "light")
+            def->init_fn = init_with(0.5);
+        else if (preset.first == "medium")
+            def->init_fn = init_with(0.7);
+        else
+            def->init_fn = init_with(1.0);
+    }
 
 } // namespace Slic3r::Domain

@@ -33,6 +33,7 @@
 #include <Eigen/Geometry>
 #include <fmt/format.h>
 #include <magic_enum/magic_enum_flags.hpp>
+#include <spdlog/spdlog.h>
 
 using namespace Slic3r;
 using namespace Slic3r::App::Yoga;
@@ -287,6 +288,7 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     m_dialog->callbacks().generate = [this]() { this->start_generation(); };
     m_dialog->callbacks().apply = [this]() { this->apply_generated_points(); };
     m_dialog->callbacks().discard = [this]() { this->discard_generated_points(); };
+    m_dialog->callbacks().auto_support_all = [this]() { this->start_auto_support_all(); };
     m_dialog->callbacks().density_changed = [this](double value)
     {
         if (m_syncing_dialog) {
@@ -482,6 +484,12 @@ void SlaSupportPointsGizmo::on_deactivated()
     m_has_generated_points = false;
     m_generated_support_points.reset();
 
+    // Cancel auto-support all queue
+    if (!m_auto_support_queue.empty()) {
+        m_auto_support_queue.clear();
+        m_auto_support_keep_existing.reset();
+    }
+
     if (m_edit_state.has_value()) {
         discard_edited_points();
     }
@@ -498,6 +506,7 @@ void SlaSupportPointsGizmo::on_deactivated()
     DialogSyncGuard guard(*this);
     m_dialog->set_generate_enabled(false);
     m_dialog->set_apply_enabled(false);
+    m_dialog->set_auto_support_all_enabled(false);
     m_dialog->set_point_count(0);
 }
 
@@ -556,6 +565,12 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     m_has_generated_points = false;
     m_generated_support_points.reset();
 
+    // Cancel auto-support all queue on selection change
+    if (!m_auto_support_queue.empty()) {
+        m_auto_support_queue.clear();
+        m_auto_support_keep_existing.reset();
+    }
+
     if (m_edit_state.has_value()) {
         discard_edited_points();
     }
@@ -564,6 +579,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     if (!enabled() || selection.elements.empty()) {
         m_dialog->set_generate_enabled(false);
         m_dialog->set_apply_enabled(false);
+        m_dialog->set_auto_support_all_enabled(false);
         m_dialog->set_point_count(0);
         return;
     }
@@ -572,6 +588,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     if (element.volume_id != 0) {
         m_dialog->set_generate_enabled(false);
         m_dialog->set_apply_enabled(false);
+        m_dialog->set_auto_support_all_enabled(false);
         m_dialog->set_point_count(0);
         return;
     }
@@ -581,6 +598,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     if (!model_object) {
         m_dialog->set_generate_enabled(false);
         m_dialog->set_apply_enabled(false);
+        m_dialog->set_auto_support_all_enabled(false);
         m_dialog->set_point_count(0);
         return;
     }
@@ -592,6 +610,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     if (!instance) {
         m_dialog->set_generate_enabled(false);
         m_dialog->set_apply_enabled(false);
+        m_dialog->set_auto_support_all_enabled(false);
         m_dialog->set_point_count(0);
         return;
     }
@@ -600,6 +619,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     if (project.find_bed_instance_by_id(bed_ref.instance_id) == nullptr) {
         m_dialog->set_generate_enabled(false);
         m_dialog->set_apply_enabled(false);
+        m_dialog->set_auto_support_all_enabled(false);
         m_dialog->set_point_count(0);
         return;
     }
@@ -623,6 +643,9 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     }
     m_dialog->set_head_diameter(head_diameter);
 
+    // Auto support all is available when we have a valid selection
+    m_dialog->set_auto_support_all_enabled(true);
+
     // Collect paintable volumes for raycasting
     this->collect_paintable_volumes(project_id, element);
 
@@ -641,18 +664,21 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     scene.add_child(points_node.release(), m_main_node);
 
     // Initialize clipping plane presenter
+    // Yes: activate() hides every scene node outside the presenter's node, and this tool does not
+    // draw the model itself, so the presenter must draw the selected object.
     m_clipping_plane_presenter.activate(
         model_object,
         instance,
         m_main_node,
         0.,
-        Scene::BuildMeshesNodes::No
+        Scene::BuildMeshesNodes::Yes
     );
     m_clipping_plane_presenter.set_behavior(true, true, 0.);
     m_clipping_plane_presenter.set_position_by_ratio(m_clipping_plane_presenter.clipper().get_position(), true);
     m_dialog->set_clipping_plane_position(m_clipping_plane_presenter.clipper().get_position());
 
     m_dialog->set_generate_enabled(true);
+    m_dialog->set_auto_support_all_enabled(true);
     m_dialog->set_apply_enabled(false);
 }
 
@@ -744,12 +770,14 @@ void SlaSupportPointsGizmo::on_generation_completed(std::optional<Domain::SLA::S
         m_dialog->set_point_count(count);
         m_dialog->set_apply_enabled(true);
         m_dialog->set_generate_enabled(true);
+        m_dialog->set_auto_support_all_enabled(true);
     } else {
         m_has_generated_points = false;
         m_generated_support_points.reset();
         m_dialog->set_point_count(0);
         m_dialog->set_apply_enabled(false);
         m_dialog->set_generate_enabled(true);
+        m_dialog->set_auto_support_all_enabled(true);
 
         AppServices::instance().dialog_manager().show_warning_dialog(
             _u8L("Failed to generate support points."),
@@ -796,10 +824,163 @@ void SlaSupportPointsGizmo::discard_generated_points()
     m_generation_slicing_id.reset();
     m_dialog->set_apply_enabled(false);
     m_dialog->set_generate_enabled(true);
+    m_dialog->set_auto_support_all_enabled(true);
 
     if (m_gizmo_controller) {
         m_gizmo_controller->deactivate_current_tool();
     }
+}
+
+void SlaSupportPointsGizmo::start_auto_support_all()
+{
+    if (m_generation_slicing_id.has_value() || !m_auto_support_queue.empty()) {
+        return;
+    }
+
+    Domain::Project& project = m_project_interactor.selected_project();
+    Domain::SelectionId project_id = m_project_interactor.selected_project_id();
+
+    // Collect all model objects with at least one printable instance on a bed
+    for (Domain::ModelObject* model_object : project.objects) {
+        if (!model_object) {
+            continue;
+        }
+
+        bool has_printable_on_bed = false;
+        for (const Domain::ModelInstance* instance : model_object->instances) {
+            if (!instance || !instance->is_printable()) {
+                continue;
+            }
+            const Domain::BedRef bed_ref = instance->get_last_bed();
+            if (project.find_bed_instance_by_id(bed_ref.instance_id) != nullptr) {
+                has_printable_on_bed = true;
+                break;
+            }
+        }
+
+        if (has_printable_on_bed) {
+            m_auto_support_queue.push_back(model_object->id());
+        }
+    }
+
+    if (m_auto_support_queue.empty()) {
+        return;
+    }
+
+    // Check if any queued object already has support points
+    bool any_has_points = false;
+    for (const Domain::ObjectID& obj_id : m_auto_support_queue) {
+        Domain::ModelObject* model_object = project.find_object_by_id(obj_id);
+        if (model_object && !model_object->sla_support_points.empty()) {
+            any_has_points = true;
+            break;
+        }
+    }
+
+    if (any_has_points) {
+        // Ask user once: keep existing points or replace them
+        // Using show_yesno_dialog since show_yesnocancel_dialog has a different API
+        AppServices::instance().dialog_manager().show_yesno_dialog(
+            _u8L("Auto Support All"),
+            _u8L("Some models already have supports. Keep them and add around them? (No = replace)"),
+            [this](bool answer) {
+                m_auto_support_keep_existing = answer;
+                this->process_auto_support_queue();
+            }
+        );
+    } else {
+        m_auto_support_keep_existing = true; // Keep (no existing points to worry about)
+        process_auto_support_queue();
+    }
+}
+
+void SlaSupportPointsGizmo::process_auto_support_queue()
+{
+    if (m_auto_support_queue.empty()) {
+        // Queue finished, re-enable buttons
+        DialogSyncGuard guard(*this);
+        m_dialog->set_generate_enabled(true);
+        m_dialog->set_auto_support_all_enabled(true);
+        m_auto_support_keep_existing.reset();
+        return;
+    }
+
+    Domain::ObjectID obj_id = m_auto_support_queue.front();
+    m_auto_support_queue.pop_front();
+
+    Domain::Project& project = m_project_interactor.selected_project();
+    Domain::ModelObject* model_object = project.find_object_by_id(obj_id);
+    if (!model_object) {
+        SPDLOG_WARN("Auto support all: Model object {} not found, skipping", obj_id.id);
+        process_auto_support_queue();
+        return;
+    }
+
+    // Find a printable instance on a bed for this object
+    const Domain::ModelInstance* instance = nullptr;
+    for (const Domain::ModelInstance* inst : model_object->instances) {
+        if (!inst || !inst->is_printable()) {
+            continue;
+        }
+        const Domain::BedRef bed_ref = inst->get_last_bed();
+        if (project.find_bed_instance_by_id(bed_ref.instance_id) != nullptr) {
+            instance = inst;
+            break;
+        }
+    }
+
+    if (!instance) {
+        SPDLOG_WARN("Auto support all: No printable instance on bed for object {}, skipping", obj_id.id);
+        process_auto_support_queue();
+        return;
+    }
+
+    const Domain::BedRef bed_ref = instance->get_last_bed();
+    const Domain::SlicingId slicing_id{project_id, bed_ref.instance_id};
+    const StatusCode status = m_project_interactor.slicing_interactor().get_status(slicing_id);
+    if (status == StatusCode::InvalidData || status == StatusCode::Empty) {
+        SPDLOG_WARN("Auto support all: Invalid slicing status for object {}, skipping", obj_id.id);
+        process_auto_support_queue();
+        return;
+    }
+
+    // Clear existing points if user chose to replace
+    if (m_auto_support_keep_existing.has_value() && !*m_auto_support_keep_existing) {
+        model_object->sla_support_points.clear();
+    }
+
+    m_generation_slicing_id = slicing_id;
+
+    DialogSyncGuard guard(*this);
+    m_dialog->set_generate_enabled(false);
+    m_dialog->set_auto_support_all_enabled(false);
+
+    m_support_points_request->callbacks().completed =
+        [this, obj_id](const std::optional<Domain::SLA::SupportPoints> support_points) {
+            this->on_auto_support_completed(obj_id, support_points);
+        };
+
+    m_support_points_request->start(slicing_id, obj_id);
+}
+
+void SlaSupportPointsGizmo::on_auto_support_completed(Domain::ObjectID obj_id, std::optional<Domain::SLA::SupportPoints> support_points)
+{
+    if (support_points.has_value()) {
+        Domain::Project& project = m_project_interactor.selected_project();
+        Domain::ModelObject* model_object = project.find_object_by_id(obj_id);
+        if (model_object) {
+            m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SlaSupportPointsApply);
+            model_object->sla_support_points = std::move(*support_points);
+            model_object->sla_points_status = PointsStatus::AutoGenerated;
+        }
+    } else {
+        SPDLOG_WARN("Auto support all: Failed to generate support points for object {}", obj_id.id);
+    }
+
+    m_generation_slicing_id.reset();
+
+    // Continue with next object in queue
+    process_auto_support_queue();
 }
 
 void SlaSupportPointsGizmo::begin_editing()
@@ -858,6 +1039,7 @@ void SlaSupportPointsGizmo::begin_editing()
 
     m_dialog->set_apply_enabled(true);
     m_dialog->set_generate_enabled(true);
+    m_dialog->set_auto_support_all_enabled(true);
 
     update_point_visuals();
 }
@@ -902,6 +1084,8 @@ void SlaSupportPointsGizmo::discard_edited_points()
 
     end_editing();
     m_dialog->set_apply_enabled(false);
+    m_dialog->set_generate_enabled(true);
+    m_dialog->set_auto_support_all_enabled(true);
 
     Domain::Project& project = m_project_interactor.selected_project();
     Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
@@ -1493,17 +1677,45 @@ void SlaSupportPointsGizmo::apply_base_height_to_selected()
 
 void SlaSupportPointsGizmo::apply_preset_light()
 {
-    apply_support_preset(0.30f, 0.8f, 2.0f, 0.5f, 0);
+    const auto [head_diameter, pillar_diameter, base_diameter, base_height] = get_support_preset_values("light");
+    apply_support_preset(static_cast<float>(head_diameter), static_cast<float>(pillar_diameter),
+                         static_cast<float>(base_diameter), static_cast<float>(base_height), 0);
 }
 
 void SlaSupportPointsGizmo::apply_preset_medium()
 {
-    apply_support_preset(0.45f, 1.2f, 3.0f, 0.7f, 1);
+    const auto [head_diameter, pillar_diameter, base_diameter, base_height] = get_support_preset_values("medium");
+    apply_support_preset(static_cast<float>(head_diameter), static_cast<float>(pillar_diameter),
+                         static_cast<float>(base_diameter), static_cast<float>(base_height), 1);
 }
 
 void SlaSupportPointsGizmo::apply_preset_heavy()
 {
-    apply_support_preset(0.60f, 1.8f, 4.0f, 1.0f, 2);
+    const auto [head_diameter, pillar_diameter, base_diameter, base_height] = get_support_preset_values("heavy");
+    apply_support_preset(static_cast<float>(head_diameter), static_cast<float>(pillar_diameter),
+                         static_cast<float>(base_diameter), static_cast<float>(base_height), 2);
+}
+
+std::tuple<double, double, double, double> SlaSupportPointsGizmo::get_support_preset_values(const std::string& preset_name) const
+{
+    const auto& config_box = m_project_interactor.preset_interactor().selected_printer_preset().print.config_box();
+    const std::string prefix = "support_preset_" + preset_name + "_";
+
+    auto get_value = [&](const std::string& suffix, double fallback) -> double {
+        auto it = config_box.items.find(prefix + suffix);
+        return (it != config_box.items.end() && it->second) ? it->second->get<double>() : fallback;
+    };
+
+    const double head_diameter = get_value("head_diameter",
+        preset_name == "light" ? 0.30 : (preset_name == "medium" ? 0.45 : 0.60));
+    const double pillar_diameter = get_value("pillar_diameter",
+        preset_name == "light" ? 0.8 : (preset_name == "medium" ? 1.2 : 1.8));
+    const double base_diameter = get_value("base_diameter",
+        preset_name == "light" ? 2.0 : (preset_name == "medium" ? 3.0 : 4.0));
+    const double base_height = get_value("base_height",
+        preset_name == "light" ? 0.5 : (preset_name == "medium" ? 0.7 : 1.0));
+
+    return {head_diameter, pillar_diameter, base_diameter, base_height};
 }
 
 void SlaSupportPointsGizmo::apply_support_preset(float head_diameter, float pillar_diameter, float base_diameter, float base_height, int preset_index)

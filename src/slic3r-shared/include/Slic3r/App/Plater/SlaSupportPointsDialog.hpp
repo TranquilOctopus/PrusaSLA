@@ -36,12 +36,14 @@ public:
         std::function<void()> preset_light = []() {};
         std::function<void()> preset_medium = []() {};
         std::function<void()> preset_heavy = []() {};
+        std::function<void()> auto_support_all = []() {};
     };
 
     Callbacks& callbacks();
 
     void set_density(int density);
     void set_generate_enabled(bool enabled);
+    void set_auto_support_all_enabled(bool enabled);
     void set_apply_enabled(bool enabled);
     void set_point_count(size_t count);
     void set_head_diameter(double diameter_mm);
@@ -67,6 +69,7 @@ private:
     Yoga::ToggleButton* m_base_diameter_use_global_checkbox = nullptr;
     Yoga::ToggleButton* m_base_height_use_global_checkbox = nullptr;
     Yoga::LayoutButton* m_generate_button = nullptr;
+    Yoga::LayoutButton* m_auto_support_all_button = nullptr;
     Yoga::LayoutButton* m_apply_button = nullptr;
     Yoga::LayoutButton* m_discard_button = nullptr;
     Yoga::LayoutButton* m_clipping_plane_reset_button = nullptr;

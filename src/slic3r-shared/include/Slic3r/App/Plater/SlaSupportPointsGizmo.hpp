@@ -19,6 +19,7 @@
 #include <optional>
 #include <unordered_set>
 #include <vector>
+#include <deque>
 
 namespace Slic3r::App::Plater {
 class SlaSupportPointsDialog;
@@ -104,6 +105,7 @@ public:
 
 private:
     void start_generation();
+    void start_auto_support_all();
     void on_generation_completed(std::optional<Slic3r::Domain::SLA::SupportPoints> support_points);
     void apply_generated_points();
     void discard_generated_points();
@@ -154,6 +156,7 @@ private:
     void apply_preset_medium();
     void apply_preset_heavy();
     void apply_support_preset(float head_diameter, float pillar_diameter, float base_diameter, float base_height, int preset_index);
+    std::tuple<double, double, double, double> get_support_preset_values(const std::string& preset_name) const;
 
     // Rectangle selection
     void start_rectangle_selection(const Domain::Vec2d& mouse_pos, bool is_add);
@@ -201,6 +204,10 @@ private:
 
     // Hovered point index (for highlight)
     std::optional<size_t> m_hovered_point_idx;
+
+    // Auto support all queue
+    std::deque<Domain::ObjectID> m_auto_support_queue;
+    std::optional<bool> m_auto_support_keep_existing;
 
     // Guard to prevent dialog setters from triggering value-change callbacks
     bool m_syncing_dialog{false};
