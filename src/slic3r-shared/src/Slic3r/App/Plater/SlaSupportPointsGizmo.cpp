@@ -641,12 +641,14 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     scene.add_child(points_node.release(), m_main_node);
 
     // Initialize clipping plane presenter
+    // Yes: activate() hides every scene node outside the presenter's node, and this tool does not
+    // draw the model itself, so the presenter must draw the selected object.
     m_clipping_plane_presenter.activate(
         model_object,
         instance,
         m_main_node,
         0.,
-        Scene::BuildMeshesNodes::No
+        Scene::BuildMeshesNodes::Yes
     );
     m_clipping_plane_presenter.set_behavior(true, true, 0.);
     m_clipping_plane_presenter.set_position_by_ratio(m_clipping_plane_presenter.clipper().get_position(), true);
