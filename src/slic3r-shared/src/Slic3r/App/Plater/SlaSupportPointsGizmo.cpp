@@ -841,7 +841,7 @@ void SlaSupportPointsGizmo::start_auto_support_all()
     Domain::SelectionId project_id = m_project_interactor.selected_project_id();
 
     // Collect all model objects with at least one printable instance on a bed
-    for (Domain::ModelObject* model_object : project.objects) {
+    for (Domain::ModelObject* model_object : project.model().objects) {
         if (!model_object) {
             continue;
         }
@@ -870,7 +870,7 @@ void SlaSupportPointsGizmo::start_auto_support_all()
     // Check if any queued object already has support points
     bool any_has_points = false;
     for (const Domain::ObjectID& obj_id : m_auto_support_queue) {
-        Domain::ModelObject* model_object = project.find_object_by_id(obj_id);
+        Domain::ModelObject* model_object = project.find_object_by_id(obj_id.id);
         if (model_object && !model_object->sla_support_points.empty()) {
             any_has_points = true;
             break;
@@ -909,7 +909,7 @@ void SlaSupportPointsGizmo::process_auto_support_queue()
     m_auto_support_queue.pop_front();
 
     Domain::Project& project = m_project_interactor.selected_project();
-    Domain::ModelObject* model_object = project.find_object_by_id(obj_id);
+    Domain::ModelObject* model_object = project.find_object_by_id(obj_id.id);
     if (!model_object) {
         SPDLOG_WARN("Auto support all: Model object {} not found, skipping", obj_id.id);
         process_auto_support_queue();
@@ -936,7 +936,7 @@ void SlaSupportPointsGizmo::process_auto_support_queue()
     }
 
     const Domain::BedRef bed_ref = instance->get_last_bed();
-    const Domain::SlicingId slicing_id{project_id, bed_ref.instance_id};
+    const Domain::SlicingId slicing_id{m_project_interactor.selected_project_id(), bed_ref.instance_id};
     const StatusCode status = m_project_interactor.slicing_interactor().get_status(slicing_id);
     if (status == StatusCode::InvalidData || status == StatusCode::Empty) {
         SPDLOG_WARN("Auto support all: Invalid slicing status for object {}, skipping", obj_id.id);
@@ -967,7 +967,7 @@ void SlaSupportPointsGizmo::on_auto_support_completed(Domain::ObjectID obj_id, s
 {
     if (support_points.has_value()) {
         Domain::Project& project = m_project_interactor.selected_project();
-        Domain::ModelObject* model_object = project.find_object_by_id(obj_id);
+        Domain::ModelObject* model_object = project.find_object_by_id(obj_id.id);
         if (model_object) {
             m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SlaSupportPointsApply);
             model_object->sla_support_points = std::move(*support_points);
@@ -1702,8 +1702,8 @@ std::tuple<double, double, double, double> SlaSupportPointsGizmo::get_support_pr
     const std::string prefix = "support_preset_" + preset_name + "_";
 
     auto get_value = [&](const std::string& suffix, double fallback) -> double {
-        auto it = config_box.items.find(prefix + suffix);
-        return (it != config_box.items.end() && it->second) ? it->second->get<double>() : fallback;
+        const auto* item = config_box.items.find(prefix + suffix);
+        return item ? item->get<double>() : fallback;
     };
 
     const double head_diameter = get_value("head_diameter",
