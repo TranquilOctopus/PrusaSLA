@@ -1522,6 +1522,7 @@ def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : 
         def->location = Print;
         def->overrides_in = Locations{ Object };
         def->row_group = L("Object elevation");
+        def->option_group = ConfigItemDef::OptionGroup::Print_Supports_Generation;
         def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
         def->gui_type = ConfigItemDef::GUIType::textfield;
         def->tooltip = L("How much the supports should lift up the supported object. "

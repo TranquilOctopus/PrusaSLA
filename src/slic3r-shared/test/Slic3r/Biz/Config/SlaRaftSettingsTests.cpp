@@ -139,3 +139,17 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         CHECK(def->label == "Pad object connector penetration");
     }
 }
+
+TEST_CASE("SLA overridable settings have known option groups", "[Config][SLA][Override]")
+{
+    const auto& defs = Slic3r::Domain::get_defs_sla();
+
+    for (const auto& def : defs.defs()) {
+        // Only check settings that can be overridden and are not hidden
+        if (!def.overrides_in.empty() &&
+            def.category != ConfigItemDef::Category::Hidden) {
+            INFO("Setting: " << def.name);
+            CHECK(def.option_group != ConfigItemDef::OptionGroup::Unknown);
+        }
+    }
+}
