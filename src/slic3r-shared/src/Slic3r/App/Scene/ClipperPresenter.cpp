@@ -86,7 +86,9 @@ void ClipperPresenter::activate(
     }
 
     if (should_build_meshes_nodes == BuildMeshesNodes::Yes) {
-        build_meshes_nodes(selected_instance->get_matrix());
+        Domain::Transform3d inst_trafo = selected_instance->get_matrix();
+        inst_trafo.pretranslate(Domain::Vec3d(0., 0., sla_shift));
+        build_meshes_nodes(inst_trafo);
     }
 
     set_enabled_scene_nodes(&m_scene_provider->scene(), false, m_main_node);
