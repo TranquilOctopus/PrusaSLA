@@ -3,6 +3,7 @@
 
 #include "Slic3r/Biz/SlaFixture.hpp"
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
+#include "Slic3r/Domain/Model.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
 
 // Slicing a model without supports is part of the planned workflow: an unsupported model is
@@ -118,7 +119,7 @@ TEST_CASE("SLA slicing uses every support point on the model", "[slicing][sla][s
     Slic3r::Test::SlaSlicingFixture fixture;
     auto model = Slic3r::Test::generate_cubes(1, 1);
     // Give the cube four support points on its bottom face (z = 0), inside the 20 x 20 mm face.
-    Domain::ModelObject* obj = model.objects.front();
+    Slic3r::Domain::ModelObject* obj = model.objects.front();
     obj->sla_support_points.clear();
     obj->sla_support_points.emplace_back(SupportPoint{Vec3f{5.0f, 5.0f, 0.0f}, 0.2f, SupportPointType::island});
     obj->sla_support_points.emplace_back(SupportPoint{Vec3f{15.0f, 5.0f, 0.0f}, 0.2f, SupportPointType::island});
