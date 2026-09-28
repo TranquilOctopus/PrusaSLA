@@ -227,7 +227,7 @@ void PreviewRenderModule::render_imgui(Render::CommandBuffer& cmd_buffer)
         && printer_technology == Domain::PrinterTechnology::FFF;
 
     // Update SLA layer image window
-    if (m_sla_layer_image_window) {
+    if (m_sla_layer_image_window.get() != nullptr) {
         bool sla_active = is_sla_active(m_project_interactor);
         if (sla_active && m_sla_viewer.has_data()) {
             const Domain::SlicingId slicing_id = m_project_interactor.selected_bed_slicing_id();
@@ -784,7 +784,7 @@ void PreviewRenderModule::init_viewers(Render::Device& device)
         && m_sla_viewer.set_settings(base_settings)) {
         m_sla_slider_layers = Passthrough(m_sla_viewer.unload_double_slider_layers());
         m_sla_layer_image_window = Passthrough(std::make_unique<SlaLayerImageWindow>(device, m_project_interactor));
-        if (m_sla_layer_image_window && m_sla_slider_layers) {
+        if (m_sla_layer_image_window.get() != nullptr && m_sla_slider_layers.get() != nullptr) {
             m_sla_layer_image_window->set_slider(m_sla_slider_layers.get());
         }
     } else {

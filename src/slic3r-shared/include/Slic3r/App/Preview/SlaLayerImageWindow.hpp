@@ -1,12 +1,16 @@
 #pragma once
 
 #include "Slic3r/App/Yoga/CollapsibleWindow.hpp"
+#include "Slic3r/App/Render/Types.hpp"
 
 #include <libslic3r/SLAResult.hpp>
 #include <libslic3r/SLALayerImage.hpp>
 
 #include <memory>
 #include <optional>
+
+namespace Slic3r::App::Render { class Device; }
+namespace Slic3r::Biz { class ProjectInteractor; }
 
 namespace Slic3r::App::Yoga {
 class Text;
@@ -48,7 +52,7 @@ private:
     Yoga::LayoutButton* m_prev_button{nullptr};
     Yoga::LayoutButton* m_next_button{nullptr};
 
-    std::optional<SlaLayerImage> m_current_layer_image;
+    std::optional<::Slic3r::sla::SlaLayerImage> m_current_layer_image;
 };
 
 } // namespace Slic3r::App::Preview

@@ -99,7 +99,7 @@ void SlaLayerImageWindow::update(const Biz::Slicing::SLAResult* result)
 
         // Render the layer image (max 1024x1024)
         const Domain::ConfigView& printer_config = result->export_data->config;
-        m_current_layer_image = sla::render_sla_layer_image(
+        m_current_layer_image = ::Slic3r::sla::render_sla_layer_image(
             result->slices[current_layer], printer_config, 1024, 1024);
 
         rebuild_texture_if_needed();
