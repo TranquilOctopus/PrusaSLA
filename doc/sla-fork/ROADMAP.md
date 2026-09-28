@@ -134,6 +134,8 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
     Result: by OpenCode, reviewed. SLA printers get the resin types (Tough, Flexible, Casting, Dental, Heat-resistant) filtered on `material_type`, with a non-panicking lookup. Known gap: the button labels are translated and compared with the untranslated preset value, so the filter only works in English.
   - [x] **M1.13e2** The resin type filter compares untranslated `material_type` values, so it works in every language. · S · needs M1.13e
     Result: by OpenCode, reviewed.
+  - [x] **M1.13e3** The resin picker showed PLA/PETG/ASA until a type was clicked: the buttons were only set up at construction, before a printer is selected. · S · needs M1.13e
+    Result: by OpenCode; visibility is refreshed in the popup's on_about_to_show().
   - [ ] **M1.13f** Finish "build plate" for the strings M1.13a could not reach (arrange dialog, menu items, undo names, two error texts): give those places a way to ask for the printer technology. · S · needs M1.13a
   - [x] **M1.13g** Model colour for SLA: one fixed high-contrast colour (from the theme tokens), no per-resin colour picker; resin printers print one colour. (User feedback 2026-09-23.) · S · needs —
     Result: By OpenCode, reviewed. For SLA, `color_from_extruder_slot` returns the theme's `SlaModelResin` token, so models draw in one colour, and the sidebar colour picker is hidden. Not yet seen in the running app.
@@ -200,6 +202,8 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
     Result: by OpenCode, reviewed. Known gap: "Edit supports" only switches to Prepare; Preview cannot reach the Prepare gizmo manager to open the support tool.
   - [x] **M2.17e** Generate and Auto support all failed on a sliced or unsliced plate: the request reused the last normal slice's points (none since M2.17a) unless the plate was Modified. · S · needs M2.17a
     Result: by OpenCode, reviewed. The request always asks for a generating slice unless the plate is empty or invalid, and a finished run without points ends the request instead of leaving it hanging.
+  - [x] **M2.17f** Generated points were dropped when slicing (the normal-slice path reused `prepare_permanent_support_points`, which keeps only `manual_add` points), so a supported model got an empty tree, stayed lifted, and slicing failed with "unprintable objects". · S · needs M2.17a
+    Result: by OpenCode, reviewed; every model point is used as is. Test: a cube with generated (island) points slices and is lifted.
 - [ ] **M2.18** Manual supports from presets (user, 2026-09-23): pick Light, Medium or Heavy in the support tool and every click places a support of that preset; the preset dimensions are set in the Supports & raft settings. · M · needs M2.3
   - [x] **M2.18a** Preset buttons choose the size for new points and resize only selected points (before, with nothing selected, they resized every point); the active preset is shown checked. · S · needs —
     Result: by OpenCode, reviewed; one `apply_support_preset()` helper. New points already take the current editing dimensions. Values are still the hard-coded ones (Light 0.30 mm tip, ...).
@@ -208,6 +212,8 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
 - [ ] **M2.19** Live support geometry (user, 2026-09-28: "the support geometry should auto-generate when support points are placed"). · M · needs M2.17e
   - [x] **M2.19a** The support tool slices its object until the support tree after points are applied and draws `support_structure` and `pad` from the SLA object cache. · M · needs —
     Result: by OpenCode; compiles, both suites pass. Not yet seen in the running app, and the drawing code is untested.
+  - [x] **M2.19b** The support tool shows the model lifted by the support elevation (`support_object_elevation`), and points are placed on the lifted model. · S · needs M2.19a
+    Result: by OpenCode, reviewed; the tool passes the elevation as the clipper's sla_shift and lifts its raycast/visual transforms, and ClipperPresenter::activate now draws the mesh with that shift (0 for every other tool). Not yet seen in the app.
 
 ## M3: Resin profile import (Chitubox, Lychee and others)
 
