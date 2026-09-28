@@ -7,6 +7,7 @@
 #include "Slic3r/Biz/ISelectedProjectChangedListener.hpp"
 #include "Slic3r/Biz/IProjectsChangedListener.hpp"
 #include "Slic3r/Biz/SLAResultCache.hpp"
+#include "Slic3r/Biz/StatusCache.hpp"
 #include "Slic3r/App/PopNotification/PopNotificationCenter.hpp"
 
 namespace Slic3r::App::Plater {
@@ -20,6 +21,7 @@ namespace Slic3r::App::Plater {
  */
 class SlaUnsupportedNotification final :
     public Biz::ISLAResultCacheChangedListener,
+    public Biz::IStatusCacheChangedListener,
     public Biz::ISelectedProjectChangedListener,
     public Biz::IProjectsChangedListener
 {
@@ -32,9 +34,19 @@ public:
 
     /**
      * @brief Called when SLA result cache changes for a slicing job.
-     * Checks for unsupported models and shows notification if found.
+     * Closes notification if the result disappears.
      */
     void on_sla_result_cache_changed(const Domain::SlicingId& id) override;
+
+    /**
+     * @brief Called when slicing status code changes.
+     * Shows notification when slicing finishes, closes when a new slice starts.
+     */
+    void on_status_cache_status_code_changed(const Domain::SlicingId id) override;
+
+    void on_status_cache_progress_changed(const Domain::SlicingId) override {}
+    void on_status_cache_warnings_changed(const Domain::SlicingId) override {}
+    void on_status_cache_errors_changed(const Domain::SlicingId) override {}
 
     /**
      * @brief Rebuild the notification for the newly active project.
