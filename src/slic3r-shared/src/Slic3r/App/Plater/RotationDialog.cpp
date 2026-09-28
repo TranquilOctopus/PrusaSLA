@@ -9,7 +9,7 @@
 #include "Slic3r/Biz/Scene/SceneInteractor.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
 #include "Slic3r/Domain/Project.hpp"
-#include "Slic3r/sla/SLAAutoOrient.hpp"
+#include "libslic3r/SLAAutoOrient.hpp"
 #include "Slic3r/Assert.hpp"
 #include <Eigen/Geometry>
 

@@ -4,7 +4,7 @@
 #include "Slic3r/Biz/Platform/ListenerScope.hpp"
 #include "Slic3r/Biz/ISelectedConfigContainerChangedListener.hpp"
 #include "Slic3r/Biz/ISelectedProjectChangedListener.hpp"
-#include "Slic3r/Biz/ISelectedBedInstancesChangedListener.hpp"
+#include "Slic3r/Biz/ISelectedBedInstanceChangedListener.hpp"
 #include "Slic3r/Biz/Slicing/SlicingInteractor.hpp"
 #include "Slic3r/Domain/SelectionId.hpp"
 #include "Slic3r/App/IsSlaActive.hpp"
