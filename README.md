@@ -13,17 +13,17 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 ## Progress
 
-**74 of 157 todos done (47%)** · updated 2026-09-27 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**77 of 158 todos done (49%)** · updated 2026-09-28 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
 | M0: Foundation | 12/15 | `██████████░░` 80% |
 | M1: Look, feel and SLA-first shell | 20/30 | `████████░░░░` 67% |
-| M2: SLA editing tools (porting the legacy gizmos) | 19/30 | `████████░░░░` 63% |
+| M2: SLA editing tools (porting the legacy gizmos) | 21/30 | `████████░░░░` 70% |
 | M3: Resin profile import (Chitubox, Lychee and others) | 2/15 | `██░░░░░░░░░░` 13% |
 | M4: Engine quality (measure first; every PR includes before/after metrics) | 5/17 | `████░░░░░░░░` 29% |
 | M5: Formats and inspection | 8/23 | `████░░░░░░░░` 35% |
-| M6: Quality gates and release | 3/10 | `████░░░░░░░░` 30% |
+| M6: Quality gates and release | 4/11 | `████░░░░░░░░` 36% |
 | M7: Excellent auto-supports *(parked)* | 5/17 | `████░░░░░░░░` 29% |
 
 ### Waiting on you
@@ -61,7 +61,7 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 </details>
 
-<details><summary>M2: SLA editing tools (porting the legacy gizmos) — 11 open</summary>
+<details><summary>M2: SLA editing tools (porting the legacy gizmos) — 9 open</summary>
 
 - [ ] **M2.9** Plater SLA visuals: resin tint, support and pad materials, and overlay styling (PLAN F3).
 - [ ] **M2.14b** Raft shapes the pad generator cannot make today: grid or honeycomb infill, a tapered skate profile, and a s…
@@ -69,11 +69,9 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 - [ ] **M2.14d** Make `raft_type` the single source of truth. Engine: `generate_pad`, `slice_supports`, `SLAPrintObject::get…
 - [ ] **M2.15** Bracing and cross-bracing controls beyond `support_pillar_connection_mode`, if M2.11 marks them missing.
 - [ ] **M2.17** Supports are an explicit step before slicing, never done by the slicer. The workflow (decided 2026-09-22):…
-  - [ ] **M2.17b** **Auto support** action for the selected models or for all of them: run the generator (the support tool's e…
   - [ ] **M2.17c** After slicing, a notification naming every model that was sliced without supports, reusing the M4.8c issue…
   - [ ] **M2.17d** Supports are done in Preview (user feedback 2026-09-23). Entering Preview must not slice and must not auto-…
 - [ ] **M2.18** Manual supports from presets (user, 2026-09-23): pick Light, Medium or Heavy in the support tool and every…
-  - [ ] **M2.18b** Preset dimensions as settings: tip diameter, penetration, pillar diameter and base size for each of Light,…
 
 </details>
 
