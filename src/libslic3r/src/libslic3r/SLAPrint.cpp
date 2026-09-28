@@ -1393,6 +1393,9 @@ void SLAPrint::slice(
         const bool generate = m_generate_support_points_for == po->model_object()->id();
         if (po->is_step_done(slaposSupportPoints) && po->m_support_points_generated != generate)
             po->invalidate_step(slaposSupportPoints);
+        // Invalidate the object slice if the support status has changed since last slice.
+        if (po->is_step_done(slaposObjectSlice) && po->m_sliced_with_supports != po->has_supports())
+            po->invalidate_step(slaposObjectSlice);
     }
 
     if (slice_until_step.has_value()) {

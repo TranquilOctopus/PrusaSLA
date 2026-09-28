@@ -660,6 +660,9 @@ void SLAPrint::Steps::slice_model(SLAPrintObject &po)
     assert(po.m_mesh_to_slice.empty() ||
            csg::get_operation(*po.m_mesh_to_slice.begin()) == csg::CSGType::Union);
 
+    // Record whether this object was sliced with supports enabled.
+    po.m_sliced_with_supports = po.has_supports();
+
     auto bb3d = csgmesh_positive_bb(po.m_mesh_to_slice);
 
     // We need to prepare the slice index...
@@ -1125,9 +1128,9 @@ void SLAPrint::Steps::initialize_printer_input()
         coord_t gndlvl = o->m_slice_index.front().print_level() - ilhs;
         for (const SliceRecord& slicerecord : o->m_slice_index) {
             if (!slicerecord.is_valid()) {
-                throw Biz::Slicing::Exception{
-                    Biz::Slicing::Error{Biz::Slicing::ErrorCode::UnprintableObjects}
-                };
+                Biz::Slicing::Error error{Biz::Slicing::ErrorCode::UnprintableObjects};
+                error.model_object_id = o->model_object()->id();
+                throw Biz::Slicing::Exception{error};
             }
 
             coord_t lvlid = slicerecord.print_level() - gndlvl;

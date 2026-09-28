@@ -268,6 +268,7 @@ private:
 
     sla::InteriorPtr m_hollowing_data;
     bool m_support_points_generated{false};
+    bool m_sliced_with_supports{false};
 };
 
 Biz::Slicing::Sla::Object::InstanceTrafos get_instance_trafos(const SLAPrintObject& object);
