@@ -9,6 +9,7 @@ class SidebarSlaSupports;
 class SidebarPreviewActionButtons;
 class GCodeWindow;
 class LegendWindow;
+class SlaLayerImageWindow;
 class DoubleSliderForLayers;
 class DoubleSliderForGcode;
 
@@ -36,6 +37,7 @@ public:
         std::unique_ptr<SidebarPreviewActionButtons> sidebar_action_buttons,
         std::unique_ptr<GCodeWindow> m_gcode_window,
         std::unique_ptr<LegendWindow> legend,
+        std::unique_ptr<SlaLayerImageWindow> sla_layer_image_window,
         std::unique_ptr<DoubleSliderForLayers> double_slider_layers,
         std::unique_ptr<DoubleSliderForLayers> sla_double_slider_layers,
         std::unique_ptr<DoubleSliderForGcode> double_slider_gcode,
@@ -58,6 +60,7 @@ private:
 private:
     Yoga::Passthrough<GCodeWindow> m_gcode_window;
     Yoga::Passthrough<LegendWindow> m_legend;
+    Yoga::Passthrough<SlaLayerImageWindow> m_sla_layer_image_window;
     Yoga::Passthrough<DoubleSliderForLayers> m_double_slider_layers;
     Yoga::Passthrough<DoubleSliderForLayers> m_sla_double_slider_layers;
     Yoga::Passthrough<DoubleSliderForGcode> m_double_slider_gcode;

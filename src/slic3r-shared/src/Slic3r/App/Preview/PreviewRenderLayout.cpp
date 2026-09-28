@@ -2,6 +2,7 @@
 
 #include "Slic3r/App/Preview/GCodeWindow.hpp"
 #include "Slic3r/App/Preview/LegendWindow.hpp"
+#include "Slic3r/App/Preview/SlaLayerImageWindow.hpp"
 #include "Slic3r/App/Preview/DoubleSliderForLayers.hpp"
 #include "Slic3r/App/Preview/DoubleSliderForGCode.hpp"
 #include "Slic3r/App/Preview/SidebarAutoReslice.hpp"
@@ -27,6 +28,7 @@ PreviewRenderLayout::PreviewRenderLayout(
     std::unique_ptr<SidebarPreviewActionButtons> sidebar_action_buttons,
     std::unique_ptr<GCodeWindow> m_gcode_window,
     std::unique_ptr<LegendWindow> legend,
+    std::unique_ptr<SlaLayerImageWindow> sla_layer_image_window,
     std::unique_ptr<DoubleSliderForLayers> double_slider_layers,
     std::unique_ptr<DoubleSliderForLayers> sla_double_slider_layers,
     std::unique_ptr<DoubleSliderForGcode> double_slider_gcode,
@@ -53,6 +55,7 @@ PreviewRenderLayout::PreviewRenderLayout(
     ),
     m_gcode_window(std::move(m_gcode_window)),
     m_legend(std::move(legend)),
+    m_sla_layer_image_window(std::move(sla_layer_image_window)),
     m_double_slider_layers(std::move(double_slider_layers)),
     m_sla_double_slider_layers(std::move(sla_double_slider_layers)),
     m_double_slider_gcode(std::move(double_slider_gcode)),
@@ -79,6 +82,11 @@ void PreviewRenderLayout::init_left_column()
     m_layout_left_column->append(m_legend.release());
     m_legend->set_visible(false);
     m_legend->collapsible_window_callbacks().collapsed_changed = [this](bool collapsed)
+    { update_left_separator_enable(); };
+
+    m_layout_left_column->append(m_sla_layer_image_window.release());
+    m_sla_layer_image_window->set_visible(false);
+    m_sla_layer_image_window->collapsible_window_callbacks().collapsed_changed = [this](bool collapsed)
     { update_left_separator_enable(); };
 }
 

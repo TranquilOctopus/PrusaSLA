@@ -17,6 +17,7 @@
 #include "Slic3r/App/Preview/SidebarAutoReslice.hpp"
 #include "Slic3r/App/Preview/SidebarSlaSupports.hpp"
 #include <Slic3r/App/Preview/LegendWindow.hpp>
+#include <Slic3r/App/Preview/SlaLayerImageWindow.hpp>
 #include <Slic3r/App/Preview/GCodeWindow.hpp>
 #include <Slic3r/App/Preview/DoubleSliderForGCode.hpp>
 #include <Slic3r/App/Preview/DoubleSliderForLayers.hpp>
@@ -239,6 +240,7 @@ private:
     Yoga::Passthrough<SidebarPreviewActionButtons> m_sidebar_action_buttons;
     Yoga::Passthrough<GCodeWindow> m_gcode_window;
     Yoga::Passthrough<LegendWindow> m_legend;
+    Yoga::Passthrough<SlaLayerImageWindow> m_sla_layer_image_window;
     Yoga::Passthrough<DoubleSliderForGcode> m_slider_gcode;
     Yoga::Passthrough<DoubleSliderForLayers> m_slider_layers;
     Yoga::Passthrough<DoubleSliderForLayers> m_sla_slider_layers;

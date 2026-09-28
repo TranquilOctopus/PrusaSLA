@@ -4,9 +4,12 @@
 #include "Slic3r/Domain/ObjectID.hpp"
 #include "Types.hpp"
 #include "SlaViewerWrapperInputData.hpp"
-#include "Slic3r/App/Imgui/DoubleSlider.hpp"
 
 #include "Slic3r/App/libvgcode/SlaViewer.hpp"
+
+namespace Slic3r::Biz {
+class ProjectInteractor;
+} // namespace Slic3r::Biz
 
 namespace Slic3r::App::Preview {
 
