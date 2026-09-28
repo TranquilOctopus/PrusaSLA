@@ -354,6 +354,8 @@ set(SLIC3R_SOURCES
     src/libslic3r/SLA/SupportPointGenerator.cpp
     src/libslic3r/SLA/Rotfinder.cpp
     src/libslic3r/SLA/Rotfinder.hpp
+    src/libslic3r/SLAAutoOrient.cpp
+    include/libslic3r/SLAAutoOrient.hpp
     src/libslic3r/SLA/SupportTree.cpp
     src/libslic3r/SLA/SupportTreeBuilder.cpp
     src/libslic3r/SLA/SupportTreeBuilder.hpp

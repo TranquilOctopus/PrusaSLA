@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "libslic3r/SLA/Rotfinder.hpp"
+#include "libslic3r/SLAAutoOrient.hpp"
 #include "Slic3r/Biz/Algorithms/ModelObject.hpp"
 #include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
 #include "Slic3r/Domain/Model.hpp"
@@ -56,6 +57,13 @@ TEST_CASE("Rotfinder: minimum-height rotation lays a tall box down", "[SLA][Rotf
     REQUIRE(std::isfinite(rotation.x()));
     REQUIRE(std::isfinite(rotation.y()));
     // Lying down, the box is 10 mm tall instead of 40 mm.
+    CHECK(height_after_rotation(*box.object, rotation) < 11.);
+}
+
+TEST_CASE("Auto orient (public API) lays a tall box down", "[SLA][Rotfinder]")
+{
+    BoxModel box{10., 10., 40.};
+    const Slic3r::Vec2d rotation = Slic3r::sla::auto_orient_min_height(*box.object);
     CHECK(height_after_rotation(*box.object, rotation) < 11.);
 }
 
