@@ -1,0 +1,227 @@
+#include "Slic3r/App/Plater/SlaUnsupportedNotification.hpp"
+
+#include <Slic3r/App/AppServices.hpp>
+#include <Slic3r/App/PopNotification/PopNotificationCenter.hpp>
+#include <Slic3r/App/PopNotification/PopNotificationData.hpp>
+
+#include "Slic3r/Biz/I18N/I18N.hpp"
+#include "Slic3r/Assert.hpp"
+#include "Slic3r/Domain/Model.hpp"
+#include "Slic3r/Domain/ModelInstance.hpp"
+#include "Slic3r/Domain/BedInstance.hpp"
+#include "Slic3r/Biz/StatusCache.hpp"
+
+#include "fmt/format.h"
+
+namespace Slic3r::App::Plater {
+using namespace Slic3r;
+using namespace Slic3r::App::PopNotification;
+using namespace Slic3r::Biz;
+
+SlaUnsupportedNotification::SlaUnsupportedNotification(
+    ProjectInteractor& project_interactor,
+    PopNotification::PopNotificationCenter& notify) :
+    m_project_interactor(project_interactor),
+    m_notify(notify)
+{
+    m_project_interactor.sla_result_cache().add_listener<Biz::ISLAResultCacheChangedListener>(this);
+    m_project_interactor.add_listener<Biz::ISelectedProjectChangedListener>(this);
+    m_project_interactor.add_listener<Biz::IProjectsChangedListener>(this);
+}
+
+SlaUnsupportedNotification::~SlaUnsupportedNotification()
+{
+    close_notification_if_open();
+    m_project_interactor.sla_result_cache().remove_listener<Biz::ISLAResultCacheChangedListener>(this);
+    m_project_interactor.remove_listener<Biz::ISelectedProjectChangedListener>(this);
+    m_project_interactor.remove_listener<Biz::IProjectsChangedListener>(this);
+}
+
+void SlaUnsupportedNotification::on_sla_result_cache_changed(const Domain::SlicingId& id)
+{
+    // Only process results for the currently selected project
+    Domain::SelectionId selected_project = m_project_interactor.selected_project_id();
+    if (id.project_id != selected_project) {
+        return;
+    }
+
+    m_current_slicing_id = id;
+
+    std::optional<Biz::SLAResultRef> sla_result = m_project_interactor.sla_result_cache().get_result(id);
+    if (!sla_result.has_value()) {
+        close_notification_if_open();
+        return;
+    }
+
+    const auto& result = sla_result->get();
+    if (result.type != Biz::Slicing::Sla::ResultType::Files) {
+        return;
+    }
+
+    if (!result.export_data) {
+        close_notification_if_open();
+        return;
+    }
+
+    // Check if the slicing status is Finished
+    const std::optional<Slicing::Status> status_opt = m_project_interactor.status_cache().get_status(id);
+    if (!status_opt.has_value() || status_opt->code != StatusCode::Finished) {
+        return;
+    }
+
+    // Collect model objects on this bed that have printable instances but no support points
+    const Domain::Project& project = m_project_interactor.project(selected_project);
+    const Domain::BedInstance* bed_instance = project.find_bed_instance_by_id(id.bed_instance_id);
+    if (!bed_instance) {
+        close_notification_if_open();
+        return;
+    }
+
+    std::vector<const Domain::ModelObject*> unsupported_objects;
+    for (const Domain::ModelInstance* instance : bed_instance->model_instances) {
+        if (!instance || !instance->is_printable()) {
+            continue;
+        }
+        const Domain::ModelObject* model_object = project.find_object_by_id(instance->get_object()->id().id);
+        if (!model_object) {
+            continue;
+        }
+        // Skip if already added
+        if (std::find(unsupported_objects.begin(), unsupported_objects.end(), model_object) != unsupported_objects.end()) {
+            continue;
+        }
+        // Check if the object has no support points
+        if (model_object->sla_support_points.empty()) {
+            unsupported_objects.push_back(model_object);
+        }
+    }
+
+    if (unsupported_objects.empty()) {
+        close_notification_if_open();
+        return;
+    }
+
+    if (m_dismissed_projects.contains(selected_project)) {
+        return;
+    }
+
+    recreate_notification(selected_project, /*open_when_closed=*/false);
+}
+
+void SlaUnsupportedNotification::on_selected_project_changed(size_t index)
+{
+    m_current_slicing_id = Domain::SlicingId{};
+    recreate_notification(index, /*open_when_closed=*/true);
+}
+
+void SlaUnsupportedNotification::on_project_will_be_removed(Domain::SelectionId project_id)
+{
+    m_dismissed_projects.erase(project_id);
+    close_notification_if_open();
+    if (m_current_slicing_id.project_id == project_id) {
+        m_current_slicing_id = Domain::SlicingId{};
+    }
+}
+
+void SlaUnsupportedNotification::on_project_changed(Domain::SelectionId project_id)
+{
+    close_notification_if_open();
+    if (m_current_slicing_id.project_id == project_id) {
+        m_current_slicing_id = Domain::SlicingId{};
+    }
+    recreate_notification(project_id, /*open_when_closed=*/true);
+}
+
+void SlaUnsupportedNotification::recreate_notification(Domain::SelectionId project_id, bool open_when_closed)
+{
+    if (project_id != m_project_interactor.selected_project_id()) {
+        return;
+    }
+    if (m_dismissed_projects.contains(project_id)) {
+        open_when_closed = false;
+    }
+
+    std::optional<Biz::SLAResultRef> sla_result = m_project_interactor.sla_result_cache().get_result(m_current_slicing_id);
+    if (!sla_result.has_value() || !sla_result->get().export_data) {
+        return;
+    }
+
+    // Re-collect unsupported objects
+    const Domain::Project& project = m_project_interactor.project(project_id);
+    const Domain::BedInstance* bed_instance = project.find_bed_instance_by_id(m_current_slicing_id.bed_instance_id);
+    if (!bed_instance) {
+        return;
+    }
+
+    std::vector<const Domain::ModelObject*> unsupported_objects;
+    for (const Domain::ModelInstance* instance : bed_instance->model_instances) {
+        if (!instance || !instance->is_printable()) {
+            continue;
+        }
+        const Domain::ModelObject* model_object = project.find_object_by_id(instance->get_object()->id().id);
+        if (!model_object) {
+            continue;
+        }
+        if (std::find(unsupported_objects.begin(), unsupported_objects.end(), model_object) != unsupported_objects.end()) {
+            continue;
+        }
+        if (model_object->sla_support_points.empty()) {
+            unsupported_objects.push_back(model_object);
+        }
+    }
+
+    if (unsupported_objects.empty()) {
+        return;
+    }
+
+    bool was_open = close_notification_if_open();
+    if (!open_when_closed && !was_open) {
+        return;
+    }
+
+    // Build notification message
+    std::string message = _u8L("Sliced without supports:") + " ";
+    const size_t max_names = 5;
+    for (size_t i = 0; i < unsupported_objects.size() && i < max_names; ++i) {
+        if (i > 0) {
+            message += ", ";
+        }
+        message += unsupported_objects[i]->name;
+    }
+    if (unsupported_objects.size() > max_names) {
+        message += fmt::format(fmt::runtime(_u8L(", … and {0} more")), unsupported_objects.size() - max_names);
+    }
+    message += "\n";
+    message += _u8L("Open the support tool to add supports, or ignore this if the model should sit on the build plate.");
+
+    using namespace Slic3r::App::PopNotification;
+    PopNotificationData data{
+        .type = PopNotificationType::SlaUnsupportedDetected,
+        .level = PopNotificationLevel::Warning,
+        .timeout = 0s,
+        .layout = PopNotificationLayoutText(message),
+        .project_id = project_id,
+        .on_user_close = [this, project_id]() { m_dismissed_projects.insert(project_id); }
+    };
+    auto matcher = [](const PopNotificationPayload&, const PopNotificationPayload&) { return false; };
+    m_notify.upsert_notification(data, matcher);
+}
+
+bool SlaUnsupportedNotification::close_notification_if_open()
+{
+    auto& list = m_notify.observable_list();
+    bool is_open = false;
+    for (size_t i = 0; i < list.size(); i++) {
+        if (list.at(i).type == PopNotificationType::SlaUnsupportedDetected) {
+            is_open = true;
+            break;
+        }
+    }
+    if (!is_open) {
+        return false;
+    }
+    list.close_notifications_of_type(PopNotificationType::SlaUnsupportedDetected);
+    return true;
+}
+
+} // namespace Slic3r::App::Plater
