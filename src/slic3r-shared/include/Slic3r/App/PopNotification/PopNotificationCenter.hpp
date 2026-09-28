@@ -3,9 +3,12 @@
 #include "Slic3r/App/PopNotification/PopNotificationObservableList.hpp"
 #include "Slic3r/Biz/IArrangeEventsListener.hpp"
 #include "Slic3r/Biz/ObservableListSortFilter.hpp"
+#include "Slic3r/Biz/PhysicalPrinter/PhysicalPrinterConfig.hpp"
 #include "Slic3r/Biz/Platform/JobManager/IJobManagerStatusChangedListener.hpp"
+#include "Slic3r/Biz/PrintHost/PrintHostJobData.hpp"
 #include "Slic3r/Biz/RemovableDrive/IRemovableDriveStatusListener.hpp"
 #include "Slic3r/Biz/RemovableDrive/RemovableDriveService.hpp"
+#include "Slic3r/Biz/ResultExport/IResultExportBinarizeListener.hpp"
 #include "Slic3r/Biz/StatusCache.hpp"
 #include "Slic3r/Biz/UserAccount/IUserAccountListener.hpp"
 #include "Slic3r/Biz/IProjectsChangedListener.hpp"
@@ -32,7 +35,8 @@ class PopNotificationCenter :
     public Biz::IArrangeEventsListener,
     public Biz::Connect::IConnectHandlerListener,
     public Platform::IFileExplorerErrorListener,
-    public Lua::IPluginInstallationListener
+    public Lua::IPluginInstallationListener,
+    public Biz::ResultExport::IResultExportBinarizeListener
 {
 public:
     PopNotificationCenter(Biz::ProjectInteractor& project_interactor);
@@ -56,6 +60,11 @@ public:
     void on_print_host_cancel(size_t id);
     void on_print_host_done(size_t id);
     void on_print_host_info(size_t id, const Biz::PrintHost::PrintHostJobInfoTag& tag, const std::string& msg);
+
+    // Result Export failure
+    void on_result_export_failed(const std::string& message) override;
+    void on_result_export_binarize_success(PhysicalPrinter::PhysicalPrinterConfig, PrintHost::PrintHostJobData) override;
+    void on_result_export_binarize_fail(const std::string&) override;
 
     // Removable Drive
     void on_removable_drive_status_changed(const boost::filesystem::path& drive_path, Biz::RemovableDrive::RemovableDriveStatus status) override;

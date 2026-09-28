@@ -118,8 +118,8 @@ void process_sla_result(const Slicing::SLAResultData& data, const boost::filesys
     auto format = registry.find_by_file_data_type(data.files.type);
     
     if (!format) {
-        throw std::runtime_error("No SLA archive format registered for FileDataType: " + 
-            std::to_string(static_cast<int>(data.files.type)));
+        throw std::runtime_error("This printer's file format is not supported for export yet (archive type " + 
+            std::to_string(static_cast<int>(data.files.type)) + ").");
     }
     
     format->store(result_path.string(), data);

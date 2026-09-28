@@ -4,6 +4,7 @@
 #include "Slic3r/Biz/Network/ServiceConfig.hpp"
 
 #include "Slic3r/LegacyFormat.hpp"
+#include <Slic3r/Biz/I18N/I18N.hpp> // translations
 
 #include <nlohmann/json.hpp>
 
@@ -77,6 +78,7 @@ void ResultExportInteractor::on_result_export_binarize_success(PhysicalPrinter::
 void ResultExportInteractor::on_result_export_binarize_fail(const std::string& msg)
 {
     SPDLOG_ERROR("ResultExportDataFinalizer has failed: {}", msg);
+    on_result_export_failed(_u8L("Export failed:") + " " + msg);
 }
 
 } // namespace Slic3r::Biz::PrintHost

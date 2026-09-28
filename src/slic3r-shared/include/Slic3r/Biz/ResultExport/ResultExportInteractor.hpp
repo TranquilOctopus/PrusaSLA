@@ -28,6 +28,9 @@ public:
     void on_result_export_binarize_success(PhysicalPrinter::PhysicalPrinterConfig config, PrintHost::PrintHostJobData data) override;
     void on_result_export_binarize_fail(const std::string& msg) override;
 
+    ResultExportDataFinalizer& result_export_data_finalizer() { return m_result_export_data_finalizer; }
+    const ResultExportDataFinalizer& result_export_data_finalizer() const { return m_result_export_data_finalizer; }
+
 private:
     PrintHost::PrintHostJobManager m_print_host_job_manager;
     ResultExportDataFinalizer m_result_export_data_finalizer;
