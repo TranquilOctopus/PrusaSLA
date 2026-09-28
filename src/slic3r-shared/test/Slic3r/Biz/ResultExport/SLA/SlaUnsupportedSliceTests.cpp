@@ -3,6 +3,7 @@
 
 #include "Slic3r/Biz/SlaFixture.hpp"
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
+#include "Slic3r/Domain/SLA/SupportPoint.hpp"
 
 // Slicing a model without supports is part of the planned workflow: an unsupported model is
 // sliced and the user is warned, not refused. With the pad around the object, the pad and
@@ -103,4 +104,41 @@ TEST_CASE("SLA slicing an unsupported model with the default raft", "[slicing][s
     // 5 mm support elevation (about 500).
     CHECK(sla_result->files.data.size() < 450);
     CHECK(sla_result->files.data.size() >= 390);
+}
+
+// A model with support points placed on it (type island, not manual_add) gets those points used
+// during slicing, the model is lifted by support elevation, and slicing succeeds with more layers.
+TEST_CASE("SLA slicing uses every support point on the model", "[slicing][sla][supports]")
+{
+    using Slic3r::Domain::sla::RaftType;
+    using Slic3r::Domain::SLA::SupportPoint;
+    using Slic3r::Domain::SLA::SupportPointType;
+    using Slic3r::Domain::Vec3f;
+
+    Slic3r::Test::SlaSlicingFixture fixture;
+    auto model = Slic3r::Test::generate_cubes(1, 1);
+    // Give the cube four support points on its bottom face (z = 0), inside the 20 x 20 mm face.
+    Domain::ModelObject* obj = model.objects.front();
+    obj->sla_support_points.clear();
+    obj->sla_support_points.emplace_back(SupportPoint{Vec3f{5.0f, 5.0f, 0.0f}, 0.2f, SupportPointType::island});
+    obj->sla_support_points.emplace_back(SupportPoint{Vec3f{15.0f, 5.0f, 0.0f}, 0.2f, SupportPointType::island});
+    obj->sla_support_points.emplace_back(SupportPoint{Vec3f{5.0f, 15.0f, 0.0f}, 0.2f, SupportPointType::island});
+    obj->sla_support_points.emplace_back(SupportPoint{Vec3f{15.0f, 15.0f, 0.0f}, 0.2f, SupportPointType::island});
+
+    auto config = Slic3r::Domain::ConfigPackSLA{};
+    config.sla_printer_settings.items.opt("sla_archive_format").set(std::string("goo"));
+    config.sla_printer_settings.items.opt("display_pixels_x").set(1440);
+    config.sla_printer_settings.items.opt("display_pixels_y").set(800);
+    config.sla_printer_settings.items.opt("display_width").set(144.0);
+    config.sla_printer_settings.items.opt("display_height").set(80.0);
+    config.sla_print_settings.items.opt("layer_height").set(0.05);
+    config.sla_material_settings.items.opt("initial_layer_height").set(0.05);
+    config.sla_print_settings.items.opt("supports_enable").set(true);
+    config.sla_print_settings.items.opt("pad_enable").set(true);
+    config.sla_print_settings.items.opt("raft_type").set(RaftType::Full);
+
+    auto sla_result = fixture.slice_sla_model(model, config);
+    REQUIRE(sla_result != nullptr);
+    // The cube is lifted by support elevation, so there are more layers than the unsupported cube (~400).
+    REQUIRE(sla_result->files.data.size() > 450);
 }

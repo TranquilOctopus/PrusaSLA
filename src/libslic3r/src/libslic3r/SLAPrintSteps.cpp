@@ -812,11 +812,17 @@ void SLAPrint::Steps::support_points(SLAPrintObject &po)
     const bool generate = m_print->m_generate_support_points_for == po.model_object()->id();
     po.m_support_points_generated = generate;
     if (!generate) {
-        // Supports are an explicit step: slicing uses the model's own points as they are.
+        // Supports are an explicit step: slicing uses the model's own points as they are,
+        // all of them (no filtering by type or distance).
         SupportPoints support_points;
-        prepare_permanent_support_points(
-            support_points, po.model_object()->sla_support_points, po.trafo(),
-            po.m_supportable_mesh->emesh);
+        const SupportPoints &object_supports = po.model_object()->sla_support_points;
+        const Transform3d &object_trafo = po.trafo();
+        support_points.reserve(object_supports.size());
+        for (const SupportPoint &p : object_supports) {
+            SupportPoint sp = p;
+            sp.pos = (object_trafo * p.pos.cast<double>()).cast<float>();
+            support_points.push_back(sp);
+        }
         po.m_preview->support_points = std::make_shared<const SupportPoints>(std::move(support_points));
         po.m_supportable_mesh->pts = po.m_preview->support_points;
         return;
