@@ -91,6 +91,8 @@ public:
         return m_callbacks;
     }
 
+    const std::string& failure_reason() const { return m_failure_reason; }
+
     void start(SlicingId slicing_id, ObjectID model_object_id)
     {
         if (this->running()) {
@@ -101,6 +103,8 @@ public:
         m_slicing_id = slicing_id;
         m_model_object_id = model_object_id;
         m_has_fresh_points = false;
+        m_cache_changed = false;
+        m_failure_reason.clear();
         m_sla_object_cache.add_listener<ISLAObjectCacheChangedListener>(this);
         m_status_cache.add_listener<IStatusCacheChangedListener>(this);
 
@@ -110,9 +114,9 @@ public:
             status == StatusCode::Stopping || status == StatusCode::InvalidData) {
             this->request_slicing_until_support_spots();
         } else if (status == StatusCode::Empty) {
-            this->complete(std::nullopt);
+            this->fail("the build plate has nothing to print");
         } else if (status == StatusCode::Removed) {
-            this->complete(std::nullopt);
+            this->fail("the build plate was removed");
         }
     }
 
@@ -133,11 +137,37 @@ public:
         return m_state != State::Idle;
     }
 
+private:
+    void fail(std::string reason)
+    {
+        SPDLOG_WARN("SLA support generation for object {} failed: {}", m_model_object_id.id, reason);
+        m_failure_reason = std::move(reason);
+        this->complete(std::nullopt);
+    }
+
+    std::string cached_points_problem() const
+    {
+        const SLAObjectCache::Key key{m_slicing_id, m_model_object_id};
+        const SLAObjectOptRef opt_ref = m_sla_object_cache.get_instance(key);
+        if (!opt_ref.has_value()) {
+            return "the object has no slicing result";
+        }
+
+        const Slicing::Sla::Object& sla_object = opt_ref->get();
+        if (!sla_object.support_points) {
+            return "supports are disabled for this object (Supports & raft: supports_enable)";
+        }
+        return "";
+    }
+
+public:
     void on_sla_object_cache_changed(const SlicingId& id, ObjectID object_id) override
     {
         if (!this->running() || id != m_slicing_id || object_id != m_model_object_id) {
             return;
         }
+
+        m_cache_changed = true;
 
         const std::optional<Slicing::Status> current_status = m_status_cache.get_status(id);
         if (current_status.has_value()
@@ -156,29 +186,31 @@ public:
 
         const std::optional<Slicing::Status> status = m_status_cache.get_status(id);
         if (!status.has_value()) {
-            this->complete(std::nullopt);
+            this->fail("slicing status is unavailable");
             return;
         }
 
         switch (status->code) {
         case StatusCode::Running:
             m_state = State::SlicingActive;
-            m_has_fresh_points = false;
             break;
         case StatusCode::Stopping:
             m_state = State::SlicingActive;
-            m_has_fresh_points = false;
             break;
         case StatusCode::Updating:
             m_has_fresh_points = false;
             break;
         case StatusCode::Modified:
-            if (m_has_fresh_points) {
-                this->try_complete_from_cache();
+            if (m_state == State::SlicingRequested || m_state == State::SlicingActive) {
+                if (m_has_fresh_points || m_cache_changed) {
+                    this->try_complete_from_cache();
+                } else {
+                    this->fail("slicing stopped before support points were generated");
+                }
             } else if (m_state == State::WaitingForSlicing) {
                 this->request_slicing_until_support_spots();
             } else {
-                this->complete(std::nullopt);
+                this->fail("slicing stopped before support points were generated");
             }
             break;
         case StatusCode::Finished:
@@ -187,7 +219,7 @@ public:
                 if (points.has_value()) {
                     this->complete(points);
                 } else {
-                    this->complete(std::nullopt);
+                    this->fail(this->cached_points_problem());
                 }
             } else if (m_state == State::WaitingForSlicing) {
                 this->request_slicing_until_support_spots();
@@ -196,11 +228,11 @@ public:
         case StatusCode::Empty:
         case StatusCode::InvalidData:
             if (m_state == State::SlicingRequested || m_state == State::SlicingActive) {
-                this->complete(std::nullopt);
+                this->fail("slicing failed before support points were generated");
             } else if (m_state == State::WaitingForSlicing) {
                 this->request_slicing_until_support_spots();
             } else {
-                this->complete(std::nullopt);
+                this->fail("slicing failed before support points were generated");
             }
             break;
         default:
@@ -245,7 +277,11 @@ private:
     void try_complete_from_cache()
     {
         const std::optional<Domain::SLA::SupportPoints> points = this->cached_support_points();
-        this->complete(points);
+        if (points.has_value()) {
+            this->complete(points);
+        } else {
+            this->fail(this->cached_points_problem());
+        }
     }
 
     void complete(std::optional<Domain::SLA::SupportPoints> support_points)
@@ -257,6 +293,7 @@ private:
     void request_slicing_until_support_spots()
     {
         m_state = State::SlicingRequested;
+        m_cache_changed = false;
         m_slicing_interactor.slice_bed(
             m_slicing_id,
             SliceUntilStep{Slic3r::slaposSupportPoints, m_model_object_id}
@@ -272,6 +309,8 @@ private:
 
     State m_state = State::Idle;
     bool m_has_fresh_points = false;
+    bool m_cache_changed = false;
+    std::string m_failure_reason;
     SlicingId m_slicing_id;
     ObjectID m_model_object_id;
 };
@@ -812,8 +851,16 @@ void SlaSupportPointsGizmo::on_generation_completed(std::optional<Domain::SLA::S
                 }
             }
         }
+
+        const std::string& failure_reason = m_support_points_request->failure_reason();
         if (error_message.empty()) {
-            error_message = _u8L("Failed to generate support points.");
+            if (!failure_reason.empty()) {
+                error_message = _u8L("Failed to generate support points:") + " " + failure_reason;
+            } else {
+                error_message = _u8L("Failed to generate support points.");
+            }
+        } else if (!failure_reason.empty()) {
+            error_message = failure_reason + "\n" + error_message;
         }
         AppServices::instance().dialog_manager().show_warning_dialog(
             error_message,
@@ -1018,7 +1065,12 @@ void SlaSupportPointsGizmo::on_auto_support_completed(Domain::ObjectID obj_id, s
             }
         }
     } else {
-        SPDLOG_WARN("Auto support all: Failed to generate support points for object {}", obj_id.id);
+        const std::string& failure_reason = m_support_points_request->failure_reason();
+        if (!failure_reason.empty()) {
+            SPDLOG_WARN("Auto support all: Failed to generate support points for object {}: {}", obj_id.id, failure_reason);
+        } else {
+            SPDLOG_WARN("Auto support all: Failed to generate support points for object {}", obj_id.id);
+        }
     }
 
     m_generation_slicing_id.reset();

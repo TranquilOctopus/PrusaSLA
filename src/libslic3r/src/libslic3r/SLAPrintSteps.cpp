@@ -805,6 +805,7 @@ void SLAPrint::Steps::support_points(SLAPrintObject &po)
 
     // If supports are disabled, we can skip the model scan.
     if (!po.m_config.get<bool>("supports_enable")) {
+        SPDLOG_WARN("Support points: supports are disabled for object {}", po.model_object()->id().id);
         po.m_preview->support_points = nullptr;
         po.m_supportable_mesh->pts.reset();
         return; // support points are unwanted
@@ -927,7 +928,7 @@ void SLAPrint::Steps::support_points(SLAPrintObject &po)
     SuppPtMask mask{blockers, enforcers, po.config().get<bool>("support_enforcers_only")};
     filter_support_points_by_modifiers(support_points, mask, po.m_model_height_levels);
     
-    SPDLOG_DEBUG("Automatic support points: {}", support_points.size());
+    SPDLOG_INFO("Automatic support points: {}", support_points.size());
     po.m_preview->support_points = std::make_shared<const SupportPoints>(std::move(support_points));
     po.m_supportable_mesh->pts = po.m_preview->support_points;
 }

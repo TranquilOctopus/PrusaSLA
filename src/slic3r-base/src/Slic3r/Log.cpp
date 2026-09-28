@@ -64,6 +64,7 @@ void init_logging()
         spdlog::apply_all([&](std::shared_ptr<spdlog::logger> l)
                           { l->sinks().push_back(file_logger); });
     }
+    spdlog::flush_on(spdlog::level::warn);
 }
 
 void set_log_level(unsigned level)
