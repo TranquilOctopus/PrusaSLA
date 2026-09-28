@@ -13,15 +13,15 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 ## Progress
 
-**77 of 158 todos done (49%)** · updated 2026-09-28 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**81 of 162 todos done (50%)** · updated 2026-09-28 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
 | M0: Foundation | 12/15 | `██████████░░` 80% |
 | M1: Look, feel and SLA-first shell | 20/30 | `████████░░░░` 67% |
-| M2: SLA editing tools (porting the legacy gizmos) | 21/30 | `████████░░░░` 70% |
+| M2: SLA editing tools (porting the legacy gizmos) | 24/34 | `████████░░░░` 71% |
 | M3: Resin profile import (Chitubox, Lychee and others) | 2/15 | `██░░░░░░░░░░` 13% |
-| M4: Engine quality (measure first; every PR includes before/after metrics) | 5/17 | `████░░░░░░░░` 29% |
+| M4: Engine quality (measure first; every PR includes before/after metrics) | 6/17 | `████░░░░░░░░` 35% |
 | M5: Formats and inspection | 8/23 | `████░░░░░░░░` 35% |
 | M6: Quality gates and release | 4/11 | `████░░░░░░░░` 36% |
 | M7: Excellent auto-supports *(parked)* | 5/17 | `████░░░░░░░░` 29% |
@@ -61,7 +61,7 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 </details>
 
-<details><summary>M2: SLA editing tools (porting the legacy gizmos) — 9 open</summary>
+<details><summary>M2: SLA editing tools (porting the legacy gizmos) — 10 open</summary>
 
 - [ ] **M2.9** Plater SLA visuals: resin tint, support and pad materials, and overlay styling (PLAN F3).
 - [ ] **M2.14b** Raft shapes the pad generator cannot make today: grid or honeycomb infill, a tapered skate profile, and a s…
@@ -72,6 +72,7 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
   - [ ] **M2.17c** After slicing, a notification naming every model that was sliced without supports, reusing the M4.8c issue…
   - [ ] **M2.17d** Supports are done in Preview (user feedback 2026-09-23). Entering Preview must not slice and must not auto-…
 - [ ] **M2.18** Manual supports from presets (user, 2026-09-23): pick Light, Medium or Heavy in the support tool and every…
+- [ ] **M2.19** Live support geometry (user, 2026-09-28: "the support geometry should auto-generate when support points are…
 
 </details>
 
@@ -93,7 +94,7 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 </details>
 
-<details><summary>M4: Engine quality (measure first; every PR includes before/after metrics) — 12 open</summary>
+<details><summary>M4: Engine quality (measure first; every PR includes before/after metrics) — 11 open</summary>
 
 - [ ] **M4.1** Tracy profiling run over the benchmark set. Write a hotspot report in `doc/sla-fork/profiling/`. No code ch…
 - [ ] **M4.2** Re-rank M4.3–M4.10 based on the M4.1 report. *(needs you)*
@@ -104,7 +105,6 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 - [ ] **M4.7** Hollowing performance and wall thickness tolerance test (PLAN B5).
 - [ ] **M4.8** Trapped-resin and suction-cup detection, with drain hole suggestions (PLAN B5b).
 - [ ] **M4.11** SLA auto-orientation algorithm (PLAN B7).
-- [ ] **M4.12** Auto-orient plater action, as a job with progress, cancel and undo (PLAN E5).
 - [ ] **M4.14** Peak memory when slicing for 12K and 16K displays (Photon Mono M5: 11520 × 5120, about 59 megapixels per la…
 - [ ] **M4.13** Z-correction and anti-aliasing review. Layer hash changes must be intentional and documented (PLAN B8).
 
