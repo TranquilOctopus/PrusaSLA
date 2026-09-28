@@ -205,6 +205,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Preview/SidebarAutoReslice.cpp
         include/Slic3r/App/Preview/SidebarPreviewActionButtons.hpp
         src/Slic3r/App/Preview/SidebarPreviewActionButtons.cpp
+        include/Slic3r/App/Preview/SidebarSlaSupports.hpp
+        src/Slic3r/App/Preview/SidebarSlaSupports.cpp
 
         include/Slic3r/App/MultiSelections.hpp
         src/Slic3r/App/MultiSelections.cpp

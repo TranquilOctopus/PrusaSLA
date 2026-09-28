@@ -5,6 +5,7 @@
 namespace Slic3r::App::Preview {
 
 class SidebarAutoReslice;
+class SidebarSlaSupports;
 class SidebarPreviewActionButtons;
 class GCodeWindow;
 class LegendWindow;
@@ -39,6 +40,7 @@ public:
         std::unique_ptr<DoubleSliderForLayers> sla_double_slider_layers,
         std::unique_ptr<DoubleSliderForGcode> double_slider_gcode,
         std::unique_ptr<SidebarAutoReslice> sidebar_auto_reslice,
+        std::unique_ptr<SidebarSlaSupports> sidebar_sla_supports,
         std::unique_ptr<NumberEntryDialog> numbers_entry_dialog,
         std::unique_ptr<InvalidDataDialog> invalid_data_dialog,
         std::unique_ptr<CrashedProjectsDialog> crashed_projects_dialog,
@@ -61,6 +63,7 @@ private:
     Yoga::Passthrough<DoubleSliderForGcode> m_double_slider_gcode;
 
     Yoga::Passthrough<SidebarAutoReslice> m_sidebar_auto_reslice;
+    Yoga::Passthrough<SidebarSlaSupports> m_sidebar_sla_supports;
     Yoga::Passthrough<SidebarPreviewActionButtons> m_sidebar_action_buttons;
     Yoga::Passthrough<InvalidDataDialog> m_invalid_data_dialog;
 };
