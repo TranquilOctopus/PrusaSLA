@@ -5,6 +5,13 @@
 #include "Slic3r/Biz/I18N/I18N.hpp"
 #include "Slic3r/App/Plater/PlaterGizmosHelper.hpp"
 #include "Slic3r/Math.hpp"
+#include "Slic3r/App/IsSlaActive.hpp"
+#include "Slic3r/Biz/Scene/SceneInteractor.hpp"
+#include "Slic3r/Domain/ModelObject.hpp"
+#include "Slic3r/Domain/Project.hpp"
+#include "Slic3r/sla/SLAAutoOrient.hpp"
+#include "Slic3r/Assert.hpp"
+#include <Eigen/Geometry>
 
 using namespace Slic3r::App::Yoga;
 
@@ -17,6 +24,7 @@ using Domain::BoundingBox3d;
 using Domain::SquareMatrix4d;
 using Domain::SquareMatrix3d;
 using Domain::Vec3d;
+using Domain::Transform3d;
 
 RotationDialog::RotationDialog(
     App::Plater::PlaterScenePresenter& scene_provider,
@@ -73,6 +81,9 @@ RotationDialog::RotationDialog(
     { add_rotation(Vec3d{deg2rad(value(0)), deg2rad(value(1)), deg2rad(value(2))}); };
 
     m_place_on_bed_button = rotation_section->emplace_back<PlaceOnBedButton>(m_project_interactor);
+
+    m_auto_orient_button = rotation_section->emplace_back<Yoga::LayoutButton>(_u8L("Auto orient"));
+    m_auto_orient_button->callbacks().action = [this]() { on_auto_orient(); };
 
     add_separator(content());
 
@@ -147,6 +158,94 @@ void RotationDialog::reload(std::optional<Domain::SelectionId> project_id) {
     } else {
         m_relative_input->set_visible({true, true, true});
     }
+    update_auto_orient_button_visibility();
+}
+
+void RotationDialog::update_auto_orient_button_visibility()
+{
+    const bool is_sla = App::is_sla_active(m_project_interactor);
+    m_auto_orient_button->set_visible(is_sla);
+}
+
+void RotationDialog::on_auto_orient()
+{
+    using namespace Biz::Scene;
+    using Domain::ElementRef;
+    using Domain::ModelInstance;
+    using Domain::ModelObject;
+    using Domain::SquareMatrix4d;
+    using Domain::SquareMatrix3d;
+    using Domain::Vec3d;
+    using Eigen::AngleAxisd;
+
+    if (!App::is_sla_active(m_project_interactor)) {
+        return;
+    }
+
+    Biz::Scene::SceneInteractor& scene_interactor{m_project_interactor.scene_interactor()};
+    const ObjectSelection& selection{scene_interactor.object_selection()};
+
+    // Check if exactly one whole instance is selected (WholeInstance state)
+    const SelectionState state{selection.state()};
+    if (state != SelectionState::WholeInstance) {
+        return;
+    }
+
+    // Get the selected element (should be exactly one)
+    if (selection.elements.size() != 1) {
+        return;
+    }
+
+    const ElementRef& element{selection.elements.front()};
+    ASSERT(element.has_instance());
+
+    const Domain::SelectionId project_id{m_project_interactor.selected_project_id()};
+    const Domain::Project& project{m_project_interactor.workbench().project(project_id)};
+
+    const ModelInstance* instance{project.find_instance_by_id(element.object_id, element.instance_id)};
+    if (!instance) {
+        return;
+    }
+
+    const ModelObject* object{instance->get_object()};
+    if (!object) {
+        return;
+    }
+
+    // Get the target rotation from the engine
+    const Domain::Vec2d target_rot_sla{Slic3r::sla::auto_orient_min_height(*object)};
+    const double rot_x{target_rot_sla.x()};
+    const double rot_y{target_rot_sla.y()};
+
+    // Build target rotation matrix: R_target = Ry(y) * Rx(x)
+    const SquareMatrix3d R_target{
+        AngleAxisd(rot_y, Vec3d::UnitY()) * AngleAxisd(rot_x, Vec3d::UnitX())
+    };
+
+    // Get current instance rotation matrix (3x3)
+    const Transform3d instance_matrix{instance->get_matrix()};
+    const SquareMatrix3d R_current{instance_matrix.rotation()};
+
+    // Compute relative rotation: R_target * R_current^-1 = R_target * R_current^T
+    const SquareMatrix3d R_relative{R_target * R_current.transpose()};
+
+    // Get selection bounding box center
+    const std::optional<SelectionExtents> selection_bounding_box{scene_interactor.selection_bounding_box()};
+    if (!selection_bounding_box) {
+        return;
+    }
+    const Vec3d center{selection_bounding_box->oriented_bounding_box().center};
+
+    // Build relative world transform: T(c) * R_relative * T(-c)
+    SquareMatrix4d relative_transform_world{SquareMatrix4d::Identity()};
+    relative_transform_world.block<3, 3>(0, 0) = R_relative;
+    relative_transform_world.block<3, 1>(0, 3) = center - R_relative * center;
+
+    // Apply transform and place on bed
+    scene_interactor.transform_selection(relative_transform_world, true);
+
+    // Take undo snapshot
+    m_project_interactor.undo_provider().take_snapshot(Biz::UndoSnapshotType::Rotate);
 }
 
 void RotationDialog::add_rotation(Domain::Vec3d rotate_by_rads)

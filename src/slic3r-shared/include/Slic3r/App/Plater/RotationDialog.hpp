@@ -5,6 +5,7 @@
 #include "Slic3r/App/Plater/ReferenceFramePicker.hpp"
 #include "Slic3r/App/Plater/GizmoWindow.hpp"
 #include "Slic3r/Biz/ProjectScoped.hpp"
+#include "Slic3r/App/Yoga/LayoutButton.hpp"
 
 namespace Slic3r::Biz {
     class ProjectInteractor;
@@ -46,10 +47,12 @@ public:
 private:
     std::optional<Domain::Vec3d> get_obb_rotation() const;
     void reload(std::optional<Domain::SelectionId> project_id = std::nullopt);
+    void update_auto_orient_button_visibility();
     App::Plater::PlaterScenePresenter& m_scene_provider;
     Biz::ProjectInteractor& m_project_interactor;
     TripleInput* m_relative_input;
     PlaceOnBedButton* m_place_on_bed_button{nullptr};
+    Yoga::LayoutButton* m_auto_orient_button{nullptr};
     ReferenceFramePicker* m_reference_frame_picker;
 
     struct ProjectContext {
@@ -62,5 +65,6 @@ private:
 
     void add_rotation(Domain::Vec3d rotate_by_rads);
     Biz::Scene::SceneInteractor::ElementTransforms get_reset_rotation_candidates() const;
+    void on_auto_orient();
 };
 }
