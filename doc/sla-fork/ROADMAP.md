@@ -204,6 +204,11 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
     Result: by OpenCode, reviewed. The request always asks for a generating slice unless the plate is empty or invalid, and a finished run without points ends the request instead of leaving it hanging.
   - [x] **M2.17f** Generated points were dropped when slicing (the normal-slice path reused `prepare_permanent_support_points`, which keeps only `manual_add` points), so a supported model got an empty tree, stayed lifted, and slicing failed with "unprintable objects". · S · needs M2.17a
     Result: by OpenCode, reviewed; every model point is used as is. Test: a cube with generated (island) points slices and is lifted.
+  - [x] **M2.17g** A generation run sliced the object lifted, and the next normal slice reused that lifted slice with no supports under it ("unprintable objects"). · S · needs M2.17f
+    Result: by OpenCode, reviewed; the object is re-sliced when its lifted state changes, and UnprintableObjects names the model.
+  - [x] **M2.17h** A failed slice (InvalidData) locked Generate out, although generating supports is what fixes it. · S · needs M2.17g
+    Result: by OpenCode, reviewed; only an empty plate blocks Generate, and a failed generation shows the plate's errors with model names.
+  - [ ] **M2.17i** Generate can still fail with only "Failed to generate support points." and nothing in the log (user, 2026-09-28): give every failure a reason, log it, and fix the race where object updates arrive before the Running status. · S · needs M2.17h
 - [ ] **M2.18** Manual supports from presets (user, 2026-09-23): pick Light, Medium or Heavy in the support tool and every click places a support of that preset; the preset dimensions are set in the Supports & raft settings. · M · needs M2.3
   - [x] **M2.18a** Preset buttons choose the size for new points and resize only selected points (before, with nothing selected, they resized every point); the active preset is shown checked. · S · needs —
     Result: by OpenCode, reviewed; one `apply_support_preset()` helper. New points already take the current editing dimensions. Values are still the hard-coded ones (Light 0.30 mm tip, ...).
@@ -385,7 +390,8 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
 - [ ] **M5.4** Display mirroring and orientation test pattern for every format (PLAN C3). · M · needs M5.3
   - [x] **M5.4a** Tests that pin how a model's position on the plate maps to the decoded layer image, for both orientations and all four mirror settings, in the .goo and PW0 formats. They record today's convention so it can be checked against a real printer, and would have caught the portrait preset that transposed every layer. · S · needs M5.3
     Result: `SlaRasterOrientationTests.cpp` slices an off-centre cube for .goo and PW0 in both orientations, then asserts relations rather than guessed corners: the layer only makes sense at the expected row width (so a transposed image fails), and each mirror flag flips exactly one image axis, with the two flags flipping different axes. Which corner is which is left to M5.4b on a real printer. Writing it exposed the supports-off slicing crash noted under M2.17a.
-  - [ ] **M5.4b** A printable test pattern (an asymmetric shape placed off-centre) per format, to confirm orientation and mirroring on each real printer. · S · needs M5.4a
+  - [x] **M5.4b** A printable test pattern (an asymmetric shape placed off-centre) per format, to confirm orientation and mirroring on each real printer. · S · needs M5.4a
+    Result: by OpenCode, reviewed; `tools/orientation_test_piece.py` writes a 40×25 mm plate with an "F", a corner boss and an edge bar (72 triangles); `orientation-test.md` says how to read the print. Printing it on each printer is still open.
 - [ ] **M5.5** Upload SLA archives to print hosts and removable drives (PLAN C4). · M · needs M0.10
 - [ ] **M5.6** Preview layer inspector: 2D layer view with a pixel grid (PLAN F4). Use mock data until M4.9 lands. · L → split · needs M0.11b, M1.3
 - [ ] **M5.7** Per-layer area and peel-force chart beside the layer slider. · M · needs M5.6, M4.9

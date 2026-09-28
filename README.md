@@ -13,16 +13,16 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 ## Progress
 
-**84 of 165 todos done (51%)** · updated 2026-09-28 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**87 of 168 todos done (52%)** · updated 2026-09-28 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
 | M0: Foundation | 12/15 | `██████████░░` 80% |
 | M1: Look, feel and SLA-first shell | 21/31 | `████████░░░░` 68% |
-| M2: SLA editing tools (porting the legacy gizmos) | 26/36 | `█████████░░░` 72% |
+| M2: SLA editing tools (porting the legacy gizmos) | 28/39 | `█████████░░░` 72% |
 | M3: Resin profile import (Chitubox, Lychee and others) | 2/15 | `██░░░░░░░░░░` 13% |
 | M4: Engine quality (measure first; every PR includes before/after metrics) | 6/17 | `████░░░░░░░░` 35% |
-| M5: Formats and inspection | 8/23 | `████░░░░░░░░` 35% |
+| M5: Formats and inspection | 9/23 | `█████░░░░░░░` 39% |
 | M6: Quality gates and release | 4/11 | `████░░░░░░░░` 36% |
 | M7: Excellent auto-supports *(parked)* | 5/17 | `████░░░░░░░░` 29% |
 
@@ -61,7 +61,7 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 </details>
 
-<details><summary>M2: SLA editing tools (porting the legacy gizmos) — 10 open</summary>
+<details><summary>M2: SLA editing tools (porting the legacy gizmos) — 11 open</summary>
 
 - [ ] **M2.9** Plater SLA visuals: resin tint, support and pad materials, and overlay styling (PLAN F3).
 - [ ] **M2.14b** Raft shapes the pad generator cannot make today: grid or honeycomb infill, a tapered skate profile, and a s…
@@ -71,6 +71,7 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 - [ ] **M2.17** Supports are an explicit step before slicing, never done by the slicer. The workflow (decided 2026-09-22):…
   - [ ] **M2.17c** After slicing, a notification naming every model that was sliced without supports, reusing the M4.8c issue…
   - [ ] **M2.17d** Supports are done in Preview (user feedback 2026-09-23). Entering Preview must not slice and must not auto-…
+  - [ ] **M2.17i** Generate can still fail with only "Failed to generate support points." and nothing in the log (user, 2026-0…
 - [ ] **M2.18** Manual supports from presets (user, 2026-09-23): pick Light, Medium or Heavy in the support tool and every…
 - [ ] **M2.19** Live support geometry (user, 2026-09-28: "the support geometry should auto-generate when support points are…
 
@@ -110,7 +111,7 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 </details>
 
-<details><summary>M5: Formats and inspection — 15 open</summary>
+<details><summary>M5: Formats and inspection — 14 open</summary>
 
 - [ ] **M5.1** Import `.sl1`/`.sl1s`/`.slx` archives in the new app, porting the legacy `SLAImportJob` (PLAN C1).
   - [ ] **M5.1a** Restore the SL1/SL1S archive reader into libslic3r from `d9e89cf564^` (`SLAArchiveReader`, `ZipperArchiveIm… *(blocked)*
@@ -120,7 +121,6 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 - [ ] **M5.3.profiles-b** Community resin presets per layer height, so the first layer matches the rest. `initial_layer_height` is a…
 - [ ] **M5.3.samples** Provide one sliced sample archive per target printer (from Chitubox/Lychee/Photon Workshop) and list the pr… *(needs you)*
 - [ ] **M5.4** Display mirroring and orientation test pattern for every format (PLAN C3).
-  - [ ] **M5.4b** A printable test pattern (an asymmetric shape placed off-centre) per format, to confirm orientation and mir…
 - [ ] **M5.5** Upload SLA archives to print hosts and removable drives (PLAN C4).
 - [ ] **M5.6** Preview layer inspector: 2D layer view with a pixel grid (PLAN F4). Use mock data until M4.9 lands.
 - [ ] **M5.7** Per-layer area and peel-force chart beside the layer slider.
