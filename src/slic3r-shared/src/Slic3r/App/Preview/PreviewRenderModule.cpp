@@ -2,6 +2,7 @@
 
 #include "Slic3r/App/Preview/PreviewCameraGizmo.hpp"
 #include "Slic3r/App/Preview/SidebarAutoReslice.hpp"
+#include "Slic3r/App/Preview/SidebarSlaSupports.hpp"
 #include "Slic3r/App/Render/Device.hpp"
 #include "Slic3r/App/Render/CommandBuffer.hpp"
 #include "Slic3r/App/Render/ScopedDebugGroup.hpp"
@@ -872,6 +873,7 @@ void PreviewRenderModule::init_scene_layout()
         AppServices::instance().pop_notification_center().observable_list()
     );
     m_sidebar_auto_reslice = std::make_unique<SidebarAutoReslice>(m_project_interactor);
+    m_sidebar_sla_supports = std::make_unique<SidebarSlaSupports>(m_project_interactor, m_render_module_navigator);
 
     m_sidebar_action_buttons =
         std::make_unique<SidebarPreviewActionButtons>(m_render_module_navigator);
@@ -894,6 +896,7 @@ void PreviewRenderModule::init_scene_layout()
         m_sla_slider_layers.release(),
         m_slider_gcode.release(),
         m_sidebar_auto_reslice.release(),
+        m_sidebar_sla_supports.release(),
         m_number_entry_dialog.release(),
         m_invalid_data_dialog.release(),
         m_crashed_projects_dialog.release(),
