@@ -105,11 +105,13 @@ public:
         m_status_cache.add_listener<IStatusCacheChangedListener>(this);
 
         const StatusCode status = m_slicing_interactor.get_status(slicing_id);
-        if (status == StatusCode::Finished) {
-            this->try_complete_from_cache();
-        } else if (status == StatusCode::Modified) {
+        if (status == StatusCode::Finished || status == StatusCode::Modified ||
+            status == StatusCode::Updating || status == StatusCode::Running ||
+            status == StatusCode::Stopping) {
             this->request_slicing_until_support_spots();
         } else if (status == StatusCode::Empty || status == StatusCode::InvalidData) {
+            this->complete(std::nullopt);
+        } else if (status == StatusCode::Removed) {
             this->complete(std::nullopt);
         }
     }
@@ -180,7 +182,16 @@ public:
             }
             break;
         case StatusCode::Finished:
-            this->try_complete_from_cache();
+            if (m_state == State::SlicingRequested || m_state == State::SlicingActive) {
+                const std::optional<Domain::SLA::SupportPoints> points = this->cached_support_points();
+                if (points.has_value()) {
+                    this->complete(points);
+                } else {
+                    this->complete(std::nullopt);
+                }
+            } else if (m_state == State::WaitingForSlicing) {
+                this->request_slicing_until_support_spots();
+            }
             break;
         case StatusCode::Empty:
         case StatusCode::InvalidData:
@@ -228,9 +239,7 @@ private:
     void try_complete_from_cache()
     {
         const std::optional<Domain::SLA::SupportPoints> points = this->cached_support_points();
-        if (points.has_value()) {
-            this->complete(points);
-        }
+        this->complete(points);
     }
 
     void complete(std::optional<Domain::SLA::SupportPoints> support_points)
