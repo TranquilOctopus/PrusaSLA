@@ -1,11 +1,10 @@
 #pragma once
 
 #include <libslic3r/SLAResult.hpp>
-#include <libslic3r/ExPolygon.hpp>
-#include <libslic3r/ConfigViews.hpp>
 
 #include <vector>
 #include <cstddef>
+#include <cstdint>
 
 namespace Slic3r::sla {
 

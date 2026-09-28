@@ -780,10 +780,13 @@ void PreviewRenderModule::init_viewers(Render::Device& device)
         std::placeholders::_2
     );
 
-    if (m_sla_viewer.init(device, m_scene_presenter->scene(), m_gizmo_manager->data_factory(), &m_project_interactor)
+    if (m_sla_viewer.init(device, m_scene_presenter->scene(), m_gizmo_manager->data_factory())
         && m_sla_viewer.set_settings(base_settings)) {
         m_sla_slider_layers = Passthrough(m_sla_viewer.unload_double_slider_layers());
-        m_sla_layer_image_window = Passthrough(std::make_unique<SlaLayerImageWindow>(&m_sla_viewer));
+        m_sla_layer_image_window = Passthrough(std::make_unique<SlaLayerImageWindow>(device, m_project_interactor));
+        if (m_sla_layer_image_window && m_sla_slider_layers) {
+            m_sla_layer_image_window->set_slider(m_sla_slider_layers.get());
+        }
     } else {
         // log some error message
     }

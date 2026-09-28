@@ -17,10 +17,8 @@ namespace Slic3r::App::Preview {
 
 SlaViewerWrapper::~SlaViewerWrapper() = default;
 
-bool SlaViewerWrapper::init(Render::Device& device, Scene::Scene& scene, Scene::GeometryDataFactory& data_factory,
-              Biz::ProjectInteractor* project_interactor)
+bool SlaViewerWrapper::init(Render::Device& device, Scene::Scene& scene, Scene::GeometryDataFactory& data_factory)
 {
-    m_project_interactor = project_interactor;
     try {
         m_viewer.init(device, scene, data_factory);
         return true;

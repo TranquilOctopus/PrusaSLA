@@ -1,7 +1,9 @@
 #include <libslic3r/SLALayerImage.hpp>
 #include <libslic3r/SLA/RasterBase.hpp>
 #include <libslic3r/SLA/AGGRaster.hpp>
-#include <libslic3r/Domain/ConfigDefsSLA.hpp>
+#include "Slic3r/Domain/ConfigDefsSLA.hpp"
+#include <libslic3r/ExPolygon.hpp>
+#include <libslic3r/ConfigViews.hpp>
 #include <algorithm>
 #include <cmath>
 
