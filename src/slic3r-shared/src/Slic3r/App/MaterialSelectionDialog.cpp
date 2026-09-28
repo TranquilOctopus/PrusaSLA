@@ -43,7 +43,7 @@ const MaterialSelectionDialog::ProjectContext& MaterialSelectionDialog::context(
     return m_project_contexts->selected();
 }
 
-void MaterialSelectionDialog::update_current_context()
+void MaterialSelectionDialog::update_type_filter_visibility()
 {
     bool sla_active = is_sla_active(m_project_interactor);
 
@@ -59,6 +59,28 @@ void MaterialSelectionDialog::update_current_context()
         }
     }
 
+    // If the currently checked filter belongs to the hidden set (and is not "All"), reset to "All"
+    if (LayoutButton* checked_type_button =
+            dynamic_cast<LayoutButton*>(m_material_type_button_group.checked_button())) {
+        const std::string& checked_value = m_type_filter_values.at(checked_type_button);
+        if (!checked_value.empty()) {
+            bool is_fff_button = std::find(m_fff_type_filter_buttons.begin(),
+                                           m_fff_type_filter_buttons.end(),
+                                           checked_type_button) != m_fff_type_filter_buttons.end();
+            bool is_sla_button = std::find(m_sla_type_filter_buttons.begin(),
+                                           m_sla_type_filter_buttons.end(),
+                                           checked_type_button) != m_sla_type_filter_buttons.end();
+            if ((sla_active && is_fff_button) || (!sla_active && is_sla_button)) {
+                m_type_filter_buttons.at("")->set_checked(true);
+            }
+        }
+    }
+}
+
+void MaterialSelectionDialog::update_current_context()
+{
+    update_type_filter_visibility();
+
     if (m_current_context != context()) {
         m_current_context = context();
         if (LayoutButton* checked_type_button =
@@ -67,24 +89,13 @@ void MaterialSelectionDialog::update_current_context()
         {
             m_type_filter_buttons.at(m_current_context.type_filter)->set_checked(true);
         }
-        // If the currently checked filter belongs to the hidden set (and is not "All"), reset to "All"
-        if (LayoutButton* checked_type_button =
-                dynamic_cast<LayoutButton*>(m_material_type_button_group.checked_button())) {
-            const std::string& checked_value = m_type_filter_values.at(checked_type_button);
-            if (!checked_value.empty()) {
-                bool is_fff_button = std::find(m_fff_type_filter_buttons.begin(),
-                                               m_fff_type_filter_buttons.end(),
-                                               checked_type_button) != m_fff_type_filter_buttons.end();
-                bool is_sla_button = std::find(m_sla_type_filter_buttons.begin(),
-                                               m_sla_type_filter_buttons.end(),
-                                               checked_type_button) != m_sla_type_filter_buttons.end();
-                if ((sla_active && is_fff_button) || (!sla_active && is_sla_button)) {
-                    m_type_filter_buttons.at("")->set_checked(true);
-                }
-            }
-        }
         m_material_filter->invalidate();
     }
+}
+
+void MaterialSelectionDialog::on_about_to_show()
+{
+    update_type_filter_visibility();
 }
 
 MaterialSelectionDialog::MaterialSelectionDialog(
