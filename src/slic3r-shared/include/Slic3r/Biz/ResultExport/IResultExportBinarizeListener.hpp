@@ -10,7 +10,6 @@ public:
     virtual ~IResultExportBinarizeListener() = default;
     virtual void on_result_export_binarize_success(PhysicalPrinter::PhysicalPrinterConfig config, PrintHost::PrintHostJobData data) = 0;
     virtual void on_result_export_binarize_fail(const std::string& msg) = 0;
-    virtual void on_result_export_failed(const std::string& message) {}
 };
 
 } // namespace Slic3r::Biz::PrintHost

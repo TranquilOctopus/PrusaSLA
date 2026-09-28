@@ -910,12 +910,12 @@ void ProjectInteractor::do_result_export_inner(const Domain::SlicingId id, Physi
     } else if (tech == Domain::PrinterTechnology::SLA) {
 
         const std::optional<SLAResultRef> sla_result{m_sla_result_cache.get_result(id)};
-        const auto& sla = sla_result.has_value() ? sla_result.value().get() : Slicing::SLAResult{};
-        const auto& export_data = sla.export_data;
+        const std::shared_ptr<Slicing::SLAResultData> export_data =
+            sla_result.has_value() ? sla_result->get().export_data : nullptr;
         const bool incomplete = !sla_result.has_value() || !export_data || export_data->files.data.empty() ||
                                 export_data->files.type == Slicing::Sla::FileDataType::other;
         if (incomplete) {
-            m_result_export_interactor.on_result_export_failed(
+            m_result_export_interactor.report_failure(
                 _u8L("The plate is not fully sliced yet. Press Slice, wait until it finishes, then export again.")
             );
             return;

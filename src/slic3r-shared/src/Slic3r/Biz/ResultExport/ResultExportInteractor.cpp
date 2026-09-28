@@ -78,7 +78,15 @@ void ResultExportInteractor::on_result_export_binarize_success(PhysicalPrinter::
 void ResultExportInteractor::on_result_export_binarize_fail(const std::string& msg)
 {
     SPDLOG_ERROR("ResultExportDataFinalizer has failed: {}", msg);
-    on_result_export_failed(_u8L("Export failed:") + " " + msg);
+    report_failure(_u8L("Export failed:") + " " + msg);
+}
+
+void ResultExportInteractor::report_failure(const std::string& message)
+{
+    SPDLOG_ERROR("Export failed: {}", message);
+    this->invoke_listeners<IResultExportFailedListener>([&message](IResultExportFailedListener* l) {
+        l->on_result_export_failed(message);
+    });
 }
 
 } // namespace Slic3r::Biz::PrintHost
