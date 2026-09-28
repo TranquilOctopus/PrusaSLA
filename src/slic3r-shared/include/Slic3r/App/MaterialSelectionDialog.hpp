@@ -66,6 +66,8 @@ private:
     ProjectContext& context();
     const ProjectContext& context() const;
     void update_current_context();
+    void update_type_filter_visibility();
+    void on_about_to_show() override;
 
 private:
     using SelectionRowListViewFactory = Yoga::ViewFactory<
