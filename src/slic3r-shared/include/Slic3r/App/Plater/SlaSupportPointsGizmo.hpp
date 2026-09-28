@@ -13,6 +13,7 @@
 #include "Slic3r/Biz/Algorithms/AABBMesh.hpp"
 #include "Slic3r/App/Scene/Clipper.hpp"
 #include "Slic3r/App/Scene/ClipperPresenter.hpp"
+#include "Slic3r/App/Scene/AuxiliaryElementId.hpp"
 #include "Slic3r/App/Yoga/Item.hpp"
 
 #include <memory>
@@ -127,6 +128,9 @@ private:
     void update_point_visuals();
     void clear_point_visuals();
     Domain::ColorRGBA get_point_color(const Domain::SLA::SupportPoint& point, bool highlighted) const;
+    void request_support_geometry();
+    void rebuild_support_geometry_node(const Domain::SlicingId& slicing_id);
+    void clear_support_geometry_node();
 
     // Raycasting helpers (adapted from PaintOnGizmoBase)
     struct VolumeHitPoint
@@ -193,12 +197,19 @@ private:
     // Scene nodes for point visuals
     Scene::Node* m_main_node = nullptr;
     Scene::Node* m_points_node = nullptr;
+    Scene::Node* m_support_geometry_node = nullptr;
 
     // Geometry and triangle mesh managers for point visuals (like MeasureGizmo)
     using GeometryManager = Render::GeometryManager<std::string>;
     using TriangleMeshManager = Scene::TriangleMeshManager<std::string>;
     GeometryManager m_geometry_manager{"sla_support_points_geometry"};
     TriangleMeshManager m_triangle_mesh_manager{"sla_support_points_mesh"};
+
+    // Geometry and triangle mesh managers for support geometry
+    using SupportGeometryManager = Render::GeometryManager<Scene::AuxiliaryElementId>;
+    using SupportTriangleMeshManager = Scene::TriangleMeshManager<Scene::AuxiliaryElementId>;
+    SupportGeometryManager m_support_geometry_manager{"sla_support_geometry"};
+    SupportTriangleMeshManager m_support_triangle_mesh_manager{"sla_support_mesh"};
 
     // Cone geometry for surface normal visualization
     std::string m_cone_geometry_id = "support_point_cone";
