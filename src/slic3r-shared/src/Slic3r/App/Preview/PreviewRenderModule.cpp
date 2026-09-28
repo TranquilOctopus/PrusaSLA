@@ -33,6 +33,9 @@
 #include "Slic3r/App/InvalidDataDialog.hpp"
 #include "Slic3r/App/UIItemCommand.hpp"
 #include "Slic3r/App/AppConfig.hpp"
+#include "Slic3r/App/IsSlaActive.hpp"
+#include "Slic3r/App/Preview/SlaLayerImageWindow.hpp"
+#include "Slic3r/Biz/SLAResultCache.hpp"
 
 #include "Slic3r/Domain/TriangleMesh.hpp"
 
@@ -222,6 +225,22 @@ void PreviewRenderModule::render_imgui(Render::CommandBuffer& cmd_buffer)
     bool gcode_window_enabled = m_fdm_viewer.mode() != FdmViewerWrapperMode::EditorPreGCode
         && m_fdm_viewer.has_data()
         && printer_technology == Domain::PrinterTechnology::FFF;
+
+    // Update SLA layer image window
+    if (m_sla_layer_image_window) {
+        bool sla_active = is_sla_active(m_project_interactor);
+        if (sla_active && m_sla_viewer.has_data()) {
+            const Domain::SlicingId slicing_id = m_project_interactor.selected_bed_slicing_id();
+            std::optional<Biz::SLAResultRef> sla_result = m_project_interactor.sla_result_cache().get_result(slicing_id);
+            if (sla_result) {
+                m_sla_layer_image_window->update(&sla_result->get());
+            } else {
+                m_sla_layer_image_window->set_visible(false);
+            }
+        } else {
+            m_sla_layer_image_window->set_visible(false);
+        }
+    }
 
     if (m_layout) {
         m_button_gcode_inspect->set_visible(gcode_window_enabled);
@@ -761,9 +780,10 @@ void PreviewRenderModule::init_viewers(Render::Device& device)
         std::placeholders::_2
     );
 
-    if (m_sla_viewer.init(device, m_scene_presenter->scene(), m_gizmo_manager->data_factory())
+    if (m_sla_viewer.init(device, m_scene_presenter->scene(), m_gizmo_manager->data_factory(), &m_project_interactor)
         && m_sla_viewer.set_settings(base_settings)) {
         m_sla_slider_layers = Passthrough(m_sla_viewer.unload_double_slider_layers());
+        m_sla_layer_image_window = Passthrough(std::make_unique<SlaLayerImageWindow>(&m_sla_viewer));
     } else {
         // log some error message
     }
@@ -892,6 +912,7 @@ void PreviewRenderModule::init_scene_layout()
         m_sidebar_action_buttons.release(),
         m_gcode_window.release(),
         m_legend.release(),
+        m_sla_layer_image_window.release(),
         m_slider_layers.release(),
         m_sla_slider_layers.release(),
         m_slider_gcode.release(),

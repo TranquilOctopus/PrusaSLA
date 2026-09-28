@@ -271,6 +271,8 @@ public:
     bool is_lower_at_min() const { return m_ctrl->lower_pos() == m_ctrl->min_pos(); }
     bool is_higher_at_max() const { return m_ctrl->higher_pos() == m_ctrl->max_pos(); }
 
+    int active_pos() const { return m_ctrl->active_pos(); }
+
     void show_lower_thumb(bool show) { m_ctrl->show_lower_thumb(show); }
 
     void set_scale(float scale) {

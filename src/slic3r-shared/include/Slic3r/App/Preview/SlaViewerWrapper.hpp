@@ -8,6 +8,10 @@
 
 #include "Slic3r/App/libvgcode/SlaViewer.hpp"
 
+namespace Slic3r::Biz {
+class ProjectInteractor;
+} // namespace Slic3r::Biz
+
 namespace Slic3r::App::Preview {
 
 class SlaViewerWrapper : public AbstractViewerWrapper
@@ -16,7 +20,8 @@ public:
     SlaViewerWrapper() = default;
     ~SlaViewerWrapper() override;
 
-    bool init(Render::Device& device, Scene::Scene& scene, Scene::GeometryDataFactory& data_factory) override;
+    bool init(Render::Device& device, Scene::Scene& scene, Scene::GeometryDataFactory& data_factory,
+              Biz::ProjectInteractor* project_interactor) override;
     bool set_settings(const ViewerWrapperBaseSettings& settings);
 
     void set_scene(Scene::Scene& scene) override
@@ -58,11 +63,21 @@ public:
     const libvgcode::Interval& layers_range() const { return m_viewer.layers_range(); }
     void set_layers_range(libvgcode::Interval::value_type min, libvgcode::Interval::value_type max);
 
+    // Accessors for SlaLayerImageWindow
+    DoubleSliderForLayers* slider_layers() { return m_slider_layers.get(); }
+    Render::Device& device() { return *m_viewer.m_device; }
+    Biz::ProjectInteractor* project_interactor() { return m_project_interactor; }
+    void request_extra_frames(unsigned int count = 1) {
+        if (m_settings.layers_slider_base_callbacks.request_extra_frames)
+            m_settings.layers_slider_base_callbacks.request_extra_frames(count);
+    }
+
 private:
     ViewerWrapperBaseSettings m_settings;
     SlaViewerWrapperInputData m_data;
 
     libvgcode::SlaViewer m_viewer;
+    Biz::ProjectInteractor* m_project_interactor{nullptr};
 
     float m_legend_height{ 0.0f };
 
