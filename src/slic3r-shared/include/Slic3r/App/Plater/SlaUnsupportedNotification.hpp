@@ -9,28 +9,28 @@
 #include "Slic3r/Biz/SLAResultCache.hpp"
 #include "Slic3r/Biz/StatusCache.hpp"
 #include "Slic3r/App/PopNotification/PopNotificationCenter.hpp"
-#include "Slic3r/App/Plater/SlaIssueAnalysis.hpp"
 
 namespace Slic3r::App::Plater {
 
 /**
- * @brief Manage notification about SLA slicing issues (islands, cups, trapped resin).
+ * @brief Manage notification about models sliced without supports.
  *
- * Listens to SLA result cache changes and shows a notification when islands are detected.
+ * Listens to SLA result cache changes and shows a notification when a bed finishes
+ * slicing and has model objects with instances on that bed but no support points.
  * The notification is closed when the project changes or a new slice starts.
  */
-class SlaIssueNotification final :
+class SlaUnsupportedNotification final :
     public Biz::ISLAResultCacheChangedListener,
     public Biz::IStatusCacheChangedListener,
     public Biz::ISelectedProjectChangedListener,
     public Biz::IProjectsChangedListener
 {
 public:
-    SlaIssueNotification(
+    SlaUnsupportedNotification(
         Biz::ProjectInteractor& project_interactor,
         PopNotification::PopNotificationCenter& notify);
 
-    ~SlaIssueNotification() final;
+    ~SlaUnsupportedNotification() final;
 
     /**
      * @brief Called when SLA result cache changes for a slicing job.
@@ -55,7 +55,7 @@ public:
     void on_selected_project_changed(size_t index) override;
 
     /**
-     * @brief Drop tracked issues for the removed project.
+     * @brief Drop tracked state for the removed project.
      * @note Implementation of IProjectsChangedListener interface
      */
     void on_project_will_be_removed(Domain::SelectionId project_id) override;

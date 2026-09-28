@@ -1,4 +1,4 @@
-#include "Slic3r/App/Plater/SlaIssueNotification.hpp"
+#include "Slic3r/App/Plater/SlaUnsupportedNotification.hpp"
 
 #include <Slic3r/App/AppServices.hpp>
 #include <Slic3r/App/PopNotification/PopNotificationCenter.hpp>
@@ -6,7 +6,9 @@
 
 #include "Slic3r/Biz/I18N/I18N.hpp"
 #include "Slic3r/Assert.hpp"
-#include "Slic3r/App/Plater/SlaIssueAnalysis.hpp"
+#include "Slic3r/Domain/Model.hpp"
+#include "Slic3r/Domain/ModelInstance.hpp"
+#include "Slic3r/Domain/BedInstance.hpp"
 #include "Slic3r/Biz/StatusCache.hpp"
 
 #include "fmt/format.h"
@@ -16,7 +18,7 @@ using namespace Slic3r;
 using namespace Slic3r::App::PopNotification;
 using namespace Slic3r::Biz;
 
-SlaIssueNotification::SlaIssueNotification(
+SlaUnsupportedNotification::SlaUnsupportedNotification(
     ProjectInteractor& project_interactor,
     PopNotification::PopNotificationCenter& notify) :
     m_project_interactor(project_interactor),
@@ -28,7 +30,7 @@ SlaIssueNotification::SlaIssueNotification(
     m_project_interactor.add_listener<Biz::IProjectsChangedListener>(this);
 }
 
-SlaIssueNotification::~SlaIssueNotification()
+SlaUnsupportedNotification::~SlaUnsupportedNotification()
 {
     close_notification_if_open();
     m_project_interactor.sla_result_cache().remove_listener<Biz::ISLAResultCacheChangedListener>(this);
@@ -37,7 +39,7 @@ SlaIssueNotification::~SlaIssueNotification()
     m_project_interactor.remove_listener<Biz::IProjectsChangedListener>(this);
 }
 
-void SlaIssueNotification::on_sla_result_cache_changed(const Domain::SlicingId& id)
+void SlaUnsupportedNotification::on_sla_result_cache_changed(const Domain::SlicingId& id)
 {
     // Only process results for the currently selected project
     Domain::SelectionId selected_project = m_project_interactor.selected_project_id();
@@ -52,7 +54,7 @@ void SlaIssueNotification::on_sla_result_cache_changed(const Domain::SlicingId& 
     }
 }
 
-void SlaIssueNotification::on_status_cache_status_code_changed(const Domain::SlicingId id)
+void SlaUnsupportedNotification::on_status_cache_status_code_changed(const Domain::SlicingId id)
 {
     // Only process results for the currently selected project
     Domain::SelectionId selected_project = m_project_interactor.selected_project_id();
@@ -82,13 +84,13 @@ void SlaIssueNotification::on_status_cache_status_code_changed(const Domain::Sli
     }
 }
 
-void SlaIssueNotification::on_selected_project_changed(size_t index)
+void SlaUnsupportedNotification::on_selected_project_changed(size_t index)
 {
     m_current_slicing_id = Domain::SlicingId{};
     recreate_notification(index, /*open_when_closed=*/true);
 }
 
-void SlaIssueNotification::on_project_will_be_removed(Domain::SelectionId project_id)
+void SlaUnsupportedNotification::on_project_will_be_removed(Domain::SelectionId project_id)
 {
     m_dismissed_projects.erase(project_id);
     close_notification_if_open();
@@ -97,7 +99,7 @@ void SlaIssueNotification::on_project_will_be_removed(Domain::SelectionId projec
     }
 }
 
-void SlaIssueNotification::on_project_changed(Domain::SelectionId project_id)
+void SlaUnsupportedNotification::on_project_changed(Domain::SelectionId project_id)
 {
     close_notification_if_open();
     if (m_current_slicing_id.project_id == project_id) {
@@ -105,7 +107,7 @@ void SlaIssueNotification::on_project_changed(Domain::SelectionId project_id)
     }
 }
 
-void SlaIssueNotification::recreate_notification(Domain::SelectionId project_id, bool open_when_closed)
+void SlaUnsupportedNotification::recreate_notification(Domain::SelectionId project_id, bool open_when_closed)
 {
     if (project_id != m_project_interactor.selected_project_id()) {
         return;
@@ -119,10 +121,33 @@ void SlaIssueNotification::recreate_notification(Domain::SelectionId project_id,
         return;
     }
 
-    const auto& issues = sla_result->get().export_data->issues;
-    SlaIssueAnalysis info = analyze_sla_issues_for_notification(issues);
+    // Collect model objects on this bed that have printable instances but no support points
+    const Domain::Project& project = m_project_interactor.project(project_id);
+    const Domain::BedInstance* bed_instance = project.find_bed_instance_by_id(m_current_slicing_id.bed_instance_id);
+    if (!bed_instance) {
+        return;
+    }
 
-    if (info.island_count == 0) {
+    std::vector<const Domain::ModelObject*> unsupported_objects;
+    for (const Domain::ModelInstance* instance : bed_instance->model_instances) {
+        if (!instance || !instance->is_printable()) {
+            continue;
+        }
+        const Domain::ModelObject* model_object = project.find_object_by_id(instance->get_object()->id().id);
+        if (!model_object) {
+            continue;
+        }
+        // Skip if already added
+        if (std::find(unsupported_objects.begin(), unsupported_objects.end(), model_object) != unsupported_objects.end()) {
+            continue;
+        }
+        // Check if the object has no support points
+        if (model_object->sla_support_points.empty()) {
+            unsupported_objects.push_back(model_object);
+        }
+    }
+
+    if (unsupported_objects.empty()) {
         return;
     }
 
@@ -131,12 +156,27 @@ void SlaIssueNotification::recreate_notification(Domain::SelectionId project_id,
         return;
     }
 
+    // Build notification message
+    std::string message = _u8L("Sliced without supports:") + " ";
+    const size_t max_names = 5;
+    for (size_t i = 0; i < unsupported_objects.size() && i < max_names; ++i) {
+        if (i > 0) {
+            message += ", ";
+        }
+        message += unsupported_objects[i]->name;
+    }
+    if (unsupported_objects.size() > max_names) {
+        message += fmt::format(fmt::runtime(_u8L(", … and {0} more")), unsupported_objects.size() - max_names);
+    }
+    message += "\n";
+    message += _u8L("Open the support tool to add supports, or ignore this if the model should sit on the build plate.");
+
     using namespace Slic3r::App::PopNotification;
     PopNotificationData data{
-        .type = PopNotificationType::SlaIssueDetected,
+        .type = PopNotificationType::SlaUnsupportedDetected,
         .level = PopNotificationLevel::Warning,
         .timeout = 0s,
-        .layout = PopNotificationLayoutText(info.message),
+        .layout = PopNotificationLayoutText(message),
         .project_id = project_id,
         .on_user_close = [this, project_id]() { m_dismissed_projects.insert(project_id); }
     };
@@ -144,12 +184,12 @@ void SlaIssueNotification::recreate_notification(Domain::SelectionId project_id,
     m_notify.upsert_notification(data, matcher);
 }
 
-bool SlaIssueNotification::close_notification_if_open()
+bool SlaUnsupportedNotification::close_notification_if_open()
 {
     auto& list = m_notify.observable_list();
     bool is_open = false;
     for (size_t i = 0; i < list.size(); i++) {
-        if (list.at(i).type == PopNotificationType::SlaIssueDetected) {
+        if (list.at(i).type == PopNotificationType::SlaUnsupportedDetected) {
             is_open = true;
             break;
         }
@@ -157,7 +197,7 @@ bool SlaIssueNotification::close_notification_if_open()
     if (!is_open) {
         return false;
     }
-    list.close_notifications_of_type(PopNotificationType::SlaIssueDetected);
+    list.close_notifications_of_type(PopNotificationType::SlaUnsupportedDetected);
     return true;
 }
 

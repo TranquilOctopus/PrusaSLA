@@ -51,6 +51,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Plater/SimplifyNotification.cpp
         include/Slic3r/App/Plater/SlaIssueNotification.hpp
         src/Slic3r/App/Plater/SlaIssueNotification.cpp
+        include/Slic3r/App/Plater/SlaUnsupportedNotification.hpp
+        src/Slic3r/App/Plater/SlaUnsupportedNotification.cpp
         include/Slic3r/App/Plater/SlaIssueAnalysis.hpp
         src/Slic3r/App/Plater/SlaIssueAnalysis.cpp
         include/Slic3r/App/Plater/SimplifyDialog.hpp
