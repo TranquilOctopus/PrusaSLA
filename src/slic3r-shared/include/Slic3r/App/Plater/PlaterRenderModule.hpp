@@ -77,6 +77,7 @@ class ArrangeGizmo;
 class SlaSupportPointsGizmo;
 class SlaHollowGizmo;
 class SlaIssueNotification;
+class SlaUnsupportedNotification;
 class PlaterScenePresenter;
 class PlaterRenderLayout;
 class SidebarPlaterActionButtons;

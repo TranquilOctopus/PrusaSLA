@@ -15,6 +15,7 @@ namespace Slic3r::App::Plater {
 using namespace Slic3r;
 using namespace Slic3r::App::PopNotification;
 using namespace Slic3r::Biz;
+using Slic3r::Biz::Slicing::StatusCode;
 
 SlaIssueNotification::SlaIssueNotification(
     ProjectInteractor& project_interactor,

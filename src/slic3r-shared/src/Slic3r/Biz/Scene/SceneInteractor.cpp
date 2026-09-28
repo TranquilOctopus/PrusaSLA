@@ -1369,8 +1369,7 @@ void SceneInteractor::modify_sla_support_points(
     std::set<Domain::BedRef> notified_beds(changes.updated_beds.begin(), changes.updated_beds.end());
     for (const ModelInstance* model_instance : model_object->instances) {
         const Domain::BedRef last_bed = model_instance->get_last_bed();
-        if (last_bed.is_valid() &&
-            project.find_bed_instance_by_id(last_bed.instance_id) != nullptr &&
+        if (project.find_bed_instance_by_id(last_bed.instance_id) != nullptr &&
             notified_beds.insert(last_bed).second)
         {
             this->invoke_slicing_input_changed(last_bed);

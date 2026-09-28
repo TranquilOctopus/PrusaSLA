@@ -3,6 +3,7 @@
 #include "Slic3r/App/Platform/IFileExplorerHandler.hpp"
 #include "Slic3r/Biz/FileDownloader/FileDownloaderJob.hpp"
 #include "Slic3r/App/DisplayStrings.hpp"
+#include "Slic3r/App/IDialogManager.hpp"
 
 #include "Slic3r/Biz/I18N/I18N.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
