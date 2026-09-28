@@ -31,6 +31,7 @@ PopNotificationCenter::PopNotificationCenter(Biz::ProjectInteractor& project_int
     m_project_interactor.status_cache().add_listener<Biz::IStatusCacheChangedListener>(this);
     m_project_interactor.add_listener<Biz::IProjectsChangedListener>(this);
     m_project_interactor.arrange_interactor().add_listener<Biz::IArrangeEventsListener>(this);
+    m_project_interactor.result_export_interactor().add_listener<Biz::ResultExport::IResultExportFailedListener>(this);
     m_list_sort_filter.set_source_model(&m_notification_list);
 
     auto sort_fn = [](const PopNotificationData& lhs, const PopNotificationData& rhs)
@@ -928,6 +929,11 @@ void PopNotificationCenter::on_print_host_error(size_t print_host_id, const std:
         },
         print_host_matcher
     );
+}
+
+void PopNotificationCenter::on_result_export_failed(const std::string& message)
+{
+    AppServices::instance().dialog_manager().show_warning_dialog(message, _u8L("Export failed"));
 }
 
 void PopNotificationCenter::on_print_host_cancel(size_t print_host_id)

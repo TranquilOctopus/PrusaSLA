@@ -3,6 +3,8 @@
 #include "Slic3r/Biz/Platform/IMainThreadDispatcher.hpp"
 #include "Slic3r/Biz/PrintHost/PrintHostJobManager.hpp"
 #include "Slic3r/Biz/ResultExport/ResultExportDataFinalizer.hpp"
+#include "Slic3r/Biz/Platform/WithListeners.hpp"
+#include "Slic3r/Biz/ResultExport/IResultExportFailedListener.hpp"
 
 #include <boost/filesystem.hpp>
 #include <map>
@@ -11,7 +13,7 @@ namespace Slic3r::Biz::ResultExport {
 
 class PrintHostJobManager;
 
-class ResultExportInteractor : public IResultExportBinarizeListener
+class ResultExportInteractor : public IResultExportBinarizeListener, public WithListeners<IResultExportFailedListener>
 {
 public:
     ResultExportInteractor(Platform::IMainThreadDispatcher& dispatcher);
@@ -27,6 +29,8 @@ public:
 
     void on_result_export_binarize_success(PhysicalPrinter::PhysicalPrinterConfig config, PrintHost::PrintHostJobData data) override;
     void on_result_export_binarize_fail(const std::string& msg) override;
+
+    void report_failure(const std::string& message);
 
 private:
     PrintHost::PrintHostJobManager m_print_host_job_manager;

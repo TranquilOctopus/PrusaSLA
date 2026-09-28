@@ -33,6 +33,8 @@
 #include <boost/filesystem/path.hpp>
 #include <tracy/Tracy.hpp>
 
+#include "libslic3r/SLAResult.hpp"
+
 using Slic3r::Domain::ConfigContainer;
 using Slic3r::Domain::ConfigItem;
 using Slic3r::Domain::ConfigPack;
@@ -908,8 +910,17 @@ void ProjectInteractor::do_result_export_inner(const Domain::SlicingId id, Physi
     } else if (tech == Domain::PrinterTechnology::SLA) {
 
         const std::optional<SLAResultRef> sla_result{m_sla_result_cache.get_result(id)};
-        ASSERT(sla_result);
-        job_data.data_ptr = sla_result.value().get().export_data;
+        const std::shared_ptr<Slicing::SLAResultData> export_data =
+            sla_result.has_value() ? sla_result->get().export_data : nullptr;
+        const bool incomplete = !sla_result.has_value() || !export_data || export_data->files.data.empty() ||
+                                export_data->files.type == Slicing::Sla::FileDataType::other;
+        if (incomplete) {
+            m_result_export_interactor.report_failure(
+                _u8L("The plate is not fully sliced yet. Press Slice, wait until it finishes, then export again.")
+            );
+            return;
+        }
+        job_data.data_ptr = export_data;
         m_result_export_interactor.perform(std::move(print_host_config), std::move(job_data));
 
     } else {
