@@ -22,14 +22,14 @@ namespace Slic3r::App::Preview {
 
 using namespace Slic3r::App::Yoga;
 using namespace Slic3r::Biz;
+using Yoga::operator""_fpx;
 
 SlaLayerImageWindow::SlaLayerImageWindow(Render::Device& device, Biz::ProjectInteractor& project_interactor)
     : CollapsibleWindow(_u8L("Layer image"), "SlaLayerImageWindow")
     , m_device(device)
     , m_project_interactor(project_interactor)
 {
-    set_default_size({420.f, 320.f});
-    set_collapsible(true);
+    set_min_height(320_fpx);
     content()->set_padding(0.f);
 
     // Layer info text
