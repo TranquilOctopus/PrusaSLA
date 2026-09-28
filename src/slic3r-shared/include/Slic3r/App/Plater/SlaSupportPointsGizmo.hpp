@@ -118,6 +118,7 @@ private:
     void end_editing();
     void apply_edited_points();
     void discard_edited_points();
+    void commit_edited_points_live();
     std::optional<size_t> find_nearest_point(const Domain::Vec3d& mesh_pos, double max_distance_mm) const;
     void add_point_at_mesh_pos(const Domain::Vec3d& mesh_pos);
     void remove_point_at_index(size_t idx);
@@ -190,6 +191,8 @@ private:
 
     // Editing state
     std::optional<SupportPointEditState> m_edit_state;
+    Domain::SLA::SupportPoints m_points_before_edit;
+    Domain::SLA::PointsStatus m_status_before_edit{};
 
     // Paintable volumes for raycasting (like PaintOnGizmoBase)
     SupportPointPaintableVolumes m_paintable_volumes;

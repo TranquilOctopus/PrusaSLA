@@ -545,7 +545,7 @@ void SlaSupportPointsGizmo::on_deactivated()
     }
 
     if (m_edit_state.has_value()) {
-        discard_edited_points();
+        end_editing();
     }
 
     m_paintable_volumes.clear();
@@ -893,10 +893,6 @@ void SlaSupportPointsGizmo::apply_generated_points()
     m_dialog->set_apply_enabled(false);
     m_dialog->set_point_count(model_object->sla_support_points.size());
 
-    if (m_gizmo_controller) {
-        m_gizmo_controller->deactivate_current_tool();
-    }
-
     // Request support geometry to be computed and displayed
     request_support_geometry();
 }
@@ -1089,6 +1085,10 @@ void SlaSupportPointsGizmo::begin_editing()
         return;
     }
 
+    // Remember the model's points before editing for discard/restore
+    m_points_before_edit = model_object->sla_support_points;
+    m_status_before_edit = model_object->sla_points_status;
+
     m_edit_state = SupportPointEditState{};
     m_edit_state->editing.points = model_object->sla_support_points;
 
@@ -1147,6 +1147,23 @@ void SlaSupportPointsGizmo::end_editing()
     m_edit_state.reset();
 }
 
+void SlaSupportPointsGizmo::commit_edited_points_live()
+{
+    if (!m_edit_state.has_value() || !m_selected_object_id.valid()) {
+        return;
+    }
+
+    Domain::Project& project = m_project_interactor.selected_project();
+    Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
+    if (!model_object) {
+        return;
+    }
+
+    model_object->sla_support_points = m_edit_state->editing.points;
+    model_object->sla_points_status = PointsStatus::UserModified;
+    request_support_geometry();
+}
+
 void SlaSupportPointsGizmo::apply_edited_points()
 {
     DialogSyncGuard guard(*this);
@@ -1169,10 +1186,6 @@ void SlaSupportPointsGizmo::apply_edited_points()
     m_dialog->set_point_count(model_object->sla_support_points.size());
     end_editing();
 
-    if (m_gizmo_controller) {
-        m_gizmo_controller->deactivate_current_tool();
-    }
-
     // Request support geometry to be computed and displayed
     request_support_geometry();
 }
@@ -1189,7 +1202,14 @@ void SlaSupportPointsGizmo::discard_edited_points()
     Domain::Project& project = m_project_interactor.selected_project();
     Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
     if (model_object) {
+        model_object->sla_support_points = m_points_before_edit;
+        model_object->sla_points_status = m_status_before_edit;
         m_dialog->set_point_count(model_object->sla_support_points.size());
+        if (!model_object->sla_support_points.empty()) {
+            request_support_geometry();
+        } else {
+            clear_support_geometry_node();
+        }
     }
 }
 
@@ -1225,6 +1245,7 @@ void SlaSupportPointsGizmo::add_point_at_mesh_pos(const Domain::Vec3d& mesh_pos)
     m_dialog->set_point_count(m_edit_state->editing.points.size());
     take_undo_snapshot();
     update_point_visuals();
+    commit_edited_points_live();
 }
 
 void SlaSupportPointsGizmo::remove_point_at_index(size_t idx)
@@ -1239,6 +1260,7 @@ void SlaSupportPointsGizmo::remove_point_at_index(size_t idx)
     m_dialog->set_point_count(m_edit_state->editing.points.size());
     take_undo_snapshot();
     update_point_visuals();
+    commit_edited_points_live();
 }
 
 void SlaSupportPointsGizmo::move_point_to_mesh_pos(size_t idx, const Domain::Vec3d& mesh_pos)
@@ -1461,6 +1483,7 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
             take_undo_snapshot();
             m_edit_state->dragged_point_idx.reset();
             update_point_visuals();
+            commit_edited_points_live();
             return Scene::GizmoActivationState::Active;
         }
         if (m_edit_state->rect_select_active) {
@@ -1639,6 +1662,7 @@ void SlaSupportPointsGizmo::request_support_geometry()
     Domain::Project& project = m_project_interactor.selected_project();
     Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
     if (!model_object || model_object->sla_support_points.empty()) {
+        clear_support_geometry_node();
         return;
     }
 
@@ -1654,7 +1678,7 @@ void SlaSupportPointsGizmo::request_support_geometry()
 
     const SlicingId slicing_id{m_project_interactor.selected_project_id(), bed_ref.instance_id};
     const StatusCode status = m_project_interactor.slicing_interactor().get_status(slicing_id);
-    if (status == StatusCode::InvalidData || status == StatusCode::Empty) {
+    if (status == StatusCode::Empty) {
         return;
     }
 
@@ -1882,6 +1906,7 @@ void SlaSupportPointsGizmo::delete_selected_points()
         m_dialog->set_point_count(m_edit_state->editing.points.size());
         take_undo_snapshot();
         update_point_visuals();
+        commit_edited_points_live();
     }
 }
 
@@ -1893,6 +1918,7 @@ void SlaSupportPointsGizmo::apply_head_diameter_to_selected()
     take_undo_snapshot();
     m_edit_state->editing.apply_head_diameter_to_selected();
     update_point_visuals();
+    commit_edited_points_live();
 }
 
 void SlaSupportPointsGizmo::apply_pillar_diameter_to_selected()
@@ -1903,6 +1929,7 @@ void SlaSupportPointsGizmo::apply_pillar_diameter_to_selected()
     take_undo_snapshot();
     m_edit_state->editing.apply_pillar_diameter_to_selected();
     update_point_visuals();
+    commit_edited_points_live();
 }
 
 void SlaSupportPointsGizmo::apply_base_diameter_to_selected()
@@ -1913,6 +1940,7 @@ void SlaSupportPointsGizmo::apply_base_diameter_to_selected()
     take_undo_snapshot();
     m_edit_state->editing.apply_base_diameter_to_selected();
     update_point_visuals();
+    commit_edited_points_live();
 }
 
 void SlaSupportPointsGizmo::apply_base_height_to_selected()
@@ -1923,6 +1951,7 @@ void SlaSupportPointsGizmo::apply_base_height_to_selected()
     take_undo_snapshot();
     m_edit_state->editing.apply_base_height_to_selected();
     update_point_visuals();
+    commit_edited_points_live();
 }
 
 void SlaSupportPointsGizmo::apply_preset_light()
@@ -2002,6 +2031,7 @@ void SlaSupportPointsGizmo::apply_support_preset(float head_diameter, float pill
         m_edit_state->editing.apply_base_diameter_to_selected();
         m_edit_state->editing.apply_base_height_to_selected();
         update_point_visuals();
+        commit_edited_points_live();
     }
 }
 
