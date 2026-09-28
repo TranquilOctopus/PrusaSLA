@@ -107,9 +107,9 @@ public:
         const StatusCode status = m_slicing_interactor.get_status(slicing_id);
         if (status == StatusCode::Finished || status == StatusCode::Modified ||
             status == StatusCode::Updating || status == StatusCode::Running ||
-            status == StatusCode::Stopping) {
+            status == StatusCode::Stopping || status == StatusCode::InvalidData) {
             this->request_slicing_until_support_spots();
-        } else if (status == StatusCode::Empty || status == StatusCode::InvalidData) {
+        } else if (status == StatusCode::Empty) {
             this->complete(std::nullopt);
         } else if (status == StatusCode::Removed) {
             this->complete(std::nullopt);
@@ -195,7 +195,13 @@ public:
             break;
         case StatusCode::Empty:
         case StatusCode::InvalidData:
-            this->complete(std::nullopt);
+            if (m_state == State::SlicingRequested || m_state == State::SlicingActive) {
+                this->complete(std::nullopt);
+            } else if (m_state == State::WaitingForSlicing) {
+                this->request_slicing_until_support_spots();
+            } else {
+                this->complete(std::nullopt);
+            }
             break;
         default:
             break;
@@ -751,20 +757,7 @@ void SlaSupportPointsGizmo::start_generation()
 
     const SlicingId slicing_id{m_project_interactor.selected_project_id(), bed_ref.instance_id};
     const StatusCode status = m_project_interactor.slicing_interactor().get_status(slicing_id);
-    if (status == StatusCode::InvalidData) {
-        std::string error_message;
-        const std::optional<Slicing::Status> status_opt = m_project_interactor.status_cache().get_status(slicing_id);
-        if (status_opt.has_value()) {
-            for (const Slicing::Error& error : status_opt->errors) {
-                error_message += "\n" + App::to_display_string(error, project);
-            }
-        }
-        AppServices::instance().dialog_manager().show_warning_dialog(
-            _u8L("Automatic generation requires valid print setup.") + error_message,
-            _u8L("Warning")
-        );
-        return;
-    } else if (status == StatusCode::Empty) {
+    if (status == StatusCode::Empty) {
         AppServices::instance().dialog_manager().show_warning_dialog(
             _u8L("Automatic generation requires printable object."),
             _u8L("Warning")
@@ -789,6 +782,7 @@ void SlaSupportPointsGizmo::on_generation_completed(std::optional<Domain::SLA::S
 {
     DialogSyncGuard guard(*this);
 
+    const std::optional<SlicingId> generation_slicing_id = m_generation_slicing_id;
     m_generation_slicing_id.reset();
 
     if (support_points.has_value()) {
@@ -809,8 +803,20 @@ void SlaSupportPointsGizmo::on_generation_completed(std::optional<Domain::SLA::S
         m_dialog->set_generate_enabled(true);
         m_dialog->set_auto_support_all_enabled(true);
 
+        std::string error_message;
+        if (generation_slicing_id.has_value()) {
+            const std::optional<Slicing::Status> status_opt = m_project_interactor.status_cache().get_status(*generation_slicing_id);
+            if (status_opt.has_value()) {
+                for (const Slicing::Error& error : status_opt->errors) {
+                    error_message += "\n" + App::to_display_string(error, m_project_interactor.selected_project());
+                }
+            }
+        }
+        if (error_message.empty()) {
+            error_message = _u8L("Failed to generate support points.");
+        }
         AppServices::instance().dialog_manager().show_warning_dialog(
-            _u8L("Failed to generate support points."),
+            error_message,
             _u8L("Warning")
         );
     }
@@ -971,8 +977,8 @@ void SlaSupportPointsGizmo::process_auto_support_queue()
     const Domain::BedRef bed_ref = instance->get_last_bed();
     const Domain::SlicingId slicing_id{m_project_interactor.selected_project_id(), bed_ref.instance_id};
     const StatusCode status = m_project_interactor.slicing_interactor().get_status(slicing_id);
-    if (status == StatusCode::InvalidData || status == StatusCode::Empty) {
-        SPDLOG_WARN("Auto support all: Invalid slicing status for object {}, skipping", obj_id.id);
+    if (status == StatusCode::Empty) {
+        SPDLOG_WARN("Auto support all: Empty slicing status for object {}, skipping", obj_id.id);
         process_auto_support_queue();
         return;
     }
