@@ -535,6 +535,9 @@ void SlaSupportPointsGizmo::collect_paintable_volumes(const Domain::SelectionId 
     using MeshManager = PlaterScenePresenter::MeshManager;
     const MeshManager& mesh_manager = m_scene_presenter.model_triangle_mesh_manager(project_id);
 
+    const double elevation = support_elevation();
+    const Domain::Transform3d lift = Domain::translation_transform(Domain::Vec3d(0., 0., elevation));
+
     for (Domain::ModelVolume* model_volume : model_object->volumes) {
         if (!model_volume->is_model_part()) {
             continue;
@@ -549,13 +552,16 @@ void SlaSupportPointsGizmo::collect_paintable_volumes(const Domain::SelectionId 
             continue;
         }
 
+        const Domain::Transform3d instance_trafo = model_instance->get_matrix();
+        const Domain::Transform3d lifted_instance_trafo = lift * instance_trafo;
+
         m_paintable_volumes.push_back({
             *model_object,
             *model_instance,
             *model_volume,
             *scene_mesh,
             scene_mesh->aabb_mesh(),
-            model_instance->get_matrix() * model_volume->get_matrix(),
+            lifted_instance_trafo * model_volume->get_matrix(),
             model_instance->get_matrix_no_offset() * model_volume->get_matrix_no_offset()
         });
     }
@@ -683,7 +689,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
         model_object,
         instance,
         m_main_node,
-        0.,
+        support_elevation(),
         Scene::BuildMeshesNodes::Yes
     );
     m_clipping_plane_presenter.set_behavior(true, true, 0.);
@@ -1430,13 +1436,15 @@ void SlaSupportPointsGizmo::update_point_visuals()
 
     Scene::Scene& scene = m_scene_presenter.scene();
 
-    // Get the instance transform
+    // Get the instance transform with support elevation applied
     const Domain::Project& project = m_project_interactor.selected_project();
     const Domain::ModelInstance* instance = project.find_instance_by_id(m_selected_object_id.id, m_selected_instance_id);
     if (!instance) {
         return;
     }
-    const Domain::Transform3d instance_trafo = instance->get_matrix();
+    const double elevation = support_elevation();
+    const Domain::Transform3d lift = Domain::translation_transform(Domain::Vec3d(0., 0., elevation));
+    const Domain::Transform3d instance_trafo = lift * instance->get_matrix();
 
     // Sphere geometry (shared for all points)
     static constexpr double SPHERE_RESOLUTION_ANGLE = Slic3r::deg2rad(360.0 / 32.0);
@@ -2010,7 +2018,9 @@ void SlaSupportPointsGizmo::project_points_to_screen(std::vector<Domain::Vec2d>&
     if (!instance) {
         return;
     }
-    const Domain::Transform3d instance_trafo = instance->get_matrix();
+    const double elevation = support_elevation();
+    const Domain::Transform3d lift = Domain::translation_transform(Domain::Vec3d(0., 0., elevation));
+    const Domain::Transform3d instance_trafo = lift * instance->get_matrix();
 
     out_screen_positions.resize(m_edit_state->editing.points.size());
 
@@ -2068,6 +2078,40 @@ void SlaSupportPointsGizmo::render_scene(Render::CommandBuffer& cmd_buffer)
 {
     // Update point visuals each frame to reflect hover/drag state
     update_point_visuals();
+}
+
+double SlaSupportPointsGizmo::support_elevation() const
+{
+    if (!m_selected_object_id.valid()) {
+        return 0.;
+    }
+
+    const Domain::Project& project = m_project_interactor.selected_project();
+    const Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
+    if (!model_object) {
+        return 0.;
+    }
+
+    // Check if supports are enabled in the print config
+    const auto& print_config = m_project_interactor.preset_interactor().selected_printer_preset().print.config_box();
+    const auto* supports_enable_item = print_config.items.find("supports_enable");
+    if (supports_enable_item && !supports_enable_item->get<bool>()) {
+        return 0.;
+    }
+
+    // Check object override for support_object_elevation
+    auto obj_elev_result = model_object->object_settings_sla.find("support_object_elevation");
+    if (obj_elev_result.item) {
+        return obj_elev_result.item->get<double>();
+    }
+
+    // Fall back to print preset value
+    const auto* preset_elev_item = print_config.items.find("support_object_elevation");
+    if (preset_elev_item) {
+        return preset_elev_item->get<double>();
+    }
+
+    return 0.;
 }
 
 } // namespace Slic3r::App::Plater
