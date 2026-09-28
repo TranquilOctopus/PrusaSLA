@@ -219,6 +219,7 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
     Result: by OpenCode; compiles, both suites pass. Not yet seen in the running app, and the drawing code is untested.
   - [x] **M2.19b** The support tool shows the model lifted by the support elevation (`support_object_elevation`), and points are placed on the lifted model. · S · needs M2.19a
     Result: by OpenCode, reviewed; the tool passes the elevation as the clipper's sla_shift and lifts its raycast/visual transforms, and ClipperPresenter::activate now draws the mesh with that shift (0 for every other tool). Not yet seen in the app.
+  - [ ] **M2.19c** Supports appear while placing points (user, 2026-09-28: they only appeared after Slice). Edited points lived in the tool until Apply, which also closed the tool, and closing the tool discarded them. Now every edit reaches the model and requests the support tree; Discard restores the points from before editing; closing keeps them; Apply leaves the tool open. · M · needs M2.19b
 
 ## M3: Resin profile import (Chitubox, Lychee and others)
 
@@ -394,9 +395,12 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
     Result: by OpenCode, reviewed; `tools/orientation_test_piece.py` writes a 40×25 mm plate with an "F", a corner boss and an edge bar (72 triangles); `orientation-test.md` says how to read the print. Printing it on each printer is still open.
 - [ ] **M5.5** Upload SLA archives to print hosts and removable drives (PLAN C4). · M · needs M0.10
 - [ ] **M5.6** Preview layer inspector: 2D layer view with a pixel grid (PLAN F4). Use mock data until M4.9 lands. · L → split · needs M0.11b, M1.3
+  - [ ] **M5.6a** Engine: `render_sla_layer_image` (public `libslic3r/SLALayerImage.hpp`) draws one sliced layer with the exporters' own raster code and the printer's display settings (resolution, mirroring, orientation, gamma), downscaled on request. · M · needs —
+  - [ ] **M5.6b** Preview "Layer image" window for SLA (user, 2026-09-28: "step through each layer to see what the printer screen output would look like", as in Chitubox): the current layer as the screen shows it, Previous/Next, layer number and Z, and a full-resolution 1:1 mode. · M · needs M5.6a
 - [ ] **M5.7** Per-layer area and peel-force chart beside the layer slider. · M · needs M5.6, M4.9
 - [ ] **M5.8** Clickable issue markers (islands, cups) that jump to the layer. · M · needs M5.6, M4.8
 - [ ] **M5.9** Pre-export checklist and format picker (PLAN F8). · M · needs M0.9, M1.3
+  - [ ] **M5.9a** (job and branch named M5.9) Export never runs on an unfinished slice, and export failures are shown instead of only logged (user, 2026-09-28: exporting a `.pm5` silently did nothing; the log said the result had no layer files). · S · needs —
 - [ ] **M5.10** Height-band clipping in the 3D view, like Chitubox's preview: two sliders set a lower and an upper Z limit and the scene shows only that slice of the model, with the cut faces capped so the inside is readable. Works on the plater view (model, supports and pad) and follows the selected printer's plate size. Reuse the clipping plane the paint and SLA tools already use (`Scene::Clipper`, `Scene::ClipperPresenter`) rather than adding a second mechanism. · M · needs M1.3
 - [x] **M5.11** The SLA export dialog offers every registered format (.pm5, .goo, .pwmx, .sl1 and the rest) with the printer's own file type first and selected, instead of only .sl1/.sl1s. The file name no longer inherits `.gcode` from the filename template. Choosing a format the bed was not sliced for explains why and offers to choose again, rather than writing a mislabelled file. · M · needs M5.3
   Result: `SlaExportFileTypes` (Biz) builds the list and the default from the format registry, and `ExportPathSelect` uses it; `.pm5`, `.goo` and the other archive extensions map to a new `PrintHostExportFormat::SlaArchive`. Unit-tested in `SlaExportFileTypesTests.cpp`. Not yet exercised in the running app.
