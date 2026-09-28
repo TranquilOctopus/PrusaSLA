@@ -173,6 +173,9 @@ private:
     // Cone visual
     void create_cone_geometry_if_needed();
 
+    // Support elevation helper
+    double support_elevation() const;
+
     PlaterScenePresenter& m_scene_presenter;
     Biz::ProjectInteractor& m_project_interactor;
     Render::Device& m_device;
