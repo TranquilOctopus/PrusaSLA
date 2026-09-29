@@ -252,7 +252,7 @@ Yaml::Details::Mark YamlAdapterRyml::mark(const NodeRef& node)
         static_cast<size_t>(std::upper_bound(nl.begin(), nl.end(), offset) - nl.begin());
     const size_t line = 1 + preceding;
     const size_t col  = preceding == 0 ? offset : offset - nl[preceding - 1] - 1;
-    return {std::string_view{node.parser_data->file}, line, col};
+    return {std::string{node.parser_data->file}, line, col};
 }
 
 YamlAdapterRyml::NodeRef YamlAdapterRyml::create_scalar_node(std::string_view value)
