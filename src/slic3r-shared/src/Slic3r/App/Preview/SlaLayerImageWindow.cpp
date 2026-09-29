@@ -79,8 +79,11 @@ void SlaLayerImageWindow::update(const Biz::Slicing::SLAResult* result)
 
     set_visible(true);
 
-    // Get current layer index from the slider (active_pos is the current thumb position)
-    size_t current_layer = static_cast<size_t>(m_slider->active_pos());
+    // Get current layer index from the slider's higher thumb (upper bound of layer range)
+    int higher_pos = m_slider->higher_pos();
+    int lower_pos = m_slider->lower_pos();
+    int max_pos = m_slider->max_pos();
+    size_t current_layer = static_cast<size_t>(higher_pos);
 
     // Clamp to valid range
     if (current_layer >= result->slices.size()) {
@@ -112,9 +115,9 @@ void SlaLayerImageWindow::update(const Biz::Slicing::SLAResult* result)
     }
     m_layer_info_text->set_text(layer_text);
 
-    // Update button states
-    m_prev_button->set_enabled(current_layer > 0);
-    m_next_button->set_enabled(current_layer + 1 < result->slices.size());
+    // Update button states: Previous enabled when higher_pos > lower_pos, Next when higher_pos < max_pos
+    m_prev_button->set_enabled(higher_pos > lower_pos);
+    m_next_button->set_enabled(higher_pos < max_pos);
 
     // Request render only when image was rebuilt or text changed
     if (needs_rebuild || layer_changed || result_changed) {
@@ -200,14 +203,22 @@ void SlaLayerImageWindow::render_body(const Domain::Vec2f& pos, const Domain::Ve
 void SlaLayerImageWindow::on_prev_layer()
 {
     if (m_slider) {
-        m_slider->move_current_thumb(-1);
+        int higher_pos = m_slider->higher_pos();
+        int lower_pos = m_slider->lower_pos();
+        int new_pos = higher_pos - 1;
+        if (new_pos < lower_pos) new_pos = lower_pos;
+        m_slider->set_higher_pos(new_pos);
     }
 }
 
 void SlaLayerImageWindow::on_next_layer()
 {
     if (m_slider) {
-        m_slider->move_current_thumb(1);
+        int higher_pos = m_slider->higher_pos();
+        int max_pos = m_slider->max_pos();
+        int new_pos = higher_pos + 1;
+        if (new_pos > max_pos) new_pos = max_pos;
+        m_slider->set_higher_pos(new_pos);
     }
 }
 
