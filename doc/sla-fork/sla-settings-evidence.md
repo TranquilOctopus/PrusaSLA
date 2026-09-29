@@ -157,23 +157,23 @@ Short paths in the evidence column: `SLAPrint*.cpp`, `SLALayerImage.cpp`, `SLASu
 | `support_max_bridge_length` | Max bridge length | Print | **used** | engine `SLAPrint.cpp:113` - only for `support_tree_type=default` (`make_support_cfg`, `SLAPrint.cpp:94`) |
 | `support_max_pillar_link_distance` | Max pillar linking distance | Print | **used** | engine `SLAPrint.cpp:114` - only for `support_tree_type=default` (`make_support_cfg`, `SLAPrint.cpp:94`) |
 | `support_object_elevation` | Object elevation | Print | **used** | engine `SLAPrint.cpp:111 (also 1449, 1480), SLASupportTool.cpp:238` - only for `support_tree_type=default` (`make_support_cfg`, `SLAPrint.cpp:94`) |
-| `branching_support_head_front_diameter` | Branching | Print | **unused for SLA** | the engine reads `branchingsupport_*` (no underscore) at `SLAPrint.cpp:131-153`; the defs created in `ConfigDefsSLA.cpp:1282-1534` are `branching_support_*`, which nothing reads. Already `Category::Hidden` |
-| `branching_support_head_penetration` | Branching | Print | **unused for SLA** | the engine reads `branchingsupport_*` (no underscore) at `SLAPrint.cpp:131-153`; the defs created in `ConfigDefsSLA.cpp:1282-1534` are `branching_support_*`, which nothing reads. Already `Category::Hidden` |
-| `branching_support_head_width` | Branching | Print | **unused for SLA** | the engine reads `branchingsupport_*` (no underscore) at `SLAPrint.cpp:131-153`; the defs created in `ConfigDefsSLA.cpp:1282-1534` are `branching_support_*`, which nothing reads. Already `Category::Hidden` |
-| `branching_support_pillar_diameter` | Branching | Print | **unused for SLA** | the engine reads `branchingsupport_*` (no underscore) at `SLAPrint.cpp:131-153`; the defs created in `ConfigDefsSLA.cpp:1282-1534` are `branching_support_*`, which nothing reads. Already `Category::Hidden` |
-| `branching_support_small_pillar_diameter_percent` | Branching | Print | **unused for SLA** | the engine reads `branchingsupport_*` (no underscore) at `SLAPrint.cpp:131-153`; the defs created in `ConfigDefsSLA.cpp:1282-1534` are `branching_support_*`, which nothing reads. Already `Category::Hidden` |
-| `branching_support_max_bridges_on_pillar` | Branching | Print | **unused for SLA** | the engine reads `branchingsupport_*` (no underscore) at `SLAPrint.cpp:131-153`; the defs created in `ConfigDefsSLA.cpp:1282-1534` are `branching_support_*`, which nothing reads. Already `Category::Hidden` |
-| `branching_support_max_weight_on_model` | Branching | Print | **unused for SLA** | the engine reads `branchingsupport_*` (no underscore) at `SLAPrint.cpp:131-153`; the defs created in `ConfigDefsSLA.cpp:1282-1534` are `branching_support_*`, which nothing reads. Already `Category::Hidden` |
-| `branching_support_pillar_connection_mode` | Branching | Print | **unused for SLA** | the engine reads `branchingsupport_*` (no underscore) at `SLAPrint.cpp:131-153`; the defs created in `ConfigDefsSLA.cpp:1282-1534` are `branching_support_*`, which nothing reads. Already `Category::Hidden` |
-| `branching_support_buildplate_only` | Branching | Print | **unused for SLA** | the engine reads `branchingsupport_*` (no underscore) at `SLAPrint.cpp:131-153`; the defs created in `ConfigDefsSLA.cpp:1282-1534` are `branching_support_*`, which nothing reads. Already `Category::Hidden` |
-| `branching_support_pillar_widening_factor` | Branching | Print | **unused for SLA** | the engine reads `branchingsupport_*` (no underscore) at `SLAPrint.cpp:131-153`; the defs created in `ConfigDefsSLA.cpp:1282-1534` are `branching_support_*`, which nothing reads. Already `Category::Hidden` |
-| `branching_support_base_diameter` | Branching | Print | **unused for SLA** | the engine reads `branchingsupport_*` (no underscore) at `SLAPrint.cpp:131-153`; the defs created in `ConfigDefsSLA.cpp:1282-1534` are `branching_support_*`, which nothing reads. Already `Category::Hidden` |
-| `branching_support_base_height` | Branching | Print | **unused for SLA** | the engine reads `branchingsupport_*` (no underscore) at `SLAPrint.cpp:131-153`; the defs created in `ConfigDefsSLA.cpp:1282-1534` are `branching_support_*`, which nothing reads. Already `Category::Hidden` |
-| `branching_support_base_safety_distance` | Branching | Print | **unused for SLA** | the engine reads `branchingsupport_*` (no underscore) at `SLAPrint.cpp:131-153`; the defs created in `ConfigDefsSLA.cpp:1282-1534` are `branching_support_*`, which nothing reads. Already `Category::Hidden` |
-| `branching_support_critical_angle` | Branching | Print | **unused for SLA** | the engine reads `branchingsupport_*` (no underscore) at `SLAPrint.cpp:131-153`; the defs created in `ConfigDefsSLA.cpp:1282-1534` are `branching_support_*`, which nothing reads. Already `Category::Hidden` |
-| `branching_support_max_bridge_length` | Branching | Print | **unused for SLA** | the engine reads `branchingsupport_*` (no underscore) at `SLAPrint.cpp:131-153`; the defs created in `ConfigDefsSLA.cpp:1282-1534` are `branching_support_*`, which nothing reads. Already `Category::Hidden` |
-| `branching_support_max_pillar_link_distance` | Branching | Print | **unused for SLA** | the engine reads `branchingsupport_*` (no underscore) at `SLAPrint.cpp:131-153`; the defs created in `ConfigDefsSLA.cpp:1282-1534` are `branching_support_*`, which nothing reads. Already `Category::Hidden` |
-| `branching_support_object_elevation` | Branching | Print | **unused for SLA** | the engine reads `branchingsupport_*` (no underscore) at `SLAPrint.cpp:131-153`; the defs created in `ConfigDefsSLA.cpp:1282-1534` are `branching_support_*`, which nothing reads. Already `Category::Hidden` |
+| `branchingsupport_head_front_diameter` | Branching | Print | **used, hidden in the UI** | the defs at `ConfigDefsSLA.cpp:1317-1569` build the name as `prefix.first + "support_..."` with `prefix.first == "branching"` (no trailing underscore), so they define exactly `branchingsupport_*` - the spelling the engine reads at `SLAPrint.cpp:162-184`. Hidden from the UI via `Category::Hidden`, read at runtime when `support_tree_type=branching` |
+| `branchingsupport_head_penetration` | Branching | Print | **used, hidden in the UI** | the defs at `ConfigDefsSLA.cpp:1317-1569` build the name as `prefix.first + "support_..."` with `prefix.first == "branching"` (no trailing underscore), so they define exactly `branchingsupport_*` - the spelling the engine reads at `SLAPrint.cpp:162-184`. Hidden from the UI via `Category::Hidden`, read at runtime when `support_tree_type=branching` |
+| `branchingsupport_head_width` | Branching | Print | **used, hidden in the UI** | the defs at `ConfigDefsSLA.cpp:1317-1569` build the name as `prefix.first + "support_..."` with `prefix.first == "branching"` (no trailing underscore), so they define exactly `branchingsupport_*` - the spelling the engine reads at `SLAPrint.cpp:162-184`. Hidden from the UI via `Category::Hidden`, read at runtime when `support_tree_type=branching` |
+| `branchingsupport_pillar_diameter` | Branching | Print | **used, hidden in the UI** | the defs at `ConfigDefsSLA.cpp:1317-1569` build the name as `prefix.first + "support_..."` with `prefix.first == "branching"` (no trailing underscore), so they define exactly `branchingsupport_*` - the spelling the engine reads at `SLAPrint.cpp:162-184`. Hidden from the UI via `Category::Hidden`, read at runtime when `support_tree_type=branching` |
+| `branchingsupport_small_pillar_diameter_percent` | Branching | Print | **used, hidden in the UI** | the defs at `ConfigDefsSLA.cpp:1317-1569` build the name as `prefix.first + "support_..."` with `prefix.first == "branching"` (no trailing underscore), so they define exactly `branchingsupport_*` - the spelling the engine reads at `SLAPrint.cpp:162-184`. Hidden from the UI via `Category::Hidden`, read at runtime when `support_tree_type=branching` |
+| `branchingsupport_max_bridges_on_pillar` | Branching | Print | **used, hidden in the UI** | the defs at `ConfigDefsSLA.cpp:1317-1569` build the name as `prefix.first + "support_..."` with `prefix.first == "branching"` (no trailing underscore), so they define exactly `branchingsupport_*` - the spelling the engine reads at `SLAPrint.cpp:162-184`. Hidden from the UI via `Category::Hidden`, read at runtime when `support_tree_type=branching` |
+| `branchingsupport_max_weight_on_model` | Branching | Print | **used, hidden in the UI** | the defs at `ConfigDefsSLA.cpp:1317-1569` build the name as `prefix.first + "support_..."` with `prefix.first == "branching"` (no trailing underscore), so they define exactly `branchingsupport_*` - the spelling the engine reads at `SLAPrint.cpp:162-184`. Hidden from the UI via `Category::Hidden`, read at runtime when `support_tree_type=branching` |
+| `branchingsupport_pillar_connection_mode` | Branching | Print | **used, hidden in the UI** | the defs at `ConfigDefsSLA.cpp:1317-1569` build the name as `prefix.first + "support_..."` with `prefix.first == "branching"` (no trailing underscore), so they define exactly `branchingsupport_*` - the spelling the engine reads at `SLAPrint.cpp:162-184`. Hidden from the UI via `Category::Hidden`, read at runtime when `support_tree_type=branching` |
+| `branchingsupport_buildplate_only` | Branching | Print | **used, hidden in the UI** | the defs at `ConfigDefsSLA.cpp:1317-1569` build the name as `prefix.first + "support_..."` with `prefix.first == "branching"` (no trailing underscore), so they define exactly `branchingsupport_*` - the spelling the engine reads at `SLAPrint.cpp:162-184`. Hidden from the UI via `Category::Hidden`, read at runtime when `support_tree_type=branching` |
+| `branchingsupport_pillar_widening_factor` | Branching | Print | **used, hidden in the UI** | the defs at `ConfigDefsSLA.cpp:1317-1569` build the name as `prefix.first + "support_..."` with `prefix.first == "branching"` (no trailing underscore), so they define exactly `branchingsupport_*` - the spelling the engine reads at `SLAPrint.cpp:162-184`. Hidden from the UI via `Category::Hidden`, read at runtime when `support_tree_type=branching` |
+| `branchingsupport_base_diameter` | Branching | Print | **used, hidden in the UI** | the defs at `ConfigDefsSLA.cpp:1317-1569` build the name as `prefix.first + "support_..."` with `prefix.first == "branching"` (no trailing underscore), so they define exactly `branchingsupport_*` - the spelling the engine reads at `SLAPrint.cpp:162-184`. Hidden from the UI via `Category::Hidden`, read at runtime when `support_tree_type=branching` |
+| `branchingsupport_base_height` | Branching | Print | **used, hidden in the UI** | the defs at `ConfigDefsSLA.cpp:1317-1569` build the name as `prefix.first + "support_..."` with `prefix.first == "branching"` (no trailing underscore), so they define exactly `branchingsupport_*` - the spelling the engine reads at `SLAPrint.cpp:162-184`. Hidden from the UI via `Category::Hidden`, read at runtime when `support_tree_type=branching` |
+| `branchingsupport_base_safety_distance` | Branching | Print | **used, hidden in the UI** | the defs at `ConfigDefsSLA.cpp:1317-1569` build the name as `prefix.first + "support_..."` with `prefix.first == "branching"` (no trailing underscore), so they define exactly `branchingsupport_*` - the spelling the engine reads at `SLAPrint.cpp:162-184`. Hidden from the UI via `Category::Hidden`, read at runtime when `support_tree_type=branching` |
+| `branchingsupport_critical_angle` | Branching | Print | **used, hidden in the UI** | the defs at `ConfigDefsSLA.cpp:1317-1569` build the name as `prefix.first + "support_..."` with `prefix.first == "branching"` (no trailing underscore), so they define exactly `branchingsupport_*` - the spelling the engine reads at `SLAPrint.cpp:162-184`. Hidden from the UI via `Category::Hidden`, read at runtime when `support_tree_type=branching` |
+| `branchingsupport_max_bridge_length` | Branching | Print | **used, hidden in the UI** | the defs at `ConfigDefsSLA.cpp:1317-1569` build the name as `prefix.first + "support_..."` with `prefix.first == "branching"` (no trailing underscore), so they define exactly `branchingsupport_*` - the spelling the engine reads at `SLAPrint.cpp:162-184`. Hidden from the UI via `Category::Hidden`, read at runtime when `support_tree_type=branching` |
+| `branchingsupport_max_pillar_link_distance` | Branching | Print | **used, hidden in the UI** | the defs at `ConfigDefsSLA.cpp:1317-1569` build the name as `prefix.first + "support_..."` with `prefix.first == "branching"` (no trailing underscore), so they define exactly `branchingsupport_*` - the spelling the engine reads at `SLAPrint.cpp:162-184`. Hidden from the UI via `Category::Hidden`, read at runtime when `support_tree_type=branching` |
+| `branchingsupport_object_elevation` | Branching | Print | **used, hidden in the UI** | the defs at `ConfigDefsSLA.cpp:1317-1569` build the name as `prefix.first + "support_..."` with `prefix.first == "branching"` (no trailing underscore), so they define exactly `branchingsupport_*` - the spelling the engine reads at `SLAPrint.cpp:162-184`. Hidden from the UI via `Category::Hidden`, read at runtime when `support_tree_type=branching` |
 | `support_preset_light_head_diameter` | light head diameter | Print | **ui-only** | App only: `App/Plater/SlaSupportPointsGizmo.cpp:1764` builds the key as `"support_preset_" + preset_name + "_"` and reads it at `:1767-1778` to seed the support-points dialog; no engine or exporter read |
 | `support_preset_light_pillar_diameter` | light pillar diameter | Print | **ui-only** | App only: `App/Plater/SlaSupportPointsGizmo.cpp:1764` builds the key as `"support_preset_" + preset_name + "_"` and reads it at `:1767-1778` to seed the support-points dialog; no engine or exporter read |
 | `support_preset_light_base_diameter` | light base diameter | Print | **ui-only** | App only: `App/Plater/SlaSupportPointsGizmo.cpp:1764` builds the key as `"support_preset_" + preset_name + "_"` and reads it at `:1767-1778` to seed the support-points dialog; no engine or exporter read |
@@ -218,8 +218,10 @@ That produced 1288 hits, which were then bucketed by file into: engine SLA files
 non-SLA files, `Biz/ResultExport/SLA/*`, `App/*`, `Biz/*` (other), `slic3r-domain` (the
 definitions), `src/slic3r/GUI` (not built) and tests. Targeted follow-ups:
 
-- `"branching_support"` vs `"branchingsupport"` over `src/` - the def file and the engine
-  disagree on the prefix (see contradictions).
+- `"branching_support"` vs `"branchingsupport"` over `src/` - the def file does not
+  contain the underscore spelling at all; the defs concatenate `"branching"` + `"support_..."`.
+  The prefix looks like a disagreement only if the concatenation is read as `branching_support_`
+  (see corrections).
 - `"support_preset_"` over `src/` - no literal hit in the App either, because the key is
   built at runtime.
 - `light_pwm`, `bottom_`, `wait_`, `lift_`, `retract_` over `src/` and
@@ -263,16 +265,19 @@ extruder key.
   - see the caveat below before hiding the two notes fields.
 - `thumbnails`, `thumbnails_format`
 
-**Unused for SLA - broken "branching" definitions (17, already `Category::Hidden`)**
-- `branching_support_head_front_diameter`, `branching_support_head_penetration`,
-  `branching_support_head_width`, `branching_support_pillar_diameter`,
-  `branching_support_small_pillar_diameter_percent`,
-  `branching_support_max_bridges_on_pillar`, `branching_support_max_weight_on_model`,
-  `branching_support_pillar_connection_mode`, `branching_support_buildplate_only`,
-  `branching_support_pillar_widening_factor`, `branching_support_base_diameter`,
-  `branching_support_base_height`, `branching_support_base_safety_distance`,
-  `branching_support_critical_angle`, `branching_support_max_bridge_length`,
-  `branching_support_max_pillar_link_distance`, `branching_support_object_elevation`
+**Used at runtime, hidden in the UI - branching support definitions (17, `Category::Hidden`)**
+
+These are `branchingsupport_*` (no underscore). They are the settings for
+`support_tree_type=branching`; they are hidden because branching support is experimental.
+- `branchingsupport_head_front_diameter`, `branchingsupport_head_penetration`,
+  `branchingsupport_head_width`, `branchingsupport_pillar_diameter`,
+  `branchingsupport_small_pillar_diameter_percent`,
+  `branchingsupport_max_bridges_on_pillar`, `branchingsupport_max_weight_on_model`,
+  `branchingsupport_pillar_connection_mode`, `branchingsupport_buildplate_only`,
+  `branchingsupport_pillar_widening_factor`, `branchingsupport_base_diameter`,
+  `branchingsupport_base_height`, `branchingsupport_base_safety_distance`,
+  `branchingsupport_critical_angle`, `branchingsupport_max_bridge_length`,
+  `branchingsupport_max_pillar_link_distance`, `branchingsupport_object_elevation`
 
 ### Caveats for the hiding job
 
@@ -311,15 +316,19 @@ The earlier audit gave no evidence and got several verdicts wrong. In order of i
    `SLASupportTool.cpp:119,240`. Verdict: **used**. Side effect worth reporting separately:
    with `raft_type=none` and `pad_enable=true`, `generate_pad` still runs and builds a
    full-plate raft, because only `make_pad_cfg` reacts to `raft_type` (`:237-239`).
-3. **The 17 "branching" settings: audit b lists them as `Hidden` and counts 0 hides.** They
-   are hidden, but for the wrong reason and under the wrong name. The def file creates
-   `branching_support_*` (`ConfigDefsSLA.cpp:1282-1534`, prefix `std::make_pair("branching", ...)`)
-   while the engine reads `branchingsupport_*` - no underscore -
-   (`SLAPrint.cpp:131-153`, `SLAPrintSteps.cpp:852`, `SLASupportTool.cpp:188`,
-   `Biz/Preset/AbstractConfigManipulation.cpp:393-408`). Nothing reads
-   `branching_support_*` at all, so the branching support tree is driven by keys that the
-   Domain defs never define. `branching_support_*` are **unused for SLA**; the real
-   `branchingsupport_*` keys are the ones worth looking at, in a separate fix.
+3. **The 17 "branching" settings: audit b lists them as `Hidden` and counts 0 hides.** Hidden
+   they are, but the stated reason was wrong. The def file does **not** create
+   `branching_support_*`: at `ConfigDefsSLA.cpp:1317` it loops over prefixes `""` and
+   `"branching"` and builds each name as `prefix.first + "support_head_front_diameter"`, so the
+   second pass yields `branchingsupport_head_front_diameter` - no underscore, exactly the
+   spelling the engine reads (`SLAPrint.cpp:162-184`, `SLAPrintSteps.cpp:856`,
+   `SLASupportTool.cpp:192`, `Biz/Preset/AbstractConfigManipulation.cpp:393`). A grep for
+   `branching_support_` over `src/`, `resources/presets/` and `tests/` returns nothing, so there
+   was never a second spelling to reconcile. The keys are defined and used; they are
+   `Category::Hidden` because branching support is experimental.
+   `tests/sla_print/sla_invalidation_tests.cpp` now asserts that all 17
+   `branchingsupport_*` names exist in `get_defs_sla()` and that the underscore spelling does not,
+   so a future edit of the prefix cannot silently reintroduce the mismatch.
 4. **`min_exposure_time` / `max_exposure_time` / `min_initial_exposure_time` /
    `max_initial_exposure_time`: audit a says "keep - exposure bounds". Wrong.** No read
    anywhere; they are still set in
