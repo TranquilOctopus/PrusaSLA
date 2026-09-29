@@ -68,6 +68,10 @@ public:
 
 private:
     void recreate_notification(Domain::SelectionId project_id, bool open_when_closed = false);
+    std::vector<const Domain::ModelObject*> collect_unsupported_objects(
+        const Domain::SlicingId& slicing_id,
+        const Domain::BedInstance& bed_instance,
+        const Domain::Project& project);
     /// Returns whether a notification was open (and therefore closed).
     bool close_notification_if_open();
 
