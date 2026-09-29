@@ -61,6 +61,8 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
 - [ ] **M0.12** `[human]` Choose 10–20 benchmark models. Use only models whose licenses allow redistribution, or store them outside the repo. Include miniatures, hollow figurines, flat parts, lattices, and tall thin parts. · S · needs —
 - [ ] **M0.13** Benchmark harness that writes a metrics JSON (PLAN A6). · M · needs M0.11a, M0.12
   Done when: two runs on the same commit give identical layer hashes, and `doc/sla-fork/baseline.json` is committed.
+  Result: hidden test `[benchmark]` in `tests/sla_print/sla_benchmark_tests.cpp` runs the support tool and a full SLAPrint slice per model and writes a stable-key-order JSON (`SLA_BENCH_OUT`, extra models from `SLA_BENCH_DIR`); `doc/sla-fork/tools/bench_diff.py` prints the before/after table. The harness records triangle count, support point count, support tree triangles and volume, pad volume, layer count, islands and islands without a support point, the time per phase and the peak working set. No layer hash yet.
+  Blocked: not built and not run in this session, so `baseline.json` and the layer hash check are still missing.
 - [ ] **M0.14** CI workflow: build, both test binaries, and a comment with the metrics diff (PLAN G1). · M · needs M0.13
 
 ## M1: Look, feel and SLA-first shell

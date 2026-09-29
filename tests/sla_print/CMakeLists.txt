@@ -19,13 +19,16 @@ add_executable(${_TEST_NAME}_tests ${_TEST_NAME}_tests_main.cpp
     sla_layer_image_tests.cpp
     sla_layers_to_mesh_tests.cpp
     sla_island_coverage_tests.cpp
-    sla_support_tool_tests.cpp)
+    sla_support_tool_tests.cpp
+    sla_benchmark_tests.cpp)
 
 # mold linker for successful linking needs also to link TBB library and link it before libslic3r.
 target_link_libraries(${_TEST_NAME}_tests test_common TBB::tbb TBB::tbbmalloc libslic3r slic3r-shared)
 set_property(TARGET ${_TEST_NAME}_tests PROPERTY FOLDER "tests")
 
 if (WIN32)
+    # sla_benchmark_tests.cpp reads the peak working set with GetProcessMemoryInfo.
+    target_link_libraries(${_TEST_NAME}_tests psapi)
     prusaslicer_copy_dlls(${_TEST_NAME}_tests)
 endif()
 
