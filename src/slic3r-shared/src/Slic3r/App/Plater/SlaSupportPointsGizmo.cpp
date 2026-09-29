@@ -28,7 +28,6 @@
 #include "Slic3r/Domain/ConfigPack.hpp"
 #include "Slic3r/Domain/Config.hpp"
 #include "Slic3r/Domain/FullConfigSLA.hpp"
-#include "Slic3r/Domain/PartialObjectConfigSLA.hpp"
 #include "Slic3r/Math.hpp"
 #include "Slic3r/App/Platform/KeyboardEvent.hpp"
 #include "Slic3r/App/Platform/KeyModifers.hpp"
@@ -500,7 +499,7 @@ void SlaSupportPointsGizmo::on_sla_object_cache_changed(const Domain::SlicingId&
 
 void SlaSupportPointsGizmo::start_generation()
 {
-    if (m_generation_slicing_id.has_value() || !m_selected_object_id.valid()) {
+    if (m_points_job_running || !m_selected_object_id.valid()) {
         return;
     }
 
@@ -528,37 +527,46 @@ void SlaSupportPointsGizmo::start_generation()
         return;
     }
 
-    const SlicingId slicing_id{m_project_interactor.selected_project_id(), bed_ref.instance_id};
-    const StatusCode status = m_project_interactor.slicing_interactor().get_status(slicing_id);
-    if (status == StatusCode::Empty) {
+    const std::optional<ObjectSlaConfig> config_opt = build_object_sla_config(model_object, instance);
+    if (!config_opt.has_value()) {
         AppServices::instance().dialog_manager().show_warning_dialog(
-            _u8L("Automatic generation requires printable object."),
+            _u8L("Automatic generation requires a full SLA print configuration for the object."),
             _u8L("Warning")
         );
         return;
     }
 
-    m_generation_slicing_id = slicing_id;
+    const SlicingId slicing_id{m_project_interactor.selected_project_id(), bed_ref.instance_id};
 
-    DialogSyncGuard guard(*this);
-    m_dialog->set_generate_enabled(false);
-    m_dialog->set_apply_enabled(false);
+    {
+        DialogSyncGuard guard(*this);
+        m_dialog->set_generate_enabled(false);
+        m_dialog->set_apply_enabled(false);
+    }
 
-    m_support_points_request->callbacks().completed =
-        [this](const std::optional<Domain::SLA::SupportPoints> support_points)
-    { this->on_generation_completed(support_points); };
+    // Run the points generation on the worker thread. Nothing is sliced for the support tool.
+    WorkerJobData job_data;
+    job_data.cloned_object = std::unique_ptr<Domain::ModelObject>(Domain::ModelObject::new_clone(*model_object));
+    job_data.instance_matrix = instance->get_matrix();
+    job_data.config = *config_opt;
+    job_data.object_id = m_selected_object_id;
+    job_data.instance_id = m_selected_instance_id;
+    job_data.slicing_id = slicing_id;
+    job_data.job_type = WorkerJobType::Points;
+    job_data.for_auto_support_all = false;
+    job_data.job_counter = ++m_job_counter;
 
-    m_support_points_request->start(slicing_id, m_selected_object_id);
+    m_points_job_running = true;
+    start_worker_job(std::move(job_data));
 }
 
 void SlaSupportPointsGizmo::on_generation_completed(std::optional<Domain::SLA::SupportPoints> support_points)
 {
     DialogSyncGuard guard(*this);
 
-    const std::optional<SlicingId> generation_slicing_id = m_generation_slicing_id;
-    m_generation_slicing_id.reset();
+    m_points_job_running = false;
 
-    if (support_points.has_value()) {
+    if (support_points.has_value() && !support_points->empty()) {
         m_generated_support_points = *support_points;
         m_has_generated_points = true;
 
@@ -576,28 +584,8 @@ void SlaSupportPointsGizmo::on_generation_completed(std::optional<Domain::SLA::S
         m_dialog->set_generate_enabled(true);
         m_dialog->set_auto_support_all_enabled(true);
 
-        std::string error_message;
-        if (generation_slicing_id.has_value()) {
-            const std::optional<Slicing::Status> status_opt = m_project_interactor.status_cache().get_status(*generation_slicing_id);
-            if (status_opt.has_value()) {
-                for (const Slicing::Error& error : status_opt->errors) {
-                    error_message += "\n" + App::to_display_string(error, m_project_interactor.selected_project());
-                }
-            }
-        }
-
-        const std::string& failure_reason = m_support_points_request->failure_reason();
-        if (error_message.empty()) {
-            if (!failure_reason.empty()) {
-                error_message = _u8L("Failed to generate support points:") + " " + failure_reason;
-            } else {
-                error_message = _u8L("Failed to generate support points.");
-            }
-        } else if (!failure_reason.empty()) {
-            error_message = failure_reason + "\n" + error_message;
-        }
         AppServices::instance().dialog_manager().show_warning_dialog(
-            error_message,
+            _u8L("Failed to generate support points: no support points could be generated."),
             _u8L("Warning")
         );
     }
@@ -640,7 +628,6 @@ void SlaSupportPointsGizmo::discard_generated_points()
 
     m_has_generated_points = false;
     m_generated_support_points.reset();
-    m_generation_slicing_id.reset();
     m_dialog->set_apply_enabled(false);
     m_dialog->set_generate_enabled(true);
     m_dialog->set_auto_support_all_enabled(true);
@@ -652,7 +639,7 @@ void SlaSupportPointsGizmo::discard_generated_points()
 
 void SlaSupportPointsGizmo::start_auto_support_all()
 {
-    if (m_generation_slicing_id.has_value() || !m_auto_support_queue.empty()) {
+    if (m_points_job_running || !m_auto_support_queue.empty()) {
         return;
     }
 
@@ -721,6 +708,16 @@ void SlaSupportPointsGizmo::process_auto_support_queue()
         m_dialog->set_generate_enabled(true);
         m_dialog->set_auto_support_all_enabled(true);
         m_auto_support_keep_existing.reset();
+
+        // The support geometry of the selected object may have been rebuilt by the last job
+        if (m_selected_object_id.valid()) {
+            const Domain::Project& project = m_project_interactor.selected_project();
+            const Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
+            if (model_object && !model_object->sla_support_points.empty()) {
+                m_dialog->set_point_count(model_object->sla_support_points.size());
+                request_support_geometry();
+            }
+        }
         return;
     }
 
@@ -754,11 +751,9 @@ void SlaSupportPointsGizmo::process_auto_support_queue()
         return;
     }
 
-    const Domain::BedRef bed_ref = instance->get_last_bed();
-    const Domain::SlicingId slicing_id{m_project_interactor.selected_project_id(), bed_ref.instance_id};
-    const StatusCode status = m_project_interactor.slicing_interactor().get_status(slicing_id);
-    if (status == StatusCode::Empty) {
-        SPDLOG_WARN("Auto support all: Empty slicing status for object {}, skipping", obj_id.id);
+    const std::optional<ObjectSlaConfig> config_opt = build_object_sla_config(model_object, instance);
+    if (!config_opt.has_value()) {
+        SPDLOG_WARN("Auto support all: No full SLA print configuration for object {}, skipping", obj_id.id);
         process_auto_support_queue();
         return;
     }
@@ -768,23 +763,34 @@ void SlaSupportPointsGizmo::process_auto_support_queue()
         model_object->sla_support_points.clear();
     }
 
-    m_generation_slicing_id = slicing_id;
+    {
+        DialogSyncGuard guard(*this);
+        m_dialog->set_generate_enabled(false);
+        m_dialog->set_auto_support_all_enabled(false);
+    }
 
-    DialogSyncGuard guard(*this);
-    m_dialog->set_generate_enabled(false);
-    m_dialog->set_auto_support_all_enabled(false);
+    // One Points job per object, run one after another on the worker thread
+    const Domain::BedRef bed_ref = instance->get_last_bed();
+    WorkerJobData job_data;
+    job_data.cloned_object = std::unique_ptr<Domain::ModelObject>(Domain::ModelObject::new_clone(*model_object));
+    job_data.instance_matrix = instance->get_matrix();
+    job_data.config = *config_opt;
+    job_data.object_id = obj_id;
+    job_data.instance_id = instance->id().id;
+    job_data.slicing_id = Domain::SlicingId{m_project_interactor.selected_project_id(), bed_ref.instance_id};
+    job_data.job_type = WorkerJobType::Points;
+    job_data.for_auto_support_all = true;
+    job_data.job_counter = ++m_job_counter;
 
-    m_support_points_request->callbacks().completed =
-        [this, obj_id](const std::optional<Domain::SLA::SupportPoints> support_points) {
-            this->on_auto_support_completed(obj_id, support_points);
-        };
-
-    m_support_points_request->start(slicing_id, obj_id);
+    m_points_job_running = true;
+    start_worker_job(std::move(job_data));
 }
 
 void SlaSupportPointsGizmo::on_auto_support_completed(Domain::ObjectID obj_id, std::optional<Domain::SLA::SupportPoints> support_points)
 {
-    if (support_points.has_value()) {
+    m_points_job_running = false;
+
+    if (support_points.has_value() && !support_points->empty()) {
         Domain::Project& project = m_project_interactor.selected_project();
         Domain::ModelObject* model_object = project.find_object_by_id(obj_id.id);
         if (model_object) {
@@ -803,6 +809,11 @@ void SlaSupportPointsGizmo::on_auto_support_completed(Domain::ObjectID obj_id, s
                 }
             }
 
+            if (m_selected_object_id == obj_id) {
+                DialogSyncGuard guard(*this);
+                m_dialog->set_point_count(support_points->size());
+            }
+
             if (instance_id != 0) {
                 const Domain::ElementRef object_ref{obj_id.id, instance_id};
                 m_project_interactor.scene_interactor().modify_sla_support_points(object_ref, [&](Domain::ModelObject& mo) {
@@ -814,22 +825,10 @@ void SlaSupportPointsGizmo::on_auto_support_completed(Domain::ObjectID obj_id, s
                 model_object->sla_support_points = std::move(*support_points);
                 model_object->sla_points_status = PointsStatus::AutoGenerated;
             }
-
-            // If this is the currently selected object, request support geometry
-            if (m_selected_object_id == obj_id) {
-                request_support_geometry();
-            }
         }
     } else {
-        const std::string& failure_reason = m_support_points_request->failure_reason();
-        if (!failure_reason.empty()) {
-            SPDLOG_WARN("Auto support all: Failed to generate support points for object {}: {}", obj_id.id, failure_reason);
-        } else {
-            SPDLOG_WARN("Auto support all: Failed to generate support points for object {}", obj_id.id);
-        }
+        SPDLOG_WARN("Auto support all: No support points could be generated for object {}", obj_id.id);
     }
-
-    m_generation_slicing_id.reset();
 
     // Continue with next object in queue
     process_auto_support_queue();
@@ -1448,9 +1447,9 @@ void SlaSupportPointsGizmo::request_support_geometry()
 
     const SlicingId slicing_id{m_project_interactor.selected_project_id(), bed_ref.instance_id};
 
-    // Build config view for the object
-    auto config_view_opt = build_object_config_view(model_object, instance);
-    if (!config_view_opt.has_value()) {
+    // Build the resolved SLA config for the object
+    const std::optional<ObjectSlaConfig> config_opt = build_object_sla_config(model_object, instance);
+    if (!config_opt.has_value()) {
         return;
     }
 
@@ -1459,7 +1458,7 @@ void SlaSupportPointsGizmo::request_support_geometry()
     job_data.cloned_object = std::unique_ptr<Domain::ModelObject>(Domain::ModelObject::new_clone(*model_object));
     job_data.instance_matrix = instance->get_matrix();
     job_data.points = model_object->sla_support_points;
-    job_data.config_view = std::move(*config_view_opt);
+    job_data.config = *config_opt;
     job_data.object_id = m_selected_object_id;
     job_data.instance_id = m_selected_instance_id;
     job_data.slicing_id = slicing_id;
@@ -1969,15 +1968,17 @@ double SlaSupportPointsGizmo::support_elevation() const
         return 0.;
     }
 
-    auto config_view_opt = build_object_config_view(model_object, instance);
-    if (!config_view_opt.has_value()) {
+    const std::optional<ObjectSlaConfig> config_opt = build_object_sla_config(model_object, instance);
+    if (!config_opt.has_value()) {
         return 0.;
     }
 
-    return sla::support_tool_elevation(*config_view_opt);
+    return sla::support_tool_elevation(config_opt->full, config_opt->object);
 }
 
-std::optional<Domain::ConfigView> SlaSupportPointsGizmo::build_object_config_view(const Domain::ModelObject* model_object, const Domain::ModelInstance* instance) const
+std::optional<SlaSupportPointsGizmo::ObjectSlaConfig> SlaSupportPointsGizmo::build_object_sla_config(
+    const Domain::ModelObject* model_object,
+    const Domain::ModelInstance* instance) const
 {
     if (!model_object || !instance) {
         return std::nullopt;
@@ -1996,11 +1997,10 @@ std::optional<Domain::ConfigView> SlaSupportPointsGizmo::build_object_config_vie
     }
 
     const Domain::Preset::HwPrinterConfig& hw_config = cc->selected_preset().hw_config;
-    auto full_config = std::make_shared<const Domain::FullConfigSLA>(std::get<Domain::ConfigPackSLA>(pack), hw_config);
-    auto partial_config = std::make_shared<const Domain::PartialObjectConfigSLA>(model_object->object_settings_sla, hw_config);
-    Domain::ConfigView view(full_config, {partial_config});
-    view.finalize();
-    return view;
+    ObjectSlaConfig config;
+    config.full = std::make_shared<const Domain::FullConfigSLA>(std::get<Domain::ConfigPackSLA>(pack), hw_config);
+    config.object = std::make_shared<const Domain::PartialObjectConfigSLA>(model_object->object_settings_sla, hw_config);
+    return config;
 }
 
 void SlaSupportPointsGizmo::start_worker_job(WorkerJobData&& job_data)
@@ -2012,6 +2012,7 @@ void SlaSupportPointsGizmo::start_worker_job(WorkerJobData&& job_data)
         result.instance_id = job_data.instance_id;
         result.slicing_id = job_data.slicing_id;
         result.job_type = job_data.job_type;
+        result.for_auto_support_all = job_data.for_auto_support_all;
         result.job_counter = job_data.job_counter;
 
         const SupportToolStop stop = [&stop_token]() {
@@ -2022,14 +2023,16 @@ void SlaSupportPointsGizmo::start_worker_job(WorkerJobData&& job_data)
             result.points = sla::generate_support_points_for_tool(
                 *job_data.cloned_object,
                 job_data.instance_matrix,
-                job_data.config_view,
+                job_data.config.full,
+                job_data.config.object,
                 stop);
         } else if (job_data.job_type == WorkerJobType::Tree) {
             result.tree = sla::build_support_tree_for_tool(
                 *job_data.cloned_object,
                 job_data.instance_matrix,
                 job_data.points,
-                job_data.config_view,
+                job_data.config.full,
+                job_data.config.object,
                 stop);
         }
 
@@ -2051,6 +2054,7 @@ void SlaSupportPointsGizmo::cancel_worker_job()
         m_worker.join();
     }
     ++m_job_counter;
+    m_points_job_running = false;
     m_active_job.reset();
 }
 
@@ -2063,25 +2067,26 @@ void SlaSupportPointsGizmo::on_worker_job_completed(WorkerJobResult&& result)
     m_active_job.reset();
 
     if (result.job_type == WorkerJobType::Points) {
-        on_points_job_completed(std::move(result.points), result.object_id, result.instance_id, result.slicing_id, result.job_counter);
+        on_points_job_completed(std::move(result.points), result.object_id, result.for_auto_support_all, result.job_counter);
     } else if (result.job_type == WorkerJobType::Tree) {
-        on_tree_job_completed(std::move(result.tree), result.object_id, result.instance_id, result.slicing_id, result.job_counter);
+        on_tree_job_completed(std::move(result.tree), result.object_id, result.job_counter);
     }
 }
 
-void SlaSupportPointsGizmo::on_points_job_completed(std::optional<Domain::SLA::SupportPoints> points, Domain::ObjectID object_id, Domain::SelectionId instance_id, Domain::SlicingId slicing_id, size_t job_counter)
+void SlaSupportPointsGizmo::on_points_job_completed(std::optional<Domain::SLA::SupportPoints> points, Domain::ObjectID object_id, bool for_auto_support_all, size_t job_counter)
 {
-    (void)object_id;
-    (void)instance_id;
-    (void)slicing_id;
     (void)job_counter;
+
+    if (for_auto_support_all) {
+        on_auto_support_completed(object_id, std::move(points));
+        return;
+    }
+
     on_generation_completed(std::move(points));
 }
 
-void SlaSupportPointsGizmo::on_tree_job_completed(std::optional<Slic3r::sla::SupportToolTree> tree, Domain::ObjectID object_id, Domain::SelectionId instance_id, Domain::SlicingId slicing_id, size_t job_counter)
+void SlaSupportPointsGizmo::on_tree_job_completed(std::optional<Slic3r::sla::SupportToolTree> tree, Domain::ObjectID object_id, size_t job_counter)
 {
-    (void)instance_id;
-    (void)slicing_id;
     (void)job_counter;
 
     if (!tree.has_value() || !m_selected_object_id.valid() || m_selected_object_id != object_id) {

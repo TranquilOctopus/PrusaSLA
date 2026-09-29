@@ -17,6 +17,7 @@
 #include "Slic3r/App/Yoga/Item.hpp"
 #include "Slic3r/Biz/JThread/JThread.hpp"
 #include "Slic3r/Domain/Config.hpp"
+#include "Slic3r/Domain/FullConfigSLA.hpp"
 #include "libslic3r/SLASupportTool.hpp"
 
 #include <memory>
@@ -177,7 +178,11 @@ private:
     void create_cone_geometry_if_needed();
 
     // Config and elevation helpers
-    std::optional<Domain::ConfigView> build_object_config_view(const Domain::ModelObject* model_object, const Domain::ModelInstance* instance) const;
+    struct ObjectSlaConfig {
+        Domain::FullConfigSLAPtr full;
+        Domain::PartialObjectConfigSLAPtr object;
+    };
+    std::optional<ObjectSlaConfig> build_object_sla_config(const Domain::ModelObject* model_object, const Domain::ModelInstance* instance) const;
     double support_elevation() const;
 
     // Worker helpers
@@ -186,12 +191,13 @@ private:
         std::unique_ptr<Domain::ModelObject> cloned_object;
         Domain::Transform3d instance_matrix;
         Domain::SLA::SupportPoints points; // for Tree job
-        Domain::ConfigView config_view;
+        ObjectSlaConfig config;
         Domain::ObjectID object_id;
         Domain::SelectionId instance_id;
         Domain::SlicingId slicing_id;
         WorkerJobType job_type;
-        size_t job_counter;
+        bool for_auto_support_all = false;
+        size_t job_counter = 0;
     };
     struct WorkerJobResult {
         std::optional<Domain::SLA::SupportPoints> points; // for Points job
@@ -200,14 +206,15 @@ private:
         Domain::SelectionId instance_id;
         Domain::SlicingId slicing_id;
         WorkerJobType job_type;
-        size_t job_counter;
+        bool for_auto_support_all = false;
+        size_t job_counter = 0;
         bool cancelled = false;
     };
     void start_worker_job(WorkerJobData&& job_data);
     void cancel_worker_job();
     void on_worker_job_completed(WorkerJobResult&& result);
-    void on_points_job_completed(std::optional<Domain::SLA::SupportPoints> points, Domain::ObjectID object_id, Domain::SelectionId instance_id, Domain::SlicingId slicing_id, size_t job_counter);
-    void on_tree_job_completed(std::optional<Slic3r::sla::SupportToolTree> tree, Domain::ObjectID object_id, Domain::SelectionId instance_id, Domain::SlicingId slicing_id, size_t job_counter);
+    void on_points_job_completed(std::optional<Domain::SLA::SupportPoints> points, Domain::ObjectID object_id, bool for_auto_support_all, size_t job_counter);
+    void on_tree_job_completed(std::optional<Slic3r::sla::SupportToolTree> tree, Domain::ObjectID object_id, size_t job_counter);
 
     PlaterScenePresenter& m_scene_presenter;
     Biz::ProjectInteractor& m_project_interactor;
@@ -218,6 +225,7 @@ private:
     std::optional<WorkerJobData> m_active_job;
     Biz::JThread::JThread m_worker;
     size_t m_job_counter = 0;
+    bool m_points_job_running = false;
     bool m_gizmo_active = false;
 
     Domain::ObjectID m_selected_object_id;
