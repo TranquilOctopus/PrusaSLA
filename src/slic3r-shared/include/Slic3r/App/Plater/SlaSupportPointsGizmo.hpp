@@ -33,8 +33,11 @@ class Device;
 
 namespace Slic3r::Biz {
 class ProjectInteractor;
-class SlaSupportPointsRequest;
 } // namespace Slic3r::Biz
+
+namespace Slic3r::libslic3r::sla {
+struct SupportToolTree;
+}
 
 namespace Slic3r::App::Plater {
 
@@ -109,7 +112,7 @@ private:
     void start_auto_support_all();
     void process_auto_support_queue();
     void on_auto_support_completed(Domain::ObjectID obj_id, std::optional<Domain::SLA::SupportPoints> support_points);
-    void on_generation_completed(std::optional<Slic3r::Domain::SLA::SupportPoints> support_points);
+    void on_generation_completed(std::optional<Domain::SLA::SupportPoints> support_points);
     void apply_generated_points();
     void discard_generated_points();
 
@@ -130,7 +133,7 @@ private:
     void clear_point_visuals();
     Domain::ColorRGBA get_point_color(const Domain::SLA::SupportPoint& point, bool highlighted) const;
     void request_support_geometry();
-    void rebuild_support_geometry_node(const Domain::SlicingId& slicing_id);
+    void rebuild_support_geometry_node(const Domain::SLA::SupportPoints& points);
     void clear_support_geometry_node();
 
     // Raycasting helpers (adapted from PaintOnGizmoBase)
@@ -174,18 +177,52 @@ private:
     // Cone visual
     void create_cone_geometry_if_needed();
 
-    // Support elevation helper
+    // Config and elevation helpers
+    std::optional<Domain::ConfigView> build_object_config_view(const Domain::ModelObject* model_object, const Domain::ModelInstance* instance) const;
     double support_elevation() const;
+
+    // Worker helpers
+    enum class WorkerJobType { Points, Tree };
+    struct WorkerJobData {
+        std::unique_ptr<Domain::ModelObject> cloned_object;
+        Domain::Transform3d instance_matrix;
+        Domain::SLA::SupportPoints points; // for Tree job
+        Domain::ConfigView config_view;
+        Domain::ObjectID object_id;
+        Domain::SelectionId instance_id;
+        Domain::SlicingId slicing_id;
+        WorkerJobType job_type;
+        size_t job_counter;
+    };
+    struct WorkerJobResult {
+        std::optional<Domain::SLA::SupportPoints> points; // for Points job
+        std::optional<sla::SupportToolTree> tree; // for Tree job
+        Domain::ObjectID object_id;
+        Domain::SelectionId instance_id;
+        Domain::SlicingId slicing_id;
+        WorkerJobType job_type;
+        size_t job_counter;
+        bool cancelled = false;
+    };
+    void start_worker_job(WorkerJobData&& job_data);
+    void cancel_worker_job();
+    void on_worker_job_completed(WorkerJobResult&& result);
+    void on_points_job_completed(std::optional<Domain::SLA::SupportPoints> points, Domain::ObjectID object_id, Domain::SelectionId instance_id, Domain::SlicingId slicing_id, size_t job_counter);
+    void on_tree_job_completed(std::optional<sla::SupportToolTree> tree, Domain::ObjectID object_id, Domain::SelectionId instance_id, Domain::SlicingId slicing_id, size_t job_counter);
 
     PlaterScenePresenter& m_scene_presenter;
     Biz::ProjectInteractor& m_project_interactor;
     Render::Device& m_device;
     Yoga::Passthrough<SlaSupportPointsDialog> m_dialog;
-    std::unique_ptr<Biz::SlaSupportPointsRequest> m_support_points_request;
-    std::optional<Domain::SlicingId> m_generation_slicing_id;
+
+    // Worker state
+    std::optional<WorkerJobData> m_active_job;
+    size_t m_job_counter = 0;
+    bool m_gizmo_active = false;
+
     Domain::ObjectID m_selected_object_id;
     Domain::SelectionId m_selected_instance_id{Domain::INVALID_ID};
-    std::optional<Slic3r::Domain::SLA::SupportPoints> m_generated_support_points;
+    std::optional<Domain::SLA::SupportPoints> m_generated_support_points;
     bool m_has_generated_points = false;
     Scene::IGizmoController* m_gizmo_controller = nullptr;
 

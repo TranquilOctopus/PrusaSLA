@@ -15,16 +15,18 @@
 #include "Slic3r/App/Plater/PlaterSceneLayer.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
-#include "Slic3r/Biz/Slicing/SlicingInteractor.hpp"
 #include "Slic3r/Biz/StatusCache.hpp"
 #include "Slic3r/Biz/IUndoProvider.hpp"
 #include "Slic3r/Biz/Utils/MeshRaycaster.hpp"
 #include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
+#include "Slic3r/Biz/JThread/JThread.hpp"
+#include "Slic3r/Biz/Platform/PlatformServices.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
 #include "Slic3r/Domain/SelectionId.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
 #include "Slic3r/Domain/ConfigContainer.hpp"
 #include "Slic3r/Domain/ConfigPack.hpp"
+#include "Slic3r/Domain/Config.hpp"
 #include "Slic3r/Math.hpp"
 #include "Slic3r/App/Platform/KeyboardEvent.hpp"
 #include "Slic3r/App/Platform/KeyModifers.hpp"
@@ -34,6 +36,8 @@
 #include <fmt/format.h>
 #include <magic_enum/magic_enum_flags.hpp>
 #include <spdlog/spdlog.h>
+
+#include "libslic3r/SLASupportTool.hpp"
 
 using namespace Slic3r;
 using namespace Slic3r::App::Yoga;
@@ -53,269 +57,11 @@ using Slic3r::Domain::SLA::SupportPoint;
 using Slic3r::Domain::SLA::SupportPointType;
 using Slic3r::Domain::SLA::SupportPoints;
 using Slic3r::Domain::SLA::PointsStatus;
-
-namespace Slic3r::Biz {
-
-class SlaSupportPointsRequest :
-    public ISLAObjectCacheChangedListener,
-    public IStatusCacheChangedListener
-{
-public:
-    struct Callbacks
-    {
-        std::function<void(std::optional<Domain::SLA::SupportPoints>)> completed =
-            [](std::optional<Domain::SLA::SupportPoints>) {};
-    };
-
-    SlaSupportPointsRequest() = delete;
-
-    SlaSupportPointsRequest(
-        SlicingInteractor& slicing_interactor,
-        StatusCache& status_cache,
-        SLAObjectCache& sla_object_cache,
-        ProjectInteractor& project_interactor
-    ) :
-        m_slicing_interactor(slicing_interactor),
-        m_status_cache(status_cache),
-        m_sla_object_cache(sla_object_cache),
-        m_project_interactor(project_interactor)
-    {}
-
-    ~SlaSupportPointsRequest() override
-    {
-        this->cancel();
-    }
-
-    Callbacks& callbacks()
-    {
-        return m_callbacks;
-    }
-
-    const std::string& failure_reason() const { return m_failure_reason; }
-
-    void start(SlicingId slicing_id, ObjectID model_object_id)
-    {
-        if (this->running()) {
-            return;
-        }
-
-        m_state = State::WaitingForSlicing;
-        m_slicing_id = slicing_id;
-        m_model_object_id = model_object_id;
-        m_has_fresh_points = false;
-        m_cache_changed = false;
-        m_failure_reason.clear();
-        m_sla_object_cache.add_listener<ISLAObjectCacheChangedListener>(this);
-        m_status_cache.add_listener<IStatusCacheChangedListener>(this);
-
-        const StatusCode status = m_slicing_interactor.get_status(slicing_id);
-        if (status == StatusCode::Finished || status == StatusCode::Modified ||
-            status == StatusCode::Updating || status == StatusCode::Running ||
-            status == StatusCode::Stopping || status == StatusCode::InvalidData) {
-            this->request_slicing_until_support_spots();
-        } else if (status == StatusCode::Empty) {
-            this->fail("the build plate has nothing to print");
-        } else if (status == StatusCode::Removed) {
-            this->fail("the build plate was removed");
-        }
-    }
-
-    void cancel()
-    {
-        if (!this->running()) {
-            return;
-        }
-
-        m_sla_object_cache.remove_listener<ISLAObjectCacheChangedListener>(this);
-        m_status_cache.remove_listener<IStatusCacheChangedListener>(this);
-
-        m_state = State::Idle;
-    }
-
-    [[nodiscard]] bool running() const
-    {
-        return m_state != State::Idle;
-    }
-
-private:
-    void fail(std::string reason)
-    {
-        SPDLOG_WARN("SLA support generation for object {} failed: {}", m_model_object_id.id, reason);
-        m_failure_reason = std::move(reason);
-        this->complete(std::nullopt);
-    }
-
-    std::string cached_points_problem() const
-    {
-        const SLAObjectCache::Key key{m_slicing_id, m_model_object_id};
-        const SLAObjectOptRef opt_ref = m_sla_object_cache.get_instance(key);
-        if (!opt_ref.has_value()) {
-            return "the object has no slicing result";
-        }
-
-        const Slicing::Sla::Object& sla_object = opt_ref->get();
-        if (!sla_object.support_points) {
-            return "supports are disabled for this object (Supports & raft: supports_enable)";
-        }
-        return "";
-    }
-
-public:
-    void on_sla_object_cache_changed(const SlicingId& id, ObjectID object_id) override
-    {
-        if (!this->running() || id != m_slicing_id || object_id != m_model_object_id) {
-            return;
-        }
-
-        m_cache_changed = true;
-
-        const std::optional<Slicing::Status> current_status = m_status_cache.get_status(id);
-        if (current_status.has_value()
-            && current_status->code == StatusCode::Running
-            && this->cached_support_points().has_value())
-        {
-            m_has_fresh_points = true;
-        }
-    }
-
-    void on_status_cache_status_code_changed(const SlicingId id) override
-    {
-        if (!this->running() || id != m_slicing_id) {
-            return;
-        }
-
-        const std::optional<Slicing::Status> status = m_status_cache.get_status(id);
-        if (!status.has_value()) {
-            this->fail("slicing status is unavailable");
-            return;
-        }
-
-        switch (status->code) {
-        case StatusCode::Running:
-            m_state = State::SlicingActive;
-            break;
-        case StatusCode::Stopping:
-            m_state = State::SlicingActive;
-            break;
-        case StatusCode::Updating:
-            m_has_fresh_points = false;
-            break;
-        case StatusCode::Modified:
-            if (m_state == State::SlicingRequested || m_state == State::SlicingActive) {
-                if (m_has_fresh_points || m_cache_changed) {
-                    this->try_complete_from_cache();
-                } else {
-                    this->fail("slicing stopped before support points were generated");
-                }
-            } else if (m_state == State::WaitingForSlicing) {
-                this->request_slicing_until_support_spots();
-            } else {
-                this->fail("slicing stopped before support points were generated");
-            }
-            break;
-        case StatusCode::Finished:
-            if (m_state == State::SlicingRequested || m_state == State::SlicingActive) {
-                const std::optional<Domain::SLA::SupportPoints> points = this->cached_support_points();
-                if (points.has_value()) {
-                    this->complete(points);
-                } else {
-                    this->fail(this->cached_points_problem());
-                }
-            } else if (m_state == State::WaitingForSlicing) {
-                this->request_slicing_until_support_spots();
-            }
-            break;
-        case StatusCode::Empty:
-        case StatusCode::InvalidData:
-            if (m_state == State::SlicingRequested || m_state == State::SlicingActive) {
-                this->fail("slicing failed before support points were generated");
-            } else if (m_state == State::WaitingForSlicing) {
-                this->request_slicing_until_support_spots();
-            } else {
-                this->fail("slicing failed before support points were generated");
-            }
-            break;
-        default:
-            break;
-        }
-    }
-
-private:
-    enum class State
-    {
-        Idle,
-        WaitingForSlicing,
-        SlicingRequested,
-        SlicingActive
-    };
-
-    [[nodiscard]] std::optional<Domain::SLA::SupportPoints> cached_support_points() const
-    {
-        const SLAObjectCache::Key key{m_slicing_id, m_model_object_id};
-        const SLAObjectOptRef opt_ref = m_sla_object_cache.get_instance(key);
-        if (!opt_ref.has_value()) {
-            return std::nullopt;
-        }
-
-        const Slicing::Sla::Object& sla_object = opt_ref->get();
-        if (!sla_object.support_points) {
-            return std::nullopt;
-        }
-
-        Domain::SLA::SupportPoints world_points = *sla_object.support_points;
-        Domain::SLA::SupportPoints mesh_points;
-        mesh_points.reserve(world_points.size());
-        const Domain::Transform3f inv = sla_object.object_trafo.inverse().cast<float>();
-        for (const auto& sp : world_points) {
-            Domain::SLA::SupportPoint mesh_sp = sp;
-            mesh_sp.pos = inv * sp.pos;
-            mesh_points.push_back(mesh_sp);
-        }
-        return mesh_points;
-    }
-
-    void try_complete_from_cache()
-    {
-        const std::optional<Domain::SLA::SupportPoints> points = this->cached_support_points();
-        if (points.has_value()) {
-            this->complete(points);
-        } else {
-            this->fail(this->cached_points_problem());
-        }
-    }
-
-    void complete(std::optional<Domain::SLA::SupportPoints> support_points)
-    {
-        this->cancel();
-        m_callbacks.completed(support_points);
-    }
-
-    void request_slicing_until_support_spots()
-    {
-        m_state = State::SlicingRequested;
-        m_cache_changed = false;
-        m_slicing_interactor.slice_bed(
-            m_slicing_id,
-            SliceUntilStep{Slic3r::slaposSupportPoints, m_model_object_id}
-        );
-    }
-
-    SlicingInteractor& m_slicing_interactor;
-    StatusCache& m_status_cache;
-    SLAObjectCache& m_sla_object_cache;
-    ProjectInteractor& m_project_interactor;
-
-    Callbacks m_callbacks;
-
-    State m_state = State::Idle;
-    bool m_has_fresh_points = false;
-    bool m_cache_changed = false;
-    std::string m_failure_reason;
-    SlicingId m_slicing_id;
-    ObjectID m_model_object_id;
-};
-
-} // namespace Slic3r::Biz
+using Slic3r::libslic3r::sla::SupportToolTree;
+using Slic3r::libslic3r::sla::generate_support_points_for_tool;
+using Slic3r::libslic3r::sla::build_support_tree_for_tool;
+using Slic3r::libslic3r::sla::support_tool_elevation;
+using Slic3r::libslic3r::sla::SupportToolStop;
 
 namespace Slic3r::App::Plater {
 
@@ -331,13 +77,6 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     m_dialog.reset(std::make_unique<SlaSupportPointsDialog>());
     m_dialog->set_title(_u8L("SLA Support Points"));
     m_dialog->set_shortcut("P");
-
-    m_support_points_request = std::make_unique<Biz::SlaSupportPointsRequest>(
-        m_project_interactor.slicing_interactor(),
-        m_project_interactor.status_cache(),
-        m_project_interactor.sla_object_cache(),
-        m_project_interactor
-    );
 
     m_dialog->callbacks().generate = [this]() { this->start_generation(); };
     m_dialog->callbacks().apply = [this]() { this->apply_generated_points(); };
@@ -518,6 +257,7 @@ void SlaSupportPointsGizmo::provide_gizmo_controller(Scene::IGizmoController& co
 
 void SlaSupportPointsGizmo::on_activated()
 {
+    m_gizmo_active = true;
     m_project_interactor.scene_interactor().add_listener<Biz::Scene::ISceneSelectionChangedListener>(this);
     m_project_interactor.sla_object_cache().add_listener<Biz::ISLAObjectCacheChangedListener>(this);
 
@@ -528,13 +268,11 @@ void SlaSupportPointsGizmo::on_activated()
 
 void SlaSupportPointsGizmo::on_deactivated()
 {
+    m_gizmo_active = false;
+    cancel_worker_job();
     m_project_interactor.scene_interactor().remove_listener<Biz::Scene::ISceneSelectionChangedListener>(this);
     m_project_interactor.sla_object_cache().remove_listener<Biz::ISLAObjectCacheChangedListener>(this);
 
-    if (m_generation_slicing_id.has_value()) {
-        m_support_points_request->cancel();
-        m_generation_slicing_id.reset();
-    }
     m_has_generated_points = false;
     m_generated_support_points.reset();
 
@@ -619,10 +357,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
 {
     DialogSyncGuard guard(*this);
 
-    if (m_generation_slicing_id.has_value()) {
-        m_support_points_request->cancel();
-        m_generation_slicing_id.reset();
-    }
+    cancel_worker_job();
     m_has_generated_points = false;
     m_generated_support_points.reset();
 
@@ -753,15 +488,11 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
 
 void SlaSupportPointsGizmo::on_sla_object_cache_changed(const Domain::SlicingId& id, Domain::ObjectID object_id)
 {
-    // If a support points generation request is running for this object, let the request handle it
-    if (m_generation_slicing_id.has_value() && id == *m_generation_slicing_id && object_id == m_selected_object_id) {
-        return;
-    }
-
-    // If the cache changed for the selected object and no generation is running, rebuild support geometry
-    if (object_id == m_selected_object_id && !m_generation_slicing_id.has_value()) {
-        rebuild_support_geometry_node(id);
-    }
+    // No longer rebuild support geometry from SLA object cache.
+    // Support geometry is now built on-demand via the worker using the new engine API.
+    // Keep listener for potential future use.
+    (void)id;
+    (void)object_id;
 }
 
 void SlaSupportPointsGizmo::start_generation()
@@ -1690,7 +1421,7 @@ void SlaSupportPointsGizmo::clear_point_visuals()
 
 void SlaSupportPointsGizmo::request_support_geometry()
 {
-    if (!m_selected_object_id.valid() || m_generation_slicing_id.has_value()) {
+    if (!m_selected_object_id.valid() || m_active_job.has_value()) {
         return;
     }
 
@@ -1712,18 +1443,29 @@ void SlaSupportPointsGizmo::request_support_geometry()
     }
 
     const SlicingId slicing_id{m_project_interactor.selected_project_id(), bed_ref.instance_id};
-    const StatusCode status = m_project_interactor.slicing_interactor().get_status(slicing_id);
-    if (status == StatusCode::Empty) {
+
+    // Build config view for the object
+    auto config_view_opt = build_object_config_view(model_object, instance);
+    if (!config_view_opt.has_value()) {
         return;
     }
 
-    m_project_interactor.slicing_interactor().slice_bed(
-        slicing_id,
-        SliceUntilStep{Slic3r::slaposSupportTree, m_selected_object_id}
-    );
+    // Start a Tree job with the current points
+    WorkerJobData job_data;
+    job_data.cloned_object = std::unique_ptr<Domain::ModelObject>(Domain::ModelObject::new_clone(*model_object));
+    job_data.instance_matrix = instance->get_matrix();
+    job_data.points = model_object->sla_support_points;
+    job_data.config_view = std::move(*config_view_opt);
+    job_data.object_id = m_selected_object_id;
+    job_data.instance_id = m_selected_instance_id;
+    job_data.slicing_id = slicing_id;
+    job_data.job_type = WorkerJobType::Tree;
+    job_data.job_counter = ++m_job_counter;
+
+    start_worker_job(std::move(job_data));
 }
 
-void SlaSupportPointsGizmo::rebuild_support_geometry_node(const Domain::SlicingId& slicing_id)
+void SlaSupportPointsGizmo::rebuild_support_geometry_node(const Domain::SLA::SupportPoints& points, const SupportToolTree& tree, double elevation)
 {
     if (!m_selected_object_id.valid() || m_main_node == nullptr) {
         return;
@@ -1732,43 +1474,35 @@ void SlaSupportPointsGizmo::rebuild_support_geometry_node(const Domain::SlicingI
     // Clear existing support geometry node
     clear_support_geometry_node();
 
-    // Get the SLA object from cache
-    const SLAObjectCache::Key key{slicing_id, m_selected_object_id};
-    const SLAObjectOptRef opt_ref = m_project_interactor.sla_object_cache().get_instance(key);
-    if (!opt_ref.has_value()) {
-        return;
-    }
-
-    const Slicing::Sla::Object& sla_object = opt_ref->get();
-
     // Get bed instance transform
     const Domain::Project& project = m_project_interactor.selected_project();
-    const Domain::BedInstance* bed_instance = project.find_bed_instance_by_id(slicing_id.bed_instance_id);
+    const Domain::SlicingId slicing_id = m_active_job.has_value() ? m_active_job->slicing_id : Domain::SlicingId{};
+    Domain::BedInstance* bed_instance = nullptr;
+    if (slicing_id.valid()) {
+        bed_instance = project.find_bed_instance_by_id(slicing_id.bed_instance_id);
+    }
+    if (!bed_instance) {
+        // Fallback: find any bed instance for the selected object
+        for (const auto& bi : project.bed_instances()) {
+            if (bi->object_id == m_selected_object_id) {
+                bed_instance = bi.get();
+                break;
+            }
+        }
+    }
     if (!bed_instance) {
         return;
     }
     const Domain::Transform3d bed_trafo = bed_instance->transformation.get_matrix();
 
-    // Find instance transform from sla_object.instance_trafos matching m_selected_instance_id
-    const Domain::ObjectID selected_instance_oid{m_selected_instance_id};
-    Domain::Transform3d instance_trafo = Domain::Transform3d::Identity();
-    bool found = false;
-    for (const auto& [oid, trafo] : sla_object.instance_trafos) {
-        if (oid.id == selected_instance_oid.id) {
-            instance_trafo = trafo;
-            found = true;
-            break;
-        }
+    // Find instance transform
+    const Domain::ModelInstance* instance = project.find_instance_by_id(m_selected_object_id.id, m_selected_instance_id);
+    if (!instance) {
+        return;
     }
-    if (!found) {
-        if (!sla_object.instance_trafos.empty()) {
-            instance_trafo = sla_object.instance_trafos.front().second;
-        } else {
-            return;
-        }
-    }
+    const Domain::Transform3d instance_trafo = instance->get_matrix();
 
-    const Domain::Transform3d final_trafo = bed_trafo * instance_trafo;
+    const Domain::Transform3d final_trafo = bed_trafo * instance_trafo * Domain::translation_transform(Domain::Vec3d(0., 0., elevation));
 
     Scene::Scene& scene = m_scene_presenter.scene();
     const auto& theme = AppServices::instance().theme();
@@ -1779,10 +1513,10 @@ void SlaSupportPointsGizmo::rebuild_support_geometry_node(const Domain::SlicingI
         .set_uniform("uniform_color", support_color);
 
     // Build support structure mesh
-    if (sla_object.support_structure && !sla_object.support_structure->empty()) {
+    if (tree.tree && !tree.tree->empty()) {
         Scene::AuxiliaryElementId support_id{Scene::AuxiliaryElementId::Type::SlaSupports, m_selected_object_id.id};
         const auto& trimesh = m_support_triangle_mesh_manager.get_or_create(support_id, [&]() {
-            return std::make_unique<Scene::TriangleMesh>(sla_object.support_structure);
+            return std::make_unique<Scene::TriangleMesh>(tree.tree);
         });
         const auto* geom = m_support_geometry_manager.get_or_create(support_id, [&]() {
             return Render::geometry_from_triangle_mesh(m_device, trimesh->triangles());
@@ -1800,10 +1534,10 @@ void SlaSupportPointsGizmo::rebuild_support_geometry_node(const Domain::SlicingI
     }
 
     // Build pad mesh
-    if (sla_object.pad && !sla_object.pad->empty()) {
+    if (tree.pad && !tree.pad->empty()) {
         Scene::AuxiliaryElementId pad_id{Scene::AuxiliaryElementId::Type::SlaPad, m_selected_object_id.id};
         const auto& trimesh = m_support_triangle_mesh_manager.get_or_create(pad_id, [&]() {
-            return std::make_unique<Scene::TriangleMesh>(sla_object.pad);
+            return std::make_unique<Scene::TriangleMesh>(tree.pad);
         });
         const auto* geom = m_support_geometry_manager.get_or_create(pad_id, [&]() {
             return Render::geometry_from_triangle_mesh(m_device, trimesh->triangles());
