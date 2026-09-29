@@ -86,8 +86,13 @@ void ClipperPresenter::activate(
     }
 
     if (should_build_meshes_nodes == BuildMeshesNodes::Yes) {
-        Domain::Transform3d inst_trafo = selected_instance->get_matrix();
-        inst_trafo.pretranslate(Domain::Vec3d(0., 0., sla_shift));
+        // The height band may run without a selection, in which case there are no volumes to draw
+        // here and everything comes in as an extra mesh.
+        Domain::Transform3d inst_trafo = Domain::Transform3d::Identity();
+        if (selected_instance != nullptr) {
+            inst_trafo = selected_instance->get_matrix();
+            inst_trafo.pretranslate(Domain::Vec3d(0., 0., sla_shift));
+        }
         build_meshes_nodes(inst_trafo);
     }
 
@@ -115,6 +120,9 @@ void ClipperPresenter::reset()
         m_model_geometry_manager.release_all();
         m_model_triangle_mesh_manager.release_all();
     }
+    // Hand the meshes back, the band collects them again when it comes back.
+    if (m_clipper)
+        m_clipper->set_extra_meshes({});
     m_contour_enabled = m_mesh_enabled = m_plane_enabled = true;
 }
 
@@ -163,6 +171,58 @@ void ClipperPresenter::build_meshes_nodes(const Domain::Transform3d& inst_trafo)
             .set_tag(id)
             .set_mesh(geom, material, int(0))
             .transform([trafo, volume](auto& xform) { xform = trafo; });
+
+        m_scene_provider->scene().add_child(builder.build().release(), m_main_node);
+    }
+
+    build_extra_meshes_nodes();
+}
+
+void ClipperPresenter::build_extra_meshes_nodes()
+{
+    // Drop the nodes of the previous set, the geometry managers are keyed by the same ids.
+    m_scene_provider->scene().remove_children(
+        [&](const Node* node) {
+            const ClipperElement* tag = node->tag_of_type<ClipperElement>();
+            if (tag == nullptr || tag->type != ClipperElementType::Mesh)
+                return false;
+            if (tag->id < extra_mesh_id_base)
+                return false;
+            m_model_geometry_manager.release(*tag);
+            m_model_triangle_mesh_manager.release(*tag);
+            return true;
+        },
+        m_main_node);
+
+    const std::vector<Clipper::ExtraMesh>& extras = m_clipper->extra_meshes();
+    for (size_t extra_id = 0; extra_id < extras.size(); ++extra_id) {
+        const Clipper::ExtraMesh& extra = extras[extra_id];
+        if (!extra.mesh || extra.mesh->empty())
+            continue;
+
+        ClipperElement id{ClipperElementType::Mesh, extra_mesh_id_base + extra_id};
+
+        const auto& trimesh = m_model_triangle_mesh_manager.get_or_create(
+            id,
+            [&]() -> std::unique_ptr<TriangleMesh> { return std::make_unique<TriangleMesh>(extra.mesh); }
+        );
+        const auto* geom = m_model_geometry_manager.get_or_create(
+            id,
+            [&]() { return Render::geometry_from_triangle_mesh(*m_device, trimesh->triangles()); }
+        );
+
+        auto material =
+            Render::Material{}
+                .set_shader(m_device->context().shader_manager().shader("gouraud_light_clip"))
+                .set_uniform("uniform_color", m_mesh_color)
+                .set_transparent(m_mesh_color.is_transparent());
+
+        NodeBuilder builder{m_scene_provider->scene()};
+        builder.set_debug_name(fmt::format("Clipped mesh:{}", extra_id))
+            .set_tag(id)
+            .set_mesh(geom, material, int(0))
+            .set_aabb(trimesh->aabb_mesh())
+            .set_transform(extra.trafo);
 
         m_scene_provider->scene().add_child(builder.build().release(), m_main_node);
     }
@@ -312,6 +372,57 @@ void ClipperPresenter::update_nodes()
             clipper_id++;
         }
     }
+
+    // The cap of every extra mesh, numbered past the selected object's clippers so the two sets
+    // cannot collide in the geometry managers.
+    for (size_t extra_id = 0; extra_id < m_clipper->extra_clippers().size(); ++extra_id) {
+        const auto& [mesh_clipper, trafo] = m_clipper->extra_clippers()[extra_id];
+        if (!mesh_clipper->result)
+            continue;
+
+        size_t island_id = 0;
+        for (const Biz::MeshClipper::CutIsland& island : mesh_clipper->result.value().cut_islands) {
+            build_non_mesh_node(
+                ClipperElementType::Plane,
+                island.model,
+                extra_mesh_id_base + extra_id,
+                island_id
+            );
+            build_non_mesh_node(
+                ClipperElementType::Contour,
+                island.model_expanded,
+                extra_mesh_id_base + extra_id,
+                island_id
+            );
+            island_id++;
+        }
+    }
+}
+
+void ClipperPresenter::set_extra_meshes(const std::vector<Clipper::ExtraMesh>& meshes)
+{
+    if (!m_clipper)
+        return;
+
+    // The band calls this on every slider change, so skip the work when nothing moved.
+    const std::vector<Clipper::ExtraMesh>& current = m_clipper->extra_meshes();
+    if (current.size() == meshes.size()) {
+        bool same = true;
+        for (size_t i = 0; i < current.size() && same; ++i) {
+            same = current[i].mesh == meshes[i].mesh
+                && current[i].trafo.matrix().isApprox(meshes[i].trafo.matrix());
+        }
+        if (same)
+            return;
+    }
+
+    m_clipper->set_extra_meshes(meshes);
+    if (m_main_node == nullptr)
+        return;
+
+    // Drop the nodes of the previous set and cut the new one, so the caps follow.
+    build_extra_meshes_nodes();
+    update_nodes();
 }
 
 void ClipperPresenter::set_clickable_plane(bool clickable) {}

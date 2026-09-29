@@ -64,6 +64,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Plater/SlaIssueAnalysis.cpp
         include/Slic3r/App/Plater/SlaHeightBand.hpp
         src/Slic3r/App/Plater/SlaHeightBand.cpp
+        include/Slic3r/App/Plater/SlaHeightBandMeshes.hpp
+        src/Slic3r/App/Plater/SlaHeightBandMeshes.cpp
         include/Slic3r/App/Plater/SimplifyDialog.hpp
         src/Slic3r/App/Plater/SimplifyDialog.cpp
         include/Slic3r/App/Plater/ArrangeDialog.hpp
@@ -1633,6 +1635,8 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/App/Plater/SlaIssueAnalysisTests.cpp
 
             test/Slic3r/App/Plater/SlaUnsupportedObjectsTests.cpp
+
+        test/Slic3r/App/Plater/SlaHeightBandMeshesTests.cpp
 
             test/Slic3r/App/ResultExport/SlaPreExportCheckTests.cpp
 
