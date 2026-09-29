@@ -227,7 +227,7 @@ public:
         m_ctrl->set_flex_grow(1.);
     }
 
-    int min_pos() const { return m_ctrl->min_pos(); }
+int min_pos() const { return m_ctrl->min_pos(); }
     int max_pos() const { return m_ctrl->max_pos(); }
     int lower_pos() const { return m_ctrl->lower_pos(); }
     int higher_pos() const { return m_ctrl->higher_pos(); }
@@ -270,8 +270,6 @@ public:
 
     bool is_lower_at_min() const { return m_ctrl->lower_pos() == m_ctrl->min_pos(); }
     bool is_higher_at_max() const { return m_ctrl->higher_pos() == m_ctrl->max_pos(); }
-
-    int active_pos() const { return m_ctrl->active_pos(); }
 
     void show_lower_thumb(bool show) { m_ctrl->show_lower_thumb(show); }
 
