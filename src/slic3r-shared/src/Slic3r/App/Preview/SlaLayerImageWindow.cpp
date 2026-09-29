@@ -595,7 +595,7 @@ void SlaLayerImageWindow::render_plot(
     // The label is drawn on top of the plot, hide it from the plot itself
     const std::string id = "##" + title;
 
-    ImGui::PushStyleColor(ImGuiCol_PlotLines, m_theme->color_imgui(line_color));
+    ImGui::PushStyleColor(ImGuiCol_PlotLines, m_theme->color_imgui(line_color).Value);
     ImGui::PlotLines(
         id.c_str(),
         values.data(),

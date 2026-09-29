@@ -19,7 +19,7 @@ constexpr std::chrono::seconds hint_timeout{20s};
 } // namespace
 
 SlaFirstModelNotification::SlaFirstModelNotification(
-    ProjectInteractor& project_interactor,
+    Biz::ProjectInteractor& project_interactor,
     PopNotification::PopNotificationCenter& notify) :
     m_project_interactor(project_interactor),
     m_notify(notify)

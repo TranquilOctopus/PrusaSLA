@@ -78,7 +78,7 @@ IniMap parse_ini(const std::string &text)
     std::istringstream in{text};
     std::string        line;
     while (std::getline(in, line)) {
-        line = boost::algorithm::trim(line);
+        line = boost::algorithm::trim_copy(line);
         if (line.empty() || line.front() == ';' || line.front() == '#' || line.front() == '[')
             continue;
 
@@ -86,11 +86,11 @@ IniMap parse_ini(const std::string &text)
         if (eq == std::string::npos)
             continue;
 
-        std::string key = boost::algorithm::trim(line.substr(0, eq));
+        std::string key = boost::algorithm::trim_copy(line.substr(0, eq));
         if (key.empty())
             continue;
 
-        map[key] = boost::algorithm::trim(line.substr(eq + 1));
+        map[key] = boost::algorithm::trim_copy(line.substr(eq + 1));
     }
 
     return map;
