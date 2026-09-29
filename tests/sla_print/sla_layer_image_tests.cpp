@@ -30,7 +30,6 @@ static Domain::ConfigView make_printer_config(Domain::SLADisplayOrientation orie
     auto full_config = std::make_shared<const Domain::FullConfigSLA>(
         config, Domain::Preset::HwPrinterConfig{.technology = Domain::PrinterTechnology::SLA});
     SLAPrintConfigView view(full_config);
-    view.finalize();
     return static_cast<Domain::ConfigView>(view);
 }
 
