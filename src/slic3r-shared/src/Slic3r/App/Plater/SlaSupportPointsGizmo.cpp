@@ -1790,7 +1790,7 @@ void SlaSupportPointsGizmo::rebuild_support_geometry_node(const Domain::SlicingI
 
         Scene::NodeBuilder builder{scene};
         builder.set_debug_name("SlaSupportPointsGizmo - Support Structure")
-            .set_mesh(geom, material, Scene::RenderLayerId(PlaterSceneLayer::GizmoHandles))
+            .set_mesh(geom, material, Scene::RenderLayerId(PlaterSceneLayer::DocumentObjects))
             .set_aabb(trimesh->aabb_mesh())
             .set_transform(final_trafo);
 
@@ -1811,7 +1811,7 @@ void SlaSupportPointsGizmo::rebuild_support_geometry_node(const Domain::SlicingI
 
         Scene::NodeBuilder builder{scene};
         builder.set_debug_name("SlaSupportPointsGizmo - Pad")
-            .set_mesh(geom, material, Scene::RenderLayerId(PlaterSceneLayer::GizmoHandles))
+            .set_mesh(geom, material, Scene::RenderLayerId(PlaterSceneLayer::DocumentObjects))
             .set_aabb(trimesh->aabb_mesh())
             .set_transform(final_trafo);
 
