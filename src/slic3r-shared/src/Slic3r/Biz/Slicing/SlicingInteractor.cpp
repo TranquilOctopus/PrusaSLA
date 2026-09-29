@@ -401,8 +401,16 @@ void SlicingInteractor::process_slicing_queue()
 
     SPDLOG_TRACE("slicing_queue: {}", m_slicing_queue.size());
 
-    const SlicingRequest to_slice{m_slicing_queue.front()};
-    m_slicing_queue.pop_front();
+    auto it = std::ranges::find_if(m_slicing_queue, [this](const SlicingRequest& request) {
+        return !m_update_requests.contains(request.id);
+    });
+
+    if (it == m_slicing_queue.end()) {
+        return;
+    }
+
+    const SlicingRequest to_slice{*it};
+    m_slicing_queue.erase(it);
 
     if (!m_processes.contains(to_slice.id)) {
         SPDLOG_TRACE("{}: removed: nonexistent", fmt::streamed(to_slice.id));
