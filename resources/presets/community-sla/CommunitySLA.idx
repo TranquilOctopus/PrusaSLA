@@ -1,3 +1,4 @@
 min_slic3r_version = 3.0.0-alpha0
+1.0.2 First layer uses the print layer height (no preset variants)
 1.0.1 First layer height follows the print layer height
 1.0.0 Initial release

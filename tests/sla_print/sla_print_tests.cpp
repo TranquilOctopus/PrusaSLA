@@ -5,11 +5,18 @@
 #include <algorithm>
 
 #include "sla_test_utils.hpp"
+#include "test_data.hpp"
 
 #include <libslic3r/TriangleMeshSlicer.hpp>
 #include <libslic3r/SLA/SupportTreeMesher.hpp>
 #include <libslic3r/BranchingTree/PointCloud.hpp>
 #include "Slic3r/Biz/Algorithms/BoundingBox.hpp"
+#include "Slic3r/Biz/Algorithms/ModelObject.hpp"
+#include "Slic3r/Biz/Slicing/BackgroundProcess.hpp"
+#include "Slic3r/Domain/Preset/HwConfig.hpp"
+#include "Slic3r/Domain/PrinterTechnology.hpp"
+#include "libslic3r/SLAPrint.hpp"
+#include "libslic3r/SlicingInput.hpp"
 
 namespace BB = Slic3r::Biz::Algorithms::BoundingBox;
 namespace {
@@ -217,4 +224,57 @@ TEST_CASE("halfcone test", "[halfcone]") {
     namespace triangle_mesh = Biz::Algorithms::TriangleMesh;
     triangle_mesh::its_merge_vertices(m);
     its_write_obj(m, "Halfcone.obj");
+}
+
+TEST_CASE("Initial layer height zero uses layer height", "[SLAInitialLayerHeight]") {
+    using namespace Slic3r;
+    using namespace Slic3r::Domain;
+    using namespace Slic3r::Biz::Algorithms;
+    using namespace Slic3r::Test;
+
+    // Create a simple 20mm cube model
+    TriangleMesh mesh = TriangleMesh::make_cube(20.0, 20.0, 20.0);
+    Domain::Model model;
+    Domain::ModelObject* object = model.add_object();
+    object->name = "cube.stl";
+    add_volume(object, mesh);
+    object->add_instance();
+
+    // Setup bed
+    Domain::Bed model_bed;
+    Domain::BedInstance bed_instance{model_bed};
+    for (const Domain::ModelObject* obj : model.objects) {
+        for (Domain::ModelInstance* inst : obj->instances) {
+            bed_instance.model_instances.push_back(inst);
+        }
+    }
+
+    // Config with layer_height = 0.03, initial_layer_height = 0
+    Domain::ConfigPackSLA config;
+    config.sla_print_settings.items.opt("layer_height").set<double>(0.03);
+    config.sla_material_settings.items.opt("initial_layer_height").set<double>(0.0);
+
+    auto hw_config = Test::create_dummy_hw_config(1, 0, Domain::PrinterTechnology::SLA);
+    auto preset_metadata = Test::create_dummy_selected_preset_metadata(hw_config);
+    auto metadata = Biz::Slicing::build_gcode_metadata({}, preset_metadata, config);
+
+    SLAPrint print{[](Biz::Slicing::SLAResult&&) {}, [](const Biz::Slicing::Sla::Object&) {}};
+    print.update(model, config, bed_instance, preset_metadata,
+                 Biz::Slicing::build_metadata_serializer(metadata, preset_metadata, config));
+
+    // Slice the model
+    ThumbnailGenerator thumbnail_generator{};
+    print.slice(SlicingId{0, 0}, thumbnail_generator, std::nullopt);
+
+    // Get the slice levels from the first object
+    REQUIRE(print.m_objects.size() == 1);
+    const SLAPrintObject& po = *print.m_objects.front();
+    REQUIRE(po.m_slice_index.size() >= 2);
+
+    // First two slice levels should be 0.03 mm apart
+    float level0 = po.m_slice_index[0].slice_level();
+    float level1 = po.m_slice_index[1].slice_level();
+    float diff = level1 - level0;
+
+    REQUIRE(diff == Approx(0.03).margin(1e-4));
 }
