@@ -285,8 +285,9 @@ Unit and meaning questions marked "verify" get settled in M3.1 by comparing a sa
 |---|---|---|---|
 | `normalExposureTime` | `exposure` | `exposure_time` | Exact |
 | `bottomLayerExposureTime` \| `bottomLayExposureTime` | `bottom_exposure` | `initial_exposure_time` | Exact |
-| `bottomLayerCount` \| `bottomLayCount` | `bottom_layers` | tilt printers: `faded_layers`, clamped to 3–20. Generic MSLA: `bottom_layer_count` | Approximated (tilt) / Exact (generic) |
-| `layerHeight` | `layer_height` | preset variant condition `print.layer_height == x` (not a material value) | Converted |
+| `bottomLayerCount` \| `bottomLayCount` | `bottom_layers` | tilt printers: `resin_faded_layers`, clamped to 3–20 (the print preset's `faded_layers` only applies when the resin has none). Generic MSLA: `bottom_layer_count` | Approximated (tilt) / Exact (generic) |
+| `transitionLayers`, `fadedLayers` | `transition_layers` | `resin_faded_layers`, both printer classes | Exact |
+| `layerHeight` | `layer_height` | `resin_layer_height` (a resin setting since M0.4, not a preset variant condition) | Exact |
 | `resinDensity` | `density` | `material_density` | Exact |
 | `resinPrice` + `resinUnit` | `price_per_litre` | `bottle_cost = price × bottle_volume / 1000`, only when the unit is per litre. Currency isn't converted, which is noted. | Converted |
 | `lightOffTime`, `bottomLightOffTime` | `wait_before_exposure` | `delay_before_exposure: [v, v]` (same value above and below area fill). Verify meaning. | Approximated |
@@ -314,8 +315,22 @@ Unit and meaning questions marked "verify" get settled in M3.1 by comparing a sa
   Result: ForeignResinProfile, IResinProfileReader and ResinProfileReaderRegistry, which picks a reader by sniffing the first 4 KB rather than the extension. Registry tests cover content dispatch, an empty registry and a missing file.
 - [x] **M3.4** `ChituboxCfgReader`, with hand-written fixtures covering: old and new key spellings, two-stage lift, quoted multi-line G-code containing colons, CRLF line endings, BOM, unknown keys, missing keys, garbage values, and an oversized file. · M · needs M3.3
   Progress: ChituboxCfgReader exists with 16 passing tests: old and new key spellings, colons in values, multi-line quoted G-code, CRLF and lone CR, a UTF-8 BOM (in both sniff() and read(), where review found sniff() rejected BOM'd files), unknown keys, garbage values, empty and missing input. M3.4b added the two-stage lift fixture and the size-limit tests (reader and registry).
-- [ ] **M3.5** `ResinProfileMapper` for tilt printers (SL1/SL1S). Implement the mapping table with statuses and unit conversions, plus table-driven tests covering every row. · M · needs M3.3
-- [ ] **M3.6** `ResinProfileMapper` for generic MSLA printers, using the M0.4 motion keys. · M · needs M3.5, M0.4
+- [x] **M3.5** `ResinProfileMapper` for tilt printers (SL1/SL1S). Implement the mapping table with statuses and unit conversions, plus table-driven tests covering every row. · M · needs M3.3
+- [x] **M3.6** `ResinProfileMapper` for generic MSLA printers, using the M0.4 motion keys. · M · needs M3.5, M0.4
+  Result: `ResinProfileMapper.{hpp,cpp}` (Biz layer) maps a `ForeignResinProfile` onto a resin preset for either
+  printer class and reports every source key with Exact/Converted/Approximated/Not applicable/Unknown. The
+  mapping table is the ROADMAP one, corrected for the resin settings M0.4 added: `layerHeight` →
+  `resin_layer_height` (Exact, no preset variant), a transition layer count → `resin_faded_layers`, and the
+  tilt bottom-layer count → `resin_faded_layers` clamped to 3–20 (Approximated) instead of the print
+  preset's `faded_layers`, which is not a material key. Only material options of the SLA config are written,
+  which a test checks against `ConfigDefsSLA.cpp`. `printer_class_from_config()` reads `use_tilt` first and
+  the printer model second, so an Anycubic/Elegoo printer gets the generic MSLA table. Speeds convert
+  mm/min → mm/s, `bottle_cost` only for a per-litre price, and both notes keep the "verify" caveat until
+  M3.1/M3.2. The table also accepts the short two-stage lift spellings (`liftHeight`, `liftSpeed`, …) that
+  M3.4's fixture uses; other spellings in the reader's key list (`offTime`, `liftDistance`, `bottomLayers`)
+  stay Unknown until M3.2 settles them. 15 table-driven cases in `ResinProfileMapperTests.cpp` cover every
+  row for both classes, the clamping, the conversions, the unknown key, the duplicate spellings and
+  `printer_class_from_config`. Not built: this session was told not to compile, so the tests are unrun.
 - [ ] **M3.7** `ResinProfileImportInteractor`: read, map, pick a base material, save as a user preset, handle name collisions, batch import a folder, and set `material_source_note`. Test with `slic3r-shared-tests` preset fixtures. · M · needs M3.4, M3.5
 - [ ] **M3.8** `SlicedArchiveResinReader`: read material settings from `.sl1`/`.sl1s` `config.ini`. Register readers for other archive formats as M5 adds them. · M · needs M3.3, M0.10
 - [ ] **M3.9** CLI `--import-resin-profile` with `--dry-run` and a JSON `--report` option. · S · needs M3.7

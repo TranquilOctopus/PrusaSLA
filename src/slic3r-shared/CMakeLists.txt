@@ -1087,6 +1087,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/Biz/ResinProfile/ResinProfileReaderRegistry.cpp
         include/Slic3r/Biz/ResinProfile/ChituboxCfgReader.hpp
         src/Slic3r/Biz/ResinProfile/ChituboxCfgReader.cpp
+        include/Slic3r/Biz/ResinProfile/ResinProfileMapper.hpp
+        src/Slic3r/Biz/ResinProfile/ResinProfileMapper.cpp
         include/Slic3r/Biz/ResinEconomics.hpp
         src/Slic3r/Biz/ResinEconomics.cpp
         include/Slic3r/Biz/ResinEconomicsInteractor.hpp
@@ -1663,6 +1665,7 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/Biz/SlaFixture.hpp
             test/Slic3r/Biz/SlaFixture.cpp
             test/Slic3r/Biz/ResinProfile/ChituboxCfgReaderTests.cpp
+            test/Slic3r/Biz/ResinProfile/ResinProfileMapperTests.cpp
             test/Slic3r/Biz/ResinEconomicsTests.cpp
             test/Slic3r/Biz/ResinEconomicsInteractorTests.cpp
             test/Slic3r/Biz/Scene/SceneInteractorTests.cpp
