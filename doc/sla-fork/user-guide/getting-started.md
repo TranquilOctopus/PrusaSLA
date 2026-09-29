@@ -21,20 +21,45 @@ selecting the M5s or M7 Pro fails at the end of the slice with *Unsupported outp
 **Resin.** One row per material slot, each showing the name of the resin preset. Click a row to
 open the picker; type filter buttons above it narrow the list to **Tough**, **Flexible**,
 **Casting**, **Dental** or **Heat-resistant**. The cog button opens the resin settings, in tabs
-named `Resin 1`, `Resin 2`, and so on. That is where **Exposure time**, **Initial exposure time**,
-the lift / retract / tilt speeds and wait times, the material type and colour, and the bottle
-volume, weight and cost live. Two resins ship with the fork: **Generic Resin** and **Generic Fast
-Resin**.
+named `Resin 1`, `Resin 2`, and so on. That is where **Layer height**, **Transition layers**,
+**Exposure time**, **Initial exposure time**, the lift / retract / tilt speeds and wait times, the
+material type and colour, and the bottle volume, weight and cost live. Two resins ship with the
+fork: **Generic Resin** and **Generic Fast Resin**.
 
-**Supports & raft.** A dropdown with the print presets plus a cog button for the settings. The
-presets are `0.05mm Standard` and `0.03mm Detail`. In the settings you find **Generate supports**,
+**Print settings.** For a resin printer the third block is a **Print settings** button instead of a
+dropdown, with a one-line summary under it: the resin name, the layer height and the two exposure
+times. The button opens a dialog with two tabs.
+
+*Resin.* A resin dropdown for the first material slot, then **Layer height**, **Exposure time**,
+**Initial exposure time**, **Bottom layer count** and **Faded layers**, and the motion block: the
+two-stage lift and retract heights and speeds, the waits around them, the light power and the
+exposure delays, each with its bottom-layer counterpart. **More resin settings...** opens the full
+resin settings, which is where the resin's own **Layer height** and **Transition layers** live.
+Both bundled resins set them — 0.05 mm and 3 layers — and a resin that sets them wins over the
+print preset, so while one is selected the layer height row is gone from the full print settings
+because it would have no effect.
+
+*Supports & raft.* A dropdown with the print presets, **Standard supports** and **Fine
+supports**, then **Raft type** and **Object elevation** (mm, 5 by default), which is how far the
+supports lift the model. **More...** opens the full print settings: **Generate supports**,
 **Support tree type**, **Support points density**, **Support only in enforced regions**, the
-**Object elevation** and **Raft type** options, and the rest of the raft and hollowing group.
+support shape values and the **Raft** group.
+
+The **Raft** group starts with **Raft type** and then shows only the settings that type actually
+uses. **None** prints no raft and shows nothing else; **Full plate** (the default) covers the whole
+build plate; **Around object** makes a raft that only the object sits on; **Skate** is *Around
+object* with half the expansion and a 70° wall slope. There is no *Use raft* switch, the type turns
+the raft on and off. A raft around the object also means **Object elevation** is ignored, because
+the raft carries the model instead of the supports.
 
 ## 2. Arrange and orient the models
 
-Import an STL, OBJ, STEP or 3MF, or drag one in. The model lands on the build plate and the tool
-bar above the viewport shows the editing tools:
+Import an STL, OBJ, STEP, SVG or 3MF file with **File > Import File**, or drag one into the
+window. A finished print can be read back in as a model too: import a `.sl1` or `.sl1s` file and
+its geometry is rebuilt from the layer images and placed on the build plate like any other model.
+The print settings stored in the archive are not imported yet.
+
+The model lands on the build plate and the tool bar above the viewport shows the editing tools:
 
 | Tool | Key | What it does |
 |---|---|---|
@@ -58,6 +83,12 @@ It rotates the model about its own centre — it does not move the model down, s
 
 Shift+click adds a model to the selection, `Ctrl+A` selects everything, right-click on empty space
 in the viewport clears it.
+
+**Height band**, in the left column of **Prepare**, is shown for a resin printer. Its two sliders,
+**Bottom** and **Top** (mm), limit the 3D view to that slice of the model, with the cut faces
+capped so the inside stays readable, and **Reset** brings the whole print height back. It clips the
+view and the selected model only: the slice and the exported file do not change with it. The panel
+stands down while a tool has the view.
 
 ## 3. Supports
 
@@ -86,12 +117,11 @@ right-click or Ctrl+click a point to delete it, and `Ctrl+A` then `Delete` to cl
 selection. Edits are kept as you make them, so closing the tool does not lose them. Auto-generated
 points and island points are drawn in different colours from points you placed yourself.
 
-The tool computes the support tree and the raft in a worker job and draws them, but it does not
-run a full slice: the layer data is still produced by **Slice** in step 4. Before you slice,
-check **Object elevation** and **Raft type** in the *Supports & raft* preset — *Object elevation*
-(mm, 5 by default) is how far the supports lift the model, and is ignored when *Raft around
-object* is on. *Raft type* offers **None**, **Full plate** (the default), **Around object** and
-**Skate**; *Use raft* switches the raft on and off.
+The tool works on a worker thread and never runs a full slice. **Generate** slices the selected
+model internally, but only to work out where the support points belong; the support tree and the
+raft are then built from those points and drawn. The layer images and the export file still come
+from **Slice** in step 4. Before you slice, set **Raft type** and **Object elevation** in the
+**Print settings** dialog (section 1).
 
 ## 4. Slice
 
@@ -120,6 +150,18 @@ The app switches to **Preview** after a successful slice. From here:
   from the printer preset. The caption gives the layer number, the total and the Z height, and the
   **Previous** / **Next** buttons step one layer, moving the slider's top thumb with them. The 3D
   view and this window follow the slider together, so they always show the same layer.
+  - **Click the image** and a **Zoom** panel opens under it: a 256 × 256 pixel crop of the display
+    around the point you clicked, at 1:1, so single pixels are visible. It follows the layer while
+    it is open, and the button beside *Zoom* closes it.
+  - The **Area (mm²)** and **Peel force (N)** charts run over the whole print, with a vertical line
+    on the layer you are on, and the values of that layer are written out under them.
+  - Islands on the current layer are ringed on the image, and the **Islands** list under the charts
+    gives each one with its layer, its area and its position, plus a **Go** button that jumps to
+    that layer. **Previous island** and **Next island** step to the closest island below or above
+    the current layer. A long list shows the first 50 islands, then a line reading *and N more*.
+- A **Supports** block above the buttons lists the models on the selected build plate with their
+  support point counts. **Edit supports** switches to **Prepare**, selects that model and opens the
+  support tool on it, so a missing support can be added from where the warning came from.
 
 Two warnings can pop up after a slice finishes, and both stay until you dismiss them:
 
@@ -130,6 +172,12 @@ Two warnings can pop up after a slice finishes, and both stay until you dismiss 
   printed flat on the plate.
 
 ## 6. Export
+
+A resin export runs a checklist first. If the plate has models without supports, or the slice found
+islands, a **Check before printing** dialog lists them — *N models has no supports: …* and *N
+islands, first on layer M* — under the line *Printing this as is is likely to waste resin. Fix the
+problems, or export anyway.* **Export anyway** goes on to the save dialog, **Cancel** goes back.
+A plate with nothing to report is not interrupted.
 
 The **Export** button at the bottom of the **Preview** sidebar, with the tooltip *Export print
 file*. It only becomes an export button once the slice has finished; if the plate changed since, it
