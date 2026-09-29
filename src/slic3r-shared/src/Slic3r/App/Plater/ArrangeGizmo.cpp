@@ -93,7 +93,8 @@ ArrangeGizmo::ArrangeGizmo(
                 }
             },
             []() { PlatformServices::instance().job_manager().cancel_job("arrange"); },
-            default_settings()
+            default_settings(),
+            project_interactor
         )
     )
 {
@@ -139,6 +140,7 @@ void ArrangeGizmo::on_wipe_tower_geometry_changed(Biz::Slicing::OptWipeTowerGeom
 }
 
 void ArrangeGizmo::update_dialog() {
+    m_dialog->reload_labels();
     const Project& project{m_workbench.project(m_project_interactor.selected_project_id())};
     const BedSelection& bed_selection{m_project_interactor.scene_interactor().bed_selection()};
     const std::optional<BedSegments> bed_segments{get_bed_segments(project, bed_selection)};

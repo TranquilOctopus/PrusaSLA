@@ -15,6 +15,7 @@
 #include "Slic3r/App/AppConfig.hpp"
 #include "Slic3r/App/CommandBindingManager.hpp"
 #include "Slic3r/App/Platform/CommandName.hpp"
+#include "Slic3r/App/IsSlaActive.hpp"
 #include "Slic3r/App/Lua/PluginSystem.hpp"
 #include "Slic3r/App/ProjectButton.hpp"
 
@@ -370,7 +371,10 @@ void TopBar::add_menu_btns(Item* parent)
             m_render_module->menu_manager().menu_item(MenuItemName::MainMenu))
     {
         m_main_menu_btn = parent->emplace_back<LayoutButton>(
-            MenuBuilder::item_name_translated(main_menu_item->name()),
+            MenuBuilder::item_name_translated(
+                main_menu_item->name(),
+                is_sla_active(m_project_interactor)
+            ),
             MenuBuilder::item_icon(main_menu_item->name())
         );
         m_main_menu_btn->icon_object()->set_preserve_colors(true);
@@ -391,7 +395,10 @@ void TopBar::add_menu_btns(Item* parent)
             m_render_module->menu_manager().menu_item(MenuItemName::FileMenu))
     {
         m_file_menu_btn = parent->emplace_back<LayoutButton>(
-            MenuBuilder::item_name_translated(file_menu_item->name()),
+            MenuBuilder::item_name_translated(
+                file_menu_item->name(),
+                is_sla_active(m_project_interactor)
+            ),
             MenuBuilder::item_icon(file_menu_item->name())
         );
         m_file_menu_btn->set_background_color(Platform::Color::ButtonTransparent);
@@ -414,7 +421,8 @@ void TopBar::add_menu_btns_items()
 {
     MenuBuilder menu_builder(
         m_render_module->menu_manager(),
-        m_render_module->command_binding_manager()
+        m_render_module->command_binding_manager(),
+        &m_project_interactor
     );
 
     if (App::MenuItem* main_menu_item =

@@ -1,5 +1,7 @@
 #include "Slic3r/App/Plater/ArrangeDialog.hpp"
 
+#include "Slic3r/App/IsSlaActive.hpp"
+#include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/Domain/BedRef.hpp"
 #include "Slic3r/Domain/SelectionId.hpp"
 
@@ -126,15 +128,21 @@ private:
     std::map<AbstractButton*, PivotPoint> m_pivot_buttons;
 };
 
-SliderWithInput* append_spacing_slider(Item* container,
-                                       const std::string& label,
-                                       double initial_value,
-                                       double max_width)
+SliderWithInput* append_spacing_slider(
+    Item* container,
+    const std::string& label,
+    double initial_value,
+    double max_width,
+    Text** out_label = nullptr
+)
 {
     auto spacing_section{container->emplace_back<Item>()};
     spacing_section->set_orientation(Orientation::Vertical);
     spacing_section->set_gap(10_fpx);
     auto spacing_label{spacing_section->emplace_back<Text>(label)};
+    if (out_label != nullptr) {
+        *out_label = spacing_label;
+    }
     spacing_label->set_padding({0_fpx, 3_fpx, 0_fpx, 3_fpx});
     spacing_label->set_font_type(Render::ImguiFontType::Bold);
 
@@ -148,23 +156,26 @@ SliderWithInput* append_spacing_slider(Item* container,
     return slider;
 }
 
-static ItemPtr help()
+ItemPtr ArrangeDialog::build_help()
 {
+    const bool sla{is_sla()};
+
     ItemPtr result{std::make_unique<Item>()};
     result->set_orientation(Orientation::Vertical);
     result->set_gap(10_fpx);
 
-    auto all_beds_text{result->emplace_back<Text>(_u8L("All beds"))};
-    all_beds_text->set_font_type(Render::ImguiFontType::Bold);
-    all_beds_text->set_text_color(ImGui::GetColorU32(ImGuiCol_TextDisabled));
+    m_all_beds_text = result->emplace_back<Text>(sla ? _u8L("All build plates") : _u8L("All beds"));
+    m_all_beds_text->set_font_type(Render::ImguiFontType::Bold);
+    m_all_beds_text->set_text_color(ImGui::GetColorU32(ImGuiCol_TextDisabled));
     GizmoHelpFactory all_beds_help;
     all_beds_help.init(result.get());
     all_beds_help.add_item({"A"}, _u8L("Arrange"));
     all_beds_help.add_item({"SHIFT", "A"}, _u8L("Arrange selection"));
 
-    auto single_bed_text{result->emplace_back<Text>(_u8L("Current bed"))};
-    single_bed_text->set_font_type(Render::ImguiFontType::Bold);
-    single_bed_text->set_text_color(ImGui::GetColorU32(ImGuiCol_TextDisabled));
+    m_single_bed_text =
+        result->emplace_back<Text>(sla ? _u8L("Current build plate") : _u8L("Current bed"));
+    m_single_bed_text->set_font_type(Render::ImguiFontType::Bold);
+    m_single_bed_text->set_text_color(ImGui::GetColorU32(ImGuiCol_TextDisabled));
     GizmoHelpFactory single_bed_help;
     single_bed_help.init(result.get());
     single_bed_help.add_item({"D"}, _u8L("Arrange"));
@@ -173,14 +184,40 @@ static ItemPtr help()
     return result;
 }
 
+bool ArrangeDialog::is_sla() const
+{
+    return m_project_interactor != nullptr && is_sla_active(*m_project_interactor);
+}
+
+void ArrangeDialog::reload_labels()
+{
+    const bool sla{is_sla()};
+
+    m_all_beds_text->set_text(sla ? _u8L("All build plates") : _u8L("All beds"));
+    m_single_bed_text->set_text(sla ? _u8L("Current build plate") : _u8L("Current bed"));
+    m_bed_spacing_label->set_text(
+        sla ? _u8L("Spacing from build plate") : _u8L("Spacing from bed")
+    );
+    m_mode->set_segment_tooltip(1, sla ? _u8L("Selected build plates") : _u8L("Selected beds"));
+    m_arrange_beds_label = sla ? _u8L("Arrange build plates") : _u8L("Arrange beds");
+
+    if (m_status == ArrangeTaskStatus::Idle) {
+        m_arrange_button->set_label(
+            m_mode->selected_index() == 0 ? m_arrange_all_label : m_arrange_beds_label
+        );
+    }
+}
+
 ArrangeDialog::ArrangeDialog(
     OnArrange on_arrange,
     OnCancel on_cancel,
-    const Settings& settings
+    const Settings& settings,
+    const Biz::ProjectInteractor& project_interactor
 ) :
     GizmoWindow(),
     m_on_arrange{on_arrange},
-    m_on_cancel{on_cancel}
+    m_on_cancel{on_cancel},
+    m_project_interactor{&project_interactor}
 {
     content()->set_orientation(Orientation::Vertical);
     content()->set_gap(0);
@@ -195,8 +232,9 @@ ArrangeDialog::ArrangeDialog(
             .initially_selected = true,
         },
         Segment{
-            .icon               = Icon::SingleSquare,
-            .tooltip            = Biz::_u8L("Selected beds"),
+            .icon = Icon::SingleSquare,
+            .tooltip =
+                is_sla() ? Biz::_u8L("Selected build plates") : Biz::_u8L("Selected beds"),
             .initially_selected = false,
         },
     };
@@ -238,9 +276,10 @@ ArrangeDialog::ArrangeDialog(
     bed_spacing_section->set_padding({20_fpx, 15_fpx, 20_fpx, 15_fpx});
     bed_spacing_section->set_orientation(Orientation::Vertical);
     m_bed_offset_slider = append_spacing_slider(bed_spacing_section,
-                          _u8L("Spacing from bed"),
+                          is_sla() ? _u8L("Spacing from build plate") : _u8L("Spacing from bed"),
                           settings.unscaled_bed_offset,
-                          preffered_max_width());
+                          preffered_max_width(),
+                          &m_bed_spacing_label);
 
     add_separator(content());
 
@@ -280,7 +319,7 @@ ArrangeDialog::ArrangeDialog(
     help_section->set_flex_shrink(0);
     help_section->set_padding({20_fpx, 15_fpx, 20_fpx, 15_fpx});
     help_section->set_flex_shrink(0);
-    help_section->append(help());
+    help_section->append(build_help());
 
     // empty item - stretch spacer
     content()->emplace_back<Item>()->set_flex_grow(1);
@@ -299,6 +338,8 @@ ArrangeDialog::ArrangeDialog(
     constexpr ImColor color_primary{223, 93, 45};
     m_arrange_button->set_background_color(color_primary);
     m_arrange_button->set_label_font_type(Render::ImguiFontType::Bold);
+
+    reload_labels();
 }
 
 void ArrangeDialog::update_segments_visibility() {
@@ -328,6 +369,7 @@ void ArrangeDialog::set_auxiliary_travel_anchor(
 void ArrangeDialog::update_status(const ArrangeTaskStatus status)
 {
     using namespace Biz;
+    m_status = status;
     if (status == ArrangeTaskStatus::Running) {
         m_arrange_button->set_label(_u8L("Cancel"));
         m_arrange_button->callbacks().action = [this]() { m_on_cancel(); };

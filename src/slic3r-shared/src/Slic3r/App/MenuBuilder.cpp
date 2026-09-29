@@ -8,6 +8,7 @@
 #include "Slic3r/App/Yoga/MenuItem.hpp"
 
 #include "Slic3r/App/Render/ImguiIconHelper.hpp"
+#include "Slic3r/App/IsSlaActive.hpp"
 
 #include "Slic3r/Biz/I18N/I18N.hpp"
 
@@ -15,7 +16,7 @@ namespace Slic3r::App {
 
 std::string dots{"..."};
 
-std::string MenuBuilder::item_name_translated(UniversalMenuItemName menu_item_name)
+std::string MenuBuilder::item_name_translated(UniversalMenuItemName menu_item_name, bool is_sla)
 {
     return std::visit(
         Domain::overloaded{
@@ -94,7 +95,8 @@ std::string MenuBuilder::item_name_translated(UniversalMenuItemName menu_item_na
                 case MenuItemName::CameraProjectionSwitch:
                     return Biz::_u8L("Switch Projection");
                 case MenuItemName::LookAtActiveBed:
-                    return Biz::_u8L("Look at Active Bed");
+                    return is_sla ? Biz::_u8L("Look at Active Build Plate")
+                                  : Biz::_u8L("Look at Active Bed");
                 case MenuItemName::CameraDefaultView:
                     return Biz::_u8L("Default View");
                 case MenuItemName::CameraTopView:
@@ -157,7 +159,7 @@ std::string MenuBuilder::item_name_translated(UniversalMenuItemName menu_item_na
                     // TRN Main menu item. Opens the preset sources and updates dialog.
                     return Biz::_u8L("Preset Sources & Updates");
                 case MenuItemName::ArrangeBed:
-                    return Biz::_u8L("Arrange Bed");
+                    return is_sla ? Biz::_u8L("Arrange Build Plate") : Biz::_u8L("Arrange Bed");
                 case MenuItemName::ArrangeSelectionBed:
                     return Biz::_u8L("Arrange selection");
                 case MenuItemName::SelectAllOnBed:
@@ -172,7 +174,8 @@ std::string MenuBuilder::item_name_translated(UniversalMenuItemName menu_item_na
                 case MenuItemName::SetMultiObjectsNumberOfInstances:
                     return Biz::_u8L("Set Number Of Instances");
                 case MenuItemName::FillBedWithInstances:
-                    return Biz::_u8L("Fill Bed With Instances");
+                    return is_sla ? Biz::_u8L("Fill Build Plate With Instances")
+                                  : Biz::_u8L("Fill Bed With Instances");
                 case MenuItemName::ExportObject:
                 case MenuItemName::ExportVolume:
                     return Biz::_u8L("Export as STL/OBJ") + "...";
@@ -348,9 +351,14 @@ std::string MenuBuilder::icon_name(UniversalMenuItemName menu_item_name)
     return icon == Render::Icon::None ? std::string{} : Render::ImguiIconHelper::icon_name(icon);
 }
 
-static std::string get_item_name_translated(App::MenuItem* menu_item)
+bool MenuBuilder::is_sla() const
 {
-    std::string item_name = MenuBuilder::item_name_translated(menu_item->name());
+    return m_project_interactor != nullptr && is_sla_active(*m_project_interactor);
+}
+
+static std::string get_item_name_translated(App::MenuItem* menu_item, bool is_sla)
+{
+    std::string item_name = MenuBuilder::item_name_translated(menu_item->name(), is_sla);
     if (menu_item->command() && menu_item->command()->has_todo_state()) {
         item_name += fmt::format("   ({})", Biz::_u8L("TODO"));
     }
@@ -366,7 +374,7 @@ void MenuBuilder::add_submenu(Yoga::MenuItem* yoga_menu_item, App::MenuItem* men
         }
 
         Yoga::MenuItem* new_yoga_menu_item = yoga_menu_item->append_sub_menu_item(
-            get_item_name_translated(sub_menu_item),
+            get_item_name_translated(sub_menu_item, is_sla()),
             item_icon(sub_menu_item->name())
         );
         if (sub_menu_item->children().empty()) {
@@ -380,7 +388,7 @@ void MenuBuilder::add_submenu(Yoga::MenuItem* yoga_menu_item, App::MenuItem* men
 Yoga::MenuItem* MenuBuilder::add_menu_item(Yoga::Menu* menu, App::MenuItem* menu_item)
 {
     Yoga::MenuItem* yoga_menu_item = menu->append_item(
-        get_item_name_translated(menu_item),
+        get_item_name_translated(menu_item, is_sla()),
         item_icon(menu_item->name())
     );
     m_command_binding_manager.bind_menu_item(menu_item->command(), yoga_menu_item);
@@ -399,7 +407,7 @@ void MenuBuilder::add_menu_items(Yoga::Menu* menu, App::MenuItem* root_menu_item
             add_menu_item(menu, menu_item);
         } else {
             Yoga::MenuItem* yoga_menu_item_with_submenu =
-                menu->append_item(get_item_name_translated(menu_item));
+                menu->append_item(get_item_name_translated(menu_item, is_sla()));
             add_submenu(yoga_menu_item_with_submenu, menu_item);
         }
     }

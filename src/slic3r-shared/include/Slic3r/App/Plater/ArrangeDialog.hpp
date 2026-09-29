@@ -10,7 +10,12 @@ class ToggleButton;
 class Slider;
 class SegmentedControl;
 class Separator;
+class Text;
 } // namespace Slic3r::App::Yoga
+
+namespace Slic3r::Biz {
+class ProjectInteractor;
+} // namespace Slic3r::Biz
 
 namespace Slic3r::App::Plater {
 
@@ -36,8 +41,12 @@ public:
     ArrangeDialog(
         OnArrange on_arrange,
         OnCancel on_cancel,
-        const Biz::Arrange::Settings& settings
+        const Biz::Arrange::Settings& settings,
+        const Biz::ProjectInteractor& project_interactor
     );
+
+    // Re-reads the printer technology and updates the 'bed' / 'build plate' wording
+    void reload_labels();
 
     void update_segments_visibility();
 
@@ -50,11 +59,20 @@ public:
     Biz::Arrange::Settings get_settings() const;
 
 private:
+    bool is_sla() const;
+    Yoga::ItemPtr build_help();
+
+private:
     OnArrange m_on_arrange;
     OnCancel m_on_cancel;
+    const Biz::ProjectInteractor* m_project_interactor{nullptr};
+    ArrangeTaskStatus m_status{ArrangeTaskStatus::Idle};
     Yoga::SegmentedControl* m_mode{nullptr};
     Yoga::SliderWithInput* m_offset_slider{nullptr};
     Yoga::SliderWithInput* m_bed_offset_slider{nullptr};
+    Yoga::Text* m_bed_spacing_label{nullptr};
+    Yoga::Text* m_all_beds_text{nullptr};
+    Yoga::Text* m_single_bed_text{nullptr};
     Yoga::ComboBox* m_geometry_handling{nullptr};
     Yoga::ToggleButton* m_enable_rotations_toggle{nullptr};
     PivotPicker* m_pivot_picker{nullptr};

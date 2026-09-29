@@ -49,4 +49,11 @@ void SegmentedControl::select_index(std::size_t index)
     ASSERT_VAL(button)->set_checked(true);
 }
 
+void SegmentedControl::set_segment_tooltip(std::size_t index, const std::string& tooltip)
+{
+    ASSERT(index < items().size());
+    const auto button{dynamic_cast<LayoutButton*>(items().at(index))};
+    ASSERT_VAL(button)->set_tooltip(tooltip);
+}
+
 } // namespace Slic3r::App::Yoga
