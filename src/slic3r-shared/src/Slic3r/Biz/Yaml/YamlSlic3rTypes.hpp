@@ -43,7 +43,7 @@ struct TypeTraits<Slic3r::Domain::Preset::SourceLocation>
     static Result<SourceLocation> parse(const YamlAdapter::NodeRef& node)
     {
         auto mark = YamlAdapter::mark(node);
-        return Slic3r::Domain::Preset::SourceLocation{std::string{mark.file}, mark.line, mark.column};
+        return Slic3r::Domain::Preset::SourceLocation{mark.file, mark.line, mark.column};
     }
 
     static std::optional<YamlAdapter::NodeRef> serialize(const SourceLocation&)

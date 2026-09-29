@@ -1,6 +1,7 @@
 #pragma once
 
 #include <concepts>
+#include <string>
 #include <string_view>
 
 namespace Slic3r::Biz::Yaml::Details {
@@ -9,20 +10,17 @@ enum class NodeType
     Scalar, Sequence, Mapping
 };
 
-// Mark is a transient location descriptor valid only while the source Document
-// is alive.  ParseErrorDesc must not outlive the Document it was parsed from.
+// Mark is a self-contained location descriptor (file name plus 1-based
+// line/column) owned by value, so it may be copied into a ParseErrorDesc and
+// formatted later, at a throw site, with no dependency on the source Document.
 //
-// file lifetime by adapter:
-//   ryml    — string_view into ParserData::file, which is heap-allocated and
-//             kept alive by Document::parser_data (shared_ptr).  Safe as long
-//             as the Document outlives the ParseErrorDesc.
-//   yaml-cpp — string_view into NodeRef::file, a std::string member of a
-//              stack-allocated NodeRef.  UNSAFE once that NodeRef is destroyed;
-//              yaml-cpp is retained only for compilation compatibility and must
-//              not be used at runtime (all builds should use ryml).
+// file is stored by value on purpose: ParseErrorDesc keeps a Mark and defers
+// the fmt::format of the message to the throw site, so the name must not be a
+// view into adapter-owned storage (nor a default-constructed null view, which
+// adapters return for nodes that carry no location, e.g. mappings/sequences).
 struct Mark
 {
-    std::string_view file;
+    std::string file;
     size_t line{0};
     size_t column{0};
 };

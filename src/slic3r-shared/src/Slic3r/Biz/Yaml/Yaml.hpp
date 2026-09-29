@@ -106,9 +106,10 @@ inline std::string format_error(const Details::Mark& mark, std::string_view mess
 
 } // namespace Details
 
-// ParseErrorDesc stores the raw Mark (file is a string_view into ParserData::file,
-// valid for the entire parsing call stack) and defers fmt::format to the throw site.
-// This avoids ~13 fmt::format calls per PresetValue probe that are immediately discarded.
+// ParseErrorDesc stores the raw Mark (file is an owning std::string, so the
+// location stays valid past the parsing call stack) and defers fmt::format to
+// the throw site.  This avoids ~13 fmt::format calls per PresetValue probe that
+// are immediately discarded.
 struct ParseErrorDesc
 {
     Details::Mark mark;
