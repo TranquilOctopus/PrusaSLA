@@ -1741,23 +1741,34 @@ void SlaSupportPointsGizmo::rebuild_support_geometry_node(const Domain::SlicingI
 
     const Slicing::Sla::Object& sla_object = opt_ref->get();
 
-    // Get the instance transform
-    const Domain::Project& project = m_project_interactor.selected_project();
-    const Domain::ModelInstance* instance = project.find_instance_by_id(m_selected_object_id.id, m_selected_instance_id);
-    if (!instance) {
-        return;
-    }
-
-    const Domain::Transform3d instance_trafo = instance->get_matrix();
-    const Domain::Transform3d combined_trafo = instance_trafo * sla_object.object_trafo;
-
     // Get bed instance transform
+    const Domain::Project& project = m_project_interactor.selected_project();
     const Domain::BedInstance* bed_instance = project.find_bed_instance_by_id(slicing_id.bed_instance_id);
     if (!bed_instance) {
         return;
     }
     const Domain::Transform3d bed_trafo = bed_instance->transformation.get_matrix();
-    const Domain::Transform3d final_trafo = bed_trafo * combined_trafo;
+
+    // Find instance transform from sla_object.instance_trafos matching m_selected_instance_id
+    const Domain::ObjectID selected_instance_oid{m_selected_instance_id};
+    Domain::Transform3d instance_trafo = Domain::Transform3d::Identity();
+    bool found = false;
+    for (const auto& [oid, trafo] : sla_object.instance_trafos) {
+        if (oid.id == selected_instance_oid.id) {
+            instance_trafo = trafo;
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        if (!sla_object.instance_trafos.empty()) {
+            instance_trafo = sla_object.instance_trafos.front().second;
+        } else {
+            return;
+        }
+    }
+
+    const Domain::Transform3d final_trafo = bed_trafo * instance_trafo;
 
     Scene::Scene& scene = m_scene_presenter.scene();
     const auto& theme = AppServices::instance().theme();
