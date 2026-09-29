@@ -225,6 +225,7 @@ if(SLIC3R_BUILD_TESTS)
         test/Slic3r/Domain/ConfigValueTests.cpp
         test/Slic3r/Domain/ConfigTests.cpp
         test/Slic3r/Domain/FDMConfigTests.cpp
+        test/Slic3r/Domain/SlaLayerHeightTests.cpp
         test/Slic3r/Domain/Preset/PresetTreeTests.cpp
         test/Slic3r/Domain/Preset/HwConfigTests.cpp
         test/Slic3r/Domain/SizeTests.cpp

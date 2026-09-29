@@ -24,15 +24,17 @@ namespace {
 
 using Key = SlaSettingsRows::Key;
 
-/// The resin values that matter most, in the order they are shown in the "Resin" tab.
+/// The resin values that matter most, in the order they are shown in the "Resin" tab. All of
+/// them live in the resin (material) box, the print box only holds the fall-back values the
+/// resin does not define.
 std::vector<Key> resin_keys()
 {
     return {
-        {"layer_height"},
+        {"resin_layer_height"},
         {"exposure_time"},
         {"initial_exposure_time"},
         {"bottom_layer_count"},
-        {"faded_layers"},
+        {"resin_faded_layers"},
         // layer separation: lift, retract, the waits around them and the light
         {"lift_height"},
         {"lift_height_2"},
@@ -112,8 +114,8 @@ SlaPrintSettingsDialog::SlaPrintSettingsDialog(
     create_supports_tab();
 
     collect_config_items();
-    m_resin_rows->set_items(&m_config_items);
-    m_supports_rows->set_items(&m_config_items);
+    m_resin_rows->set_items(&m_resin_config_items);
+    m_supports_rows->set_items(&m_supports_config_items);
 
     m_tabs->set_current_index(0);
 
@@ -295,7 +297,8 @@ void SlaPrintSettingsDialog::on_reset()
 
 void SlaPrintSettingsDialog::collect_config_items()
 {
-    m_config_items.clear();
+    m_resin_config_items.clear();
+    m_supports_config_items.clear();
     Biz::Preset::PresetInteractor& preset_interactor = m_project_interactor.preset_interactor();
 
     const Biz::OverridableCBIObservableList& material_cbis = preset_interactor.material_cbi_list();
@@ -307,7 +310,7 @@ void SlaPrintSettingsDialog::collect_config_items()
         for (size_t index = 0; index < material_list->size(); ++index) {
             const Biz::OverrideItem& item = material_list->at(index);
             if (item.config_item != nullptr) {
-                m_config_items.push_back(
+                m_resin_config_items.push_back(
                     Biz::ConfigItemContext{item.name, item.config_item, item.original_config_item}
                 );
             }
@@ -319,7 +322,7 @@ void SlaPrintSettingsDialog::collect_config_items()
         for (size_t index = 0; index < print_list->size(); ++index) {
             const Biz::PrintToolItem& item = print_list->at(index);
             if (item.print_item != nullptr) {
-                m_config_items.push_back(
+                m_supports_config_items.push_back(
                     Biz::ConfigItemContext{item.name, item.print_item, item.original_print_item}
                 );
             }

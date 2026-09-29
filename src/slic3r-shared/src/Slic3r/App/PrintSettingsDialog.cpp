@@ -75,8 +75,10 @@ PrintSettingsDialog::PrintSettingsDialog(
             if (item.print_item->def().category == Domain::ConfigItemDef::Category::Hidden) {
                 return false;
             }
-            return item.name != "layer_height"
-                || !sla_resin_sets_layer_height(m_project_interactor);
+            return (item.name != "layer_height"
+                    || !sla_resin_sets_layer_height(m_project_interactor))
+                && (item.name != "faded_layers"
+                    || !sla_resin_sets_faded_layers(m_project_interactor));
         }
     );
     m_tool_print_categorizer->set_group_by_fn(group_by_fn);
@@ -365,9 +367,11 @@ void PrintSettingsDialog::on_preset_value_changed(
         const auto location{std::get<Domain::SLAConfigLocation>(item.location())};
         if (location != Domain::SLAConfigLocation::Print) {
             if (location == Domain::SLAConfigLocation::Material
-                && item.def().name == "resin_layer_height")
+                && (item.def().name == "resin_layer_height"
+                    || item.def().name == "resin_faded_layers"))
             {
-                // The resin layer height decides whether the print layer height is shown.
+                // The resin layer height and transition layers decide whether the print layer
+                // height and faded layers are shown.
                 m_tool_print_categorizer->invalidate();
             }
             return;
