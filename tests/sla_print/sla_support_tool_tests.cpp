@@ -73,7 +73,7 @@ TEST_CASE("SLASupportTool: generate_support_points_for_tool returns points for l
     BoxModel box{20., 20., 40.};
     box.object->instances.front()->set_offset({0., 0., 10.}); // lift 10 mm
 
-    Slic3r::Transform3d object_to_world = Slic3r::Transform3d::Identity();
+    Slic3r::Domain::Transform3d object_to_world = Slic3r::Domain::Transform3d::Identity();
     object_to_world.translate({0., 0., 10.});
 
     SlaConfig config = make_sla_config();
@@ -88,7 +88,7 @@ TEST_CASE("SLASupportTool: build_support_tree_for_tool returns tree with correct
     BoxModel box{20., 20., 40.};
     box.object->instances.front()->set_offset({0., 0., 10.}); // lift 10 mm
 
-    Slic3r::Transform3d object_to_world = Slic3r::Transform3d::Identity();
+    Slic3r::Domain::Transform3d object_to_world = Slic3r::Domain::Transform3d::Identity();
     object_to_world.translate({0., 0., 10.});
 
     SlaConfig config = make_sla_config();
@@ -118,7 +118,7 @@ TEST_CASE("SLASupportTool: stop function returns empty result without throwing",
     BoxModel box{20., 20., 40.};
     box.object->instances.front()->set_offset({0., 0., 10.});
 
-    Slic3r::Transform3d object_to_world = Slic3r::Transform3d::Identity();
+    Slic3r::Domain::Transform3d object_to_world = Slic3r::Domain::Transform3d::Identity();
     object_to_world.translate({0., 0., 10.});
 
     SlaConfig config = make_sla_config();
@@ -151,7 +151,7 @@ TEST_CASE("SLASupportTool: build_support_tree_for_tool places tree under moved o
     // Lift 10 mm AND move to x=30, y=20
     box.object->instances.front()->set_offset({30., 20., 10.});
 
-    Slic3r::Transform3d object_to_world = Slic3r::Transform3d::Identity();
+    Slic3r::Domain::Transform3d object_to_world = Slic3r::Domain::Transform3d::Identity();
     object_to_world.translate({30., 20., 10.});
 
     SlaConfig config = make_sla_config();
