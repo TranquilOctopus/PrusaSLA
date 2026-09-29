@@ -245,6 +245,7 @@ set(SLIC3R_SHARED_FILES
         include/Slic3r/App/DirtyCategoryList.hpp
         include/Slic3r/App/PrintSettingsDialog.hpp
         src/Slic3r/App/PrintSettingsDialog.cpp
+        include/Slic3r/App/SlaRaftSettings.hpp
         include/Slic3r/App/MaterialSettingsDialog.hpp
         src/Slic3r/App/MaterialSettingsDialog.cpp
         include/Slic3r/App/LogicalPrinterSettingsDialog.hpp
