@@ -358,6 +358,8 @@ set(SLIC3R_SOURCES
     include/libslic3r/SLAAutoOrient.hpp
     src/libslic3r/SLALayerImage.cpp
     include/libslic3r/SLALayerImage.hpp
+    src/libslic3r/SLASupportTool.cpp
+    include/libslic3r/SLASupportTool.hpp
     src/libslic3r/SLA/SupportTree.cpp
     src/libslic3r/SLA/SupportTreeBuilder.cpp
     src/libslic3r/SLA/SupportTreeBuilder.hpp
