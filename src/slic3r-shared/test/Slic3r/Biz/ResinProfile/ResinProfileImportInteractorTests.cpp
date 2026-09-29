@@ -159,8 +159,6 @@ struct ResinImportFixture
     }
 };
 
-} // namespace
-
 TEST_CASE(
     "ResinProfileImportInteractor imports a Chitubox profile into a user resin preset",
     "[resin_profile][import]"

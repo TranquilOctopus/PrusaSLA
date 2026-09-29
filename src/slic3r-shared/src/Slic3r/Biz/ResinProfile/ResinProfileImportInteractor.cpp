@@ -555,5 +555,4 @@ std::vector<ResinImportResult> ResinProfileImportInteractor::import_folder(
     return results;
 }
 
-} // namespace ResinProfile
-} // namespace Slic3r::Biz
+} // namespace Slic3r::Biz::ResinProfile
