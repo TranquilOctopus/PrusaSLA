@@ -6,6 +6,8 @@
 #include "Slic3r/Domain/FullConfigSLA.hpp"
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/Domain/ExPolygon.hpp"
+#include "Slic3r/Domain/Preset/HwConfig.hpp"
+#include "Slic3r/Domain/PrinterTechnology.hpp"
 #include "libslic3r/ConfigViews.hpp"
 #include "libslic3r/SLALayerImage.hpp"
 
@@ -25,7 +27,8 @@ static Domain::ConfigView make_printer_config(Domain::SLADisplayOrientation orie
     config.sla_printer_settings.items.opt("display_mirror_y").set(false);
     config.sla_printer_settings.items.opt("gamma_correction").set(1.0);
 
-    auto full_config = std::make_shared<const Domain::FullConfigSLA>(config.sla_printer_settings, config.sla_print_settings, config.sla_material_settings);
+    auto full_config = std::make_shared<const Domain::FullConfigSLA>(
+        config, Domain::Preset::HwPrinterConfig{.technology = Domain::PrinterTechnology::SLA});
     SLAPrintConfigView view(full_config);
     view.finalize();
     return static_cast<Domain::ConfigView>(view);
