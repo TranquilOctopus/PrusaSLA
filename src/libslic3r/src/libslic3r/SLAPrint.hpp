@@ -474,6 +474,12 @@ public:
 
 // Helper functions:
 
+// raft_type is the single source of truth for the raft (pad); pad_enable and
+// pad_around_object are only read for configs that have no (known) raft_type.
+bool is_pad_enabled(const SLAPrintObjectConfigView &c);
+
+bool is_pad_around_object(const SLAPrintObjectConfigView &c);
+
 bool is_zero_elevation(const SLAPrintObjectConfigView &c);
 
 sla::SupportTreeConfig make_support_cfg(const SLAPrintObjectConfigView& c);
