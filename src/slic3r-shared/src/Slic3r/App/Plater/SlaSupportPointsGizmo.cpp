@@ -1490,9 +1490,8 @@ void SlaSupportPointsGizmo::rebuild_support_geometry_node(const Domain::SLA::Sup
         return;
     }
     const Domain::Transform3d bed_trafo = bed_instance->transformation.get_matrix();
-    const Domain::Transform3d instance_trafo = instance->get_matrix();
 
-    const Domain::Transform3d final_trafo = bed_trafo * instance_trafo * Domain::translation_transform(Domain::Vec3d(0., 0., elevation));
+    const Domain::Transform3d final_trafo = bed_trafo * Domain::translation_transform(Domain::Vec3d(0., 0., elevation));
 
     Scene::Scene& scene = m_scene_presenter.scene();
     const auto& theme = AppServices::instance().theme();
