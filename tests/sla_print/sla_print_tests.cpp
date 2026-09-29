@@ -268,7 +268,7 @@ float sliced_level_distance(double print_layer_height, double resin_layer_height
     Domain::Model model;
     Domain::ModelObject* object = model.add_object();
     object->name = "cube.stl";
-    Biz::Algorithms::add_volume(object, mesh);
+    Biz::Algorithms::ModelObject::add_volume(object, mesh);
     object->add_instance();
 
     // Setup bed

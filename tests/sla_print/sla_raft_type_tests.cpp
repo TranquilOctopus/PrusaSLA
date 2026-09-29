@@ -78,7 +78,7 @@ struct CubeWithSupports {
 
         Slic3r::Domain::ModelObject* object = model.add_object();
         object->name = "cube.stl";
-        Slic3r::Biz::Algorithms::add_volume(
+        Slic3r::Biz::Algorithms::ModelObject::add_volume(
             object, Slic3r::Biz::Algorithms::TriangleMesh::make_cube(20., 20., 20.));
         object->add_instance();
         object->sla_support_points = {

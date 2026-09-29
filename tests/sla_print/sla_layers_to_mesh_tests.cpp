@@ -11,6 +11,7 @@
 #include "Slic3r/Domain/Preset/HwConfig.hpp"
 #include "Slic3r/Domain/PrinterTechnology.hpp"
 #include "libslic3r/ConfigViews.hpp"
+#include "libslic3r/ExPolygon.hpp"
 #include "libslic3r/SLALayerImage.hpp"
 #include "libslic3r/SLALayersToMesh.hpp"
 #include "libslic3r/libslic3r.h"

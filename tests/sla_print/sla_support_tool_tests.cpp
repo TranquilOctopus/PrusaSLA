@@ -4,6 +4,7 @@
 #include "Slic3r/Biz/Algorithms/ModelObject.hpp"
 #include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
 #include "Slic3r/Domain/Model.hpp"
+#include "Slic3r/Domain/Types.hpp"
 #include "Slic3r/Domain/FullConfigSLA.hpp"
 #include "Slic3r/Domain/ConfigBoxesSLA.hpp"
 #include "Slic3r/Domain/Config.hpp"
@@ -74,7 +75,7 @@ TEST_CASE("SLASupportTool: generate_support_points_for_tool returns points for l
     box.object->instances.front()->set_offset({0., 0., 10.}); // lift 10 mm
 
     Slic3r::Domain::Transform3d object_to_world = Slic3r::Domain::Transform3d::Identity();
-    object_to_world.translate({0., 0., 10.});
+    object_to_world.translate(Slic3r::Domain::Vec3d(0., 0., 10.));
 
     SlaConfig config = make_sla_config();
 
@@ -89,7 +90,7 @@ TEST_CASE("SLASupportTool: build_support_tree_for_tool returns tree with correct
     box.object->instances.front()->set_offset({0., 0., 10.}); // lift 10 mm
 
     Slic3r::Domain::Transform3d object_to_world = Slic3r::Domain::Transform3d::Identity();
-    object_to_world.translate({0., 0., 10.});
+    object_to_world.translate(Slic3r::Domain::Vec3d(0., 0., 10.));
 
     SlaConfig config = make_sla_config();
 
@@ -119,7 +120,7 @@ TEST_CASE("SLASupportTool: stop function returns empty result without throwing",
     box.object->instances.front()->set_offset({0., 0., 10.});
 
     Slic3r::Domain::Transform3d object_to_world = Slic3r::Domain::Transform3d::Identity();
-    object_to_world.translate({0., 0., 10.});
+    object_to_world.translate(Slic3r::Domain::Vec3d(0., 0., 10.));
 
     SlaConfig config = make_sla_config();
 
@@ -152,7 +153,7 @@ TEST_CASE("SLASupportTool: build_support_tree_for_tool places tree under moved o
     box.object->instances.front()->set_offset({30., 20., 10.});
 
     Slic3r::Domain::Transform3d object_to_world = Slic3r::Domain::Transform3d::Identity();
-    object_to_world.translate({30., 20., 10.});
+    object_to_world.translate(Slic3r::Domain::Vec3d(30., 20., 10.));
 
     SlaConfig config = make_sla_config();
 

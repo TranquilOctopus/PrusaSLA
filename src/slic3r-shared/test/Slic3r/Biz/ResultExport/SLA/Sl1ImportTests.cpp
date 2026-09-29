@@ -19,6 +19,7 @@ namespace fs = boost::filesystem;
 using Slic3r::Biz::PrintHost::Sla::import_sl1_archive;
 using Slic3r::Biz::PrintHost::Sla::store_sl1;
 using Slic3r::Domain::Vec3d;
+using Catch::Approx;
 
 // A hand made archive, for the cases a slicing run cannot produce.
 static fs::path write_archive(const fs::path                                &path,
@@ -76,7 +77,8 @@ TEST_CASE("SL1 import round trip", "[import][sla][sl1]")
     REQUIRE_NOTHROW(store_sl1(sl1_path.string(), *sla_result));
 
     auto imported = import_sl1_archive(sl1_path);
-    INFO(imported.has_value() ? "" : imported.error());
+    const std::string info_msg = imported.has_value() ? std::string{} : imported.error();
+    INFO(info_msg);
     REQUIRE(imported.has_value());
     REQUIRE_FALSE(imported->mesh.empty());
 
