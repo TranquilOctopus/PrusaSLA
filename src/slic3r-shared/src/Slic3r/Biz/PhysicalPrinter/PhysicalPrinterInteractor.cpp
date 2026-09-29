@@ -238,6 +238,15 @@ bool PhysicalPrinterInteractor::is_printer_compatible(const std::string& uuid, c
 
     const auto& printer = m_observable_list.at(index_of(uuid));
 
+    // Both the local and the removable destination only write a file, they never talk to a printer,
+    // so they work with every printer profile, FFF and SLA alike. Without this only the local
+    // destination (the hard coded default above) passes, and on_selected_config_container_changed()
+    // silently resets a picked removable destination back to the local one whenever the printer or
+    // the build plate changes - the file then lands on the local disk instead of the drive.
+    if (std::holds_alternative<FileSystemExport>(printer.payload)) {
+        return true;
+    }
+
     if (std::holds_alternative<ConnectUpload>(printer.payload)) {
         return true;
     }
