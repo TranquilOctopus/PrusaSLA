@@ -2,6 +2,7 @@
 
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/Domain/Image.hpp"
+#include "Slic3r/Domain/SlaLayerHeight.hpp"
 #include "Slic3r/Biz/Algorithms/ImageUtils.hpp"
 #include "Slic3r/Time.hpp"
 #include "Slic3r/Utils.hpp"
@@ -281,7 +282,7 @@ static void fill_header_and_misc(anycubicsla_format_header &h,
     float bottle_cost = cfg.get<double>("bottle_cost");
     float material_density = bottle_weight_g / bottle_volume_ml;
 
-    h.layer_height_mm        = get_cfg_value_f(cfg, "layer_height");
+    h.layer_height_mm        = float(Domain::sla_effective_layer_height(cfg));
     m.bottom_layer_height_mm = get_cfg_value_f(cfg, "initial_layer_height");
     h.exposure_time_s        = get_cfg_value_f(cfg, "exposure_time");
     h.bottom_exposure_time_s = get_cfg_value_f(cfg, "initial_exposure_time");
@@ -506,7 +507,7 @@ void store_pm5(const std::string& file_path, const Biz::Slicing::SLAResultData& 
         }
     }
 
-    float layer_height_mm = get_cfg_value_f(cfg, "layer_height");
+    float layer_height_mm = float(Domain::sla_effective_layer_height(cfg));
     float initial_layer_height_mm = get_cfg_value_f(cfg, "initial_layer_height");
     float exposure_time_s = get_cfg_value_f(cfg, "exposure_time");
     float initial_exposure_time_s = get_cfg_value_f(cfg, "initial_exposure_time");

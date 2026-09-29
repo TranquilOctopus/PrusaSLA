@@ -391,6 +391,17 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->min = 0;
     def->init_fn = init_with(10.);
 
+    def = defs.add("resin_layer_height", typeid(double));
+    def->location = Material;
+    def->label = L("Layer height");
+    def->option_group = ConfigItemDef::OptionGroup::Printer_General_Exposure;
+    def->category = ConfigItemDef::Category::Filament_MaterialTemperatures;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Layer height for this resin. 0 = use the layer height from Supports & raft.");
+    def->units = {L("mm")};
+    def->min = 0;
+    def->init_fn = init_with(0.);
+
     def = defs.add("min_initial_exposure_time", typeid(double));
     def->location = Printer;
     def->label = L("Minimum initial exposure time");

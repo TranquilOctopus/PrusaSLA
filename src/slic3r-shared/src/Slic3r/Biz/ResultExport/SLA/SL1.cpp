@@ -5,6 +5,7 @@
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/Domain/FullConfigSLA.hpp"
 #include "Slic3r/Domain/Image.hpp"
+#include "Slic3r/Domain/SlaLayerHeight.hpp"
 #include "Slic3r/Biz/Algorithms/ImageUtils.hpp"
 #include "Slic3r/Time.hpp"
 #include "Slic3r/Utils.hpp"
@@ -146,7 +147,7 @@ void fill_iniconf(ConfMap &m, const Domain::ConfigView &cfg, const Domain::SLA::
     using Domain::SLAMaterialSpeed::slamsFast;
 
     CNumericLocalesSetter locales_setter; // for to_string
-    m["layerHeight"]    = serialize(cfg.get<double>("layer_height"));
+    m["layerHeight"]    = serialize(Domain::sla_effective_layer_height(cfg));
     m["expTime"]        = serialize(cfg.get<double>("exposure_time"));
     m["expTimeFirst"]   = serialize(cfg.get<double>("initial_exposure_time"));
     const Domain::SLAMaterialSpeed mps = cfg.get<Domain::SLAMaterialSpeed>("material_print_speed");

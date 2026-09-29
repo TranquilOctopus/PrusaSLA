@@ -725,6 +725,8 @@ const std::map<std::string, std::vector<Step>> invalidated_by{
     {"relative_correction_x", all_steps()},
     {"relative_correction_y", all_steps()},
     {"relative_correction_z", all_steps()},
+    // The resin's own layer height overrides the print preset's on every SLA read.
+    {"resin_layer_height", steps({propagate(slaposObjectSlice)})},
     {"sla_archive_format", steps({propagate(slapsMergeSlicesAndEval)})},
     {"sla_output_precision", steps({propagate(slapsMergeSlicesAndEval)})},
     {"slice_closing_radius", steps({propagate(slaposObjectSlice)})},
