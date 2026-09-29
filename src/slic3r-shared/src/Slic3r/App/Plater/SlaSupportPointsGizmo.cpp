@@ -1479,30 +1479,17 @@ void SlaSupportPointsGizmo::rebuild_support_geometry_node(const Domain::SLA::Sup
 
     // Get bed instance transform
     const Domain::Project& project = m_project_interactor.selected_project();
-    const Domain::SlicingId slicing_id = m_active_job.has_value() ? m_active_job->slicing_id : Domain::SlicingId{};
-    Domain::BedInstance* bed_instance = nullptr;
-    if (slicing_id.valid()) {
-        bed_instance = project.find_bed_instance_by_id(slicing_id.bed_instance_id);
+    const Domain::ModelInstance* instance =
+        project.find_instance_by_id(m_selected_object_id.id, m_selected_instance_id);
+    if (!instance) {
+        return;
     }
-    if (!bed_instance) {
-        // Fallback: find any bed instance for the selected object
-        for (const auto& bi : project.bed_instances()) {
-            if (bi->object_id == m_selected_object_id) {
-                bed_instance = bi.get();
-                break;
-            }
-        }
-    }
+    const Domain::BedInstance* bed_instance =
+        project.find_bed_instance_by_id(instance->get_last_bed().instance_id);
     if (!bed_instance) {
         return;
     }
     const Domain::Transform3d bed_trafo = bed_instance->transformation.get_matrix();
-
-    // Find instance transform
-    const Domain::ModelInstance* instance = project.find_instance_by_id(m_selected_object_id.id, m_selected_instance_id);
-    if (!instance) {
-        return;
-    }
     const Domain::Transform3d instance_trafo = instance->get_matrix();
 
     const Domain::Transform3d final_trafo = bed_trafo * instance_trafo * Domain::translation_transform(Domain::Vec3d(0., 0., elevation));
@@ -1986,7 +1973,7 @@ std::optional<SlaSupportPointsGizmo::ObjectSlaConfig> SlaSupportPointsGizmo::bui
 
     const Domain::Project& project = m_project_interactor.selected_project();
     const Domain::BedRef bed_ref = instance->get_last_bed();
-    Domain::ConfigContainer* cc = project.find_config_container(bed_ref.config_container_id);
+    const Domain::ConfigContainer* cc = project.find_config_container(bed_ref.config_container_id);
     if (!cc) {
         return std::nullopt;
     }
