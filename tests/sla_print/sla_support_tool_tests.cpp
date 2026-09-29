@@ -7,6 +7,7 @@
 #include "Slic3r/Domain/Types.hpp"
 #include "Slic3r/Domain/FullConfigSLA.hpp"
 #include "Slic3r/Domain/ConfigBoxesSLA.hpp"
+#include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/Domain/ConfigPack.hpp"
 #include "Slic3r/Domain/Config.hpp"
 #include "Slic3r/Domain/Preset/HwConfig.hpp"
