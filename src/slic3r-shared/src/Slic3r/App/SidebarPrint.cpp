@@ -10,7 +10,10 @@
 #include "Slic3r/App/Yoga/RadioButton.hpp"
 #include "Slic3r/App/Yoga/ScrollArea.hpp"
 #include "Slic3r/App/Navigator.hpp"
+#include "Slic3r/App/MaterialSettingsDialog.hpp"
 #include "Slic3r/App/PrintSettingsDialog.hpp"
+#include "Slic3r/App/SlaPrintSettingsDialog.hpp"
+#include "Slic3r/App/SidebarSlaPrintSettings.hpp"
 #include "Slic3r/App/IsSlaActive.hpp"
 
 #include "Slic3r/App/Config/PrintToolFavoritesItem.hpp"
@@ -29,13 +32,23 @@ using namespace Slic3r::App::Render;
 
 namespace Slic3r::App {
 
-SidebarPrint::SidebarPrint(Biz::ProjectInteractor& project_interactor, Navigator& navigator) :
+SidebarPrint::SidebarPrint(
+    Biz::ProjectInteractor& project_interactor,
+    Navigator& navigator,
+    MaterialSettingsDialog* material_settings_dialog
+) :
     Window("SidebarPrint"),
     m_preset_changed_listener_scope(project_interactor.preset_interactor(), *this),
     m_project_interactor(project_interactor),
     m_navigator(navigator)
 {
     m_print_settings_dialog = emplace_back<PrintSettingsDialog>(project_interactor, m_navigator);
+    m_sla_print_settings_dialog = emplace_back<SlaPrintSettingsDialog>(
+        project_interactor,
+        m_navigator,
+        material_settings_dialog,
+        m_print_settings_dialog
+    );
 
     set_orientation(Orientation::Vertical);
     set_gap(5_fpx);
@@ -58,6 +71,7 @@ SidebarPrint::SidebarPrint(Biz::ProjectInteractor& project_interactor, Navigator
 
     Item* layer_height_row = m_content_area->emplace_back<Item>();
     layer_height_row->set_flex_shrink(0);
+    m_print_preset_row = layer_height_row;
     Rectangle* text_rect = layer_height_row->emplace_back<Rectangle>();
     text_rect->set_fill(m_theme->color_imgui(Platform::Color::WindowBgAlternate));
     text_rect->set_align_items(YGAlignCenter);
@@ -122,7 +136,15 @@ SidebarPrint::SidebarPrint(Biz::ProjectInteractor& project_interactor, Navigator
         &m_project_interactor.preset_interactor().tool_presets()
     );
 
+    m_sla_print_settings = m_content_area->emplace_back<SidebarSlaPrintSettings>(
+        m_project_interactor,
+        *m_sla_print_settings_dialog
+    );
+    m_sla_print_settings_dialog
+        ->attach_to_item(m_sla_print_settings, Position::Left, 40_fpx, AlignU::Start);
+
     update_tools_visibility();
+    update_sla_visibility();
     refresh_tools_comboboxes_label_colors();
 
     add_separator();
@@ -150,7 +172,8 @@ void SidebarPrint::update_tools_visibility()
         )
             .value_or(false);
 
-    m_tool_head_list_view->set_visible(is_multi_extruder);
+    // SLA presets are gathered in the print settings button instead
+    m_tool_head_list_view->set_visible(is_multi_extruder && !is_sla_active(m_project_interactor));
 }
 
 void SidebarPrint::refresh_print_combobox_label_color()
@@ -169,6 +192,14 @@ void SidebarPrint::update_print_preset_label()
 {
     const bool is_sla = is_sla_active(m_project_interactor);
     m_print_preset_label->set_text(is_sla ? Biz::_u8L("Supports & raft") : Biz::_u8L("Print preset"));
+}
+
+void SidebarPrint::update_sla_visibility()
+{
+    const bool is_sla = is_sla_active(m_project_interactor);
+    m_print_preset_row->set_visible(!is_sla);
+    m_sla_print_settings->update_visibility();
+    m_sla_print_settings->refresh();
 }
 
 void SidebarPrint::refresh_tools_comboboxes_label_colors()
@@ -193,6 +224,11 @@ PrintSettingsDialog& SidebarPrint::print_settings_dialog()
     return *m_print_settings_dialog;
 }
 
+SlaPrintSettingsDialog& SidebarPrint::sla_print_settings_dialog()
+{
+    return *m_sla_print_settings_dialog;
+}
+
 void SidebarPrint::on_preset_selection_changed(
     Domain::SelectionId project_id,
     Domain::SelectionId config_container_id,
@@ -206,14 +242,18 @@ void SidebarPrint::on_preset_selection_changed(
         case Biz::Preset::PresetItemType::PrinterPreset:
             update_tools_visibility();
             update_print_preset_label();
+            update_sla_visibility();
             break;
         case Biz::Preset::PresetItemType::PrintPreset:
             refresh_print_combobox_label_color();
+            m_sla_print_settings->refresh();
             break;
         case Biz::Preset::PresetItemType::ToolPrintPreset:
             refresh_tools_comboboxes_label_colors();
             break;
         case Biz::Preset::PresetItemType::MaterialPreset:
+            m_sla_print_settings->refresh();
+            break;
         default:
             break;
         }
@@ -239,12 +279,14 @@ void SidebarPrint::on_preset_value_changed(
             refresh_print_combobox_label_color();
         }
     }
+    m_sla_print_settings->refresh();
 }
 
 void SidebarPrint::on_preset_bundles_loaded()
 {
     refresh_print_combobox_label_color();
     refresh_tools_comboboxes_label_colors();
+    m_sla_print_settings->refresh();
 }
 
 void SidebarPrint::on_config_container_selection_changed(
@@ -257,6 +299,7 @@ void SidebarPrint::on_config_container_selection_changed(
     {
         update_tools_visibility();
         update_print_preset_label();
+        update_sla_visibility();
     }
 }
 
