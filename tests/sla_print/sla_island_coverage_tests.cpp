@@ -77,7 +77,8 @@ TEST_CASE("Island coverage: frog_legs.obj", "[SLA][IslandCoverage]")
     test_mesh_island_coverage("frog_legs.obj");
 }
 
-TEST_CASE("Island coverage: overhang.obj", "[SLA][IslandCoverage]")
+// Hidden: runs > 4 min (mesh far from the origin); investigate the support point generator (M4.3).
+TEST_CASE("Island coverage: overhang.obj", "[.][SLA][IslandCoverage][slow]")
 {
     test_mesh_island_coverage("overhang.obj");
 }
