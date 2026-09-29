@@ -18,11 +18,13 @@ values:
   material_vendor: Generic
   material_colour: '#808080'
 variants:
-- condition: 'print.layer_height == 0.03'
+- condition: print.layer_height == 0.03
+  name: Generic Resin @0.03
   id: community_sla_material_generic_003
   values:
     initial_layer_height: 0.03
-- condition: 'print.layer_height == 0.05'
+- condition: print.layer_height == 0.05
+  name: Generic Resin @0.05
   id: community_sla_material_generic_005
   values:
     initial_layer_height: 0.05
@@ -38,11 +40,13 @@ values:
   exposure_time: 1.8
   initial_exposure_time: 25.0
 variants:
-- condition: 'print.layer_height == 0.03'
+- condition: print.layer_height == 0.03
+  name: Generic Fast Resin @0.03
   id: community_sla_material_fast_003
   values:
     initial_layer_height: 0.03
-- condition: 'print.layer_height == 0.05'
+- condition: print.layer_height == 0.05
+  name: Generic Fast Resin @0.05
   id: community_sla_material_fast_005
   values:
     initial_layer_height: 0.05
