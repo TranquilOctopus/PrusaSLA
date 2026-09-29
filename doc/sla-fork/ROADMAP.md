@@ -442,6 +442,7 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
 ## M6: Quality gates and release
 
 - [ ] **M6.1** Robustness mesh set with no crashes or hangs (PLAN G2). · M · needs M0.13
+  Progress: `tests/sla_print/sla_robustness_tests.cpp` builds 11 bad meshes in code (empty, single triangle, degenerate triangle, open box, box with a flipped face, two overlapping cubes in one volume, cube with duplicated faces, 0.05 mm cube, 0.02 mm plate, 0.5 × 0.5 × 150 mm needle, cube 1500 mm from the origin) and runs each through support point generation, the support tree and raft, and a full slice. Every support call gets a 60 s stop function; the far-from-origin case runs both stages on a worker thread with a deadline, because the support generator has run for minutes on a mesh at ~1364 mm. Not built: the test target was not compiled, so nothing is known about what the pipeline does with these meshes yet. Left unticked until it passes and until its `needs` (M0.13) is done.
 - [ ] **M6.2** Visual regression renders, including the grayscale lightness check (PLAN G3). · M · needs M0.11b, M0.5
 - [ ] **M6.3** Nightly upstream merge rehearsal with a conflict report (PLAN G4). · S · needs M0.3, M0.14
 - [ ] **M6.4** `[human]` End-to-end walk through the M1.1 journeys on an integrated build, filing new todos for gaps. · M · needs M1.11, M2.7, M3.10
