@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Slic3r/App/Render/GeometryManager.hpp"
+#include "Slic3r/App/Scene/Clipper.hpp"
 #include "Slic3r/App/Scene/TriangleMeshManager.hpp"
 #include "Slic3r/App/Scene/ClipperPresenterHelper.hpp"
 #include "Slic3r/App/Scene/HeightBand.hpp"
@@ -52,7 +53,7 @@ public:
     void set_height_band(const HeightBand& band);
     // Meshes clipped and capped next to the selected object, e.g. every other model on the build
     // plate plus the SLA support tree and the raft. Passing the same list twice is cheap.
-    void set_extra_meshes(const std::vector<Clipper::ExtraMesh>& meshes);
+    void set_extra_meshes(const std::vector<ExtraMesh>& meshes);
     void update_clipper(
         const Domain::Vec3d& clp_normal,
         double clp_offset,

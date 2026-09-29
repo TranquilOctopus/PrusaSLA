@@ -79,7 +79,7 @@ struct Fixture
         return { stored->get().support_structure, stored->get().pad };
     }
 
-    std::vector<Scene::Clipper::ExtraMesh> collect(const Domain::ModelInstance* selected = nullptr) const
+    std::vector<Scene::ExtraMesh> collect(const Domain::ModelInstance* selected = nullptr) const
     {
         return collect_height_band_meshes(*bed_instance, slicing_id, sla_object_cache, selected);
     }
@@ -91,7 +91,7 @@ struct Fixture
 };
 
 // Number of collected meshes whose payload is the given one.
-size_t count_of(const std::vector<Scene::Clipper::ExtraMesh>& meshes, const std::shared_ptr<const Domain::TriangleMesh>& mesh)
+size_t count_of(const std::vector<Scene::ExtraMesh>& meshes, const std::shared_ptr<const Domain::TriangleMesh>& mesh)
 {
     size_t count = 0;
     for (const auto& extra : meshes) {
@@ -102,7 +102,7 @@ size_t count_of(const std::vector<Scene::Clipper::ExtraMesh>& meshes, const std:
 }
 
 // The single collected mesh carrying the given payload, or nullptr.
-const Scene::Clipper::ExtraMesh* find(const std::vector<Scene::Clipper::ExtraMesh>& meshes, const std::shared_ptr<const Domain::TriangleMesh>& mesh)
+const Scene::ExtraMesh* find(const std::vector<Scene::ExtraMesh>& meshes, const std::shared_ptr<const Domain::TriangleMesh>& mesh)
 {
     for (const auto& extra : meshes) {
         if (extra.mesh == mesh)
@@ -164,8 +164,8 @@ TEST_CASE("collect_height_band_meshes - the support tree and the raft are collec
     REQUIRE(meshes.size() == 3);
     CHECK(count_of(meshes, instance->get_object()->volumes.front()->mesh_ptr()) == 1);
 
-    const Scene::Clipper::ExtraMesh* support = find(meshes, support_mesh);
-    const Scene::Clipper::ExtraMesh* pad     = find(meshes, pad_mesh);
+    const Scene::ExtraMesh* support = find(meshes, support_mesh);
+    const Scene::ExtraMesh* pad     = find(meshes, pad_mesh);
     REQUIRE(support != nullptr);
     REQUIRE(pad != nullptr);
     // Both sit where the model of their instance is, the support lift of the print frame is dropped.

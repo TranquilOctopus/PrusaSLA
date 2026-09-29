@@ -23,7 +23,7 @@ namespace Slic3r::App::Plater {
  * model is lifted by the support elevation. The plater draws the model unlifted, so the lift is
  * dropped again to keep the supports attached to their model.
  */
-std::vector<Scene::Clipper::ExtraMesh> collect_height_band_meshes(
+std::vector<Scene::ExtraMesh> collect_height_band_meshes(
     const Domain::BedInstance&   bed_instance,
     const Domain::SlicingId&     slicing_id,
     const Biz::SLAObjectCache&   sla_object_cache,

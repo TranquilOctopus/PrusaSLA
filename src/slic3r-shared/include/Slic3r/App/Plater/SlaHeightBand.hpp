@@ -96,7 +96,7 @@ private:
     [[nodiscard]] const Domain::ModelObject* selected_object() const;
     [[nodiscard]] const Domain::ModelInstance* selected_instance() const;
     // Every printable model on the selected build plate, the support trees and the rafts.
-    [[nodiscard]] std::vector<Scene::Clipper::ExtraMesh> collect_extra_meshes() const;
+    [[nodiscard]] std::vector<Scene::ExtraMesh> collect_extra_meshes() const;
 
 private:
     Biz::ProjectInteractor& m_project_interactor;

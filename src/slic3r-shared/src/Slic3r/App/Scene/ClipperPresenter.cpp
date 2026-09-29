@@ -194,9 +194,9 @@ void ClipperPresenter::build_extra_meshes_nodes()
         },
         m_main_node);
 
-    const std::vector<Clipper::ExtraMesh>& extras = m_clipper->extra_meshes();
+    const std::vector<ExtraMesh>& extras = m_clipper->extra_meshes();
     for (size_t extra_id = 0; extra_id < extras.size(); ++extra_id) {
-        const Clipper::ExtraMesh& extra = extras[extra_id];
+        const ExtraMesh& extra = extras[extra_id];
         if (!extra.mesh || extra.mesh->empty())
             continue;
 
@@ -399,13 +399,13 @@ void ClipperPresenter::update_nodes()
     }
 }
 
-void ClipperPresenter::set_extra_meshes(const std::vector<Clipper::ExtraMesh>& meshes)
+void ClipperPresenter::set_extra_meshes(const std::vector<ExtraMesh>& meshes)
 {
     if (!m_clipper)
         return;
 
     // The band calls this on every slider change, so skip the work when nothing moved.
-    const std::vector<Clipper::ExtraMesh>& current = m_clipper->extra_meshes();
+    const std::vector<ExtraMesh>& current = m_clipper->extra_meshes();
     if (current.size() == meshes.size()) {
         bool same = true;
         for (size_t i = 0; i < current.size() && same; ++i) {

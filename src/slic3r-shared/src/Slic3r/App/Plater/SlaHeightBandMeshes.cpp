@@ -8,14 +8,14 @@ using namespace Slic3r;
 
 namespace Slic3r::App::Plater {
 
-std::vector<Scene::Clipper::ExtraMesh> collect_height_band_meshes(
+std::vector<Scene::ExtraMesh> collect_height_band_meshes(
     const Domain::BedInstance&   bed_instance,
     const Domain::SlicingId&     slicing_id,
     const Biz::SLAObjectCache&   sla_object_cache,
     const Domain::ModelInstance* selected_instance
 )
 {
-    std::vector<Scene::Clipper::ExtraMesh> meshes;
+    std::vector<Scene::ExtraMesh> meshes;
 
     // The model instances are placed the way the plater places them, see PlaterScenePresenter.
     const Domain::Transform3d bed_trafo = bed_instance.transformation.get_matrix();
@@ -32,7 +32,7 @@ std::vector<Scene::Clipper::ExtraMesh> collect_height_band_meshes(
             for (const Domain::ModelVolume* volume : object->volumes) {
                 if (volume == nullptr || !volume->is_model_part())
                     continue;
-                meshes.push_back(Scene::Clipper::ExtraMesh{
+                meshes.push_back(Scene::ExtraMesh{
                     volume->mesh_ptr(), instance->get_matrix() * volume->get_matrix()
                 });
             }
@@ -54,10 +54,10 @@ std::vector<Scene::Clipper::ExtraMesh> collect_height_band_meshes(
             world_trafo.translation().z()     = instance->get_matrix().translation().z();
 
             if (sla_object.support_structure && !sla_object.support_structure->empty()) {
-                meshes.push_back(Scene::Clipper::ExtraMesh{sla_object.support_structure, world_trafo});
+                meshes.push_back(Scene::ExtraMesh{sla_object.support_structure, world_trafo});
             }
             if (sla_object.pad && !sla_object.pad->empty()) {
-                meshes.push_back(Scene::Clipper::ExtraMesh{sla_object.pad, world_trafo});
+                meshes.push_back(Scene::ExtraMesh{sla_object.pad, world_trafo});
             }
         }    }
 

@@ -231,7 +231,7 @@ const Domain::ModelInstance* SlaHeightBand::selected_instance() const
         .find_instance_by_id(element.object_id, element.instance_id);
 }
 
-std::vector<Scene::Clipper::ExtraMesh> SlaHeightBand::collect_extra_meshes() const
+std::vector<Scene::ExtraMesh> SlaHeightBand::collect_extra_meshes() const
 {
     if (m_current_project_id == Domain::INVALID_ID
         || !m_project_interactor.project_exists(m_current_project_id))

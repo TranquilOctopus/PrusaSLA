@@ -684,7 +684,7 @@ TEST_CASE(
 {
     SECTION("the name of the profile wins")
     {
-        const ForeignResinProfile profile =
+        ForeignResinProfile profile =
             profile_of({{"currProfile", "Grey resin"}, {"machineName", "Photon Mono"}});
         profile.printer_hint = "Photon Mono";
 
