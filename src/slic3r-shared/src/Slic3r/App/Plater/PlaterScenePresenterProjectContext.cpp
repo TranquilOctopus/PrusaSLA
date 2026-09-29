@@ -7,7 +7,11 @@ namespace Slic3r::App::Plater {
 
 static constexpr Scene::RenderLayerId SELECTION_AABB_RENDER_LAYER_ID = Scene::RenderLayerId(0);
 
-void PlaterScenePresenterProjectContext::update_selection_obb_node(Render::Device& device, const Biz::ProjectInteractor& project_interactor)
+void PlaterScenePresenterProjectContext::update_selection_obb_node(
+    Render::Device& device,
+    const Biz::ProjectInteractor& project_interactor,
+    double selection_lift
+)
 {
     if (!m_selection_obb_node.dirty)
         return;
@@ -52,8 +56,10 @@ void PlaterScenePresenterProjectContext::update_selection_obb_node(Render::Devic
     DEBUG_ASSERT(m_selection_obb_node.main_node != nullptr);
     DEBUG_ASSERT(m_selection_obb_node.selection_node != nullptr);
     DEBUG_ASSERT(m_selection_obb_node.volume_nodes_parent != nullptr);
-    // updates the selection aabb node
-    Scene::update_obb_node(*m_selection_obb_node.selection_node, selection_bounding_box->oriented_bounding_box(), 0.25);
+    // updates the selection aabb node, moved up by the visual SLA lift of the selection
+    Biz::Scene::OrientedBoundingBox obb = selection_bounding_box->oriented_bounding_box();
+    obb.center.z() += selection_lift;
+    Scene::update_obb_node(*m_selection_obb_node.selection_node, obb, 0.25);
 
     const Biz::Scene::ObjectSelection& object_selection = project_interactor.scene_interactor().object_selection();
     if (object_selection.mode == Biz::Scene::SelectionMode::Volume) {
@@ -86,6 +92,8 @@ void PlaterScenePresenterProjectContext::update_selection_obb_node(Render::Devic
             const Domain::ModelVolume* volume = project_interactor.selected_project().find_volume_by_id(tag->object_id, tag->volume_id);
             auto world_trafo = instance->get_matrix() * volume->get_matrix();
             Domain::BoundingBox3d aabb = Biz::Algorithms::ModelVolume::transformed_bounding_box(*volume, world_trafo);
+            aabb.min.z() += selection_lift;
+            aabb.max.z() += selection_lift;
             Scene::update_obb_node(*child_node, { 0.5 * (aabb.min + aabb.max), aabb.max - aabb.min }, 0.25);
             child_node->set_debug_name(fmt::format("children_aabb_{}_{}_{}", tag->object_id, tag->instance_id, tag->volume_id));
             child_node->set_enabled(true);

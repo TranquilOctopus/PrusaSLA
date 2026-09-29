@@ -2,6 +2,7 @@
 #include "Slic3r/App/Scene/GeometryDataFactory.hpp"
 #include "Slic3r/App/Plater/GizmoNodeTag.hpp"
 #include "Slic3r/App/Plater/PlaterSceneLayer.hpp"
+#include "Slic3r/App/Plater/PlaterScenePresenter.hpp"
 #include "Slic3r/Domain/Types.hpp"
 
 #include <numbers>
@@ -132,7 +133,7 @@ Scene::GizmoActivationState TranslationGizmo::on_mouse(Scene::GizmoEventContext&
 
     if (event_type == Platform::MouseEvent::Type::ButtonDown) {
         const std::optional<Biz::Scene::SelectionExtents> selection_bounding_box{
-            m_scene_interactor.selection_bounding_box()
+            m_scene_provider.selection_bounding_box()
         };
         const Scene::Node* node = ctx.pick_result_node_with_tag_of_type<TranslationGizmoNodeTag>();
         if (node == nullptr || !selection_bounding_box) {

@@ -13,12 +13,11 @@
 #include "Slic3r/Biz/Algorithms/AABBMesh.hpp"
 #include "Slic3r/App/Scene/Clipper.hpp"
 #include "Slic3r/App/Scene/ClipperPresenter.hpp"
-#include "Slic3r/App/Scene/AuxiliaryElementId.hpp"
+#include "Slic3r/App/Plater/SlaSupportPreviewService.hpp"
 #include "Slic3r/App/Yoga/Item.hpp"
 #include "jthread/JThread.hpp"
 #include "Slic3r/Domain/Config.hpp"
 #include "Slic3r/Domain/FullConfigSLA.hpp"
-#include "libslic3r/SLASupportTool.hpp"
 
 #include <memory>
 #include <optional>
@@ -29,6 +28,7 @@
 namespace Slic3r::App::Plater {
 class SlaSupportPointsDialog;
 class PlaterScenePresenter;
+class SlaSupportPreviewService;
 }
 
 namespace Slic3r::App::Render {
@@ -77,7 +77,8 @@ public:
     SlaSupportPointsGizmo(
         PlaterScenePresenter& scene_presenter,
         Biz::ProjectInteractor& project_interactor,
-        Render::Device& device
+        Render::Device& device,
+        SlaSupportPreviewService& support_preview_service
     );
 
     ~SlaSupportPointsGizmo() override;
@@ -132,9 +133,6 @@ private:
     void update_point_visuals();
     void clear_point_visuals();
     Domain::ColorRGBA get_point_color(const Domain::SLA::SupportPoint& point, bool highlighted) const;
-    void request_support_geometry();
-    void rebuild_support_geometry_node(const Domain::SLA::SupportPoints& points, const Slic3r::sla::SupportToolTree& tree, double elevation);
-    void clear_support_geometry_node();
 
     // Raycasting helpers (adapted from PaintOnGizmoBase)
     struct VolumeHitPoint
@@ -178,19 +176,15 @@ private:
     void create_cone_geometry_if_needed();
 
     // Config and elevation helpers
-    struct ObjectSlaConfig {
-        Domain::FullConfigSLAPtr full;
-        Domain::PartialObjectConfigSLAPtr object;
-    };
+    using ObjectSlaConfig = SlaSupportPreviewService::ObjectSlaConfig;
     std::optional<ObjectSlaConfig> build_object_sla_config(const Domain::ModelObject* model_object, const Domain::ModelInstance* instance) const;
     double support_elevation() const;
 
     // Worker helpers
-    enum class WorkerJobType { Points, Tree };
+    enum class WorkerJobType { Points };
     struct WorkerJobData {
         std::unique_ptr<Domain::ModelObject> cloned_object;
         Domain::Transform3d instance_matrix;
-        Domain::SLA::SupportPoints points; // for Tree job
         ObjectSlaConfig config;
         Domain::ObjectID object_id;
         Domain::SelectionId instance_id;
@@ -201,7 +195,6 @@ private:
     };
     struct WorkerJobResult {
         std::optional<Domain::SLA::SupportPoints> points; // for Points job
-        std::optional<Slic3r::sla::SupportToolTree> tree; // for Tree job
         Domain::ObjectID object_id;
         Domain::SelectionId instance_id;
         Domain::SlicingId slicing_id;
@@ -214,11 +207,11 @@ private:
     void cancel_worker_job();
     void on_worker_job_completed(WorkerJobResult&& result);
     void on_points_job_completed(std::optional<Domain::SLA::SupportPoints> points, Domain::ObjectID object_id, bool for_auto_support_all, size_t job_counter);
-    void on_tree_job_completed(std::optional<Slic3r::sla::SupportToolTree> tree, Domain::ObjectID object_id, size_t job_counter);
 
     PlaterScenePresenter& m_scene_presenter;
     Biz::ProjectInteractor& m_project_interactor;
     Render::Device& m_device;
+    SlaSupportPreviewService& m_support_preview_service;
     Yoga::Passthrough<SlaSupportPointsDialog> m_dialog;
 
     // Worker state
@@ -248,19 +241,12 @@ private:
     // Scene nodes for point visuals
     Scene::Node* m_main_node = nullptr;
     Scene::Node* m_points_node = nullptr;
-    Scene::Node* m_support_geometry_node = nullptr;
 
     // Geometry and triangle mesh managers for point visuals (like MeasureGizmo)
     using GeometryManager = Render::GeometryManager<std::string>;
     using TriangleMeshManager = Scene::TriangleMeshManager<std::string>;
     GeometryManager m_geometry_manager{"sla_support_points_geometry"};
     TriangleMeshManager m_triangle_mesh_manager{"sla_support_points_mesh"};
-
-    // Geometry and triangle mesh managers for support geometry
-    using SupportGeometryManager = Render::GeometryManager<Scene::AuxiliaryElementId>;
-    using SupportTriangleMeshManager = Scene::TriangleMeshManager<Scene::AuxiliaryElementId>;
-    SupportGeometryManager m_support_geometry_manager{"sla_support_geometry"};
-    SupportTriangleMeshManager m_support_triangle_mesh_manager{"sla_support_mesh"};
 
     // Cone geometry for surface normal visualization
     std::string m_cone_geometry_id = "support_point_cone";

@@ -112,6 +112,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Plater/HeightRangeDialog.cpp
         include/Slic3r/App/Plater/SlaSupportPointsGizmo.hpp
         src/Slic3r/App/Plater/SlaSupportPointsGizmo.cpp
+        include/Slic3r/App/Plater/SlaSupportPreviewService.hpp
+        src/Slic3r/App/Plater/SlaSupportPreviewService.cpp
         include/Slic3r/App/Plater/SlaSupportPointsEditing.hpp
         src/Slic3r/App/Plater/SlaSupportPointsEditing.cpp
         include/Slic3r/App/Plater/SlaSupportPointsDialog.hpp
@@ -1627,6 +1629,8 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/App/Plater/SlaToolTypesTests.cpp
 
             test/Slic3r/App/Plater/SlaSupportPointsGizmoTests.cpp
+
+            test/Slic3r/App/Plater/SlaSupportPreviewServiceTests.cpp
 
             test/Slic3r/App/Plater/SlaDrainHolesEditingTests.cpp
 

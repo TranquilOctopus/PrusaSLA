@@ -13,6 +13,7 @@
 #include "Slic3r/App/Render/Device.hpp"
 #include "Slic3r/App/Render/GeometryBuilder.hpp"
 #include "Slic3r/App/Plater/PlaterSceneLayer.hpp"
+#include "Slic3r/App/Plater/SlaSupportPreviewService.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/Biz/StatusCache.hpp"
@@ -56,9 +57,7 @@ using Slic3r::Domain::SLA::SupportPoint;
 using Slic3r::Domain::SLA::SupportPointType;
 using Slic3r::Domain::SLA::SupportPoints;
 using Slic3r::Domain::SLA::PointsStatus;
-using Slic3r::sla::SupportToolTree;
 using Slic3r::sla::generate_support_points_for_tool;
-using Slic3r::sla::build_support_tree_for_tool;
 using Slic3r::sla::support_tool_elevation;
 using Slic3r::sla::SupportToolStop;
 
@@ -67,11 +66,13 @@ namespace Slic3r::App::Plater {
 SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     PlaterScenePresenter& scene_presenter,
     Biz::ProjectInteractor& project_interactor,
-    Render::Device& device
+    Render::Device& device,
+    SlaSupportPreviewService& support_preview_service
 ) :
     m_scene_presenter(scene_presenter),
     m_project_interactor(project_interactor),
-    m_device(device)
+    m_device(device),
+    m_support_preview_service(support_preview_service)
 {
     m_dialog.reset(std::make_unique<SlaSupportPointsDialog>());
     m_dialog->set_title(_u8L("SLA Support Points"));
@@ -295,7 +296,6 @@ void SlaSupportPointsGizmo::on_deactivated()
 
     // Clear point visuals
     clear_point_visuals();
-    clear_support_geometry_node();
     m_hovered_point_idx.reset();
 
     DialogSyncGuard guard(*this);
@@ -373,9 +373,6 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
         discard_edited_points();
     }
     m_hovered_point_idx.reset();
-
-    // Clear support geometry node on selection change
-    clear_support_geometry_node();
 
     if (!enabled() || selection.elements.empty()) {
         m_dialog->set_generate_enabled(false);
@@ -481,11 +478,6 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     m_dialog->set_generate_enabled(true);
     m_dialog->set_auto_support_all_enabled(true);
     m_dialog->set_apply_enabled(false);
-
-    // If the selected object already has support points, request support geometry
-    if (!model_object->sla_support_points.empty()) {
-        request_support_geometry();
-    }
 }
 
 void SlaSupportPointsGizmo::on_sla_object_cache_changed(const Domain::SlicingId& id, Domain::ObjectID object_id)
@@ -617,9 +609,6 @@ void SlaSupportPointsGizmo::apply_generated_points()
     m_has_generated_points = false;
     m_dialog->set_apply_enabled(false);
     m_dialog->set_point_count(model_object->sla_support_points.size());
-
-    // Request support geometry to be computed and displayed
-    request_support_geometry();
 }
 
 void SlaSupportPointsGizmo::discard_generated_points()
@@ -709,13 +698,11 @@ void SlaSupportPointsGizmo::process_auto_support_queue()
         m_dialog->set_auto_support_all_enabled(true);
         m_auto_support_keep_existing.reset();
 
-        // The support geometry of the selected object may have been rebuilt by the last job
         if (m_selected_object_id.valid()) {
             const Domain::Project& project = m_project_interactor.selected_project();
             const Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
-            if (model_object && !model_object->sla_support_points.empty()) {
+            if (model_object) {
                 m_dialog->set_point_count(model_object->sla_support_points.size());
-                request_support_geometry();
             }
         }
         return;
@@ -923,7 +910,6 @@ void SlaSupportPointsGizmo::commit_edited_points_live()
         mo.sla_support_points = m_edit_state->editing.points;
         mo.sla_points_status = PointsStatus::UserModified;
     });
-    request_support_geometry();
 }
 
 void SlaSupportPointsGizmo::apply_edited_points()
@@ -950,9 +936,6 @@ void SlaSupportPointsGizmo::apply_edited_points()
 
     m_dialog->set_point_count(model_object->sla_support_points.size());
     end_editing();
-
-    // Request support geometry to be computed and displayed
-    request_support_geometry();
 }
 
 void SlaSupportPointsGizmo::discard_edited_points()
@@ -973,11 +956,6 @@ void SlaSupportPointsGizmo::discard_edited_points()
             mo.sla_points_status = m_status_before_edit;
         });
         m_dialog->set_point_count(model_object->sla_support_points.size());
-        if (!model_object->sla_support_points.empty()) {
-            request_support_geometry();
-        } else {
-            clear_support_geometry_node();
-        }
     }
 }
 
@@ -1421,157 +1399,6 @@ void SlaSupportPointsGizmo::clear_point_visuals()
     }
 }
 
-void SlaSupportPointsGizmo::request_support_geometry()
-{
-    if (!m_selected_object_id.valid()) {
-        return;
-    }
-
-    Domain::Project& project = m_project_interactor.selected_project();
-    Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
-    if (!model_object || model_object->sla_support_points.empty()) {
-        clear_support_geometry_node();
-        cancel_worker_job();
-        return;
-    }
-
-    const Domain::ModelInstance* instance = project.find_instance_by_id(m_selected_object_id.id, m_selected_instance_id);
-    if (!instance || !instance->is_printable()) {
-        return;
-    }
-
-    const Domain::BedRef bed_ref = instance->get_last_bed();
-    if (project.find_bed_instance_by_id(bed_ref.instance_id) == nullptr) {
-        return;
-    }
-
-    const SlicingId slicing_id{m_project_interactor.selected_project_id(), bed_ref.instance_id};
-
-    // Build the resolved SLA config for the object
-    const std::optional<ObjectSlaConfig> config_opt = build_object_sla_config(model_object, instance);
-    if (!config_opt.has_value()) {
-        return;
-    }
-
-    // Start a Tree job with the current points
-    WorkerJobData job_data;
-    job_data.cloned_object = std::unique_ptr<Domain::ModelObject>(Domain::ModelObject::new_clone(*model_object));
-    job_data.instance_matrix = instance->get_matrix();
-    job_data.points = model_object->sla_support_points;
-    job_data.config = *config_opt;
-    job_data.object_id = m_selected_object_id;
-    job_data.instance_id = m_selected_instance_id;
-    job_data.slicing_id = slicing_id;
-    job_data.job_type = WorkerJobType::Tree;
-    job_data.job_counter = ++m_job_counter;
-
-    start_worker_job(std::move(job_data));
-}
-
-void SlaSupportPointsGizmo::rebuild_support_geometry_node(const Domain::SLA::SupportPoints& points, const Slic3r::sla::SupportToolTree& tree, double elevation)
-{
-    if (!m_selected_object_id.valid() || m_main_node == nullptr) {
-        return;
-    }
-
-    // Clear existing support geometry node
-    clear_support_geometry_node();
-
-    // Get bed instance transform
-    const Domain::Project& project = m_project_interactor.selected_project();
-    const Domain::ModelInstance* instance =
-        project.find_instance_by_id(m_selected_object_id.id, m_selected_instance_id);
-    if (!instance) {
-        return;
-    }
-    const Domain::BedInstance* bed_instance =
-        project.find_bed_instance_by_id(instance->get_last_bed().instance_id);
-    if (!bed_instance) {
-        return;
-    }
-    const Domain::Transform3d bed_trafo = bed_instance->transformation.get_matrix();
-
-    const Domain::Transform3d final_trafo = bed_trafo * Domain::translation_transform(Domain::Vec3d(0., 0., elevation));
-
-    Scene::Scene& scene = m_scene_presenter.scene();
-    const auto& theme = AppServices::instance().theme();
-    const ColorRGBA support_color = theme.color(Platform::Color::SlaModelResin, Platform::ColorGroup::Default);
-
-    auto material = Render::Material{}
-        .set_shader(m_device.context().shader_manager().shader("gouraud_light"))
-        .set_uniform("uniform_color", support_color);
-
-    // Build support structure mesh
-    if (tree.tree && !tree.tree->empty()) {
-        Scene::AuxiliaryElementId support_id{Scene::AuxiliaryElementId::Type::SlaSupports, m_selected_object_id.id};
-        const auto& trimesh = m_support_triangle_mesh_manager.get_or_create(support_id, [&]() {
-            return std::make_unique<Scene::TriangleMesh>(tree.tree);
-        });
-        const auto* geom = m_support_geometry_manager.get_or_create(support_id, [&]() {
-            return Render::geometry_from_triangle_mesh(m_device, trimesh->triangles());
-        });
-
-        Scene::NodeBuilder builder{scene};
-        builder.set_debug_name("SlaSupportPointsGizmo - Support Structure")
-            .set_mesh(geom, material, Scene::RenderLayerId(PlaterSceneLayer::DocumentObjects))
-            .set_aabb(trimesh->aabb_mesh())
-            .set_transform(final_trafo);
-
-        std::unique_ptr<Scene::Node> support_node = builder.build();
-        m_support_geometry_node = support_node.get();
-        scene.add_child(support_node.release(), m_main_node);
-    }
-
-    // Build pad mesh
-    if (tree.pad && !tree.pad->empty()) {
-        Scene::AuxiliaryElementId pad_id{Scene::AuxiliaryElementId::Type::SlaPad, m_selected_object_id.id};
-        const auto& trimesh = m_support_triangle_mesh_manager.get_or_create(pad_id, [&]() {
-            return std::make_unique<Scene::TriangleMesh>(tree.pad);
-        });
-        const auto* geom = m_support_geometry_manager.get_or_create(pad_id, [&]() {
-            return Render::geometry_from_triangle_mesh(m_device, trimesh->triangles());
-        });
-
-        Scene::NodeBuilder builder{scene};
-        builder.set_debug_name("SlaSupportPointsGizmo - Pad")
-            .set_mesh(geom, material, Scene::RenderLayerId(PlaterSceneLayer::DocumentObjects))
-            .set_aabb(trimesh->aabb_mesh())
-            .set_transform(final_trafo);
-
-        std::unique_ptr<Scene::Node> pad_node = builder.build();
-        if (m_support_geometry_node == nullptr) {
-            m_support_geometry_node = pad_node.get();
-        }
-        scene.add_child(pad_node.release(), m_main_node);
-    }
-}
-
-void SlaSupportPointsGizmo::clear_support_geometry_node()
-{
-    if (m_support_geometry_node != nullptr && m_main_node != nullptr) {
-        Scene::Scene& scene = m_scene_presenter.scene();
-        scene.remove_children([this](const Scene::Node* node) {
-            return node->parent() == m_main_node &&
-                   (node == m_support_geometry_node ||
-                    (m_support_geometry_node && node->parent() == m_main_node &&
-                     (node->debug_name().find("Support Structure") != std::string::npos ||
-                      node->debug_name().find("Pad") != std::string::npos)));
-        }, m_main_node);
-
-        // Release the geometry resources for this object
-        if (m_selected_object_id.valid()) {
-            Scene::AuxiliaryElementId support_id{Scene::AuxiliaryElementId::Type::SlaSupports, m_selected_object_id.id};
-            Scene::AuxiliaryElementId pad_id{Scene::AuxiliaryElementId::Type::SlaPad, m_selected_object_id.id};
-            m_support_geometry_manager.release(support_id);
-            m_support_geometry_manager.release(pad_id);
-            m_support_triangle_mesh_manager.release(support_id);
-            m_support_triangle_mesh_manager.release(pad_id);
-        }
-
-        m_support_geometry_node = nullptr;
-    }
-}
-
 Domain::ColorRGBA SlaSupportPointsGizmo::get_point_color(const Domain::SLA::SupportPoint& point, bool highlighted) const
 {
     const auto& theme = AppServices::instance().theme();
@@ -1954,7 +1781,8 @@ double SlaSupportPointsGizmo::support_elevation() const
         return 0.;
     }
 
-    const std::optional<ObjectSlaConfig> config_opt = build_object_sla_config(model_object, instance);
+    const std::optional<ObjectSlaConfig> config_opt =
+        build_object_sla_config(model_object, instance);
     if (!config_opt.has_value()) {
         return 0.;
     }
@@ -1966,27 +1794,14 @@ std::optional<SlaSupportPointsGizmo::ObjectSlaConfig> SlaSupportPointsGizmo::bui
     const Domain::ModelObject* model_object,
     const Domain::ModelInstance* instance) const
 {
-    if (!model_object || !instance) {
+    // The preview service resolves the configuration, so the tool and the plate always agree.
+    const std::optional<SlaSupportPreviewService::ObjectSlaConfig> config =
+        m_support_preview_service.build_object_sla_config(
+            m_project_interactor.selected_project(), model_object, instance);
+    if (!config.has_value()) {
         return std::nullopt;
     }
-
-    const Domain::Project& project = m_project_interactor.selected_project();
-    const Domain::BedRef bed_ref = instance->get_last_bed();
-    const Domain::ConfigContainer* cc = project.find_config_container(bed_ref.config_container_id);
-    if (!cc) {
-        return std::nullopt;
-    }
-
-    Domain::ConfigPack pack = cc->build_print_config();
-    if (!std::holds_alternative<Domain::ConfigPackSLA>(pack)) {
-        return std::nullopt;
-    }
-
-    const Domain::Preset::HwPrinterConfig& hw_config = cc->selected_preset().hw_config;
-    ObjectSlaConfig config;
-    config.full = std::make_shared<const Domain::FullConfigSLA>(std::get<Domain::ConfigPackSLA>(pack), hw_config);
-    config.object = std::make_shared<const Domain::PartialObjectConfigSLA>(model_object->object_settings_sla, hw_config);
-    return config;
+    return ObjectSlaConfig{config->full, config->object};
 }
 
 void SlaSupportPointsGizmo::start_worker_job(WorkerJobData&& job_data)
@@ -2009,14 +1824,6 @@ void SlaSupportPointsGizmo::start_worker_job(WorkerJobData&& job_data)
             result.points = sla::generate_support_points_for_tool(
                 *job_data.cloned_object,
                 job_data.instance_matrix,
-                job_data.config.full,
-                job_data.config.object,
-                stop);
-        } else if (job_data.job_type == WorkerJobType::Tree) {
-            result.tree = sla::build_support_tree_for_tool(
-                *job_data.cloned_object,
-                job_data.instance_matrix,
-                job_data.points,
                 job_data.config.full,
                 job_data.config.object,
                 stop);
@@ -2054,8 +1861,6 @@ void SlaSupportPointsGizmo::on_worker_job_completed(WorkerJobResult&& result)
 
     if (result.job_type == WorkerJobType::Points) {
         on_points_job_completed(std::move(result.points), result.object_id, result.for_auto_support_all, result.job_counter);
-    } else if (result.job_type == WorkerJobType::Tree) {
-        on_tree_job_completed(std::move(result.tree), result.object_id, result.job_counter);
     }
 }
 
@@ -2069,24 +1874,6 @@ void SlaSupportPointsGizmo::on_points_job_completed(std::optional<Domain::SLA::S
     }
 
     on_generation_completed(std::move(points));
-}
-
-void SlaSupportPointsGizmo::on_tree_job_completed(std::optional<Slic3r::sla::SupportToolTree> tree, Domain::ObjectID object_id, size_t job_counter)
-{
-    (void)job_counter;
-
-    if (!tree.has_value() || !m_selected_object_id.valid() || m_selected_object_id != object_id) {
-        return;
-    }
-
-    const double elevation = support_elevation();
-    const Domain::Project& project = m_project_interactor.selected_project();
-    const Domain::ModelObject* model_object = project.find_object_by_id(object_id.id);
-    if (!model_object) {
-        return;
-    }
-
-    rebuild_support_geometry_node(model_object->sla_support_points, *tree, elevation);
 }
 
 } // namespace Slic3r::App::Plater

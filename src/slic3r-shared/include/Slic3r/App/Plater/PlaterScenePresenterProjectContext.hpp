@@ -22,7 +22,11 @@ public:
     void set_sinking_contours_highlight_enabled(bool enable) { m_sinking_contours.set_highlight_enabled(enable); }
 
     void set_selection_obb_node_as_dirty() { m_selection_obb_node.dirty = true; }
-    void update_selection_obb_node(Render::Device& device, const Biz::ProjectInteractor& project_interactor);
+    void update_selection_obb_node(
+        Render::Device& device,
+        const Biz::ProjectInteractor& project_interactor,
+        double selection_lift = 0.
+    );
     void set_selection_obb_visible(bool visible);
 
     const MMPaintedGeometryManager& mm_painted_geometry_manager() const;

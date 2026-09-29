@@ -235,7 +235,7 @@ void PlaterScenePresenter::render_scene(Render::CommandBuffer& command_buffer)
             m_volume_materials_dirty = false;
         }
 
-        project_context().update_selection_obb_node(m_device, m_project_interactor);
+        project_context().update_selection_obb_node(m_device, m_project_interactor, selection_sla_lift());
 #if ENABLE_DEBUG_RENDER_SCENE_AABB
         m_camera_frustum_updater.update_scene_aabb(project_context());
         m_camera_frustum_updater.update_scene_aabb_node(project_context(), m_device);
@@ -347,6 +347,126 @@ void PlaterScenePresenter::on_hover_changed(const HoverData& hover_data)
     m_volume_materials_dirty = true;
 }
 
+double PlaterScenePresenter::sla_lift(Domain::ObjectID object_id) const
+{
+    const auto it = m_sla_lifts.find(object_id);
+    return it != m_sla_lifts.end() ? it->second : 0.;
+}
+
+double PlaterScenePresenter::selection_sla_lift() const
+{
+    const Biz::Scene::ObjectSelection& selection =
+        m_project_interactor.scene_interactor().object_selection();
+    if (selection.elements.empty()) {
+        return 0.;
+    }
+
+    const Domain::ElementRef& first = selection.elements.front();
+    const double lift                = sla_lift(Domain::ObjectID{first.object_id});
+    for (const Domain::ElementRef& element : selection.elements) {
+        if (element.object_id != first.object_id) {
+            return 0.; // more than one object on the plate, there is no single lift
+        }
+    }
+    return lift;
+}
+
+std::optional<Biz::Scene::SelectionExtents> PlaterScenePresenter::selection_bounding_box() const
+{
+    std::optional<Biz::Scene::SelectionExtents> extents =
+        m_project_interactor.scene_interactor().selection_bounding_box();
+    const double lift = selection_sla_lift();
+    if (!extents || lift == 0.) {
+        return extents;
+    }
+
+    // Only the box moves, min_z keeps describing the model data (place on bed, floating checks).
+    Biz::Scene::OrientedBoundingBox obb = extents->oriented_bounding_box();
+    obb.center.z() += lift;
+    return Biz::Scene::SelectionExtents{obb, extents->min_z()};
+}
+
+Domain::Transform3d PlaterScenePresenter::instance_transform(const Domain::ModelInstance* inst) const
+{
+    Domain::Transform3d trafo = inst->get_matrix();
+    const double lift          = inst->get_object() != nullptr ? sla_lift(inst->get_object()->id()) : 0.;
+    if (lift != 0.) {
+        trafo.pretranslate(Domain::Vec3d(0., 0., lift));
+    }
+    return trafo;
+}
+
+void PlaterScenePresenter::apply_sla_lift_to_nodes(Domain::ObjectID object_id)
+{
+    if (m_selected_project_id == Domain::INVALID_ID || !has_project(m_selected_project_id)) {
+        return;
+    }
+
+    // The whole instance subtree hangs off the instance node, lifting that one node lifts the
+    // volumes, their raycast components (so picking) and everything drawn below them.
+    const Domain::Project& proj = m_workbench.project(m_selected_project_id);
+    Scene::visit(
+        scene().root(),
+        [&](Scene::Node& n) {
+            const SceneNodeTag* t = n.tag_of_type<SceneNodeTag>();
+            if (t == nullptr || t->volume_id != 0 || t->object_id != object_id.id) {
+                return;
+            }
+            const auto* inst = proj.find_instance_by_id(t->object_id, t->instance_id);
+            if (inst != nullptr) {
+                n.set_local_transform(Scene::Transform{instance_transform(inst)});
+            }
+        },
+        true
+    );
+}
+
+void PlaterScenePresenter::set_sla_lift(Domain::ObjectID object_id, double lift)
+{
+    if (m_selected_project_id == Domain::INVALID_ID || !has_project(m_selected_project_id)) {
+        return;
+    }
+
+    const auto it = m_sla_lifts.find(object_id);
+    if (lift == 0.) {
+        if (it == m_sla_lifts.end()) {
+            return;
+        }
+        m_sla_lifts.erase(it);
+    } else {
+        if (it != m_sla_lifts.end() && it->second == lift) {
+            return;
+        }
+        m_sla_lifts[object_id] = lift;
+    }
+
+    apply_sla_lift_to_nodes(object_id);
+
+    set_scene_aabb_as_dirty();
+    project_context().set_selection_obb_node_as_dirty();
+    update_selection_root(m_selected_project_id, m_project_interactor.scene_interactor().object_selection());
+}
+
+void PlaterScenePresenter::clear_sla_lifts()
+{
+    if (m_sla_lifts.empty() || m_selected_project_id == Domain::INVALID_ID || !has_project(m_selected_project_id)) {
+        return;
+    }
+
+    std::vector<Domain::ObjectID> object_ids;
+    object_ids.reserve(m_sla_lifts.size());
+    for (const auto& entry : m_sla_lifts) {
+        object_ids.push_back(entry.first);
+    }
+    m_sla_lifts.clear();
+    for (const Domain::ObjectID& object_id : object_ids) {
+        apply_sla_lift_to_nodes(object_id);
+    }
+
+    set_scene_aabb_as_dirty();
+    project_context().set_selection_obb_node_as_dirty();
+}
+
 void PlaterScenePresenter::on_node_added(Scene::Node* node)
 {
     if (node != nullptr && node->contains_raycast_component())
@@ -378,6 +498,8 @@ void PlaterScenePresenter::on_project_loaded(Domain::SelectionId project_id)
 
 void PlaterScenePresenter::on_project_removed(Domain::SelectionId project_id)
 {
+    // The visual lifts belong to objects of a project that is going away.
+    m_sla_lifts.clear();
     Biz::Platform::PlatformServices::instance()
         .main_thread_dispatcher()
         .dispatch_on_main_thread_after([project_id, this]() { m_projects.erase(project_id); });
@@ -1293,7 +1415,7 @@ void PlaterScenePresenter::update_selection_root(
     project.set_selection_obb_node_as_dirty();
 
     const std::optional<Biz::Scene::SelectionExtents> bounding_box{
-        m_project_interactor.scene_interactor().selection_bounding_box()
+        selection_bounding_box()
     };
 
     if (!bounding_box) {
@@ -1362,7 +1484,7 @@ void PlaterScenePresenter::on_instance_added(Domain::SelectionId project_id, con
         const Domain::ModelInstance*
             inst = Domain::find_by_id<Domain::ModelInstance>(obj->instances, element.instance_id);
         builder.set_debug_name(fmt::format("obj: {} inst: {}", obj->id().id, inst->id().id))
-            .transform([inst](auto& t) { t = inst->get_matrix(); })
+            .transform([this, inst](auto& t) { t = instance_transform(inst); })
             .set_tag(SceneNodeTag{obj->id().id, 0, inst->id().id, Domain::ModelVolumeType::INVALID})
             .child_for_each(
                 obj->volumes,
@@ -1412,7 +1534,7 @@ void PlaterScenePresenter::on_instance_transformed(Domain::SelectionId project_i
                     if (t->instance_id != 0 && t->instance_id == e.instance_id) {
                         const auto* inst = proj.find_instance_by_id(e.object_id, e.instance_id);
                         ASSERT(inst);
-                        n.set_local_transform(Scene::Transform{inst->get_matrix()});
+                        n.set_local_transform(Scene::Transform{instance_transform(inst)});
                     }
                 }
             }

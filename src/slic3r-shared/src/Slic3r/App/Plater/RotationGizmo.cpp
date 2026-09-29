@@ -370,7 +370,7 @@ Scene::GizmoActivationState RotationGizmo::on_mouse(Scene::GizmoEventContext& ct
 
     if (event_type == Platform::MouseEvent::Type::ButtonDown) {
         const std::optional<Biz::Scene::SelectionExtents> selection_bounding_box{
-            m_scene_interactor.selection_bounding_box()
+            m_scene_presenter.selection_bounding_box()
         };
 
         if (!selection_bounding_box) {

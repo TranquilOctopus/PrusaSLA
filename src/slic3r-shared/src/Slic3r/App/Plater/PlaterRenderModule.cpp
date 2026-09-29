@@ -63,6 +63,7 @@
 #include "Slic3r/App/Plater/HeightRangeGizmo.hpp"
 #include "Slic3r/App/Plater/HeightRangeDialog.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsGizmo.hpp"
+#include "Slic3r/App/Plater/SlaSupportPreviewService.hpp"
 #include "Slic3r/App/Plater/SlaHollowGizmo.hpp"
 #include "Slic3r/App/Plater/ToolGizmosUiInfo.hpp"
 #include "Slic3r/App/Navigator.hpp"
@@ -1080,6 +1081,13 @@ void PlaterRenderModule::init_gizmos()
         m_project_interactor,
         AppServices::instance().pop_notification_center()
     );
+    // Keeps the support tree and the raft of every model on the plate drawn, so the tool gizmo
+    // below only has to edit points.
+    m_sla_support_preview = std::make_unique<SlaSupportPreviewService>(
+        m_project_interactor,
+        *m_scene_presenter,
+        *m_device
+    );
     m_paint_on_supports_gizmo = &m_gizmo_manager->add_tool_gizmo<PaintOnSupportsGizmo>(
         *m_device,
         m_gizmo_manager->data_factory(),
@@ -1147,7 +1155,8 @@ void PlaterRenderModule::init_gizmos()
     m_sla_support_points_gizmo = &m_gizmo_manager->add_tool_gizmo<SlaSupportPointsGizmo>(
         *m_scene_presenter,
         m_project_interactor,
-        *m_device
+        *m_device,
+        *m_sla_support_preview
     );
     m_sla_hollow_gizmo = &m_gizmo_manager->add_tool_gizmo<SlaHollowGizmo>(
         *m_scene_presenter,
