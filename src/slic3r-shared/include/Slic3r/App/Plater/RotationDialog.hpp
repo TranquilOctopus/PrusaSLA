@@ -11,6 +11,10 @@ namespace Slic3r::Biz {
     class ProjectInteractor;
 }
 
+namespace Slic3r::App::Yoga {
+    class RadioButton;
+}
+
 namespace Slic3r::App::Plater {
 class TripleInput;
 
@@ -48,11 +52,16 @@ private:
     std::optional<Domain::Vec3d> get_obb_rotation() const;
     void reload(std::optional<Domain::SelectionId> project_id = std::nullopt);
     void update_auto_orient_button_visibility();
+    void reload_auto_orient_goal();
     App::Plater::PlaterScenePresenter& m_scene_provider;
     Biz::ProjectInteractor& m_project_interactor;
     TripleInput* m_relative_input;
     PlaceOnBedButton* m_place_on_bed_button{nullptr};
     Yoga::LayoutButton* m_auto_orient_button{nullptr};
+    Yoga::Item* m_auto_orient_goal_row{nullptr};
+    Yoga::RadioButton* m_lowest_height_button{nullptr};
+    Yoga::RadioButton* m_fewest_supports_button{nullptr};
+    Yoga::ButtonGroup m_auto_orient_goal_buttons;
     ReferenceFramePicker* m_reference_frame_picker;
 
     struct ProjectContext {

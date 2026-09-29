@@ -165,6 +165,35 @@ float find_ground_level(const TriangleMesh &mesh,
     return execution::reduce(execution::ex_tbb, size_t(0), vsize, zmin, minfn, accessfn, granularity);
 }
 
+// Score the supportedness of a mesh resting on the build plate: the faces lying flat on the plate
+// are rewarded by their area (they need no support at all) and everything else is scored as
+// overhang. Upstream used this score for prints where the object touches the plate; unlike the
+// general supportedness score it needs no configuration.
+double get_supportedness_onfloor_score(const TriangleMesh &mesh, const Transform3f &tr)
+{
+    if (mesh.its.vertices.empty()) return NaNd;
+
+    size_t Nthreads = std::thread::hardware_concurrency();
+
+    float zmin = find_ground_level(mesh, tr, Nthreads);
+    float zlvl = zmin + 0.1f; // Set up a slight tolerance from z level
+
+    auto accessfn = [&mesh, &tr, zlvl](size_t fi) {
+        std::array<Vec3f, 3> tri = get_transformed_triangle(mesh, tr, fi);
+        Facestats fc{tri};
+
+        if (tri[0].z() <= zlvl && tri[1].z() <= zlvl && tri[2].z() <= zlvl)
+            return -2 * fc.area * POINTS_PER_UNIT_AREA;
+
+        return get_supportedness_score(fc);
+    };
+
+    size_t facecount = mesh.its.indices.size();
+    double S = unscaled(sum_score<int_fast64_t>(accessfn, facecount, Nthreads));
+
+    return S / facecount;
+}
+
 using XYRotation = std::array<double, 2>;
 
 // prepare the rotation transformation
@@ -340,6 +369,33 @@ Vec2d find_best_misalignment_rotation(const Domain::ModelObject &mo,
         }, OptNS::initvals({0., 0.}), bounds);
 
     return {result.optimum[0], result.optimum[1]};
+}
+
+Vec2d find_least_supports_rotation(const Domain::ModelObject &mo,
+                                   const RotOptimizeParams   &params)
+{
+    RotfinderBoilerplate<1000> bp{mo, params};
+
+    // The object rests on the build plate, so only the poses laying a convex hull face flat on
+    // the plate have to be checked. This is a much smaller set than the whole XY plane, and every
+    // pose in it is an exact face-down orientation, not a grid sample.
+    const std::vector<XYRotation> inputs = get_chull_rotations(bp.mesh, bp.max_tries);
+    if (inputs.empty()) {
+        return Vec2d::Zero();
+    }
+
+    bp.max_tries = inputs.size();
+
+    auto objfn = [&bp](const XYRotation &rot) {
+        bp.statusfn();
+        return get_supportedness_onfloor_score(bp.mesh, to_transform3f(rot));
+    };
+
+    XYRotation rot = find_min_score<2>(
+        objfn, inputs.cbegin(), inputs.cend(), [&bp] { return bp.stopcond(); }
+    );
+
+    return {rot[0], rot[1]};
 }
 
 inline BoundingBoxf3 bounding_box_with_tr(const indexed_triangle_set &its,
