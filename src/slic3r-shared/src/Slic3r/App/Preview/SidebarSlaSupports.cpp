@@ -1,9 +1,12 @@
 #include "Slic3r/App/Preview/SidebarSlaSupports.hpp"
 
+#include <algorithm>
+
 #include "Slic3r/App/Yoga/LayoutButton.hpp"
 #include "Slic3r/App/Yoga/Text.hpp"
 #include "Slic3r/App/Yoga/Item.hpp"
 #include "Slic3r/App/Navigator.hpp"
+#include "Slic3r/App/Scene/IGizmo.hpp"
 
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/Biz/Scene/SceneInteractor.hpp"
@@ -25,7 +28,9 @@ SidebarSlaSupports::SidebarSlaSupports(ProjectInteractor& project_interactor, Ap
     m_config_container_listener_scope(project_interactor, *this),
     m_project_listener_scope(project_interactor, *this),
     m_bed_selection_listener_scope(project_interactor.scene_interactor(), *this),
-    m_project_interactor(project_interactor)
+    m_project_interactor(project_interactor),
+    // The project may already be selected when this is constructed, so the initial state has to be read.
+    m_current_project_id(project_interactor.selected_project_id())
 {
     set_orientation(Orientation::Vertical);
     set_gap(5_fpx);
@@ -48,16 +53,7 @@ SidebarSlaSupports::SidebarSlaSupports(ProjectInteractor& project_interactor, Ap
         _u8L("Switch to Prepare view with SLA Support Points tool")
     );
     m_edit_supports_button->set_margin({ 0.f, 10.f, 0.f, 0.f });
-    m_edit_supports_button->callbacks().action = [this]()
-    {
-        // Switch to Prepare (Plater) module
-        if (m_project_interactor.selected_project_id() != Domain::INVALID_ID && m_navigator) {
-            m_navigator->navigate_to_module_type(Render::ModuleType::Plater);
-            // Note: Activating the SLA Support Points tool on the selected model
-            // requires access to the Plater module's GizmoManager, which is not
-            // available from Preview. The tool activation is left as a follow-up.
-        }
-    };
+    m_edit_supports_button->callbacks().action = [this]() { edit_supports(); };
 
     // Initial refresh
     refresh();
@@ -99,46 +95,11 @@ void SidebarSlaSupports::refresh()
         return;
     }
 
-    const auto project_id = m_project_interactor.selected_project_id();
-    if (project_id == Domain::INVALID_ID) {
+    if (m_project_interactor.selected_project_id() == Domain::INVALID_ID) {
         return;
     }
 
-    const auto& project = m_project_interactor.selected_project();
-    const auto& model = project.model();
-
-    // Get the selected bed instance
-    const auto& bed_selection = m_project_interactor.scene_interactor().bed_selection();
-    const auto bed_ref = bed_selection.last_selected_bed();
-    const auto bed_instance_id = bed_ref.instance_id;
-
-    if (bed_instance_id == Domain::INVALID_ID) {
-        return;
-    }
-
-    // Find the bed instance to get its model instances
-    const BedInstance* bed_instance = project.find_bed_instance_by_id(bed_instance_id);
-    if (!bed_instance) {
-        return;
-    }
-
-    const auto& bed_model_instances = bed_instance->model_instances;
-
-    // For each model object that has instances on this bed, show its support points count
-    for (const ModelObject* object : model.objects) {
-        // Check if this object has instances on the selected bed
-        bool has_instance_on_bed = false;
-        for (const ModelInstance* instance : bed_model_instances) {
-            if (instance->get_object() == object) {
-                has_instance_on_bed = true;
-                break;
-            }
-        }
-
-        if (!has_instance_on_bed) {
-            continue;
-        }
-
+    for (const ModelObject* object : listed_objects()) {
         // Create a row for this model
         Item* row = m_rows_container->emplace_back<Item>();
         row->set_orientation(Orientation::Horizontal);
@@ -153,6 +114,92 @@ void SidebarSlaSupports::refresh()
         value_text->set_font_type(Render::ImguiFontType::Regular);
         value_text->set_text_color(m_theme->color_imgui(Platform::Color::Text));
     }
+}
+
+std::vector<const ModelObject*> SidebarSlaSupports::listed_objects() const
+{
+    if (m_current_project_id == Domain::INVALID_ID
+        || !m_project_interactor.project_exists(m_current_project_id)
+        || m_current_project_id != m_project_interactor.selected_project_id())
+    {
+        return {};
+    }
+
+    const auto& project = m_project_interactor.selected_project();
+
+    // Only the models placed on the selected bed are listed
+    const auto& bed_selection = m_project_interactor.scene_interactor().bed_selection();
+    const BedInstance* bed_instance =
+        project.find_bed_instance_by_id(bed_selection.last_selected_bed().instance_id);
+    if (!bed_instance) {
+        return {};
+    }
+
+    std::vector<const ModelObject*> objects;
+    for (const ModelObject* object : project.model().objects) {
+        const bool has_instance_on_bed = std::ranges::any_of(
+            bed_instance->model_instances,
+            [object](const ModelInstance* instance) { return instance->get_object() == object; }
+        );
+        if (has_instance_on_bed) {
+            objects.push_back(object);
+        }
+    }
+    return objects;
+}
+
+const ModelObject* SidebarSlaSupports::edited_object() const
+{
+    const std::vector<const ModelObject*> objects = listed_objects();
+    if (objects.empty()) {
+        return nullptr;
+    }
+
+    // The model selected in the scene wins, so that the button edits what the user works on.
+    const Biz::Scene::ObjectSelection& selection =
+        m_project_interactor.scene_interactor().object_selection();
+    if (selection.elements.size() == 1) {
+        const size_t object_id = selection.elements.front().object_id;
+        const auto it = std::ranges::find_if(
+            objects,
+            [object_id](const ModelObject* object) { return object->id().id == object_id; }
+        );
+        if (it != objects.end()) {
+            return *it;
+        }
+    }
+
+    return objects.front();
+}
+
+void SidebarSlaSupports::edit_supports()
+{
+    if (m_project_interactor.selected_project_id() == Domain::INVALID_ID || !m_navigator) {
+        return;
+    }
+
+    // Switch to Prepare (Plater) module
+    m_navigator->navigate_to_module_type(Render::ModuleType::Plater);
+
+    const ModelObject* object = edited_object();
+    if (!object) {
+        return;
+    }
+
+    const auto it = std::ranges::find_if(
+        object->instances,
+        [](const ModelInstance* instance) { return instance->is_printable(); }
+    );
+    if (it == object->instances.end()) {
+        return; // no printable instance to edit
+    }
+
+    // Select the instance before the tool is activated, the tool is enabled by the selection.
+    m_project_interactor.scene_interactor().set_object_selection({
+        Biz::Scene::SelectionMode::Instance,
+        { { object->id().id, (*it)->id().id } }
+    });
+    m_navigator->activate_plater_tool(Scene::ToolType::SlaSupportPoints);
 }
 
 void SidebarSlaSupports::update_visibility()

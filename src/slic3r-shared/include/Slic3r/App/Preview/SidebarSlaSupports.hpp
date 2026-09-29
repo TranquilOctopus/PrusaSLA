@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include "Slic3r/App/Yoga/Window.hpp"
 #include "Slic3r/Biz/Platform/ListenerScope.hpp"
 #include "Slic3r/Biz/ISelectedConfigContainerChangedListener.hpp"
@@ -13,6 +15,11 @@ namespace Slic3r::Biz {
 class ProjectInteractor;
 class SLAResultCache;
 } // namespace Slic3r::Biz
+
+namespace Slic3r::Domain {
+class ModelObject;
+class ModelInstance;
+} // namespace Slic3r::Domain
 
 namespace Slic3r::App {
 class Navigator;
@@ -40,6 +47,13 @@ public:
 private:
     void refresh();
     void update_visibility();
+    void edit_supports();
+
+    /// Models having an instance on the bed selected in the scene, in model order.
+    std::vector<const Domain::ModelObject*> listed_objects() const;
+
+    /// Model to edit - the one selected in the scene, or the first listed one.
+    const Domain::ModelObject* edited_object() const;
 
     Biz::ProjectInteractor& m_project_interactor;
     App::Navigator* m_navigator{nullptr};
