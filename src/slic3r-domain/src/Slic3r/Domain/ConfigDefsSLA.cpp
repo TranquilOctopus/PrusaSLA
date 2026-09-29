@@ -362,7 +362,8 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->location = Printer;
     def->label = L("Minimum exposure time");
     def->option_group = ConfigItemDef::OptionGroup::Printer_General_Exposure;
-    def->category = ConfigItemDef::Category::Printer_General;
+    // Nothing clamps the exposure with this, so it only looks like a printer capability.
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Minimum exposure time");
     def->units = {L("s")};
@@ -373,7 +374,8 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->location = Printer;
     def->label = L("Maximum exposure time");
     def->option_group = ConfigItemDef::OptionGroup::Printer_General_Exposure;
-    def->category = ConfigItemDef::Category::Printer_General;
+    // Nothing clamps the exposure with this, so it only looks like a printer capability.
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Maximum exposure time");
     def->units = {L("s")};
@@ -416,7 +418,8 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->location = Printer;
     def->label = L("Minimum initial exposure time");
     def->option_group = ConfigItemDef::OptionGroup::Printer_General_Exposure;
-    def->category = ConfigItemDef::Category::Printer_General;
+    // Nothing clamps the exposure with this, so it only looks like a printer capability.
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Minimum initial exposure time");
     def->units = {L("s")};
@@ -427,7 +430,8 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->location = Printer;
     def->label = L("Maximum initial exposure time");
     def->option_group = ConfigItemDef::OptionGroup::Printer_General_Exposure;
-    def->category = ConfigItemDef::Category::Printer_General;
+    // Nothing clamps the exposure with this, so it only looks like a printer capability.
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Maximum initial exposure time");
     def->units = {L("s")};
@@ -1075,11 +1079,15 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->max = 20;
     def->init_fn = init_with((std::vector<double>{ 0., 0. }));
 
+    // Layer separation. The engine derives the peel time from ExposureProfile and from the tilt
+    // times (SLAPrintSteps.cpp:1255-1274, 1524-1530), so none of the SL1 separation knobs below
+    // is read on any SLA path. They are hidden, not deleted: old presets and .3mf projects still
+    // carry the values. lift_speed and retract_speed stay visible, the Elegoo exporter reads them.
     def = defs.add("lift_height", typeid(double));
     def->location = Material;
     def->label = L("Lift height");
     def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
-    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Height to lift the build plate during layer separation.");
     def->units = {L("mm")};
@@ -1090,7 +1098,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->location = Material;
     def->label = L("Lift height (above area fill)");
     def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
-    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Height to lift the build plate during layer separation for layers above area fill threshold.");
     def->units = {L("mm")};
@@ -1112,7 +1120,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->location = Material;
     def->label = L("Lift speed (above area fill)");
     def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
-    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Speed of the build plate lift during layer separation for layers above area fill threshold.");
     def->units = {L("mm/s")};
@@ -1134,7 +1142,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->location = Material;
     def->label = L("Retract speed (above area fill)");
     def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
-    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Speed of the build plate retract after lift for layers above area fill threshold.");
     def->units = {L("mm/s")};
@@ -1145,7 +1153,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->location = Material;
     def->label = L("Wait before lift");
     def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
-    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Delay before starting the lift movement.");
     def->units = {L("s")};
@@ -1156,7 +1164,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->location = Material;
     def->label = L("Wait after lift");
     def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
-    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Delay after the lift movement before retract.");
     def->units = {L("s")};
@@ -1167,7 +1175,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->location = Material;
     def->label = L("Wait after retract");
     def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
-    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Delay after the retract movement before next exposure.");
     def->units = {L("s")};
@@ -1178,7 +1186,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->location = Material;
     def->label = L("Light PWM");
     def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
-    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::spinbox;
     def->tooltip = L("PWM value for the UV light (0-255).");
     def->min = 0;
@@ -1189,7 +1197,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->location = Material;
     def->label = L("Bottom lift height");
     def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
-    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Height to lift the build plate during layer separation for bottom layers.");
     def->units = {L("mm")};
@@ -1200,7 +1208,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->location = Material;
     def->label = L("Bottom lift height (above area fill)");
     def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
-    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Height to lift the build plate during layer separation for bottom layers above area fill threshold.");
     def->units = {L("mm")};
@@ -1211,7 +1219,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->location = Material;
     def->label = L("Bottom lift speed");
     def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
-    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Speed of the build plate lift during layer separation for bottom layers.");
     def->units = {L("mm/s")};
@@ -1222,7 +1230,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->location = Material;
     def->label = L("Bottom lift speed (above area fill)");
     def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
-    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Speed of the build plate lift during layer separation for bottom layers above area fill threshold.");
     def->units = {L("mm/s")};
@@ -1233,7 +1241,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->location = Material;
     def->label = L("Bottom retract speed");
     def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
-    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Speed of the build plate retract after lift for bottom layers.");
     def->units = {L("mm/s")};
@@ -1244,7 +1252,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->location = Material;
     def->label = L("Bottom retract speed (above area fill)");
     def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
-    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Speed of the build plate retract after lift for bottom layers above area fill threshold.");
     def->units = {L("mm/s")};
@@ -1255,7 +1263,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->location = Material;
     def->label = L("Bottom wait before lift");
     def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
-    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Delay before starting the lift movement for bottom layers.");
     def->units = {L("s")};
@@ -1266,7 +1274,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->location = Material;
     def->label = L("Bottom wait after lift");
     def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
-    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Delay after the lift movement before retract for bottom layers.");
     def->units = {L("s")};
@@ -1277,7 +1285,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->location = Material;
     def->label = L("Bottom wait after retract");
     def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
-    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Delay after the retract movement before next exposure for bottom layers.");
     def->units = {L("s")};
@@ -1288,7 +1296,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->location = Material;
     def->label = L("Bottom light PWM");
     def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialPrintingProfile_ProfilesSettings;
-    def->category = ConfigItemDef::Category::Filament_MaterialPrintingProfile;
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::spinbox;
     def->tooltip = L("PWM value for the UV light for bottom layers (0-255).");
     def->min = 0;
@@ -1309,7 +1317,9 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->location = Material;
     def->label = L("Material source note");
     def->option_group = ConfigItemDef::OptionGroup::Filament_MaterialTemperatures_MaterialProperty;
-    def->category = ConfigItemDef::Category::Filament_MaterialTemperatures;
+    // Nothing reads or writes this: the foreign-resin importer keeps the source in
+    // ForeignResinProfile (ChituboxCfgReader.cpp) and never maps it to the key.
+    def->category = ConfigItemDef::Category::Hidden;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Records where an imported resin profile came from.");
     def->init_fn = init_with("");

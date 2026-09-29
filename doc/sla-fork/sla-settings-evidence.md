@@ -138,7 +138,7 @@ Short paths in the evidence column: `SLAPrint*.cpp`, `SLALayerImage.cpp`, `SLASu
 | `bottom_wait_after_lift` | Bottom wait after lift | Material | **unused for SLA** | no read; only the def, the invalidation entry `SLAPrint.cpp:676` (`steps({propagate(slapsMergeSlicesAndEval)})`, i.e. declared) and `test/.../ConfigLoadTests.cpp:506-508` |
 | `bottom_wait_after_retract` | Bottom wait after retract | Material | **unused for SLA** | no read; only the def, the invalidation entry `SLAPrint.cpp:677` (`steps({propagate(slapsMergeSlicesAndEval)})`, i.e. declared) and `test/.../ConfigLoadTests.cpp:506-508` |
 | `bottom_light_pwm` | Bottom light PWM | Material | **unused for SLA** | no read; only the def, `SLAPrint.cpp:673` and `ConfigLoadTests.cpp:507`. `GooSLA.cpp:325-326` hard-codes 255 instead |
-| `bottom_layer_count` | Bottom layer count | Material | **unused for SLA** | no read; only the def, `SLAPrint.cpp:668` and `ConfigLoadTests.cpp:508`. `AnycubicSLA.cpp:288,513` derives its own `bottom_layer_count` local from `faded_layers` |
+| `bottom_layer_count` | Bottom layer count | Material | **used** (verdict corrected, see "Hidden in M1.13d3") | `Domain::sla_bottom_layer_count` reads it at `SlaLayerHeight.cpp:45` and the Elegoo (`Biz/ResultExport/SLA/AnycubicSLA.cpp:289,515`) and Goo (`GooSLA.cpp:303`) exporters write the result into their headers. The "unused for SLA" verdict below predates M1.13c3, which introduced that call |
 | `material_source_note` | Material source note | Material | **unused for SLA** | no read and nothing writes it: only the def, the invalidation entry `SLAPrint.cpp:690` (`steps({})`) and `test/.../ConfigLoadTests.cpp:509` which asserts it is empty. The foreign-resin importer keeps `source_format`/`source_path` in `Biz/ResinProfile/ChituboxCfgReader.cpp:185-186` and never maps them to this key |
 | `support_head_front_diameter` | Pinhead front diameter | Print | **used** | engine `SLAPrint.cpp:103 (also 1233), SLAPrintSteps.cpp:852, SLASupportTool.cpp:188` - only for `support_tree_type=default` (`make_support_cfg`, `SLAPrint.cpp:94`) |
 | `support_head_penetration` | Head penetration | Print | **used** | engine `SLAPrint.cpp:108 (also 1224)` - only for `support_tree_type=default` (`make_support_cfg`, `SLAPrint.cpp:94`) |
@@ -242,21 +242,22 @@ know the names.
 - `min_exposure_time`, `max_exposure_time`, `min_initial_exposure_time`,
   `max_initial_exposure_time`
 
-**Unused for SLA - layer separation mechanics, whole families (19, Material)**
+**Unused for SLA - layer separation mechanics, whole families (18 of 19, Material)**
 - `lift_height`, `lift_height_2`, `lift_speed_2`, `retract_speed_2`
 - `wait_before_lift`, `wait_after_lift`, `wait_after_retract`
 - `light_pwm`
 - `bottom_lift_height`, `bottom_lift_height_2`, `bottom_lift_speed`, `bottom_lift_speed_2`,
   `bottom_retract_speed`, `bottom_retract_speed_2`, `bottom_wait_before_lift`,
-  `bottom_wait_after_lift`, `bottom_wait_after_retract`, `bottom_light_pwm`,
-  `bottom_layer_count`
+  `bottom_wait_after_lift`, `bottom_wait_after_retract`, `bottom_light_pwm`
 
-These are 19 settings that look like the SL1 layer-separation knobs and do nothing at all
+The 19th, `bottom_layer_count`, was on this list too but **is read**, see the corrected verdict
+in the table above. Do **not** hide `lift_speed` and `retract_speed` in the same sweep: those two
+keys *are* read by the Elegoo exporter, and `retract_speed` is also an FFF extruder key.
+
+These 18 settings look like the SL1 layer-separation knobs and do nothing at all
 in this fork: the engine computes peel time from `ExposureProfile`
 (`SLAPrintSteps.cpp:1255-1274`, i.e. the tilt/tower/delay family) and the *tilt* times
-(`SLAPrintSteps.cpp:1524-1530`). Do **not** hide `lift_speed` and `retract_speed` in the same
-sweep: those two keys *are* read by the Elegoo exporter, and `retract_speed` is also an FFF
-extruder key.
+(`SLAPrintSteps.cpp:1524-1530`).
 
 **Unused for SLA - metadata and output extras (6)**
 - `material_notes`, `material_vendor`, `material_source_note`, `printer_notes`
@@ -356,3 +357,51 @@ The earlier audit gave no evidence and got several verdicts wrong. In order of i
     invisible in the dialog; `printer_variant` only reaches the printer through
     `Biz/ResultExport/SLA/SL1.cpp:158` and `sla_output_precision` only through the SVG
     rasteriser `Format/SL1_SVG.cpp:223`.
+
+## Hidden in M1.13d3
+
+What the hiding job actually did on 2026-09-29, and what it left alone. Definitions were kept
+everywhere; only the visibility changed.
+
+**Definition category set to `Category::Hidden` in `ConfigDefsSLA.cpp` (23 keys, SLA only).**
+They are defined only in the SLA definitions, so the change cannot reach FFF, and every panel
+that lists non-`Hidden` definitions drops them at once
+(`ObservableCategorizer.cpp:9`, `MaterialSettingsDialog.cpp:248`, `PrintSettingsDialog.cpp:75`).
+
+- Exposure bounds, `Printer_General` -> `Hidden`: `min_exposure_time`, `max_exposure_time`,
+  `min_initial_exposure_time`, `max_initial_exposure_time`.
+- Layer separation, `Filament_MaterialPrintingProfile` -> `Hidden`: `lift_height`,
+  `lift_height_2`, `lift_speed_2`, `retract_speed_2`, `wait_before_lift`, `wait_after_lift`,
+  `wait_after_retract`, `light_pwm`, `bottom_lift_height`, `bottom_lift_height_2`,
+  `bottom_lift_speed`, `bottom_lift_speed_2`, `bottom_retract_speed`, `bottom_retract_speed_2`,
+  `bottom_wait_before_lift`, `bottom_wait_after_lift`, `bottom_wait_after_retract`,
+  `bottom_light_pwm`.
+- `material_source_note`, `Filament_MaterialTemperatures` -> `Hidden`.
+
+**Panel filter instead of a definition change (1 key).**
+
+- `thumbnails` - defined once for both technologies (`ConfigCommon.cpp:106`), so the definition
+  was not touched. `PrinterAdvancedSettingsDialog` filters it out of the categorizer when
+  `is_sla_active()`, the same shape as the `layer_height` filter of M1.13c2 in
+  `PrintSettingsDialog.cpp:72-81`.
+
+**Hand-written row list trimmed (the resin tab of `SlaPrintSettingsDialog`).**
+
+That dialog builds its rows from a literal key list, which ignores the category, so the 18
+hidden separation keys were removed from `resin_keys()` and `SlaSettingsRows` now skips a
+`Hidden` item as a safeguard. `lift_speed`, `retract_speed`, `bottom_layer_count` and the two
+delays stay in the list.
+
+**On the list, not hidden.**
+
+- `bottom_layer_count` - **the verdict above is stale.** It is read by
+  `Domain::sla_bottom_layer_count` (`SlaLayerHeight.cpp:45`), which the Elegoo
+  (`AnycubicSLA.cpp:289,515`) and Goo (`GooSLA.cpp:303`) exporters write into their headers.
+  That call came with M1.13c3, after this document was written. Verdict is now **used**.
+- `material_notes` and `printer_notes` - kept visible per caveat 1 above: they are the only way
+  to pass data to a non-PrusaResearch printer, so hiding them would remove a working feature, not
+  a dead setting. A two-line revert if the product call goes the other way.
+- `pad_around_object`, `material_vendor` and `thumbnails_format` - already `Category::Hidden`
+  before this job, so there was nothing left to hide.
+- The 17 `branching_support_*` keys - out of scope, a separate job renames them to the
+  `branchingsupport_*` the engine actually reads.

@@ -24,7 +24,9 @@ namespace {
 
 using Key = SlaSettingsRows::Key;
 
-/// The resin values that matter most, in the order they are shown in the "Resin" tab.
+/// The resin values that matter most, in the order they are shown in the "Resin" tab. The SL1
+/// layer-separation knobs are not in the list: nothing reads them, so they are Category::Hidden
+/// (see ConfigDefsSLA.cpp) and SlaSettingsRows skips them.
 std::vector<Key> resin_keys()
 {
     return {
@@ -33,29 +35,10 @@ std::vector<Key> resin_keys()
         {"initial_exposure_time"},
         {"bottom_layer_count"},
         {"faded_layers"},
-        // layer separation: lift, retract, the waits around them and the light
-        {"lift_height"},
-        {"lift_height_2"},
         {"lift_speed"},
-        {"lift_speed_2"},
         {"retract_speed"},
-        {"retract_speed_2"},
-        {"wait_before_lift"},
-        {"wait_after_lift"},
-        {"wait_after_retract"},
-        {"light_pwm"},
         {"delay_before_exposure"},
         {"delay_after_exposure"},
-        {"bottom_lift_height"},
-        {"bottom_lift_height_2"},
-        {"bottom_lift_speed"},
-        {"bottom_lift_speed_2"},
-        {"bottom_retract_speed"},
-        {"bottom_retract_speed_2"},
-        {"bottom_wait_before_lift"},
-        {"bottom_wait_after_lift"},
-        {"bottom_wait_after_retract"},
-        {"bottom_light_pwm"},
     };
 }
 
