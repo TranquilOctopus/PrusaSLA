@@ -2,6 +2,7 @@
 
 #include "Slic3r/Biz/Utils/MeshClipper.hpp"
 #include "Slic3r/App/Scene/ClipperPresenterHelper.hpp"
+#include "Slic3r/App/Scene/HeightBand.hpp"
 #include "Slic3r/Domain/Model.hpp"
 
 namespace Slic3r::Domain {
@@ -34,6 +35,10 @@ public:
     void set_range_and_pos(const Domain::Vec3d& cpl_normal, double cpl_offset, double pos);
     void set_limiting_plane(const Domain::Vec3d& plane_normal, double plane_offset);
     void set_behavior(bool hide_clipped, bool fill_cut, double contour_width);
+
+    // The lower limit of the band becomes the clipper plane, the upper limit is only a shader side plane.
+    void set_height_band(const HeightBand& band);
+    const HeightBand& height_band() const { return m_height_band; }
 
     int get_number_of_contours() const;
     std::map<MeshClipperContourId, Domain::Vec3d> point_per_contour() const;
@@ -78,6 +83,7 @@ private:
     const Domain::ModelInstance* m_selected_instance{nullptr};
     double m_sla_shift{0.};
     Biz::ClippingPlane m_limiting_plane{Domain::Vec3d::UnitZ(), -Domain::SINKING_Z_THRESHOLD};
+    HeightBand m_height_band;
 };
 
 } // namespace Slic3r::App::Scene

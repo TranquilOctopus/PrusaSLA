@@ -133,6 +133,10 @@ public:
 
     IToolGizmo* find_tool(ToolType tool, Domain::PrinterTechnology pt);
 
+    // The single clipper shared by the tool gizmos, borrowed by the plater height band when no tool is active.
+    Clipper& clipper() { return m_clipper; }
+    const Clipper& clipper() const { return m_clipper; }
+
 private:
     using PickResultWithRay = std::tuple<NodePickResults, Ray>;
     PickResultWithRay

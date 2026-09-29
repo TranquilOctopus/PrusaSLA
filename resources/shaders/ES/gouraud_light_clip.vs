@@ -22,13 +22,15 @@ uniform Light lights[MAX_LIGHTS];
 
 // Clipping plane - general orientation. Used by the SLA gizmo.
 uniform vec4 clipping_plane;
+// Second clipping plane - general orientation. Used by the height band. A zero vector clips nothing.
+uniform vec4 clipping_plane_2;
 
 attribute vec3 v_position;
 attribute vec3 v_normal;
 
 // x = tainted, y = specular;
 varying vec2 intensity;
-varying float clipping_planes_dot;
+varying vec2 clipping_planes_dots;
 
 vec3 light_direction(Light light)
 {
@@ -52,6 +54,7 @@ void main()
     }
     gl_Position = projection_matrix * eye_position;
 
-    // Fill in the scalar for fragment shader clipping. Fragments with this value lower than zero are discarded.
-    clipping_planes_dot = dot(model_matrix * vec4(v_position, 1.0), clipping_plane);
+    // Fill in the scalars for fragment shader clipping. Fragments with any of these values lower than zero are discarded.
+    vec4 world_position = model_matrix * vec4(v_position, 1.0);
+    clipping_planes_dots = vec2(dot(world_position, clipping_plane), dot(world_position, clipping_plane_2));
 }

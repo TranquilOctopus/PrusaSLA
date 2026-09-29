@@ -72,6 +72,7 @@
 
 #include "Slic3r/App/AppServices.hpp"
 #include "Slic3r/App/Plater/History.hpp"
+#include "Slic3r/App/Plater/SlaHeightBand.hpp"
 #include "Slic3r/App/CubeView.hpp"
 #include "Slic3r/App/SidebarBed.hpp"
 #include "Slic3r/App/SidebarPrint.hpp"
@@ -621,6 +622,14 @@ void PlaterRenderModule::init_scene_layout()
     m_history = Passthrough(std::make_unique<History>());
     m_history->set_visible(false);
 
+    // SLA height band - drives the shared clipper while no tool gizmo needs it.
+    m_sla_height_band = new SlaHeightBand(
+        m_project_interactor,
+        *m_device,
+        *m_scene_presenter,
+        m_gizmo_manager->clipper()
+    );
+
     m_sidebar_action_buttons =
         Passthrough{std::make_unique<SidebarPlaterActionButtons>(
             m_render_module_navigator,
@@ -645,7 +654,8 @@ void PlaterRenderModule::init_scene_layout()
         m_invalid_data_dialog.release(),
         m_plugin_system.init_dialog().release(),
         m_crashed_projects_dialog.release(),
-        m_preset_updater_dialog.release()
+        m_preset_updater_dialog.release(),
+        std::unique_ptr<SlaHeightBand>(m_sla_height_band)
     ));
     m_layout->init();
 
@@ -1209,6 +1219,9 @@ void PlaterRenderModule::active_tool_changed(Scene::IToolGizmo* active_tool)
     };
     m_scene_presenter->set_selection_bounding_box_visible(selection_box_visible);
     m_command_binding_manager.update_ui_items();
+
+    // A tool gizmo may take over the shared clipper, so the height band has to step aside.
+    m_sla_height_band->set_suspended(active_tool != nullptr);
 }
 
 void PlaterRenderModule::set_navigator(Navigator* navigator)

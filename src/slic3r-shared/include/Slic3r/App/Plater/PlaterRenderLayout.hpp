@@ -4,6 +4,7 @@
 
 #include "Slic3r/App/Plater/History.hpp"
 #include "Slic3r/App/Plater/SidebarPlaterActionButtons.hpp"
+#include "Slic3r/App/Plater/SlaHeightBand.hpp"
 
 namespace Slic3r::App::Lua {
 class PluginDialog;
@@ -17,6 +18,7 @@ namespace Slic3r::App::Plater {
 
 class History;
 class SidebarPlaterActionButtons;
+class SlaHeightBand;
 
 class PlaterRenderLayout : public AbstractRenderLayout
 {
@@ -38,7 +40,8 @@ public:
         std::unique_ptr<InvalidDataDialog> invalid_data_dialog,
         std::unique_ptr<Lua::PluginDialog> plugin_dialog,
         std::unique_ptr<CrashedProjectsDialog> crashed_projects_dialog,
-        std::unique_ptr<PresetUpdaterDialog> preset_updater_dialog
+        std::unique_ptr<PresetUpdaterDialog> preset_updater_dialog,
+        std::unique_ptr<SlaHeightBand> sla_height_band
     );
 
     void init() override;
@@ -50,6 +53,7 @@ private:
 private:
     Yoga::Passthrough<SidebarPlaterActionButtons> m_sidebar_action_buttons;
     Yoga::Passthrough<History> m_history;
+    Yoga::Passthrough<SlaHeightBand> m_sla_height_band;
     Yoga::Passthrough<WelcomeDialog> m_welcome_dialog;
     Yoga::Passthrough<InvalidDataDialog> m_invalid_data_dialog;
     Yoga::Passthrough<Lua::PluginDialog> m_plugin_dialog;

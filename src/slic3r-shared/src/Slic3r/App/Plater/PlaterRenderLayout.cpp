@@ -22,7 +22,8 @@ PlaterRenderLayout::PlaterRenderLayout(
     std::unique_ptr<InvalidDataDialog> invalid_data_dialog,
     std::unique_ptr<Lua::PluginDialog> plugin_dialog,
     std::unique_ptr<CrashedProjectsDialog> crashed_projects_dialog,
-    std::unique_ptr<PresetUpdaterDialog> preset_updater_dialog
+    std::unique_ptr<PresetUpdaterDialog> preset_updater_dialog,
+    std::unique_ptr<SlaHeightBand> sla_height_band
 ) :
     AbstractRenderLayout(
         navigator,
@@ -40,6 +41,7 @@ PlaterRenderLayout::PlaterRenderLayout(
     ),
     m_sidebar_action_buttons(std::move(sidebar_action_buttons)),
     m_history(std::move(history)),
+    m_sla_height_band(std::move(sla_height_band)),
     m_welcome_dialog(std::move(welcome_dialog)),
     m_invalid_data_dialog(std::move(invalid_data_dialog)),
     m_plugin_dialog(std::move(plugin_dialog))
@@ -61,6 +63,7 @@ void PlaterRenderLayout::init_left_column()
 {
     AbstractRenderLayout::init_left_column();
     m_layout_left_column->append(m_history.release());
+    m_layout_left_column->append(m_sla_height_band.release());
 }
 
 void PlaterRenderLayout::init_right_column()
