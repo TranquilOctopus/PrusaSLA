@@ -161,10 +161,11 @@ TEST_CASE("Goo export", "[export][sla][goo]")
         std::memcpy(&value, &bits, sizeof(value));
         return value;
     };
-    // After bottom_layers: bottom_exposure_time, bottom_lift_distance, bottom_lift_speed,
-    // lift_distance, lift_speed, bottom_retract_distance, bottom_retract_speed, retract_distance,
-    // retract_speed, then the two second-stage distances and speeds, then the two PWMs.
-    size_t motion = bottom_layers_offset + 4 + 4; // skip bottom_exposure_time
+    // After bottom_layers: bottom_lift_distance, bottom_lift_speed, lift_distance, lift_speed,
+    // bottom_retract_distance, bottom_retract_speed, retract_distance, retract_speed, then the two
+    // second-stage distances and speeds, then the two PWMs. The bottom exposure time comes before
+    // bottom_layers and is already part of bottom_layers_offset.
+    size_t motion = bottom_layers_offset + 4;
     REQUIRE(f(motion + 0) == Catch::Approx(9.0f));    // bottom_lift_distance, bottom_lift_height
     REQUIRE(f(motion + 4) == Catch::Approx(1.75f));   // bottom_lift_speed
     REQUIRE(f(motion + 8) == Catch::Approx(7.5f));    // lift_distance, lift_height

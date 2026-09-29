@@ -127,7 +127,9 @@ TEST_CASE("PM5 store writes a Photon Workshop version 517 file", "[export][sla][
     // AnycubicExportTests.cpp, this is about the values the resin puts into it.
     auto data = read_file_binary(out_path);
     REQUIRE(data.size() > 20 + 4);
-    const size_t header_body = 20 + read_le32(data, 20) + 12 + 4;
+    // The address table holds absolute offsets, and a block starts with its 12-byte name and a u32
+    // length, so the body of the block at that address starts 16 bytes further in (0x48 here).
+    const size_t header_body = read_le32(data, 20) + 12 + 4;
     REQUIRE(data.size() >= header_body + 36);
     // The light-off delay in s, the lift height in mm, the lift speed and the retract speed in mm/s
     // (pm5.md): the settings are already in those units, so they are written as they are.
@@ -136,9 +138,10 @@ TEST_CASE("PM5 store writes a Photon Workshop version 517 file", "[export][sla][
     REQUIRE(read_le_float(data, header_body + 28) == Catch::Approx(1.25f));
     REQUIRE(read_le_float(data, header_body + 32) == Catch::Approx(2.5f));
 
-    // The LAYERDEF entries (the fourth address) carry the lift height and speed of each layer, the
-    // bottom_* settings on the bottom layers. 11 layers are at the bottom exposure time.
-    const size_t layerdef_body = 20 + read_le32(data, 20 + 4 * 4) + 12 + 4 + 4;
+    // The LAYERDEF entries (the fifth slot of the address table) carry the lift height and speed of
+    // each layer, the bottom_* settings on the bottom layers. The body opens with the layer count,
+    // so the entries follow it. 11 layers are at the bottom exposure time.
+    const size_t layerdef_body = read_le32(data, 20 + 4 * 4) + 12 + 4 + 4;
     const uint32_t layer_count = read_le32(data, layerdef_body - 4);
     REQUIRE(layer_count > 11);
     REQUIRE(data.size() >= layerdef_body + layer_count * 32);

@@ -263,8 +263,9 @@ void Clipper::set_height_band(const HeightBand& band)
     m_height_band = band;
 
     if (m_height_band.active) {
-        // The clipper holds a single plane, so the lower limit goes there - and it caps its own cut face.
-        m_clp.reset(new Biz::ClippingPlane(Vec3d::UnitZ(), m_height_band.z_min));
+        // The clipper holds a single plane, so the lower limit goes there - it caps its own cut face.
+        // The shaders keep dot(n, p) <= offset, so a -Z normal drops everything below z_min.
+        m_clp.reset(new Biz::ClippingPlane(-Vec3d::UnitZ(), -m_height_band.z_min));
         // get_clipping_plane_data() only forwards the plane to the shaders for a non zero ratio.
         m_clp_ratio = 1.;
     }

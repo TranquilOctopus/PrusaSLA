@@ -33,8 +33,10 @@ Domain::Vec4f height_band_upper_plane_data(const HeightBand& band)
     if (!band.active)
         return Domain::Vec4f(0.f, 0.f, 1.f, FLT_MAX);
 
-    // Biz::ClippingPlane((0, 0, -1), -z_max) keeps everything below z_max, negated normal for OpenGL.
-    return Domain::Vec4f(0.f, 0.f, 1.f, float(-band.z_max));
+    // A fragment survives when dot(world_position, plane) >= 0, and Scene::get_clipping_plane_data()
+    // hands the shaders the negated normal, so a plane keeping everything below z_max is
+    // Biz::ClippingPlane((0, 0, 1), z_max) in its own terms and this vec4 for the shader.
+    return Domain::Vec4f(0.f, 0.f, -1.f, float(band.z_max));
 }
 
 } // namespace Slic3r::App::Scene
