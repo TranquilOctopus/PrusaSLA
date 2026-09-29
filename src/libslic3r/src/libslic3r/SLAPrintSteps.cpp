@@ -361,7 +361,7 @@ void SLAPrint::Steps::apply_printer_corrections(SLAPrintObject &po, SliceOrigin 
 {
     if (o == soSupport && !po.m_supportable_mesh->emesh.vertices().empty()) return;
 
-    auto faded_lyrs = size_t(po.m_config.get<int>("faded_layers"));
+    auto faded_lyrs = size_t(std::max(0, Domain::sla_effective_faded_layers(po.m_config)));
     double min_w = m_print->print_config().get<double>("elefant_foot_min_width") / 2.;
     double start_efc = m_print->print_config().get<double>("elefant_foot_compensation");
 
@@ -1410,7 +1410,7 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
     const double init_exp_time = config.get<double>("initial_exposure_time");
     const double exp_time      = config.get<double>("exposure_time");
 
-    const int fade_layers_cnt = config.get<int>("faded_layers");// 10 // [3;20]
+    const int fade_layers_cnt = Domain::sla_effective_faded_layers(config);// 10 // [3;20]
 
     ExposureProfile below(config, 0);
     ExposureProfile above(config, 1);
@@ -1575,7 +1575,7 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
     print_statistics = create_stats(layers_info, is_prusa_print);
     if (printer_input.empty()) // set as invalid
         print_statistics.estimated_print_time = NaNd;
-    int count_faded_layers = config.get<int>("faded_layers");
+    int count_faded_layers = Domain::sla_effective_faded_layers(config);
     if (count_faded_layers < 0)
         count_faded_layers = 0;
     print_statistics.count_faded_layers = count_faded_layers;

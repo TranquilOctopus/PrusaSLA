@@ -286,7 +286,7 @@ static void fill_header_and_misc(anycubicsla_format_header &h,
     m.bottom_layer_height_mm = get_cfg_value_f(cfg, "initial_layer_height");
     h.exposure_time_s        = get_cfg_value_f(cfg, "exposure_time");
     h.bottom_exposure_time_s = get_cfg_value_f(cfg, "initial_exposure_time");
-    h.bottom_layer_count     = get_cfg_value_i(cfg, "faded_layers");
+    h.bottom_layer_count     = Domain::sla_bottom_layer_count(cfg);
     if (layer_count < h.bottom_layer_count) {
         h.bottom_layer_count = layer_count;
     }
@@ -337,7 +337,8 @@ static void fill_header_and_misc(anycubicsla_format_header &h,
         pixel_size_um = 35.0f;  // Photon Mono SE: 35um
     }
     h.pixel_size_um = pixel_size_um;
-    h.transition_layer_count = 0;
+    // The transition layers are where the exposure fades from the bottom exposure to the normal one.
+    h.transition_layer_count = std::uint32_t(std::max(0, Domain::sla_effective_faded_layers(cfg)));
     h.transition_layer_type = 0;
 }
 
@@ -511,10 +512,13 @@ void store_pm5(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     float initial_layer_height_mm = get_cfg_value_f(cfg, "initial_layer_height");
     float exposure_time_s = get_cfg_value_f(cfg, "exposure_time");
     float initial_exposure_time_s = get_cfg_value_f(cfg, "initial_exposure_time");
-    std::uint32_t bottom_layer_count = static_cast<std::uint32_t>(get_cfg_value_i(cfg, "faded_layers"));
+    std::uint32_t bottom_layer_count = static_cast<std::uint32_t>(Domain::sla_bottom_layer_count(cfg));
     if (layer_count < bottom_layer_count) {
         bottom_layer_count = layer_count;
     }
+    // The transition layers are where the exposure fades from the bottom exposure to the normal one.
+    std::uint32_t transition_layer_count =
+        static_cast<std::uint32_t>(std::max(0, Domain::sla_effective_faded_layers(cfg)));
     std::uint32_t res_x = static_cast<std::uint32_t>(get_cfg_value_i(cfg, "display_pixels_x"));
     std::uint32_t res_y = static_cast<std::uint32_t>(get_cfg_value_i(cfg, "display_pixels_y"));
 
@@ -600,7 +604,7 @@ void store_pm5(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     anycubicsla_write_int32(out, '$');
     anycubicsla_write_int32(out, 0); // per_layer_override
     anycubicsla_write_int32(out, print_time_s);
-    anycubicsla_write_int32(out, 10); // transition_layer_count
+    anycubicsla_write_int32(out, transition_layer_count);
     anycubicsla_write_int32(out, 0); // transition_type
     anycubicsla_write_int32(out, 0); // unknown
     anycubicsla_write_int32(out, 0x00030000); // unknown

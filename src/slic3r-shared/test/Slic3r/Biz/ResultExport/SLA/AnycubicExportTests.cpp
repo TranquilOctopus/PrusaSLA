@@ -121,6 +121,18 @@ TEST_CASE("Anycubic pwmx export", "[export][sla][anycubic]")
     float layer_height_mm = *reinterpret_cast<const float*>(data.data() + header_payload_offset + 4);
     REQUIRE(layer_height_mm == Catch::Approx(0.05f));
 
+    // The bottom layer count is how many layers the file exposes at the bottom exposure time. The
+    // engine has no burn-in of its own, it fades the exposure over 10 transition layers starting
+    // with the first one, so that is 11 layers.
+    REQUIRE(data.size() >= header_payload_offset + 24);
+    float bottom_layer_count = *reinterpret_cast<const float*>(data.data() + header_payload_offset + 20);
+    REQUIRE(bottom_layer_count == Catch::Approx(11.0f));
+
+    // The transition layer count is the fade itself, taken from faded_layers.
+    REQUIRE(data.size() >= header_payload_offset + 76);
+    uint32_t transition_layer_count = read_le<uint32_t>(data.data() + header_payload_offset + 72);
+    REQUIRE(transition_layer_count == 10);
+
     REQUIRE(data.size() >= header_payload_offset + 48);
     uint32_t res_x = read_le<uint32_t>(data.data() + header_payload_offset + 44);
     uint32_t res_y = read_le<uint32_t>(data.data() + header_payload_offset + 48);
@@ -182,6 +194,8 @@ TEST_CASE("Anycubic PM5 export", "[export][sla][anycubic][pm5]")
     config.sla_material_settings.items.opt("exposure_time").set(6.0);
     config.sla_material_settings.items.opt("initial_exposure_time").set(35.0);
     config.sla_print_settings.items.opt("faded_layers").set(10);
+    // The resin owns the transition layer count, the print preset keeps a value of its own.
+    config.sla_material_settings.items.opt("resin_faded_layers").set(4);
     config.sla_material_settings.items.opt("bottle_weight").set(1.0);
     config.sla_material_settings.items.opt("bottle_volume").set(1000.0);
     config.sla_material_settings.items.opt("bottle_cost").set(0.0);
@@ -270,11 +284,18 @@ TEST_CASE("Anycubic PM5 export", "[export][sla][anycubic][pm5]")
     float initial_exposure_time_s = *reinterpret_cast<const float*>(data.data() + header_body + 16);
     REQUIRE(initial_exposure_time_s == Catch::Approx(35.0f));
 
-    // HEADER +20 is the bottom layer count; +24 is the lift height (pm5.md).
+    // HEADER +20 is the bottom layer count; +24 is the lift height (pm5.md). The engine fades the
+    // exposure over the resin's 4 transition layers, starting with the first one, so the file
+    // exposes 5 layers at the initial exposure time.
     float bottom_layer_count_f = *reinterpret_cast<const float*>(data.data() + header_body + 20);
-    REQUIRE(bottom_layer_count_f == Catch::Approx(10.0f));
+    REQUIRE(bottom_layer_count_f == Catch::Approx(5.0f));
     float lift_height_mm = *reinterpret_cast<const float*>(data.data() + header_body + 24);
     REQUIRE(lift_height_mm == Catch::Approx(8.0f));
+
+    // HEADER +72 is the transition layer count, the fade taken from the resin.
+    REQUIRE(data.size() >= header_body + 76);
+    uint32_t transition_layer_count = read_le<uint32_t>(data.data() + header_body + 72);
+    REQUIRE(transition_layer_count == 4);
 
     uint32_t res_x = read_le<uint32_t>(data.data() + header_body + 44);
     uint32_t res_y = read_le<uint32_t>(data.data() + header_body + 48);

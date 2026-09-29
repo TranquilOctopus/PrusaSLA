@@ -15,4 +15,22 @@ inline bool is_sla_active(const Biz::ProjectInteractor& project_interactor)
         == Domain::PrinterTechnology::SLA;
 }
 
+// Whether the selected resin brings its own layer height (resin_layer_height > 0). That is the
+// case for the community SLA bundle, where layer height is a property of the resin and not of
+// the Supports & raft preset, so the print layer height must not be shown.
+inline bool sla_resin_sets_layer_height(const Biz::ProjectInteractor& project_interactor)
+{
+    if (!is_sla_active(project_interactor))
+        return false;
+
+    const auto& materials =
+        project_interactor.preset_interactor().selected_printer_preset().materials;
+    if (materials.empty())
+        return false;
+
+    const Domain::ConfigItem* item =
+        materials.front().config_box().items.find("resin_layer_height");
+    return item && item->get<double>() > 0.;
+}
+
 } // namespace Slic3r::App
