@@ -37,4 +37,8 @@ private:
     std::vector<std::unique_ptr<IResinProfileReader>> m_readers;
 };
 
+/// @brief Fill a registry with the readers this build knows about.
+/// This is where the readers of the archive formats M5 brings in are added.
+void register_resin_profile_readers(ResinProfileReaderRegistry& registry);
+
 } // namespace Slic3r::Biz::ResinProfile
