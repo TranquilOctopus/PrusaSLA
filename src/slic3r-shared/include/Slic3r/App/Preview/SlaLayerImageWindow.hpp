@@ -15,6 +15,7 @@ namespace Slic3r::Biz { class ProjectInteractor; }
 namespace Slic3r::App::Yoga {
 class Text;
 class LayoutButton;
+class Item;
 }
 
 namespace Slic3r::App::Preview {
@@ -35,8 +36,14 @@ protected:
 
 private:
     void rebuild_texture_if_needed();
+    void rebuild_zoom_texture();
     void on_prev_layer();
     void on_next_layer();
+    // Turns a click on the fitted layer image into slice mm and opens the native resolution zoom on it.
+    void on_layer_image_clicked();
+    void render_zoom_region(size_t layer_index);
+    void close_zoom();
+    size_t current_layer_index() const;
 
     Render::Device& m_device;
     Biz::ProjectInteractor& m_project_interactor;
@@ -53,6 +60,18 @@ private:
     Yoga::LayoutButton* m_next_button{nullptr};
 
     std::optional<::Slic3r::sla::SlaLayerImage> m_current_layer_image;
+
+    // Pixel zoom: a 256 x 256 px window of the layer at the printer's native pixel size.
+    Yoga::Item* m_zoom_panel{nullptr};
+    Yoga::Item* m_zoom_header{nullptr};
+    Yoga::Text* m_zoom_label{nullptr};
+    Yoga::LayoutButton* m_zoom_close_button{nullptr};
+    Render::TexturePtr m_zoom_texture;
+    size_t m_zoom_texture_width{0};
+    size_t m_zoom_texture_height{0};
+    double m_zoom_center_x_mm{0.};
+    double m_zoom_center_y_mm{0.};
+    std::optional<::Slic3r::sla::SlaLayerImage> m_zoom_image;
 };
 
 } // namespace Slic3r::App::Preview

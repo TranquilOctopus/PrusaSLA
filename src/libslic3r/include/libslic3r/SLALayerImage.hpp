@@ -23,4 +23,16 @@ SlaLayerImage render_sla_layer_image(const Domain::ExPolygons& slice,
                                      const Domain::ConfigView& printer_config,
                                      size_t max_width, size_t max_height);
 
+// Renders a width_px x height_px window of one layer at the printer's native pixel size
+// (one display pixel is one image pixel, so pixel_width_mm / pixel_height_mm of the result
+// are the unscaled display pixel dimensions). The window is centred on (center_x_mm,
+// center_y_mm) in slice coordinates - the same coordinate system the display rectangle
+// [0, display_width] x [0, display_height] spans. Gamma and mirroring / orientation are
+// the same as in render_sla_layer_image(), so the returned image is a true magnification
+// of a part of the downscaled image.
+SlaLayerImage render_sla_layer_image_region(const Domain::ExPolygons& slice,
+                                            const Domain::ConfigView& printer_config,
+                                            double center_x_mm, double center_y_mm,
+                                            size_t width_px, size_t height_px);
+
 } // namespace Slic3r::sla
