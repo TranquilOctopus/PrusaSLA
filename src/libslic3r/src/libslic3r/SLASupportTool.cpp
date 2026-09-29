@@ -1,13 +1,11 @@
 #include "libslic3r/SLASupportTool.hpp"
 
 #include "libslic3r/SLAPrint.hpp"
-#include "libslic3r/CSGMesh/ModelToCSGMesh.hpp"
 #include "libslic3r/SLA/SupportPointGenerator.hpp"
 #include "libslic3r/SLA/SupportTree.hpp"
 #include "libslic3r/SLA/Pad.hpp"
 #include "libslic3r/SLA/JobController.hpp"
 #include "libslic3r/TriangleMeshSlicer.hpp"
-#include "libslic3r/Exception.hpp"
 #include "admesh/stl.h"
 
 #include <Slic3r/Biz/Algorithms/ModelObject.hpp>
