@@ -15,6 +15,9 @@
 #include "Slic3r/App/Scene/ClipperPresenter.hpp"
 #include "Slic3r/App/Scene/AuxiliaryElementId.hpp"
 #include "Slic3r/App/Yoga/Item.hpp"
+#include "Slic3r/Biz/JThread/JThread.hpp"
+#include "Slic3r/Domain/Config.hpp"
+#include "libslic3r/SLASupportTool.hpp"
 
 #include <memory>
 #include <optional>
@@ -34,10 +37,6 @@ class Device;
 namespace Slic3r::Biz {
 class ProjectInteractor;
 } // namespace Slic3r::Biz
-
-namespace Slic3r::libslic3r::sla {
-struct SupportToolTree;
-}
 
 namespace Slic3r::App::Plater {
 
@@ -133,7 +132,7 @@ private:
     void clear_point_visuals();
     Domain::ColorRGBA get_point_color(const Domain::SLA::SupportPoint& point, bool highlighted) const;
     void request_support_geometry();
-    void rebuild_support_geometry_node(const Domain::SLA::SupportPoints& points);
+    void rebuild_support_geometry_node(const Domain::SLA::SupportPoints& points, const Slic3r::sla::SupportToolTree& tree, double elevation);
     void clear_support_geometry_node();
 
     // Raycasting helpers (adapted from PaintOnGizmoBase)
@@ -196,7 +195,7 @@ private:
     };
     struct WorkerJobResult {
         std::optional<Domain::SLA::SupportPoints> points; // for Points job
-        std::optional<sla::SupportToolTree> tree; // for Tree job
+        std::optional<Slic3r::sla::SupportToolTree> tree; // for Tree job
         Domain::ObjectID object_id;
         Domain::SelectionId instance_id;
         Domain::SlicingId slicing_id;
@@ -208,7 +207,7 @@ private:
     void cancel_worker_job();
     void on_worker_job_completed(WorkerJobResult&& result);
     void on_points_job_completed(std::optional<Domain::SLA::SupportPoints> points, Domain::ObjectID object_id, Domain::SelectionId instance_id, Domain::SlicingId slicing_id, size_t job_counter);
-    void on_tree_job_completed(std::optional<sla::SupportToolTree> tree, Domain::ObjectID object_id, Domain::SelectionId instance_id, Domain::SlicingId slicing_id, size_t job_counter);
+    void on_tree_job_completed(std::optional<Slic3r::sla::SupportToolTree> tree, Domain::ObjectID object_id, Domain::SelectionId instance_id, Domain::SlicingId slicing_id, size_t job_counter);
 
     PlaterScenePresenter& m_scene_presenter;
     Biz::ProjectInteractor& m_project_interactor;
@@ -217,6 +216,7 @@ private:
 
     // Worker state
     std::optional<WorkerJobData> m_active_job;
+    Biz::JThread::JThread m_worker;
     size_t m_job_counter = 0;
     bool m_gizmo_active = false;
 

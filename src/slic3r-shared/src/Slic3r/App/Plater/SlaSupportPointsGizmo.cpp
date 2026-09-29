@@ -27,6 +27,8 @@
 #include "Slic3r/Domain/ConfigContainer.hpp"
 #include "Slic3r/Domain/ConfigPack.hpp"
 #include "Slic3r/Domain/Config.hpp"
+#include "Slic3r/Domain/FullConfigSLA.hpp"
+#include "Slic3r/Domain/PartialObjectConfigSLA.hpp"
 #include "Slic3r/Math.hpp"
 #include "Slic3r/App/Platform/KeyboardEvent.hpp"
 #include "Slic3r/App/Platform/KeyModifers.hpp"
@@ -36,8 +38,6 @@
 #include <fmt/format.h>
 #include <magic_enum/magic_enum_flags.hpp>
 #include <spdlog/spdlog.h>
-
-#include "libslic3r/SLASupportTool.hpp"
 
 using namespace Slic3r;
 using namespace Slic3r::App::Yoga;
@@ -57,11 +57,11 @@ using Slic3r::Domain::SLA::SupportPoint;
 using Slic3r::Domain::SLA::SupportPointType;
 using Slic3r::Domain::SLA::SupportPoints;
 using Slic3r::Domain::SLA::PointsStatus;
-using Slic3r::libslic3r::sla::SupportToolTree;
-using Slic3r::libslic3r::sla::generate_support_points_for_tool;
-using Slic3r::libslic3r::sla::build_support_tree_for_tool;
-using Slic3r::libslic3r::sla::support_tool_elevation;
-using Slic3r::libslic3r::sla::SupportToolStop;
+using Slic3r::sla::SupportToolTree;
+using Slic3r::sla::generate_support_points_for_tool;
+using Slic3r::sla::build_support_tree_for_tool;
+using Slic3r::sla::support_tool_elevation;
+using Slic3r::sla::SupportToolStop;
 
 namespace Slic3r::App::Plater {
 
@@ -231,7 +231,10 @@ void SlaSupportPointsGizmo::provide_clipper(Scene::Clipper& clipper)
     m_clipping_plane_presenter = Scene::ClipperPresenter(&clipper, &m_device, &m_scene_presenter);
 }
 
-SlaSupportPointsGizmo::~SlaSupportPointsGizmo() = default;
+SlaSupportPointsGizmo::~SlaSupportPointsGizmo()
+{
+    cancel_worker_job();
+}
 
 Scene::ToolType SlaSupportPointsGizmo::type() const
 {
@@ -1421,7 +1424,7 @@ void SlaSupportPointsGizmo::clear_point_visuals()
 
 void SlaSupportPointsGizmo::request_support_geometry()
 {
-    if (!m_selected_object_id.valid() || m_active_job.has_value()) {
+    if (!m_selected_object_id.valid()) {
         return;
     }
 
@@ -1429,6 +1432,7 @@ void SlaSupportPointsGizmo::request_support_geometry()
     Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
     if (!model_object || model_object->sla_support_points.empty()) {
         clear_support_geometry_node();
+        cancel_worker_job();
         return;
     }
 
@@ -1465,7 +1469,7 @@ void SlaSupportPointsGizmo::request_support_geometry()
     start_worker_job(std::move(job_data));
 }
 
-void SlaSupportPointsGizmo::rebuild_support_geometry_node(const Domain::SLA::SupportPoints& points, const SupportToolTree& tree, double elevation)
+void SlaSupportPointsGizmo::rebuild_support_geometry_node(const Domain::SLA::SupportPoints& points, const Slic3r::sla::SupportToolTree& tree, double elevation)
 {
     if (!m_selected_object_id.valid() || m_main_node == nullptr) {
         return;
@@ -1960,26 +1964,138 @@ double SlaSupportPointsGizmo::support_elevation() const
         return 0.;
     }
 
-    // Check if supports are enabled in the print config
-    const auto& print_config = m_project_interactor.preset_interactor().selected_printer_preset().print.config_box();
-    const auto* supports_enable_item = print_config.items.find("supports_enable");
-    if (supports_enable_item && !supports_enable_item->get<bool>()) {
+    const Domain::ModelInstance* instance = project.find_instance_by_id(m_selected_object_id.id, m_selected_instance_id);
+    if (!instance) {
         return 0.;
     }
 
-    // Check object override for support_object_elevation
-    auto obj_elev_result = model_object->object_settings_sla.find("support_object_elevation");
-    if (obj_elev_result.item) {
-        return obj_elev_result.item->get<double>();
+    auto config_view_opt = build_object_config_view(model_object, instance);
+    if (!config_view_opt.has_value()) {
+        return 0.;
     }
 
-    // Fall back to print preset value
-    const auto* preset_elev_item = print_config.items.find("support_object_elevation");
-    if (preset_elev_item) {
-        return preset_elev_item->get<double>();
+    return sla::support_tool_elevation(*config_view_opt);
+}
+
+std::optional<Domain::ConfigView> SlaSupportPointsGizmo::build_object_config_view(const Domain::ModelObject* model_object, const Domain::ModelInstance* instance) const
+{
+    if (!model_object || !instance) {
+        return std::nullopt;
     }
 
-    return 0.;
+    const Domain::Project& project = m_project_interactor.selected_project();
+    const Domain::BedRef bed_ref = instance->get_last_bed();
+    Domain::ConfigContainer* cc = project.find_config_container(bed_ref.config_container_id);
+    if (!cc) {
+        return std::nullopt;
+    }
+
+    Domain::ConfigPack pack = cc->build_print_config();
+    if (!std::holds_alternative<Domain::ConfigPackSLA>(pack)) {
+        return std::nullopt;
+    }
+
+    const Domain::Preset::HwPrinterConfig& hw_config = cc->selected_preset().hw_config;
+    auto full_config = std::make_shared<const Domain::FullConfigSLA>(std::get<Domain::ConfigPackSLA>(pack), hw_config);
+    auto partial_config = std::make_shared<const Domain::PartialObjectConfigSLA>(model_object->object_settings_sla, hw_config);
+    Domain::ConfigView view(full_config, {partial_config});
+    view.finalize();
+    return view;
+}
+
+void SlaSupportPointsGizmo::start_worker_job(WorkerJobData&& job_data)
+{
+    m_active_job = std::move(job_data);
+    m_worker = Biz::JThread::JThread([this](Biz::JThread::StopToken stop_token, WorkerJobData job_data) mutable {
+        WorkerJobResult result;
+        result.object_id = job_data.object_id;
+        result.instance_id = job_data.instance_id;
+        result.slicing_id = job_data.slicing_id;
+        result.job_type = job_data.job_type;
+        result.job_counter = job_data.job_counter;
+
+        const SupportToolStop stop = [&stop_token]() {
+            return stop_token.stop_requested();
+        };
+
+        if (job_data.job_type == WorkerJobType::Points) {
+            result.points = sla::generate_support_points_for_tool(
+                *job_data.cloned_object,
+                job_data.instance_matrix,
+                job_data.config_view,
+                stop);
+        } else if (job_data.job_type == WorkerJobType::Tree) {
+            result.tree = sla::build_support_tree_for_tool(
+                *job_data.cloned_object,
+                job_data.instance_matrix,
+                job_data.points,
+                job_data.config_view,
+                stop);
+        }
+
+        if (stop()) {
+            result.cancelled = true;
+        }
+
+        Biz::Platform::PlatformServices::instance().main_thread_dispatcher().dispatch_on_main_thread(
+            [this, result = std::move(result)]() mutable {
+                on_worker_job_completed(std::move(result));
+            });
+    }, std::move(m_active_job.value()));
+}
+
+void SlaSupportPointsGizmo::cancel_worker_job()
+{
+    if (m_worker.joinable()) {
+        m_worker.request_stop();
+        m_worker.join();
+    }
+    ++m_job_counter;
+    m_active_job.reset();
+}
+
+void SlaSupportPointsGizmo::on_worker_job_completed(WorkerJobResult&& result)
+{
+    if (!m_gizmo_active || result.job_counter != m_job_counter) {
+        return;
+    }
+
+    m_active_job.reset();
+
+    if (result.job_type == WorkerJobType::Points) {
+        on_points_job_completed(std::move(result.points), result.object_id, result.instance_id, result.slicing_id, result.job_counter);
+    } else if (result.job_type == WorkerJobType::Tree) {
+        on_tree_job_completed(std::move(result.tree), result.object_id, result.instance_id, result.slicing_id, result.job_counter);
+    }
+}
+
+void SlaSupportPointsGizmo::on_points_job_completed(std::optional<Domain::SLA::SupportPoints> points, Domain::ObjectID object_id, Domain::SelectionId instance_id, Domain::SlicingId slicing_id, size_t job_counter)
+{
+    (void)object_id;
+    (void)instance_id;
+    (void)slicing_id;
+    (void)job_counter;
+    on_generation_completed(std::move(points));
+}
+
+void SlaSupportPointsGizmo::on_tree_job_completed(std::optional<Slic3r::sla::SupportToolTree> tree, Domain::ObjectID object_id, Domain::SelectionId instance_id, Domain::SlicingId slicing_id, size_t job_counter)
+{
+    (void)instance_id;
+    (void)slicing_id;
+    (void)job_counter;
+
+    if (!tree.has_value() || !m_selected_object_id.valid() || m_selected_object_id != object_id) {
+        return;
+    }
+
+    const double elevation = support_elevation();
+    const Domain::Project& project = m_project_interactor.selected_project();
+    const Domain::ModelObject* model_object = project.find_object_by_id(object_id.id);
+    if (!model_object) {
+        return;
+    }
+
+    rebuild_support_geometry_node(model_object->sla_support_points, *tree, elevation);
 }
 
 } // namespace Slic3r::App::Plater
