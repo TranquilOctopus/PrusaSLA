@@ -2,6 +2,7 @@
 
 #include "Slic3r/Domain/Model.hpp"
 #include "Slic3r/Domain/Config.hpp"
+#include "Slic3r/Domain/FullConfigSLA.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
 #include "libslic3r/SLAResult.hpp"
 
@@ -23,18 +24,21 @@ struct SupportToolTree {
 SupportToolTree build_support_tree_for_tool(const Domain::ModelObject& object,
     const Domain::Transform3d& object_to_world,
     const Domain::SLA::SupportPoints& points,          // in the object's mesh frame
-    const Domain::ConfigView& object_config,           // resolved SLA object config
+    const Domain::FullConfigSLAPtr& full_config,       // resolved SLA config
+    const Domain::PartialObjectConfigSLAPtr& object_settings,
     const SupportToolStop& stop);
 
 // Generated points, returned in the object's mesh frame (like model_object->sla_support_points).
 Domain::SLA::SupportPoints generate_support_points_for_tool(const Domain::ModelObject& object,
     const Domain::Transform3d& object_to_world,
-    const Domain::ConfigView& object_config,
+    const Domain::FullConfigSLAPtr& full_config,
+    const Domain::PartialObjectConfigSLAPtr& object_settings,
     const SupportToolStop& stop);
 
 // Elevation the tree uses (support_object_elevation, plus the pad's required elevation when
 // the pad is enabled and not embedded; same rule as SLAPrintObject::get_elevation, and 0 in
 // zero-elevation mode).
-double support_tool_elevation(const Domain::ConfigView& object_config);
+double support_tool_elevation(const Domain::FullConfigSLAPtr& full_config,
+                             const Domain::PartialObjectConfigSLAPtr& object_settings);
 
 } // namespace Slic3r::sla

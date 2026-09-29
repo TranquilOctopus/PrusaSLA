@@ -340,21 +340,21 @@ auto closest_slice_record(
 
 } // namespace
 
+double resolve_initial_layer_height(double initial_layer_height, double first_object_layer_height)
+{ return initial_layer_height > 0. ? initial_layer_height : first_object_layer_height; }
+
 SLAPrint::Steps::Steps(SLAPrint *print)
     : m_print{print}
     , objcount{m_print->m_objects.size()}
-    , ilhd{m_print->print_config().get<double>("initial_layer_height")}
-    , ilh{0.f}
-    , ilhs{0}
+    , ilhd{resolve_initial_layer_height(
+          m_print->print_config().get<double>("initial_layer_height"),
+          m_print->m_objects.empty()
+              ? m_print->print_config().get<double>("initial_layer_height")
+              : m_print->m_objects.front()->m_config.get<double>("layer_height"))}
+    , ilh{float(ilhd)}
+    , ilhs{scaled(ilhd)}
     , objectstep_scale{(max_objstatus - min_objstatus) / (objcount * 100.0)}
-{
-    if (ilhd <= 0. && !m_print->m_objects.empty()) {
-        double lhd = m_print->m_objects.front()->m_config.get<double>("layer_height");
-        ilhd = lhd;
-    }
-    ilh = float(ilhd);
-    ilhs = scaled(ilhd);
-}
+{}
 
 void SLAPrint::Steps::apply_printer_corrections(SLAPrintObject &po, SliceOrigin o)
 {
