@@ -255,7 +255,12 @@ TEST_CASE("halfcone test", "[halfcone]") {
     its_write_obj(m, "Halfcone.obj");
 }
 
-TEST_CASE("Initial layer height zero uses layer height", "[SLAInitialLayerHeight]") {
+namespace {
+
+// Slice a 20 mm cube with the given print preset and resin layer height, and return the
+// distance between the first two slice levels.
+float sliced_level_distance(double print_layer_height, double resin_layer_height)
+{
     using namespace Slic3r;
 
     // Create a simple 20mm cube model
@@ -275,10 +280,12 @@ TEST_CASE("Initial layer height zero uses layer height", "[SLAInitialLayerHeight
         }
     }
 
-    // Config with layer_height = 0.03, initial_layer_height = 0
+    // Config with an unset initial layer height, so the first layer falls back to the
+    // effective (resin aware) layer height.
     Domain::ConfigPackSLA config;
-    config.sla_print_settings.items.opt("layer_height").set<double>(0.03);
+    config.sla_print_settings.items.opt("layer_height").set<double>(print_layer_height);
     config.sla_material_settings.items.opt("initial_layer_height").set<double>(0.0);
+    config.sla_material_settings.items.opt("resin_layer_height").set<double>(resin_layer_height);
 
     auto hw_config = Test::create_dummy_hw_config(1, 0, Domain::PrinterTechnology::SLA);
     auto preset_metadata = create_dummy_selected_preset_metadata(hw_config);
@@ -299,10 +306,20 @@ TEST_CASE("Initial layer height zero uses layer height", "[SLAInitialLayerHeight
     REQUIRE(layers[0].slices().size() == 1);
     REQUIRE(layers[1].slices().size() == 1);
 
-    // First two slice levels should be 0.03 mm apart
     float level0 = layers[0].slices().front().get().slice_level();
     float level1 = layers[1].slices().front().get().slice_level();
-    float diff = level1 - level0;
+    return level1 - level0;
+}
 
-    REQUIRE(diff == Approx(0.03).margin(1e-4));
+} // namespace
+
+TEST_CASE("Initial layer height zero uses layer height", "[SLAInitialLayerHeight]") {
+    REQUIRE(sliced_level_distance(0.03, 0.) == Approx(0.03).margin(1e-4));
+}
+
+TEST_CASE("Resin layer height overrides the print layer height", "[SLAResinLayerHeight]") {
+    // The resin layer height wins on every SLA layer height read.
+    REQUIRE(sliced_level_distance(0.05, 0.03) == Approx(0.03).margin(1e-4));
+    // A resin without a layer height of its own falls back to the print preset.
+    REQUIRE(sliced_level_distance(0.05, 0.) == Approx(0.05).margin(1e-4));
 }

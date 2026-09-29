@@ -2,6 +2,7 @@
 
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/Domain/Image.hpp"
+#include "Slic3r/Domain/SlaLayerHeight.hpp"
 #include "Slic3r/Biz/Algorithms/ImageUtils.hpp"
 #include "Slic3r/Time.hpp"
 #include "Slic3r/Utils.hpp"
@@ -287,7 +288,7 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     header.y_size_platform = static_cast<float>(dh);
     header.z_size_platform = get_cfg_value_f(cfg, "printer_build_height");
 
-    header.layer_thickness = get_cfg_value_f(cfg, "layer_height");
+    header.layer_thickness = float(Domain::sla_effective_layer_height(cfg));
     header.common_exposure_time = get_cfg_value_f(cfg, "exposure_time");
     header.exposure_delay_mode = 1;
     header.turn_off_time = 0.5f;

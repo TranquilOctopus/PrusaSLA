@@ -19,6 +19,7 @@
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/Domain/ConfigCommon.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
+#include "Slic3r/Domain/SlaLayerHeight.hpp"
 #include "Slic3r/Exception.hpp"
 #include "Slic3r/Biz/Algorithms/ExPolygon.hpp"
 #include "Slic3r/Biz/Algorithms/Execution/Execution.hpp"
@@ -350,7 +351,7 @@ SLAPrint::Steps::Steps(SLAPrint *print)
           m_print->print_config().get<double>("initial_layer_height"),
           m_print->m_objects.empty()
               ? m_print->print_config().get<double>("initial_layer_height")
-              : m_print->m_objects.front()->m_config.get<double>("layer_height"))}
+              : Domain::sla_effective_layer_height(m_print->m_objects.front()->m_config))}
     , ilh{float(ilhd)}
     , ilhs{scaled(ilhd)}
     , objectstep_scale{(max_objstatus - min_objstatus) / (objcount * 100.0)}
@@ -402,7 +403,7 @@ indexed_triangle_set SLAPrint::Steps::generate_preview_vdb(const SLAPrintObject 
 
     // update preview mesh
     double vscale = std::min(MaxPreviewVoxelScale,
-                             1. / po.m_config.get<double>("layer_height"));
+                             1. / Domain::sla_effective_layer_height(po.m_config));
 
     auto   voxparams = csg::VoxelizeParams{}
                          .voxel_scale(vscale)
@@ -674,7 +675,7 @@ void SLAPrint::Steps::slice_model(SLAPrintObject &po)
 
     // We need to prepare the slice index...
 
-    double  lhd  = m_print->m_objects.front()->m_config.get<double>("layer_height");
+    double  lhd  = Domain::sla_effective_layer_height(m_print->m_objects.front()->m_config);
     float   lh   = float(lhd);
     coord_t lhs  = scaled(lhd);
     double  minZ = bb3d.min(Z) - po.get_elevation();

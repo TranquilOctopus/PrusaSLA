@@ -17,6 +17,7 @@
 #include <Slic3r/Domain/TriangleMesh.hpp>
 #include <Slic3r/Domain/ConfigCommon.hpp>
 #include <Slic3r/Domain/Constants.hpp>
+#include <Slic3r/Domain/SlaLayerHeight.hpp>
 #include <Slic3r/Exception.hpp>
 
 namespace Slic3r::sla {
@@ -154,7 +155,7 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const Domain::ModelO
         if (mesh.empty()) return result;
 
         // Compute slice heights
-        double layer_height = cfg.get<double>("layer_height");
+        double layer_height = Domain::sla_effective_layer_height(cfg);
         std::vector<float> heights = compute_slice_heights(mesh, layer_height);
         if (heights.empty()) return result;
 

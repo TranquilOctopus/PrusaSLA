@@ -73,6 +73,9 @@ add_library(slic3r-domain STATIC
     include/Slic3r/Domain/SLA/RaftPreset.hpp
     src/Slic3r/Domain/SLA/RaftPreset.cpp
 
+    include/Slic3r/Domain/SlaLayerHeight.hpp
+    src/Slic3r/Domain/SlaLayerHeight.cpp
+
     include/Slic3r/Domain/TextConfiguration.hpp
     src/Slic3r/Domain/TextConfiguration.cpp
     include/Slic3r/Domain/FontFile.hpp
