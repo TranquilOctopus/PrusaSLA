@@ -524,7 +524,7 @@ void PlaterRenderModule::register_commands()
 
     m_top_bar->register_context_menus(m_gizmo_manager->data_factory(), m_scene_presenter.get());
 
-    MenuBuilder menu_builder(menu_manager(), command_binding_manager());
+    MenuBuilder menu_builder(menu_manager(), command_binding_manager(), &m_project_interactor);
 
     std::map<MenuItemName, Yoga::Menu*> context_menus = {
         {MenuItemName::BedContextMenu, m_bed_menu},

@@ -27,6 +27,8 @@ public:
 
     void select_index(std::size_t);
 
+    void set_segment_tooltip(std::size_t index, const std::string& tooltip);
+
 private:
     ButtonGroup m_group;
 };

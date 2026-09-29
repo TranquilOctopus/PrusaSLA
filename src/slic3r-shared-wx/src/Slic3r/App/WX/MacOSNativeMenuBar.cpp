@@ -10,6 +10,7 @@
 #include "Slic3r/App/Platform/ICommand.hpp"
 #include "Slic3r/App/Platform/KeyboardShortcut.hpp"
 #include "Slic3r/App/AppServices.hpp"
+#include "Slic3r/App/IsSlaActive.hpp"
 #include "Slic3r/App/AppConfig.hpp"
 
 #include "Slic3r/App/WX/StringConversions.hpp"
@@ -66,7 +67,10 @@ void MacOSNativeMenuBar::build_menu_from_name(MenuItemName menu_item_name)
     if (MenuItem* menu = m_menu_manager.menu_item(menu_item_name)) {
         wxMenu* wx_menu = build_menu_from_item(menu);
         if (wx_menu) {
-            m_menu_bar->Append(wx_menu, from_u8(MenuBuilder::item_name_translated(menu_item_name)));
+            m_menu_bar->Append(wx_menu, from_u8(MenuBuilder::item_name_translated(
+                                               menu_item_name,
+                                               is_sla_active(m_project_interactor)
+                                           )));
         }
     }
 }
@@ -94,7 +98,10 @@ void MacOSNativeMenuBar::add_menu_item_to_menu(
         return;
     }
 
-    wxString label = from_u8(MenuBuilder::item_name_translated(item->name()));
+    wxString label{from_u8(MenuBuilder::item_name_translated(
+        item->name(),
+        is_sla_active(m_project_interactor)
+    ))};
 
     // Add keyboard shortcut to label if available
     wxString shortcut = get_shortcut_string(cmd->name());
@@ -137,7 +144,10 @@ void MacOSNativeMenuBar::populate_menu(wxMenu* wx_menu, MenuItem* parent_item)
             continue;
         }
 
-        wxString label = from_u8(MenuBuilder::item_name_translated(item->name()));
+        wxString label{from_u8(MenuBuilder::item_name_translated(
+            item->name(),
+            is_sla_active(m_project_interactor)
+        ))};
 
         if (item->name().matches(MenuItemName::RecentProjects))
         {
@@ -212,7 +222,10 @@ void MacOSNativeMenuBar::setup_apple_menu()
     if (apple_menu)
         m_menu_bar->Append(
             apple_menu,
-            from_u8(MenuBuilder::item_name_translated(MenuItemName::MainMenu))
+            from_u8(MenuBuilder::item_name_translated(
+                MenuItemName::MainMenu,
+                is_sla_active(m_project_interactor)
+            ))
         );
 #endif
     if (!apple_menu) {

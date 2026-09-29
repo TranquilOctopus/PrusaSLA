@@ -7,7 +7,7 @@ using namespace Slic3r::Biz;
 
 namespace Slic3r::App {
 
-std::string to_display_string(Biz::Slicing::ErrorCode code)
+std::string to_display_string(Biz::Slicing::ErrorCode code, bool is_sla)
 {
     using Biz::Slicing::ErrorCode;
 
@@ -196,14 +196,16 @@ std::string to_display_string(Biz::Slicing::ErrorCode code)
     case ErrorCode::UnsupportedOutputFormat:
         return _u8L("Unsupported output format.");
     case ErrorCode::OutOfMemory:
-        return _u8L("Not enough memory to slice this bed. Try fewer or smaller objects, or close other programs, then slice again.");
+        return is_sla ?
+            _u8L("Not enough memory to slice this build plate. Try fewer or smaller objects, or close other programs, then slice again.") :
+            _u8L("Not enough memory to slice this bed. Try fewer or smaller objects, or close other programs, then slice again.");
     case ErrorCode::InternalError:
         return _u8L("Slicing failed because of an internal error. The details are in the log.");
     }
     return _u8L("Unknown error.");
 }
 
-std::string to_display_string(Biz::Slicing::Error error, const Domain::Project& project)
+std::string to_display_string(Biz::Slicing::Error error, const Domain::Project& project, bool is_sla)
 {
     const Domain::ModelObject* object{
         error.model_object_id ? project.find_object_by_id(error.model_object_id->id) : nullptr
@@ -219,7 +221,7 @@ std::string to_display_string(Biz::Slicing::Error error, const Domain::Project& 
     switch (error.code) {
     case Biz::Slicing::ErrorCode::InvalidThumbnailRequest: {
         const auto& payload = std::get<Biz::Slicing::InvalidThumbnailRequestPayload>(error.payload);
-        std::string error_str = to_display_string(error.code);
+        std::string error_str = to_display_string(error.code, is_sla);
         if (payload.invalid_format)
             error_str += "\n - " + fmt::format(fmt::runtime(_u8L("Invalid input format. Expected vector of dimensions in the following format: \"{}\"")), "XxY/EXT, XxY/EXT, ...");
         if (payload.out_of_range)
@@ -228,11 +230,11 @@ std::string to_display_string(Biz::Slicing::Error error, const Domain::Project& 
             error_str += "\n - " + _u8L("Some extension in the input is invalid");
         return error_str;
     }
-    default: return to_display_string(error.code) + item_keys_info + object_info;
+    default: return to_display_string(error.code, is_sla) + item_keys_info + object_info;
     }
 }
 
-std::string to_display_string(Biz::Slicing::Warning warning, const Domain::Project& project)
+std::string to_display_string(Biz::Slicing::Warning warning, const Domain::Project& project, bool is_sla)
 {
     using Biz::Slicing::CustomGCodeReservedKeywordsWarningPayload;
     using Biz::Slicing::EmptyLayersWarningPayload;
@@ -270,9 +272,13 @@ std::string to_display_string(Biz::Slicing::Warning warning, const Domain::Proje
             message += _u8L("(Some lines not shown)") + std::string("\n");
         }
         message += "\n"
-            + _u8L("Make sure the object is printable. "
-                   "This is usually caused by negligibly small extrusions or by a faulty model. "
-                   "Try to repair the model or change its orientation on the bed.");
+            + (is_sla ?
+                   _u8L("Make sure the object is printable. "
+                        "This is usually caused by negligibly small extrusions or by a faulty model. "
+                        "Try to repair the model or change its orientation on the build plate.") :
+                   _u8L("Make sure the object is printable. "
+                        "This is usually caused by negligibly small extrusions or by a faulty model. "
+                        "Try to repair the model or change its orientation on the bed."));
         break;
     }
 

@@ -2,6 +2,7 @@
 
 #include "Slic3r/App/CustomGCodeMigration.hpp"
 #include "Slic3r/App/DisplayStrings.hpp"
+#include "Slic3r/App/IsSlaActive.hpp"
 #include "Slic3r/App/Navigator.hpp"
 #include "Slic3r/App/Yoga/ScrollArea.hpp"
 #include "Slic3r/App/Yoga/Text.hpp"
@@ -104,7 +105,7 @@ public:
             set_orientation(Yoga::Orientation::Vertical);
             set_gap(20_fpx);
 
-            auto title{emplace_back<Yoga::Text>(to_display_string(error.code))};
+            auto title{emplace_back<Yoga::Text>(to_display_string(error.code, is_sla_active(project_interactor)))};
             title->set_font_type(Render::ImguiFontType::Bold);
             title->set_flex_shrink(0);
 
@@ -230,7 +231,9 @@ public:
                 text->set_flex_shrink(0.f);
             }
         } else {
-            auto text{emplace_back<Yoga::Text>(to_display_string(error, project))};
+            auto text{emplace_back<Yoga::Text>(
+                to_display_string(error, project, is_sla_active(project_interactor))
+            )};
             text->set_flex_shrink(0);
         }
     }

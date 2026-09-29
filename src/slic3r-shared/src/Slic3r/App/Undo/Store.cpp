@@ -1,4 +1,5 @@
 #include "Slic3r/App/Undo/Store.hpp"
+#include "Slic3r/App/IsSlaActive.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/Biz/Scene/SceneInteractor.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
@@ -57,7 +58,7 @@ static std::optional<std::size_t> get_undo_stack_index(
     return static_cast<std::size_t>(index_to_load);
 }
 
-static std::string to_string(Biz::UndoSnapshotType type)
+static std::string to_string(Biz::UndoSnapshotType type, bool is_sla)
 {
     using Type = Biz::UndoSnapshotType;
     using Biz::_u8L;
@@ -70,7 +71,7 @@ static std::string to_string(Biz::UndoSnapshotType type)
     case Type::QuickDrag:
         return _u8L("Quick drag");
     case Type::QuickDragAndAddBed:
-        return _u8L("Quick drag and add a bed");
+        return is_sla ? _u8L("Quick drag and add a build plate") : _u8L("Quick drag and add a bed");
     case Type::Translate:
         return _u8L("Translate");
     case Type::SetTranslation:
@@ -208,7 +209,7 @@ static std::string to_string(Biz::UndoSnapshotType type)
     case Type::DeactivateGizmo:
         return _u8L("Close tool dialog");
     case Type::SelectBed:
-        return _u8L("Select a bed");
+        return is_sla ? _u8L("Select a build plate") : _u8L("Select a bed");
     case Type::AddConfigContainer:
         return _u8L("Add Printer Group");
     case Type::DuplicateConfigContainer:
@@ -216,9 +217,9 @@ static std::string to_string(Biz::UndoSnapshotType type)
     case Type::DeleteConfigContainer:
         return _u8L("Delete Printer Group");
     case Type::AddBed:
-        return _u8L("Add a bed");
+        return is_sla ? _u8L("Add a build plate") : _u8L("Add a bed");
     case Type::DeleteBed:
-        return _u8L("Delete a bed");
+        return is_sla ? _u8L("Delete a build plate") : _u8L("Delete a bed");
     case Type::SelectPrinterPreset:
         return _u8L("Select a printer");
     case Type::SetPartSettingsValue:
@@ -445,10 +446,12 @@ void Store::update_top_bar(Domain::SelectionId project_id, const Stack& stack)
     std::vector<std::pair<std::size_t, std::string>> snapshots;
     snapshots.reserve(stack.get_snapshots().size());
 
+    const bool is_sla{is_sla_active(m_project_interactor)};
     std::ranges::transform(
         stack.get_snapshots(),
         std::back_inserter(snapshots),
-        [](const Snapshot& snapshot) { return std::pair{snapshot.id, to_string(snapshot.type)}; }
+        [is_sla](const Snapshot& snapshot)
+        { return std::pair{snapshot.id, to_string(snapshot.type, is_sla)}; }
     );
 
     const std::optional<std::size_t> selected_index{stack.get_selected_index()};
