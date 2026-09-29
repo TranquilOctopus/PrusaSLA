@@ -18,6 +18,7 @@ namespace Slic3r::App::Yoga {
 class Text;
 class LayoutButton;
 class Item;
+class ScrollArea;
 }
 
 namespace Slic3r::App::Preview {
@@ -56,6 +57,28 @@ private:
     void close_zoom();
     size_t current_layer_index() const;
 
+    // A single island reported by the slicer, with the slice coordinates of its centroid.
+    struct Island
+    {
+        size_t layer{0};
+        double x_mm{0.};
+        double y_mm{0.};
+        std::optional<double> area_mm2;
+    };
+    // Fills the island list and its rows from the issues of the last result.
+    void rebuild_island_list();
+    std::string island_row_text(const Island& island) const;
+    // Island layer closest to the current one, in the given direction.
+    std::optional<size_t> prev_island_layer() const;
+    std::optional<size_t> next_island_layer() const;
+    void go_to_layer(size_t layer);
+    void on_prev_island();
+    void on_next_island();
+    // The window has to be tall enough for the image, the charts, the island list and the zoom.
+    void update_min_height();
+    // Draws a ring on every island of the layer the image was rendered for.
+    void render_island_markers(float rect_min_x, float rect_min_y, float rect_width, float rect_height) const;
+
     Render::Device& m_device;
     Biz::ProjectInteractor& m_project_interactor;
     DoubleSliderForLayers* m_slider{nullptr};
@@ -75,6 +98,17 @@ private:
     Yoga::Text* m_layer_info_text{nullptr};
     Yoga::LayoutButton* m_prev_button{nullptr};
     Yoga::LayoutButton* m_next_button{nullptr};
+
+    // Islands of the last result, sorted by layer. The list is empty and hidden when the
+    // slicer found none.
+    std::vector<Island> m_islands;
+    std::vector<size_t> m_island_layers; //< unique layers of m_islands, ascending
+    Yoga::Item* m_islands_panel{nullptr};
+    Yoga::Item* m_islands_header{nullptr};
+    Yoga::Text* m_islands_title{nullptr};
+    Yoga::LayoutButton* m_islands_prev_button{nullptr};
+    Yoga::LayoutButton* m_islands_next_button{nullptr};
+    Yoga::ScrollArea* m_islands_rows{nullptr};
 
     std::optional<::Slic3r::sla::SlaLayerImage> m_current_layer_image;
 
