@@ -85,6 +85,15 @@ public:
     ) override
     {}
 
+    void show_labeled_yesno_dialog(
+        const std::string& title,
+        const std::string& text,
+        const std::string& yes_label,
+        const std::string& no_label,
+        const YesNoCallback& callback
+    ) override
+    {}
+
     void show_rich_yesno_dialog(
         const std::string& title,
         const std::string& text,
