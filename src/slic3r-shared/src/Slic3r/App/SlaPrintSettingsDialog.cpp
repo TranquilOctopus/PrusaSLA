@@ -28,7 +28,9 @@ using Key = SlaSettingsRows::Key;
 
 /// The resin values that matter most, in the order they are shown in the "Resin" tab. All of
 /// them live in the resin (material) box, the print box only holds the fall-back values the
-/// resin does not define.
+/// resin does not define. The layer-separation knobs are in the list because the .pwmx/.pm5 and
+/// .goo exporters write the lift distance, the lift and retract speeds, the waits and the light
+/// PWM into their headers.
 std::vector<Key> resin_keys()
 {
     return {

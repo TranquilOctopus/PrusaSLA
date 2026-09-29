@@ -7,6 +7,12 @@ records what each setting is read by.
 165 settings are covered: 100 **used**, 46 **unused for SLA**, 18 **ui-only**, 1
 **superseded** (`pad_around_object`). 47 settings are therefore safe to hide.
 
+**Updated 2026-09-29 (M5.3.motion).** 18 of the 46 "unused" verdicts are now **used**: the
+`.pwmx`/`.pm5` and `.goo` writers read the 18 layer-separation settings, and M1.13d3's hiding of
+them was reverted. The counts above are the ones of the original pass; the table is the current
+truth, and the "Hidden in M1.13d3" section at the end says what was hidden and what was taken
+back. 28 settings are now safe to hide.
+
 ## How the settings dialog picks keys
 
 The App does not keep a hand-written list of SLA settings. The categoriser shows **every**
@@ -118,27 +124,27 @@ Short paths in the evidence column: `SLAPrint*.cpp`, `SLALayerImage.cpp`, `SLASu
 | `tilt_up_offset_delay` | Tilt up offset delay | Material | **used** | engine `SLAPrintSteps.cpp:1261` (`ExposureProfile`, used by `layer_peel_move_time` `:1277`); exporter `Biz/ResultExport/SLA/SL1.cpp:46,79-84` (key list + read loop) |
 | `tilt_up_cycles` | Tilt up cycles | Material | **used** | engine `SLAPrintSteps.cpp:1267` (`ExposureProfile`, used by `layer_peel_move_time` `:1277`); exporter `Biz/ResultExport/SLA/SL1.cpp:70,107-111` (key list + read loop) |
 | `tilt_up_delay` | Tilt up delay | Material | **used** | engine `SLAPrintSteps.cpp:1262` (`ExposureProfile`, used by `layer_peel_move_time` `:1277`); exporter `Biz/ResultExport/SLA/SL1.cpp:47,79-84` (key list + read loop) |
-| `lift_height` | Lift height | Material | **unused for SLA** | no read; the non-Prusa branch of `SLAPrintSteps.cpp:1524-1549` uses `fast_tilt_time`/`slow_tilt_time`/`high_viscosity_tilt_time` instead. Grep for `"lift_height"` over `src/` returns only the def, the invalidation entry `SLAPrint.cpp:679` and `test/.../ConfigLoadTests.cpp:503` |
-| `lift_height_2` | Lift height (above area fill) | Material | **unused for SLA** | no read; only the def and the invalidation entry `SLAPrint.cpp:680` |
-| `lift_speed` | Lift speed | Material | **used** | exporter `Biz/ResultExport/SLA/GooSLA.cpp:298,310` (`get_cfg_value_f(cfg, "lift_speed", 2.0f)`); the SLA def default is 0, so the fallback is what normally applies. Never read by the engine |
-| `lift_speed_2` | Lift speed (above area fill) | Material | **unused for SLA** | no read; only the def and the invalidation entry `SLAPrint.cpp:682` |
-| `retract_speed` | Retract speed | Material | **used** | exporter `Biz/ResultExport/SLA/GooSLA.cpp:314` (`get_cfg_value_f(cfg, "retract_speed", 3.0f)`). Note the key is also an FFF extruder key (`ConfigDefsFDM.cpp:3375`); the other reads (`GCode/WipeTower*.cpp`, `GCode.cpp:1283`) are FFF only |
-| `retract_speed_2` | Retract speed (above area fill) | Material | **unused for SLA** | no read; only the def and the invalidation entry `SLAPrint.cpp:685` |
-| `wait_before_lift` | Wait before lift | Material | **unused for SLA** | no read; only the def and the invalidation entry `SLAPrint.cpp:688` |
-| `wait_after_lift` | Wait after lift | Material | **unused for SLA** | no read; only the def and the invalidation entry `SLAPrint.cpp:686` |
-| `wait_after_retract` | Wait after retract | Material | **unused for SLA** | no read; only the def and the invalidation entry `SLAPrint.cpp:687` |
-| `light_pwm` | Light PWM | Material | **unused for SLA** | no read; only the def, the invalidation entry `SLAPrint.cpp:683` and `test/.../ConfigLoadTests.cpp:505`. The key is not even set in `resources/presets/prusa-research-sla` |
-| `bottom_lift_height` | Bottom lift height | Material | **unused for SLA** | no read; only the def, the invalidation entry `SLAPrint.cpp:669` (`steps({propagate(slapsMergeSlicesAndEval)})`, i.e. declared) and `test/.../ConfigLoadTests.cpp:506-508` |
-| `bottom_lift_height_2` | Bottom lift height (above area fill) | Material | **unused for SLA** | no read; only the def, the invalidation entry `SLAPrint.cpp:670` (`steps({propagate(slapsMergeSlicesAndEval)})`, i.e. declared) and `test/.../ConfigLoadTests.cpp:506-508` |
-| `bottom_lift_speed` | Bottom lift speed | Material | **unused for SLA** | no read; only the def, the invalidation entry `SLAPrint.cpp:671` (`steps({propagate(slapsMergeSlicesAndEval)})`, i.e. declared) and `test/.../ConfigLoadTests.cpp:506-508` |
-| `bottom_lift_speed_2` | Bottom lift speed (above area fill) | Material | **unused for SLA** | no read; only the def, the invalidation entry `SLAPrint.cpp:672` (`steps({propagate(slapsMergeSlicesAndEval)})`, i.e. declared) and `test/.../ConfigLoadTests.cpp:506-508` |
-| `bottom_retract_speed` | Bottom retract speed | Material | **unused for SLA** | no read; only the def, the invalidation entry `SLAPrint.cpp:674` (`steps({propagate(slapsMergeSlicesAndEval)})`, i.e. declared) and `test/.../ConfigLoadTests.cpp:506-508` |
-| `bottom_retract_speed_2` | Bottom retract speed (above area fill) | Material | **unused for SLA** | no read; only the def, the invalidation entry `SLAPrint.cpp:675` (`steps({propagate(slapsMergeSlicesAndEval)})`, i.e. declared) and `test/.../ConfigLoadTests.cpp:506-508` |
-| `bottom_wait_before_lift` | Bottom wait before lift | Material | **unused for SLA** | no read; only the def, the invalidation entry `SLAPrint.cpp:678` (`steps({propagate(slapsMergeSlicesAndEval)})`, i.e. declared) and `test/.../ConfigLoadTests.cpp:506-508` |
-| `bottom_wait_after_lift` | Bottom wait after lift | Material | **unused for SLA** | no read; only the def, the invalidation entry `SLAPrint.cpp:676` (`steps({propagate(slapsMergeSlicesAndEval)})`, i.e. declared) and `test/.../ConfigLoadTests.cpp:506-508` |
-| `bottom_wait_after_retract` | Bottom wait after retract | Material | **unused for SLA** | no read; only the def, the invalidation entry `SLAPrint.cpp:677` (`steps({propagate(slapsMergeSlicesAndEval)})`, i.e. declared) and `test/.../ConfigLoadTests.cpp:506-508` |
-| `bottom_light_pwm` | Bottom light PWM | Material | **unused for SLA** | no read; only the def, `SLAPrint.cpp:673` and `ConfigLoadTests.cpp:507`. `GooSLA.cpp:325-326` hard-codes 255 instead |
-| `bottom_layer_count` | Bottom layer count | Material | **unused for SLA** | no read; only the def, `SLAPrint.cpp:668` and `ConfigLoadTests.cpp:508`. `AnycubicSLA.cpp:288,513` derives its own `bottom_layer_count` local from `faded_layers` |
+| `lift_height` | Lift height | Material | **used (exporters, from this change)** | M5.3.motion: the `.pwmx`/`.pm5` lift distance (`AnycubicSLA.cpp:321,555,627,721`) and the `.goo` `lift_distance` (`GooSLA.cpp:332`), mm as the setting is. Never read by the engine, whose peel time comes from `ExposureProfile` (`SLAPrintSteps.cpp:1524-1549`) |
+| `lift_height_2` | Lift height (above area fill) | Material | **used (exporters, from this change)** | M5.3.motion: the second lift stage of the `.goo` header, `second_lift_distance` (`GooSLA.cpp:346`), mm; 0 means no second stage |
+| `lift_speed` | Lift speed | Material | **used (exporters, from this change)** | M5.3.motion: the `.pwmx`/`.pm5` lift speed (`AnycubicSLA.cpp:327,557,628,722`) and the `.goo` `lift_speed` (`GooSLA.cpp:333`), mm/s. Never read by the engine |
+| `lift_speed_2` | Lift speed (above area fill) | Material | **used (exporters, from this change)** | M5.3.motion: the `.goo` `second_lift_speed` (`GooSLA.cpp:347`), mm/s |
+| `retract_speed` | Retract speed | Material | **used (exporters, from this change)** | M5.3.motion: the `.pwmx`/`.pm5` retract speed (`AnycubicSLA.cpp:335,559,629`) and the `.goo` `retract_speed` (`GooSLA.cpp:339`), mm/s. Note the key is also an FFF extruder key (`ConfigDefsFDM.cpp:3375`); the other reads (`GCode/WipeTower*.cpp`, `GCode.cpp:1283`) are FFF only |
+| `retract_speed_2` | Retract speed (above area fill) | Material | **used (exporters, from this change)** | M5.3.motion: the `.goo` `second_retract_speed` (`GooSLA.cpp:351`), mm/s |
+| `wait_before_lift` | Wait before lift | Material | **used (exporters, from this change)** | M5.3.motion: the `.pwmx`/`.pm5` light-off delay, HEADER +12 (`AnycubicSLA.cpp:316,554,624`), and the `.goo` `before_lift_time` (`GooSLA.cpp:319`), s |
+| `wait_after_lift` | Wait after lift | Material | **used (exporters, from this change)** | M5.3.motion: the `.goo` `after_lift_time` (`GooSLA.cpp:320`), s. The Anycubic containers have no field for it |
+| `wait_after_retract` | Wait after retract | Material | **used (exporters, from this change)** | M5.3.motion: the `.goo` `after_retract_time` (`GooSLA.cpp:321`), s. The Anycubic containers have no field for it |
+| `light_pwm` | Light PWM | Material | **used (exporters, from this change)** | M5.3.motion: the `.goo` `light_pwm` (`GooSLA.cpp:355`), 0-255 as the setting is. The Anycubic containers have no field for it, and the key is not set in `resources/presets/prusa-research-sla` |
+| `bottom_lift_height` | Bottom lift height | Material | **used (exporters, from this change)** | M5.3.motion: the bottom lift distance of the `.pwmx`/`.pm5` (`AnycubicSLA.cpp:324,556,721`) and the `.goo` `bottom_lift_distance` (`GooSLA.cpp:330`), mm |
+| `bottom_lift_height_2` | Bottom lift height (above area fill) | Material | **used (exporters, from this change)** | M5.3.motion: the `.goo` `bottom_second_lift_distance` (`GooSLA.cpp:344`), mm |
+| `bottom_lift_speed` | Bottom lift speed | Material | **used (exporters, from this change)** | M5.3.motion: the bottom lift speed of the `.pwmx`/`.pm5` (`AnycubicSLA.cpp:330,558,722`) and the `.goo` `bottom_lift_speed` (`GooSLA.cpp:331`), mm/s |
+| `bottom_lift_speed_2` | Bottom lift speed (above area fill) | Material | **used (exporters, from this change)** | M5.3.motion: the `.goo` `bottom_second_lift_speed` (`GooSLA.cpp:345`), mm/s |
+| `bottom_retract_speed` | Bottom retract speed | Material | **used (exporters, from this change)** | M5.3.motion: the `.goo` `bottom_retract_speed` (`GooSLA.cpp:337`), mm/s. The Anycubic containers have no bottom retract field |
+| `bottom_retract_speed_2` | Bottom retract speed (above area fill) | Material | **used (exporters, from this change)** | M5.3.motion: the `.goo` `bottom_second_retract_speed` (`GooSLA.cpp:349`), mm/s |
+| `bottom_wait_before_lift` | Bottom wait before lift | Material | **used (exporters, from this change)** | M5.3.motion: the `.goo` `bottom_before_lift_time` (`GooSLA.cpp:316`), s |
+| `bottom_wait_after_lift` | Bottom wait after lift | Material | **used (exporters, from this change)** | M5.3.motion: the `.goo` `bottom_after_lift_time` (`GooSLA.cpp:317`), s |
+| `bottom_wait_after_retract` | Bottom wait after retract | Material | **used (exporters, from this change)** | M5.3.motion: the `.goo` `bottom_after_retract_time` (`GooSLA.cpp:318`), s |
+| `bottom_light_pwm` | Bottom light PWM | Material | **used (exporters, from this change)** | M5.3.motion: the `.goo` `bottom_light_pwm` (`GooSLA.cpp:354`), 0-255 as the setting is; `GooSLA.cpp` hard-coded 255 until then |
+| `bottom_layer_count` | Bottom layer count | Material | **used** (verdict corrected, see "Hidden in M1.13d3") | `Domain::sla_bottom_layer_count` reads it at `SlaLayerHeight.cpp:45` and the Elegoo (`Biz/ResultExport/SLA/AnycubicSLA.cpp:299,535`) and Goo (`GooSLA.cpp:324`) exporters write the result into their headers. The "unused for SLA" verdict below predates M1.13c3, which introduced that call |
 | `material_source_note` | Material source note | Material | **unused for SLA** | no read and nothing writes it: only the def, the invalidation entry `SLAPrint.cpp:690` (`steps({})`) and `test/.../ConfigLoadTests.cpp:509` which asserts it is empty. The foreign-resin importer keeps `source_format`/`source_path` in `Biz/ResinProfile/ChituboxCfgReader.cpp:185-186` and never maps them to this key |
 | `support_head_front_diameter` | Pinhead front diameter | Print | **used** | engine `SLAPrint.cpp:103 (also 1233), SLAPrintSteps.cpp:852, SLASupportTool.cpp:188` - only for `support_tree_type=default` (`make_support_cfg`, `SLAPrint.cpp:94`) |
 | `support_head_penetration` | Head penetration | Print | **used** | engine `SLAPrint.cpp:108 (also 1224)` - only for `support_tree_type=default` (`make_support_cfg`, `SLAPrint.cpp:94`) |
@@ -194,7 +200,7 @@ Short paths in the evidence column: `SLAPrint*.cpp`, `SLALayerImage.cpp`, `SLASu
 | `thumbnails` | Thumbnails | Printer | **unused for SLA** | no read on an SLA path: `SLAPrint.cpp:766` declares it with `steps({})` and only the FDD GCode path consumes it (`Print.cpp:1581` -> `GCode.cpp:1053`). The exporters *would* write thumbnails (`SL1.cpp:237`, `GooSLA.cpp:271-274`, `AnycubicSLA.cpp:372`) but `SLAResultData::thumbnails` (`SLAResult.hpp:110`) is never filled from this key |
 | `thumbnails_format` | Format of G-code thumbnails | Printer | **unused for SLA** | only read by the legacy thumbnail-string parser `Biz/Config/Legacy/PrintConfig.cpp:5278`; `Category::Hidden` |
 | `layer_height` | Layer height | Print | **used** | engine `SLAPrintSteps.cpp:353,405,677`, `SLASupportTool.cpp:157`; exporter `AnycubicSLA.cpp:284,509`, `GooSLA.cpp:290`, `SL1.cpp:149` |
-| `max_print_height` | Max print height | Printer | **used** | engine `SLAPrintSteps.cpp:1587` (build volume); exporter `AnycubicSLA.cpp:539` |
+| `max_print_height` | Max print height | Printer | **used** | engine `SLAPrintSteps.cpp:1587` (build volume); exporter `AnycubicSLA.cpp:576` (the M5's maximum Z) and `GooSLA.cpp:307` (the plate Z size) |
 | `output_filename_format` | Output filename format | Print | **used** | Biz `Biz/ResultExport/ExportNameParser.cpp:213,238` (SLA branch -> `parse_sla_export_name`) |
 | `slice_closing_radius` | Slice gap closing radius | Print | **used** | engine `SLAPrintSteps.cpp:712,912,1050`, `SLASupportTool.cpp:163` |
 | `slicing_mode` | Slicing Mode | Print | **used** | engine `SLAPrintSteps.cpp:713`, `SLASupportTool.cpp:164` |
@@ -225,8 +231,9 @@ definitions), `src/slic3r/GUI` (not built) and tests. Targeted follow-ups:
 - `"support_preset_"` over `src/` - no literal hit in the App either, because the key is
   built at runtime.
 - `light_pwm`, `bottom_`, `wait_`, `lift_`, `retract_` over `src/` and
-  `resources/presets/**` - hits only in the defs, the invalidation table, a load test and
-  the legacy `PrintConfig.cpp`.
+  `resources/presets/**` - at the time of this pass, hits only in the defs, the invalidation
+  table, a load test and the legacy `PrintConfig.cpp`; M5.3.motion added the reads in
+  `Biz/ResultExport/SLA/AnycubicSLA.cpp` and `Biz/ResultExport/SLA/GooSLA.cpp`.
 - `min_exposure_time`, `max_initial_exposure_time` over the whole repo - the only hits
   outside `src/` are `resources/presets/community-sla/CommunitySLA/preset-sla-printer.yaml`.
 - `"thumbnails"` over `src/` - the only consumer is the FFF GCode path.
@@ -244,21 +251,27 @@ know the names.
 - `min_exposure_time`, `max_exposure_time`, `min_initial_exposure_time`,
   `max_initial_exposure_time`
 
-**Unused for SLA - layer separation mechanics, whole families (19, Material)**
+**Unused for SLA - layer separation mechanics, whole families (0 of 19, Material)**
+- **Nothing on this list any more.** M5.3.motion wired the writers to these settings (lift
+  distance, lift and retract speed, the three waits, the light PWM and the `bottom_*`
+  equivalents) and the Anycubic and Goo headers now carry them, so the verdict below is
+  **wrong for every one of them** and they must not be hidden. The list is kept to show what
+  was believed before the exporters were read again:
 - `lift_height`, `lift_height_2`, `lift_speed_2`, `retract_speed_2`
 - `wait_before_lift`, `wait_after_lift`, `wait_after_retract`
 - `light_pwm`
 - `bottom_lift_height`, `bottom_lift_height_2`, `bottom_lift_speed`, `bottom_lift_speed_2`,
   `bottom_retract_speed`, `bottom_retract_speed_2`, `bottom_wait_before_lift`,
-  `bottom_wait_after_lift`, `bottom_wait_after_retract`, `bottom_light_pwm`,
-  `bottom_layer_count`
+  `bottom_wait_after_lift`, `bottom_wait_after_retract`, `bottom_light_pwm`
 
-These are 19 settings that look like the SL1 layer-separation knobs and do nothing at all
-in this fork: the engine computes peel time from `ExposureProfile`
-(`SLAPrintSteps.cpp:1255-1274`, i.e. the tilt/tower/delay family) and the *tilt* times
-(`SLAPrintSteps.cpp:1524-1530`). Do **not** hide `lift_speed` and `retract_speed` in the same
-sweep: those two keys *are* read by the Elegoo exporter, and `retract_speed` is also an FFF
-extruder key.
+The 19th, `bottom_layer_count`, was on this list too but **is read**, see the corrected verdict
+in the table above. `lift_speed` and `retract_speed` were never on it: they were read by the
+Goo writer even then, and `retract_speed` is also an FFF extruder key.
+
+These 19 settings look like the SL1 layer-separation knobs and the **engine** does nothing with
+them: it computes peel time from `ExposureProfile` (`SLAPrintSteps.cpp:1255-1274`, i.e. the
+tilt/tower/delay family) and the *tilt* times (`SLAPrintSteps.cpp:1524-1530`). That is why a
+grep over `libslic3r` alone finds no read. The non-Prusa **exporters** do read them.
 
 **Unused for SLA - metadata and output extras (6)**
 - `material_notes`, `material_vendor`, `material_source_note`, `printer_notes`
@@ -357,11 +370,71 @@ The earlier audit gave no evidence and got several verdicts wrong. In order of i
 9. **The 19 lift/wait/PWM/bottom settings that audit b marks "keep".** They are the biggest
    block of wrong verdicts: `lift_height`, `lift_height_2`, `lift_speed_2`,
    `retract_speed_2`, `wait_before_lift`, `wait_after_lift`, `wait_after_retract`,
-   `light_pwm` and the eleven `bottom_*` settings are never read. `SLAPrintSteps.cpp:1524-1549`
-   (the non-Prusa separation branch) uses `fast_tilt_time`/`slow_tilt_time`/
-   `high_viscosity_tilt_time` instead, which is why they look plausible.
+   `light_pwm` and the eleven `bottom_*` settings are never read **by the engine**.
+   `SLAPrintSteps.cpp:1524-1549` (the non-Prusa separation branch) uses
+   `fast_tilt_time`/`slow_tilt_time`/`high_viscosity_tilt_time` instead, which is why they look
+   plausible. The exporters read them: M5.3.motion wires the `.pwmx`/`.pm5` and `.goo` writers
+   to them, so the verdict is now **used (exporters)**.
 10. **`sla_output_precision` and `printer_variant`: audit a/b say "keep" but for the wrong
     reason.** Both are real reads, yet both are `Category::Hidden` and therefore already
     invisible in the dialog; `printer_variant` only reaches the printer through
     `Biz/ResultExport/SLA/SL1.cpp:158` and `sla_output_precision` only through the SVG
     rasteriser `Format/SL1_SVG.cpp:223`.
+
+## Hidden in M1.13d3, and un-hidden again by M5.3.motion
+
+What the hiding job did on 2026-09-29, what M5.3.motion took back, and what it left alone.
+Definitions were kept everywhere; only the visibility changes.
+
+**Definition category set to `Category::Hidden` in `ConfigDefsSLA.cpp` (23 keys, SLA only).**
+They are defined only in the SLA definitions, so the change cannot reach FFF, and every panel
+that lists non-`Hidden` definitions drops them at once
+(`ObservableCategorizer.cpp:9`, `MaterialSettingsDialog.cpp:248`, `PrintSettingsDialog.cpp:75`).
+The layer-separation block is listed as M5.3.motion reverted it.
+
+- Exposure bounds, `Printer_General` -> `Hidden`: `min_exposure_time`, `max_exposure_time`,
+  `min_initial_exposure_time`, `max_initial_exposure_time`. **Still hidden.**
+- Layer separation, `Filament_MaterialPrintingProfile` -> `Hidden`: `lift_height`,
+  `lift_height_2`, `lift_speed_2`, `retract_speed_2`, `wait_before_lift`, `wait_after_lift`,
+  `wait_after_retract`, `light_pwm`, `bottom_lift_height`, `bottom_lift_height_2`,
+  `bottom_lift_speed`, `bottom_lift_speed_2`, `bottom_retract_speed`, `bottom_retract_speed_2`,
+  `bottom_wait_before_lift`, `bottom_wait_after_lift`, `bottom_wait_after_retract`,
+  `bottom_light_pwm`. **Un-hidden again by M5.3.motion** (5 keys hidden now).
+- `material_source_note`, `Filament_MaterialTemperatures` -> `Hidden`. **Still hidden.**
+
+**Why the layer-separation block was wrong.** The hiding job looked for a read inside the
+engine and found none, and it took that as "nothing reads it". The `.pwmx`/`.pm5` and `.goo`
+writers were the readers that mattered, and what they read were not even these names: they asked
+for `lift_distance`, `retract_distance`, `initial_lift_distance`, `initial_lift_speed`,
+`initial_retract_distance`, `initial_retract_speed` and `printer_build_height`, none of which is
+a defined key, so every exported file used the hard-coded defaults whatever the resin said. The
+key names in the table are the ones the writers use now, and the containers keep their layouts.
+
+**Panel filter instead of a definition change (1 key).**
+
+- `thumbnails` - defined once for both technologies (`ConfigCommon.cpp:106`), so the definition
+  was not touched. `PrinterAdvancedSettingsDialog` filters it out of the categorizer when
+  `is_sla_active()`, the same shape as the `layer_height` filter of M1.13c2 in
+  `PrintSettingsDialog.cpp:72-81`. **Kept.**
+
+**Hand-written row list trimmed (the resin tab of `SlaPrintSettingsDialog`).**
+
+That dialog builds its rows from a literal key list, which ignores the category, so the 18
+hidden separation keys were removed from `resin_keys()` and `SlaSettingsRows` now skips a
+`Hidden` item as a safeguard. **M5.3.motion put the 18 keys back into `resin_keys()`**, since a
+user on a non-Prusa printer sets them there; the `Hidden` skip stays as a safeguard, and
+`bottom_layer_count` and the two delays were never out of the list.
+
+**On the list, not hidden.**
+
+- `bottom_layer_count` - **the verdict above is stale.** It is read by
+  `Domain::sla_bottom_layer_count` (`SlaLayerHeight.cpp:45`), which the Elegoo
+  (`AnycubicSLA.cpp:299,535`) and Goo (`GooSLA.cpp:324`) exporters write into their headers.
+  That call came with M1.13c3, after this document was written. Verdict is now **used**.
+- `material_notes` and `printer_notes` - kept visible per caveat 1 above: they are the only way
+  to pass data to a non-PrusaResearch printer, so hiding them would remove a working feature, not
+  a dead setting. A two-line revert if the product call goes the other way.
+- `pad_around_object`, `material_vendor` and `thumbnails_format` - already `Category::Hidden`
+  before this job, so there was nothing left to hide.
+- The 17 `branching_support_*` keys - out of scope, a separate job renames them to the
+  `branchingsupport_*` the engine actually reads.
