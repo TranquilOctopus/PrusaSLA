@@ -81,7 +81,12 @@ SupportToolTree build_support_tree_for_tool(const Domain::ModelObject& object,
         // Create SupportableMesh
         sla::SupportableMesh supportable_mesh;
         supportable_mesh.emesh = AABBMesh(mesh.its);
-        supportable_mesh.pts = std::make_shared<const Domain::SLA::SupportPoints>(points);
+        // Points are in object's mesh frame; transform to world frame
+        Domain::SLA::SupportPoints world_points = points;
+        for (auto& sp : world_points) {
+            sp.pos = (object_to_world * sp.pos.cast<double>()).cast<float>();
+        }
+        supportable_mesh.pts = std::make_shared<const Domain::SLA::SupportPoints>(std::move(world_points));
         supportable_mesh.zoffset = mesh.bounding_box().min.z();
         supportable_mesh.cfg = make_support_cfg(object_config);
         supportable_mesh.pad_cfg = make_pad_cfg(object_config);
@@ -103,7 +108,7 @@ SupportToolTree build_support_tree_for_tool(const Domain::ModelObject& object,
 
         // Create pad if enabled
         std::shared_ptr<const Domain::TriangleMesh> pad_mesh;
-        if (supportable_mesh.pad_cfg.embed_object.enabled) {
+        if (object_config.get<bool>("pad_enable")) {
             if (stop && stop()) return {tree_mesh, nullptr};
 
             indexed_triangle_set pad_its = sla::create_pad(supportable_mesh, tree_its, ctl);

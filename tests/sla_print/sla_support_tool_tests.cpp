@@ -131,3 +131,42 @@ TEST_CASE("SLASupportTool: support_tool_elevation returns correct values", "[SLA
     // In zero-elevation mode (pad around object), elevation should be 0
     CHECK(elev_zero == 0.0);
 }
+
+TEST_CASE("SLASupportTool: build_support_tree_for_tool places tree under moved object", "[SLASupportTool]")
+{
+    BoxModel box{20., 20., 40.};
+    // Lift 10 mm AND move to x=30, y=20
+    box.object->instances.front()->set_offset({30., 20., 10.});
+
+    Slic3r::Transform3d object_to_world = Slic3r::Transform3d::Identity();
+    object_to_world.translate({30., 20., 10.});
+
+    auto config = make_sla_config();
+
+    // Generate points (they come back in object's mesh frame)
+    auto points = Slic3r::sla::generate_support_points_for_tool(*box.object, object_to_world, config, []{ return false; });
+    REQUIRE(points.size() > 0);
+
+    // Build tree
+    auto tree = Slic3r::sla::build_support_tree_for_tool(*box.object, object_to_world, points, config, []{ return false; });
+
+    REQUIRE(tree.tree != nullptr);
+    REQUIRE_FALSE(tree.tree->empty());
+
+    // Object's world bounding box: box is 20x20x40 at origin in object frame, instance offset (30,20,10)
+    // So world bbox: x in [30, 50], y in [20, 40], z in [10, 50]
+    // Tree should be under the object, so its bbox should overlap in X and Y
+    auto tree_bb = tree.tree->bounding_box();
+    double obj_min_x = 30., obj_max_x = 50.;
+    double obj_min_y = 20., obj_max_y = 40.;
+    double obj_min_z = 10.;
+
+    // Check X overlap
+    CHECK(tree_bb.max.x() >= obj_min_x - 1e-6);
+    CHECK(tree_bb.min.x() <= obj_max_x + 1e-6);
+    // Check Y overlap
+    CHECK(tree_bb.max.y() >= obj_min_y - 1e-6);
+    CHECK(tree_bb.min.y() <= obj_max_y + 1e-6);
+    // Check tree max z is at least object world min z - 0.5 (tree extends down from object bottom)
+    CHECK(tree_bb.max.z() >= obj_min_z - 0.5);
+}
