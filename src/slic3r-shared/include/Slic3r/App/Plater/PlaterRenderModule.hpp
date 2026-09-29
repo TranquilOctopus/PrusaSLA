@@ -78,6 +78,7 @@ class SlaSupportPointsGizmo;
 class SlaHollowGizmo;
 class SlaIssueNotification;
 class SlaUnsupportedNotification;
+class SlaFirstModelNotification;
 class PlaterScenePresenter;
 class PlaterRenderLayout;
 class SidebarPlaterActionButtons;
@@ -315,6 +316,7 @@ private:
     SlaHollowGizmo* m_sla_hollow_gizmo                          = nullptr;
     std::unique_ptr<SlaIssueNotification> m_sla_issue_notification;
     std::unique_ptr<SlaUnsupportedNotification> m_sla_unsupported_notification;
+    std::unique_ptr<SlaFirstModelNotification> m_sla_first_model_notification;
 
     std::shared_ptr<ThumbnailStore> m_thumbnail_store;
     std::shared_ptr<ThumbnailStoreUpdater> m_thumbnail_store_updater;
