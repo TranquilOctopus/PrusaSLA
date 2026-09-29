@@ -98,6 +98,7 @@ std::vector<std::string> get_all_sla_config_keys() {
     keys.push_back("relative_correction_x");
     keys.push_back("relative_correction_y");
     keys.push_back("relative_correction_z");
+    keys.push_back("resin_faded_layers");
     keys.push_back("resin_layer_height");
     keys.push_back("sla_archive_format");
     keys.push_back("sla_output_precision");
@@ -262,6 +263,7 @@ TEST_CASE("SLAInvalidation: table-driven expected steps for representative keys"
         {"pad_enable", steps({propagate(slaposObjectSlice)})},
         {"raft_type", steps({propagate(slaposObjectSlice), propagate(slaposPad)})},
         {"relative_correction", all_steps()},
+        {"resin_faded_layers", steps({propagate(slaposObjectSlice)})},
         {"resin_layer_height", steps({propagate(slaposObjectSlice)})},
         {"support_base_diameter", steps({propagate(slaposSupportTree)})},
         {"support_object_elevation", steps({propagate(slaposObjectSlice)})},

@@ -128,6 +128,20 @@ TEST_CASE("Goo export", "[export][sla][goo]")
     std::memcpy(&layer_thickness, &layer_thickness_bits, sizeof(float));
     REQUIRE(layer_thickness == Catch::Approx(0.05f));
 
+    // After layer_thickness come common_exposure_time, exposure_delay_mode, turn_off_time, the
+    // six bottom and normal lift/retract times and bottom_exposure_time, then bottom_layers.
+    size_t bottom_layers_offset = layer_thickness_offset + 4 + 4 + 1 + 4 + 6 * 4 + 4;
+    REQUIRE(data.size() >= bottom_layers_offset + 4);
+    // The engine has no burn-in of its own, it fades the exposure over the 10 transition layers
+    // starting with the first one, so that is 11 layers at the bottom exposure time.
+    REQUIRE(read_be<uint32_t>(data.data() + bottom_layers_offset) == 11);
+
+    // transition_layers is the last field of the header, after layer_content_offset and
+    // gray_scale_level, and the fade itself comes from faded_layers.
+    size_t header_size = bottom_layers_offset + 4 + 16 * 4 + 2 * 2 + 1 + 4 + 3 * 4 + 8 + 4 + 1 + 2;
+    REQUIRE(data.size() >= header_size);
+    REQUIRE(read_be<uint16_t>(data.data() + header_size - 2) == 10);
+
     // Check ending string at end of file
     REQUIRE(data.size() >= 11);
     std::string ending(reinterpret_cast<const char*>(data.data() + data.size() - 11), 11);

@@ -402,6 +402,16 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->min = 0;
     def->init_fn = init_with(0.);
 
+    def = defs.add("resin_faded_layers", typeid(int));
+    def->location = Material;
+    def->label = L("Transition layers");
+    def->option_group = ConfigItemDef::OptionGroup::Printer_General_Exposure;
+    def->category = ConfigItemDef::Category::Filament_MaterialTemperatures;
+    def->gui_type = ConfigItemDef::GUIType::spinbox;
+    def->tooltip = L("Layers over which the exposure fades from bottom to normal exposure. -1 = use the value from Supports & raft.");
+    def->min = -1;
+    def->init_fn = init_with(-1);
+
     def = defs.add("min_initial_exposure_time", typeid(double));
     def->location = Printer;
     def->label = L("Minimum initial exposure time");
