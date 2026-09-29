@@ -2,6 +2,7 @@
 #include <catch2/catch_approx.hpp>
 
 #include "Slic3r/App/Plater/SlaHeightBandMeshes.hpp"
+#include "Slic3r/App/Scene/Clipper.hpp"
 #include "Slic3r/Biz/Algorithms/ModelObject.hpp"
 #include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
 #include "Slic3r/Biz/SLAObjectCache.hpp"
@@ -14,6 +15,8 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+namespace Scene = Slic3r::App::Scene;
 
 using namespace Slic3r;
 using namespace Slic3r::App::Plater;
