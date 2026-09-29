@@ -39,7 +39,8 @@ std::string ConfigItemDef::translate_category(Category category, const PrinterTe
     case ConfigItemDef::Category::Print_CustomGCode:
         return L("Custom G-code");
     case ConfigItemDef::Category::Print_Pad:
-        return L("Pad");
+        // Only the SLA raft settings live in this category, and for SLA it is a raft.
+        return pt == PrinterTechnology::SLA ? L("Raft") : L("Pad");
     case ConfigItemDef::Category::Print_Hollowing:
         return L("Hollowing");
     case ConfigItemDef::Category::Print_OutputOptions:
@@ -209,7 +210,8 @@ std::string ConfigItemDef::translate_option_group(OptionGroup option_group)
     case ConfigItemDef::OptionGroup::Print_PrecisionSlicing_ScriptSubstitutions:
         return L("Scripts & Substitutions");
     case ConfigItemDef::OptionGroup::Print_Pad_Pad:
-        return L("Pad");
+        // As above, this option group is only used by the SLA raft settings.
+        return L("Raft");
     case ConfigItemDef::OptionGroup::Print_Hollowing_Hollowing:
         return L("Hollowing");
     case ConfigItemDef::OptionGroup::Print_OutputOptions_OutputFile:

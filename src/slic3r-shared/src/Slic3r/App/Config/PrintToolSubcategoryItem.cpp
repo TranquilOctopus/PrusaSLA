@@ -2,6 +2,7 @@
 
 #include <Slic3r/Domain/Config.hpp>
 
+#include "Slic3r/App/SlaRaftSettings.hpp"
 #include "Slic3r/App/Yoga/Text.hpp"
 #include "Slic3r/App/Imgui/ImguiExtension.hpp"
 
@@ -23,6 +24,7 @@ PrintToolSubcategoryItem::PrintToolSubcategoryItem(
     Biz::DataObserver<Biz::PrintToolItem>(index, data),
     m_cbi(cbi),
     m_cbi_setter(cbi_setter),
+    m_project_interactor(project_interactor),
     m_rows_filter_list(std::make_shared<Biz::ObservableListSortFilter<Biz::PrintToolItem>>())
 {
     set_object_name("PrintToolSubcategoryItem");
@@ -44,7 +46,9 @@ PrintToolSubcategoryItem::PrintToolSubcategoryItem(
         [this](const Biz::PrintToolItem& item) -> bool
         {
             return item.print_item->def().option_group == m_option_group
-                && item.print_item->def().category == m_category;
+                && item.print_item->def().category == m_category
+                // The raft type decides which raft knobs apply; the rest are not raft settings.
+                && raft_setting_visible(m_project_interactor, item.name);
         }
     );
     // also group by row_group

@@ -576,6 +576,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft wall thickness");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
+    def->order = 2; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("The thickness of the raft walls.");
     def->units = {L("mm")};
@@ -589,8 +590,9 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft height");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
+    def->order = 1; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
-    def->tooltip = L("The height of the raft cavity. Set to zero to disable the cavity.");
+    def->tooltip = L("The height of the cavity in the raft that the object sits in. Set to zero for a flat raft with no cavity.");
     def->units = {L("mm")};
     def->min = 0;
     def->max = 30;
@@ -602,8 +604,9 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft expansion");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
+    def->order = 3; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
-    def->tooltip = L("How far the raft extends around the object geometry. The Skate raft type uses half of this value.");
+    def->tooltip = L("How far the raft reaches around the object. Must be wide enough for the raft to hold the object it carries.");
     def->units = {L("mm")};
     def->min = 0;
     def->max = 30;
@@ -615,11 +618,12 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Max merge distance");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
+    def->order = 5; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
-     def->tooltip = L("Some objects can get along with a few smaller pads "
+     def->tooltip = L("Some objects can get along with a few smaller rafts "
                       "instead of a single big one. This parameter defines "
-                      "how far the center of two smaller pads should be. If they"
-                      "are closer, they will get merged into one pad.");
+                      "how far the center of two smaller rafts should be. If they"
+                      "are closer, they will get merged into one raft.");
     def->units = {L("mm")};
     def->min = 0;
     def->init_fn = init_with(50.);
@@ -639,8 +643,9 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft slope");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
+    def->order = 4; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
-    def->tooltip = L("The slope of the raft wall relative to the bed plane. 90 degrees means straight walls. The Skate raft type uses 70 degrees instead of this value.");
+    def->tooltip = L("The slope of the raft wall relative to the build plate. 90 degrees means straight walls; a lower value makes the raft wider at the bottom.");
     def->units = {L("°")};
     def->min = 45;
     def->max = 90;
@@ -663,8 +668,9 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft around object everywhere");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
+    def->order = 7; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::checkbox;
-    def->tooltip = L("Force raft around object everywhere (overrides elevation-based logic).");
+    def->tooltip = L("Make the raft follow the object everywhere, even where the supports do not reach.");
     def->init_fn = init_with(false);
 
     def = defs.add("pad_object_gap", typeid(double));
@@ -673,8 +679,9 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft gap to object");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
+    def->order = 6; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
-    def->tooltip  = L("The gap between the object bottom and the generated raft.");
+    def->tooltip  = L("The gap left between the object bottom and the raft that carries it.");
     def->units = {L("mm")};
     def->min = 0;
     def->max = 10;
@@ -683,11 +690,12 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def = defs.add("pad_object_connector_stride", typeid(double));
     def->location = Print;
     def->overrides_in = Locations{ Object };
-    def->label = L("Pad object connector stride");
+    def->label = L("Raft object connector stride");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
+    def->order = 8; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
-    def->tooltip = L("Distance between two connector sticks which connect the object and the generated pad.");
+    def->tooltip = L("Distance between two connector sticks which tie the object to the raft.");
     def->units = {L("mm")};
     def->min = 0;
     def->init_fn = init_with(10.);
@@ -695,11 +703,12 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def = defs.add("pad_object_connector_width", typeid(double));
     def->location = Print;
     def->overrides_in = Locations{ Object };
-    def->label = L("Pad object connector width");
+    def->label = L("Raft object connector width");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
+    def->order = 9; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
-    def->tooltip  = L("Width of the connector sticks which connect the object and the generated pad.");
+    def->tooltip  = L("Width of the connector sticks which tie the object to the raft.");
     def->units = {L("mm")};
     def->min = 0;
     def->init_fn = init_with(0.5);
@@ -707,12 +716,13 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def = defs.add("pad_object_connector_penetration", typeid(double));
     def->location = Print;
     def->overrides_in = Locations{ Object };
-    def->label = L("Pad object connector penetration");
+    def->label = L("Raft object connector penetration");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
+    def->order = 10; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip  = L(
-        "How much should the tiny connectors penetrate into the model body.");
+        "How far the tiny connectors that tie the object to the raft reach into the object body.");
     def->units = {L("mm")};
     def->min = 0;
     def->init_fn = init_with(0.3);
@@ -723,8 +733,10 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft type");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
+    // The raft type decides which of the knobs below apply, so it goes first in the group.
+    def->order = 0;
     def->gui_type = ConfigItemDef::GUIType::combobox;
-    def->tooltip = L("Select the raft type. None prints no raft, Full plate prints a raft over the whole build plate, Around object prints a raft that only the object sits on, and Skate is an around object raft with half the expansion and a 70 degree wall slope. The raft type decides whether a raft is printed and whether it goes around the object; it does not change the height, wall thickness or gap to object.");
+    def->tooltip = L("The shape of the raft under the object. None prints no raft, Full plate prints a raft over the whole build plate, Around object prints a raft that only the object sits on, and Skate is an around object raft with half the expansion and a 70 degree wall slope. The type decides which of the settings below apply, and it shows only those.");
     def->init_fn = init_with(
         sla::RaftType::Full,
         {{int(sla::RaftType::None), "none", L("None")},
