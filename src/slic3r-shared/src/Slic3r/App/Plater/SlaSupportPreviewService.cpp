@@ -9,6 +9,7 @@
 #include "Slic3r/App/Scene/Node.hpp"
 #include "Slic3r/App/Scene/NodeBuilder.hpp"
 #include "Slic3r/App/Scene/Scene.hpp"
+#include "Slic3r/App/Theme.hpp"
 #include "Slic3r/App/ThemeTypes.hpp"
 #include "Slic3r/Biz/Platform/PlatformServices.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
@@ -18,6 +19,7 @@
 #include "Slic3r/Domain/ModelInstance.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
 #include "Slic3r/Domain/Project.hpp"
+#include "Slic3r/Domain/SlicingId.hpp"
 #include "Slic3r/Domain/Transformation.hpp"
 
 #include <fmt/format.h>
