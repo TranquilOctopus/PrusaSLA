@@ -67,6 +67,45 @@ std::vector<ExPolygons> make_shifted_square(double size_mm, double shift_mm)
     return layers;
 }
 
+// Create layers with a widening square stack (each layer slightly larger, same center).
+// No islands expected since each layer overlaps the previous.
+std::vector<ExPolygons> make_widening_stack(int num_layers, double base_size_mm, double growth_per_layer_mm)
+{
+    std::vector<ExPolygons> layers(num_layers);
+    for (int i = 0; i < num_layers; ++i) {
+        double size = base_size_mm + i * growth_per_layer_mm;
+        layers[i].push_back(make_square(size));
+    }
+    return layers;
+}
+
+// Create layers with a square on layers 0-2 and a separate square starting on layer 3.
+std::vector<ExPolygons> make_separate_square_on_layer3(double size_mm)
+{
+    std::vector<ExPolygons> layers(4);
+    // Base square at origin on layers 0-2
+    for (int i = 0; i < 3; ++i) {
+        layers[i].push_back(make_square(size_mm, 0.0, 0.0));
+    }
+    // Separate square at (50, 50) starting on layer 3
+    layers[3].push_back(make_square(size_mm, 50.0, 50.0));
+    return layers;
+}
+
+// Create layers with a square on layers 0-2, and on layer 3 the same square plus a larger overlapping square.
+std::vector<ExPolygons> make_overlapping_square_on_layer3(double size_mm)
+{
+    std::vector<ExPolygons> layers(4);
+    // Base square at origin on layers 0-2
+    for (int i = 0; i < 3; ++i) {
+        layers[i].push_back(make_square(size_mm, 0.0, 0.0));
+    }
+    // On layer 3: same square + larger overlapping square (same center)
+    layers[3].push_back(make_square(size_mm, 0.0, 0.0));
+    layers[3].push_back(make_square(size_mm * 2.0, 0.0, 0.0));
+    return layers;
+}
+
 // Create layers with a small speck below min_area.
 std::vector<ExPolygons> make_small_speck(double speck_size_mm, double base_size_mm)
 {
@@ -105,23 +144,47 @@ TEST_CASE("IslandDetection: square appearing only in layer 1 is detected as isla
     CHECK(hits[0].centroid.y() == Approx(0.0).margin(0.01));
 }
 
-TEST_CASE("IslandDetection: shifted square with overhang detected if large enough", "[SLA][IslandDetection]")
+TEST_CASE("IslandDetection: shifted square with overlap is NOT an island", "[SLA][IslandDetection]")
 {
-    // 10mm square shifted by 6mm -> 4mm overlap, 6mm overhang = 60 mm² unsupported
+    // 10mm square shifted by 6mm -> 4mm overlap, but still overlaps so NOT an island
     auto layers = make_shifted_square(10.0, 6.0);
     auto hits = SLA::detect_islands(layers, 0.05);
-    REQUIRE(hits.size() == 1);
-    CHECK(hits[0].layer_index == 1);
-    // Overhang area: 10mm * 6mm = 60 mm² (rectangle)
-    CHECK(hits[0].area_mm2 == Approx(60.0).margin(1.0));
+    REQUIRE(hits.empty());
 }
 
-TEST_CASE("IslandDetection: shifted square with small overhang filtered by min_area", "[SLA][IslandDetection]")
+TEST_CASE("IslandDetection: shifted square with small overlap is NOT an island", "[SLA][IslandDetection]")
 {
-    // 10mm square shifted by 1mm -> 9mm overlap, 1mm overhang = 10 mm² unsupported
-    // But set min_area to 20 mm² so it should be filtered
+    // 10mm square shifted by 1mm -> 9mm overlap, still overlaps so NOT an island
     auto layers = make_shifted_square(10.0, 1.0);
     auto hits = SLA::detect_islands(layers, 20.0);
+    REQUIRE(hits.empty());
+}
+
+TEST_CASE("IslandDetection: widening stack (cone) produces no islands", "[SLA][IslandDetection]")
+{
+    // 5 layers, each 1mm larger than previous, same center -> no islands
+    auto layers = make_widening_stack(5, 10.0, 1.0);
+    auto hits = SLA::detect_islands(layers, 0.05);
+    REQUIRE(hits.empty());
+}
+
+TEST_CASE("IslandDetection: separate square starting on layer 3 is detected as island", "[SLA][IslandDetection]")
+{
+    // Base square on layers 0-2, separate square at (50,50) starts on layer 3
+    auto layers = make_separate_square_on_layer3(10.0); // 10x10 = 100 mm²
+    auto hits = SLA::detect_islands(layers, 0.05);
+    REQUIRE(hits.size() == 1);
+    CHECK(hits[0].layer_index == 3);
+    CHECK(hits[0].area_mm2 == Approx(100.0).margin(0.01));
+    CHECK(hits[0].centroid.x() == Approx(50.0).margin(0.01));
+    CHECK(hits[0].centroid.y() == Approx(50.0).margin(0.01));
+}
+
+TEST_CASE("IslandDetection: overlapping larger square on layer 3 produces no islands", "[SLA][IslandDetection]")
+{
+    // Base square on layers 0-2, layer 3 has same square + larger overlapping square
+    auto layers = make_overlapping_square_on_layer3(10.0);
+    auto hits = SLA::detect_islands(layers, 0.05);
     REQUIRE(hits.empty());
 }
 

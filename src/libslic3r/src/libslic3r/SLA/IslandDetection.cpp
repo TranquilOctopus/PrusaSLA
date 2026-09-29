@@ -15,6 +15,9 @@ std::vector<IslandHit> detect_islands(const std::vector<Domain::ExPolygons>& lay
     if (layers.size() < 2)
         return hits;
 
+    constexpr double sf = Biz::Algorithms::Scaling::SCALING_FACTOR;
+    constexpr double epsilon_area = 1e-6 * sf * sf; // 1e-6 mm² in scaled units
+
     for (size_t layer_idx = 1; layer_idx < layers.size(); ++layer_idx) {
         const Domain::ExPolygons& current_layer = layers[layer_idx];
         const Domain::ExPolygons& prev_layer = layers[layer_idx - 1];
@@ -22,26 +25,30 @@ std::vector<IslandHit> detect_islands(const std::vector<Domain::ExPolygons>& lay
         if (current_layer.empty())
             continue;
 
-        // Subtract previous layer's polygons from current layer's polygons
-        // Islands are regions in current layer that have no overlap with previous layer
-        Domain::ExPolygons unsupported = diff_ex(current_layer, prev_layer);
+        for (const Domain::ExPolygon& region : current_layer) {
+            // Check if this region has any overlap with the previous layer
+            Domain::ExPolygons intersection = intersection_ex(Domain::ExPolygons{region}, prev_layer);
 
-        for (const Domain::ExPolygon& island : unsupported) {
-            double area = Biz::Algorithms::ExPolygon::area(island);
-            // Areas come in scaled units: multiply by the factor twice to get mm2.
-            constexpr double sf = Biz::Algorithms::Scaling::SCALING_FACTOR;
-            double area_mm2 = area * sf * sf;
+            double overlap_area = 0.0;
+            for (const Domain::ExPolygon& poly : intersection) {
+                overlap_area += Biz::Algorithms::ExPolygon::area(poly);
+            }
 
-            if (area_mm2 >= min_area_mm2) {
-                // Compute centroid of the island
-                Domain::Point centroid_point = island.contour.centroid();
-                Domain::Vec2d centroid(unscaled<double>(centroid_point.x()), unscaled<double>(centroid_point.y()));
+            // If no meaningful overlap, this region is an island
+            if (overlap_area <= epsilon_area) {
+                double area = Biz::Algorithms::ExPolygon::area(region);
+                double area_mm2 = area * sf * sf;
 
-                hits.push_back(IslandHit{
-                    .layer_index = layer_idx,
-                    .centroid = centroid,
-                    .area_mm2 = area_mm2
-                });
+                if (area_mm2 >= min_area_mm2) {
+                    Domain::Point centroid_point = region.contour.centroid();
+                    Domain::Vec2d centroid(unscaled<double>(centroid_point.x()), unscaled<double>(centroid_point.y()));
+
+                    hits.push_back(IslandHit{
+                        .layer_index = layer_idx,
+                        .centroid = centroid,
+                        .area_mm2 = area_mm2
+                    });
+                }
             }
         }
     }
