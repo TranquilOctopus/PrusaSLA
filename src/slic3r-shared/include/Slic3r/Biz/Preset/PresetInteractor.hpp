@@ -114,6 +114,19 @@ public:
         Domain::Preset::PresetKind kind,
         size_t slot_index
     );
+    /**
+     * @brief Save the currently selected preset as a new user preset under a name the caller picked,
+     * without asking for one.
+     * This is save_user_preset() minus the name dialog, for callers that already know the name (the
+     * resin profile importer, the CLI). The new preset inherits from the system preset the selected
+     * one came from and carries only the values that differ from it, like a preset saved from the
+     * material settings dialog.
+     */
+    void save_selected_preset_as(
+        Domain::Preset::PresetKind kind,
+        size_t slot_index,
+        std::string new_name
+    );
     void save_user_tool_print_presets();
 
     const PresetInteractorConfigContainerContext& config_container_context(

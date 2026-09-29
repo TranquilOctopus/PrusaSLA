@@ -578,6 +578,18 @@ void PresetInteractor::save_user_preset(
     save_user_preset_internal(kind, slot_index, {}, std::move(new_name), bag);
 }
 
+void PresetInteractor::save_selected_preset_as(PresetKind kind, size_t slot_index, std::string new_name)
+{
+    if (new_name.empty()) {
+        return;
+    }
+    InvokeLaterBag bag;
+    // The same bookkeeping save_user_preset() does before it asks for a name: the ids of what is
+    // selected now are what the save diffs the new preset against and writes into its vendor.
+    m_unsaved_changes_selected_ids = from_selected_preset(selected_printer_preset());
+    save_user_preset_internal(kind, slot_index, {}, std::move(new_name), bag);
+}
+
 void PresetInteractor::save_user_tool_print_presets()
 {
     InvokeLaterBag bag;

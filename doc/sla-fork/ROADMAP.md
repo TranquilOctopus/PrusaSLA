@@ -331,7 +331,27 @@ Unit and meaning questions marked "verify" get settled in M3.1 by comparing a sa
   stay Unknown until M3.2 settles them. 15 table-driven cases in `ResinProfileMapperTests.cpp` cover every
   row for both classes, the clamping, the conversions, the unknown key, the duplicate spellings and
   `printer_class_from_config`. Not built: this session was told not to compile, so the tests are unrun.
-- [ ] **M3.7** `ResinProfileImportInteractor`: read, map, pick a base material, save as a user preset, handle name collisions, batch import a folder, and set `material_source_note`. Test with `slic3r-shared-tests` preset fixtures. · M · needs M3.4, M3.5
+- [x] **M3.7** `ResinProfileImportInteractor`: read, map, pick a base material, save as a user preset, handle name collisions, batch import a folder, and set `material_source_note`. Test with `slic3r-shared-tests` preset fixtures. · M · needs M3.4, M3.5
+  Result: `ResinProfileImportInteractor` (Biz layer) runs the whole flow per file: registry reads it (size
+  cap and sniffing, so nothing is evaluated), the base is a **system** resin preset of the target
+  printer (a user or runtime preset would give the new one nothing to inherit), the mapper fills the
+  material values plus `material_source_note` = `<source app> <file name>, imported <date>`, and the
+  preset is saved through `PresetInteractor::save_selected_preset_as()`, the new non-interactive half of
+  `save_user_preset()` added here: select the base into the container, write the mapped values on top
+  of it, save. So the user preset inherits the base (`inherits` = its id) and carries only the imported
+  values, and it reloads with the bundle like any preset saved from the material settings dialog. The
+  name comes from the profile, sanitized (it becomes a file name, so `:`/`/` and the other illegal
+  characters become `_`) and made unique through `NameValidator`, because saving under a taken name
+  would *replace* that preset instead of adding one. `import_folder` reads every regular file sorted by
+  name, one `ResinImportResult` per file, a file that fails only fills in its own result, and the file
+  count is capped. A dry run reports the name it would use and writes nothing. The printer class is
+  decided from the base resin (a preset that turns `use_tilt` off lifts the plate) and otherwise from
+  `printer_model`, because a `ConfigView` always carries `use_tilt` with its tilt-on default and
+  `printer_class_from_config()` would therefore call every printer a tilt printer; worth fixing there.
+  Tests import a hand-written `.cfg` for the app bundle's Photon Mono M5 (the test data bundle has no
+  generic MSLA printer) and check the user preset after a reload, the ` (2)` collision, the base picked
+  by name, a dry run writing nothing, a folder with one good and one unreadable file, and a target
+  that is not selected. Not built: this session was told not to compile, so the tests are unrun.
 - [ ] **M3.8** `SlicedArchiveResinReader`: read material settings from `.sl1`/`.sl1s` `config.ini`. Register readers for other archive formats as M5 adds them. · M · needs M3.3, M0.10
 - [ ] **M3.9** CLI `--import-resin-profile` with `--dry-run` and a JSON `--report` option. · S · needs M3.7
   Done when: running it on the fixtures produces a stable JSON report, checked by a test.
