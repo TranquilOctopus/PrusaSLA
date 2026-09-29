@@ -55,6 +55,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Plater/SlaUnsupportedNotification.cpp
         include/Slic3r/App/Plater/SlaIssueAnalysis.hpp
         src/Slic3r/App/Plater/SlaIssueAnalysis.cpp
+        include/Slic3r/App/Plater/SlaHeightBand.hpp
+        src/Slic3r/App/Plater/SlaHeightBand.cpp
         include/Slic3r/App/Plater/SimplifyDialog.hpp
         src/Slic3r/App/Plater/SimplifyDialog.cpp
         include/Slic3r/App/Plater/ArrangeDialog.hpp
@@ -568,6 +570,8 @@ set(SLIC3R_SHARED_FILES
         include/Slic3r/App/Scene/ClipperPresenter.hpp
         include/Slic3r/App/Scene/ClipperPresenterHelper.hpp
         src/Slic3r/App/Scene/ClipperPresenter.cpp
+        include/Slic3r/App/Scene/HeightBand.hpp
+        src/Slic3r/App/Scene/HeightBand.cpp
         include/Slic3r/App/Scene/CameraTargetAnimation.hpp
         src/Slic3r/App/Scene/CameraTargetAnimation.cpp
         include/Slic3r/App/Scene/ModelGeometryProvider.hpp
@@ -1585,6 +1589,8 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/App/Scene/Node.cpp
             test/Slic3r/App/Scene/Ray.cpp
         test/Slic3r/App/Scene/MouseBindingScheme.cpp
+
+            test/Slic3r/App/Scene/HeightBandTests.cpp
 
             test/Slic3r/App/Plater/SurfaceMesh.cpp
 

@@ -94,7 +94,7 @@ void Clipper::release()
 
 void Clipper::recalculate_object_clippers()
 {
-    if (m_clp_ratio == 0.)
+    if (m_clp_ratio == 0. || !m_clp || !m_selected_instance)
         return;
     const Transformation inst_trafo = m_selected_instance->get_transformation();
 
@@ -209,7 +209,23 @@ void Clipper::set_limiting_plane(const Vec3d& plane_normal, const double plane_o
 const Biz::ClippingPlane& Clipper::get_clipping_plane(bool ignore_hide_clipped) const
 {
     static const Biz::ClippingPlane no_clip = Biz::ClippingPlane::ClipsNothing();
+    if (!m_clp)
+        return no_clip;
     return (ignore_hide_clipped || m_hide_clipped) ? *m_clp : no_clip;
+}
+
+void Clipper::set_height_band(const HeightBand& band)
+{
+    m_height_band = band;
+
+    if (m_height_band.active) {
+        // The clipper holds a single plane, so the lower limit goes there - and it caps its own cut face.
+        m_clp.reset(new Biz::ClippingPlane(Vec3d::UnitZ(), m_height_band.z_min));
+        // get_clipping_plane_data() only forwards the plane to the shaders for a non zero ratio.
+        m_clp_ratio = 1.;
+    }
+
+    recalculate_object_clippers();
 }
 
 void Clipper::set_behavior(bool hide_clipped, bool fill_cut, double contour_width)
