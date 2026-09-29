@@ -1,4 +1,5 @@
 #include "Slic3r/Biz/FileLoadingLogic.hpp"
+#include "Slic3r/Biz/ResultExport/SLA/SL1Import.hpp"
 #include "Slic3r/Biz/Format/STL.hpp"
 #include "Slic3r/Biz/Format/SVG.hpp"
 #include "Slic3r/Biz/Format/OBJ.hpp"
@@ -75,6 +76,15 @@ static bool has_zero_volume(const TriangleMeshStats& stats)
     return stats.volume < zero_volume //
         && stats.volume
         >= 0.f; // temporary check for the non-legacy project files, where volume is incorrect
+}
+
+// A sliced print of an SLA printer, in the zip based archive of the printer and the
+// slicer. The geometry is reconstructed from the layer images of the archive.
+static bool is_sl1_archive(const boost::filesystem::path& input_file_path)
+{
+    const std::string path_str = input_file_path.string();
+    return boost::algorithm::iends_with(path_str, ".sl1") ||
+           boost::algorithm::iends_with(path_str, ".sl1s");
 }
 
 static void convert_from_imperial_units(TriangleMesh& mesh)
@@ -708,6 +718,7 @@ static tl::expected<ReturnData, FileLoadError> read_data_from_file(
     const bool is_svg = boost::algorithm::iends_with(path_str, ".svg");
     const bool is_step = boost::algorithm::iends_with(path_str, ".step") ||
                          boost::algorithm::iends_with(path_str, ".stp");
+    const bool is_sl1  = is_sl1_archive(input_file_path);
     if (is_stl || is_obj) {
         auto loaded_mesh = is_stl ? Biz::load_stl(path_str) : Biz::load_obj(path_str);
         if (loaded_mesh) {
@@ -802,10 +813,28 @@ static tl::expected<ReturnData, FileLoadError> read_data_from_file(
         }
         ret.model = std::move(result.value());
         return ret;
+    } else if (is_sl1) {
+        // The archive carries the print settings of the print it was written for, but only
+        // the geometry goes onto the plate for now. Applying the settings to the presets is
+        // a step of its own.
+        auto imported = PrintHost::Sla::import_sl1_archive(input_file_path);
+        if (!imported) {
+            return tl::make_unexpected(FileLoadError::error(imported.error()));
+        }
+        if (imported.value().mesh.empty()) {
+            return tl::make_unexpected(FileLoadError::error(
+                fmt::vformat(
+                    _u8L("Model from {} couldn't be read because it's empty"),
+                    fmt::make_format_args(ret.file_name)
+                )
+            ));
+        }
+        ret.mesh = std::move(imported.value().mesh);
+        return ret;
     }
 
     return tl::make_unexpected(FileLoadError::error(_u8L(
-        "Unknown file format. Input file must have .stl, .obj, .step/.stp, .svg, .amf(.xml) or extension .3mf(.zip)."
+        "Unknown file format. Input file must have .stl, .obj, .step/.stp, .svg, .amf(.xml), .sl1, .sl1s or extension .3mf(.zip)."
     )));
 }
 
@@ -838,13 +867,18 @@ static tl::expected<ReturnData, FileLoadError> read_and_process_file(
                 )
             ));
         }
-        process_mesh(
-            mesh,
-            file_name,
-            answer_convert_from_meters,
-            answer_convert_from_imperial_units,
-            dialog_provider
-        );
+        // The geometry of an SL1 archive is in millimeters by construction, its size comes
+        // from the display size in the profile of the archive. The unit guessing of the mesh
+        // formats must not offer to scale it.
+        if (!is_sl1_archive(input_file_path)) {
+            process_mesh(
+                mesh,
+                file_name,
+                answer_convert_from_meters,
+                answer_convert_from_imperial_units,
+                dialog_provider
+            );
+        }
     } else {
         return tl::make_unexpected(FileLoadError::error(_u8L("There is no data for either the mesh or the model.")));
     }
@@ -1225,7 +1259,8 @@ const std::vector<std::string>& get_import_extensions()
         ".stl",
         ".obj",
         ".svg",
-        ".step", ".stp"
+        ".step", ".stp",
+        ".sl1", ".sl1s"
     };
     return extensions;
 }
