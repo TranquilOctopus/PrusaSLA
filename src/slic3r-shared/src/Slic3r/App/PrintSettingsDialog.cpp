@@ -70,8 +70,14 @@ PrintSettingsDialog::PrintSettingsDialog(
     };
 
     m_tool_print_categorizer->set_filter_fn(
-        [](const Biz::PrintToolItem& item)
-        { return item.print_item->def().category != Domain::ConfigItemDef::Category::Hidden; }
+        [this](const Biz::PrintToolItem& item)
+        {
+            if (item.print_item->def().category == Domain::ConfigItemDef::Category::Hidden) {
+                return false;
+            }
+            return item.name != "layer_height"
+                || !sla_resin_sets_layer_height(m_project_interactor);
+        }
     );
     m_tool_print_categorizer->set_group_by_fn(group_by_fn);
     m_tool_print_categorizer->set_sort_fn(
@@ -336,6 +342,10 @@ void PrintSettingsDialog::on_preset_selection_changed(
     if (type == Biz::Preset::PresetItemType::PrinterPreset) {
         update_print_tab_label();
     }
+    if (type == Biz::Preset::PresetItemType::MaterialPreset) {
+        // The selected resin may bring its own layer height, which hides the print layer height.
+        m_tool_print_categorizer->invalidate();
+    }
 }
 
 void PrintSettingsDialog::on_preset_value_changed(
@@ -354,6 +364,12 @@ void PrintSettingsDialog::on_preset_value_changed(
     } else if (std::holds_alternative<Domain::SLAConfigLocation>(item.location())) {
         const auto location{std::get<Domain::SLAConfigLocation>(item.location())};
         if (location != Domain::SLAConfigLocation::Print) {
+            if (location == Domain::SLAConfigLocation::Material
+                && item.def().name == "resin_layer_height")
+            {
+                // The resin layer height decides whether the print layer height is shown.
+                m_tool_print_categorizer->invalidate();
+            }
             return;
         }
     }

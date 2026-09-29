@@ -1,7 +1,7 @@
 kind: vendor
 id: CommunitySLA
 name: Community SLA
-version: 1.0.2
+version: 1.0.3
 features:
   printer: {}
   tool: {}
