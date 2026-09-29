@@ -1,8 +1,12 @@
 #include "Slic3r/Biz/ResinProfile/ResinProfileReaderRegistry.hpp"
 
+#include "Slic3r/Biz/ResinProfile/ChituboxCfgReader.hpp"
+#include "Slic3r/Biz/ResinProfile/SlicedArchiveResinReader.hpp"
+
 #include <boost/filesystem/fstream.hpp>
 #include <boost/filesystem/operations.hpp>
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -44,6 +48,14 @@ tl::expected<ForeignResinProfile, std::string> ResinProfileReaderRegistry::read_
     }
 
     return tl::make_unexpected("Unrecognized resin profile format");
+}
+
+void register_resin_profile_readers(ResinProfileReaderRegistry& registry)
+{
+    registry.register_reader(std::make_unique<ChituboxCfgReader>());
+    // The .sl1 and .sl1s of every Prusa machine, and later the archives of the other
+    // writers of M5.3.
+    registry.register_reader(std::make_unique<SlicedArchiveResinReader>());
 }
 
 } // namespace Slic3r::Biz::ResinProfile
