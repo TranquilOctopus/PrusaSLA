@@ -28,17 +28,22 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         CHECK(def->category == ConfigItemDef::Category::Print_Pad);
         CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
         CHECK(def->label == "Raft type");
-        CHECK(def->tooltip.find("controls the raft height") != std::string::npos);
+        // The raft type turns the raft on or off and decides whether it goes around the object.
+        CHECK(def->tooltip.find("decides whether a raft is printed") != std::string::npos);
+        // Skate is around object with half the expansion and a 70 degree wall.
+        CHECK(def->tooltip.find("half the expansion and a 70 degree wall slope") != std::string::npos);
+        // It does NOT set the height, wall thickness or gap, those stay the user's values.
+        CHECK(def->tooltip.find("does not change the height, wall thickness or gap") != std::string::npos);
     }
 
-    // Check pad_enable (now "Use raft")
+    // pad_enable ("Use raft") is replaced by raft_type, so it is hidden, not deleted.
     {
         const ConfigItemDef* def = find_def("pad_enable");
         REQUIRE(def != nullptr);
-        CHECK(def->category == ConfigItemDef::Category::Print_Pad);
+        CHECK(def->category == ConfigItemDef::Category::Hidden);
         CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
         CHECK(def->label == "Use raft");
-        CHECK(def->tooltip.find("automatically enabled") != std::string::npos);
+        CHECK(def->tooltip.find("The raft type decides this") != std::string::npos);
     }
 
     // Check pad_wall_thickness (now "Raft wall thickness")
@@ -48,7 +53,8 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         CHECK(def->category == ConfigItemDef::Category::Print_Pad);
         CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
         CHECK(def->label == "Raft wall thickness");
-        CHECK(def->tooltip.find("set by the selected raft type") != std::string::npos);
+        // The raft type passes the wall thickness through, it does not set it.
+        CHECK(def->tooltip.find("set by the selected raft type") == std::string::npos);
     }
 
     // Check pad_wall_height (now "Raft height")
@@ -58,7 +64,7 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         CHECK(def->category == ConfigItemDef::Category::Print_Pad);
         CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
         CHECK(def->label == "Raft height");
-        CHECK(def->tooltip.find("set by the selected raft type") != std::string::npos);
+        CHECK(def->tooltip.find("set by the selected raft type") == std::string::npos);
     }
 
     // Check pad_brim_size (now "Raft expansion")
@@ -68,8 +74,9 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         CHECK(def->category == ConfigItemDef::Category::Print_Pad);
         CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
         CHECK(def->label == "Raft expansion");
-        CHECK(def->tooltip.find("set by the selected raft type") != std::string::npos);
-        CHECK(def->tooltip.find("Skate uses half") != std::string::npos);
+        CHECK(def->tooltip.find("set by the selected raft type") == std::string::npos);
+        // Only Skate overrides it, with half the value.
+        CHECK(def->tooltip.find("Skate raft type uses half of this value") != std::string::npos);
     }
 
     // Check pad_wall_slope (now "Raft slope")
@@ -79,8 +86,8 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         CHECK(def->category == ConfigItemDef::Category::Print_Pad);
         CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
         CHECK(def->label == "Raft slope");
-        CHECK(def->tooltip.find("set by the selected raft type") != std::string::npos);
-        CHECK(def->tooltip.find("Skate uses 70 degrees") != std::string::npos);
+        CHECK(def->tooltip.find("set by the selected raft type") == std::string::npos);
+        CHECK(def->tooltip.find("Skate raft type uses 70 degrees") != std::string::npos);
     }
 
     // Check pad_object_gap (now "Raft gap to object")
@@ -90,17 +97,18 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         CHECK(def->category == ConfigItemDef::Category::Print_Pad);
         CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
         CHECK(def->label == "Raft gap to object");
-        CHECK(def->tooltip.find("set by the selected raft type") != std::string::npos);
+        CHECK(def->tooltip.find("set by the selected raft type") == std::string::npos);
     }
 
-    // Check pad_around_object (now "Raft around object")
+    // pad_around_object ("Raft around object") is replaced by raft_type, so it is hidden.
     {
         const ConfigItemDef* def = find_def("pad_around_object");
         REQUIRE(def != nullptr);
-        CHECK(def->category == ConfigItemDef::Category::Print_Pad);
+        CHECK(def->category == ConfigItemDef::Category::Hidden);
         CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
         CHECK(def->label == "Raft around object");
-        CHECK(def->tooltip.find("enabled automatically for Around Object and Skate") != std::string::npos);
+        CHECK(def->tooltip.find("The raft type decides this") != std::string::npos);
+        CHECK(def->tooltip.find("Around object and Skate") != std::string::npos);
     }
 
     // Check pad_around_object_everywhere (now "Raft around object everywhere")

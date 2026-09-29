@@ -116,7 +116,7 @@ SupportToolTree build_support_tree_for_tool(const Domain::ModelObject& object,
 
         // Create pad if enabled
         std::shared_ptr<const Domain::TriangleMesh> pad_mesh;
-        if (cfg.get<bool>("pad_enable")) {
+        if (is_pad_enabled(cfg)) {
             if (stop && stop()) return {tree_mesh, nullptr};
 
             const indexed_triangle_set empty_its;
@@ -237,7 +237,7 @@ double support_tool_elevation(const Domain::FullConfigSLAPtr& full_config,
     bool supports_enable = cfg.get<bool>("supports_enable");
     double ret = supports_enable ? cfg.get<double>("support_object_elevation") : 0.;
 
-    if (supports_enable && cfg.get<bool>("pad_enable")) {
+    if (supports_enable && is_pad_enabled(cfg)) {
         sla::PadConfig pcfg = make_pad_cfg(cfg);
         if (!pcfg.embed_object.enabled) {
             ret += pcfg.required_elevation();

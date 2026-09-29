@@ -993,7 +993,7 @@ void SLAPrint::Steps::generate_pad(SLAPrintObject& po)
     // and before the supports had been sliced. (or the slicing has to be
     // repeated)
     using Slic3r::Biz::Slicing::Sla::Object;
-    if (!po.m_config.get<bool>("pad_enable")) {
+    if (!is_pad_enabled(po.m_config)) {
         po.m_preview->pad = nullptr;
         return; // pad is unwanted
     }
@@ -1035,7 +1035,7 @@ void SLAPrint::Steps::generate_pad(SLAPrintObject& po)
 void SLAPrint::Steps::slice_supports(SLAPrintObject &po) {
     // Don't bother if no supports and no pad is present.
     if (!po.m_config.get<bool>("supports_enable") &&
-        !po.m_config.get<bool>("pad_enable"))
+        !is_pad_enabled(po.m_config))
         return;
 
     auto heights = reserve_vector<float>(po.m_slice_index.size());

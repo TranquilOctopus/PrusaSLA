@@ -66,28 +66,59 @@ using Slic3r::Biz::Slicing::IThumbnailImageGenerator;
 using Slic3r::Biz::Slicing::SliceUntilStep;
 using Slic3r::Domain::SlicingId;
 
-bool is_zero_elevation(const SLAPrintObjectConfigView &c)
+namespace {
+// The pad values raft_type stands for, or nullopt for a config that has no raft_type
+// (or one this build does not know), where the pad_enable / pad_around_object
+// checkboxes are the only source of truth.
+std::optional<Domain::SLA::RaftPadValues> raft_values(const SLAPrintObjectConfigView &c)
 {
-    using Domain::SLA::raft_preset_to_pad_values;
-    using Domain::sla::RaftType;
+    if (c.values().count("raft_type") == 0)
+        return std::nullopt;
 
-    // Check if raft_type setting exists (for backward compatibility)
-    const bool has_raft_type = c.values().count("raft_type") > 0;
-    if (has_raft_type) {
-        auto raft_type = c.get<RaftType>("raft_type");
-        auto vals = raft_preset_to_pad_values(
-            raft_type,
-            c.get<double>("pad_wall_height"),
-            c.get<double>("pad_wall_thickness"),
-            c.get<double>("pad_brim_size"),
-            c.get<double>("pad_wall_slope"),
-            c.get<double>("pad_object_gap")
-        );
-        return vals.pad_enable && vals.pad_around_object;
+    const Domain::sla::RaftType raft_type = c.get<Domain::sla::RaftType>("raft_type");
+    switch (raft_type) {
+    case Domain::sla::RaftType::None:
+    case Domain::sla::RaftType::Full:
+    case Domain::sla::RaftType::AroundObject:
+    case Domain::sla::RaftType::Skate:
+        break;
+    default:
+        return std::nullopt;
     }
 
-    // Legacy behavior
-    return c.get<bool>("pad_enable") && c.get<bool>("pad_around_object");
+    return Domain::SLA::raft_preset_to_pad_values(
+        raft_type,
+        c.get<double>("pad_wall_height"),
+        c.get<double>("pad_wall_thickness"),
+        c.get<double>("pad_brim_size"),
+        c.get<double>("pad_wall_slope"),
+        c.get<double>("pad_object_gap")
+    );
+}
+} // namespace
+
+// Is a raft (pad) printed? raft_type decides, pad_enable is the legacy fallback.
+bool is_pad_enabled(const SLAPrintObjectConfigView &c)
+{
+    if (const auto vals = raft_values(c); vals)
+        return vals->pad_enable;
+
+    return c.get<bool>("pad_enable");
+}
+
+// Does the raft hug the object (zero elevation)? raft_type decides, pad_around_object
+// is the legacy fallback.
+bool is_pad_around_object(const SLAPrintObjectConfigView &c)
+{
+    if (const auto vals = raft_values(c); vals)
+        return vals->pad_around_object;
+
+    return c.get<bool>("pad_around_object");
+}
+
+bool is_zero_elevation(const SLAPrintObjectConfigView &c)
+{
+    return is_pad_enabled(c) && is_pad_around_object(c);
 }
 
 // Compile the argument for support creation from the static print config.
@@ -160,38 +191,8 @@ sla::SupportTreeConfig make_support_cfg(const SLAPrintObjectConfigView& c)
 
 sla::PadConfig::EmbedObject builtin_pad_cfg(const SLAPrintObjectConfigView& c)
 {
-    using Domain::SLA::raft_preset_to_pad_values;
-    using Domain::SLA::RaftPadValues;
-    using Domain::sla::RaftType;
-
     sla::PadConfig::EmbedObject ret;
 
-    const bool has_raft_type = c.values().count("raft_type") > 0;
-    if (has_raft_type) {
-        auto raft_type = c.get<RaftType>("raft_type");
-        RaftPadValues vals = raft_preset_to_pad_values(
-            raft_type,
-            c.get<double>("pad_wall_height"),
-            c.get<double>("pad_wall_thickness"),
-            c.get<double>("pad_brim_size"),
-            c.get<double>("pad_wall_slope"),
-            c.get<double>("pad_object_gap")
-        );
-
-        ret.enabled = vals.pad_enable && vals.pad_around_object;
-
-        if (ret.enabled) {
-            ret.everywhere           = c.get<bool>("pad_around_object_everywhere");
-            ret.object_gap_mm        = vals.pad_object_gap_mm;
-            ret.stick_width_mm       = c.get<double>("pad_object_connector_width");
-            ret.stick_stride_mm      = c.get<double>("pad_object_connector_stride");
-            ret.stick_penetration_mm = c.get<double>("pad_object_connector_penetration");
-        }
-
-        return ret;
-    }
-
-    // Legacy behavior
     ret.enabled = is_zero_elevation(c);
 
     if (ret.enabled) {
@@ -207,47 +208,23 @@ sla::PadConfig::EmbedObject builtin_pad_cfg(const SLAPrintObjectConfigView& c)
 
 sla::PadConfig make_pad_cfg(const SLAPrintObjectConfigView& c)
 {
-    using Domain::SLA::raft_preset_to_pad_values;
-    using Domain::SLA::RaftPadValues;
-    using Domain::sla::RaftType;
-
     sla::PadConfig pcfg;
 
-    const bool has_raft_type = c.values().count("raft_type") > 0;
-    if (has_raft_type) {
-        auto raft_type = c.get<RaftType>("raft_type");
-        RaftPadValues vals = raft_preset_to_pad_values(
-            raft_type,
-            c.get<double>("pad_wall_height"),
-            c.get<double>("pad_wall_thickness"),
-            c.get<double>("pad_brim_size"),
-            c.get<double>("pad_wall_slope"),
-            c.get<double>("pad_object_gap")
-        );
-
-        pcfg.wall_thickness_mm = vals.pad_wall_thickness_mm;
-        pcfg.wall_slope = vals.pad_wall_slope_deg * PI / 180.0;
+    if (const auto vals = raft_values(c); vals) {
+        pcfg.wall_thickness_mm = vals->pad_wall_thickness_mm;
+        pcfg.wall_slope = vals->pad_wall_slope_deg * PI / 180.0;
         pcfg.max_merge_dist_mm = c.get<double>("pad_max_merge_distance");
-        pcfg.wall_height_mm = vals.pad_wall_height_mm;
-        pcfg.brim_size_mm = vals.pad_brim_size_mm;
+        pcfg.wall_height_mm = vals->pad_wall_height_mm;
+        pcfg.brim_size_mm = vals->pad_brim_size_mm;
+    } else {
+        // Legacy behavior
+        pcfg.wall_thickness_mm = c.get<double>("pad_wall_thickness");
+        pcfg.wall_slope = c.get<double>("pad_wall_slope") * PI / 180.0;
 
-        pcfg.embed_object = builtin_pad_cfg(c);
-
-        // If raft type is None, disable the pad entirely
-        if (!vals.pad_enable) {
-            pcfg.embed_object.enabled = false;
-        }
-
-        return pcfg;
+        pcfg.max_merge_dist_mm = c.get<double>("pad_max_merge_distance");
+        pcfg.wall_height_mm = c.get<double>("pad_wall_height");
+        pcfg.brim_size_mm = c.get<double>("pad_brim_size");
     }
-
-    // Legacy behavior
-    pcfg.wall_thickness_mm = c.get<double>("pad_wall_thickness");
-    pcfg.wall_slope = c.get<double>("pad_wall_slope") * PI / 180.0;
-
-    pcfg.max_merge_dist_mm = c.get<double>("pad_max_merge_distance");
-    pcfg.wall_height_mm = c.get<double>("pad_wall_height");
-    pcfg.brim_size_mm = c.get<double>("pad_brim_size");
 
     // set builtin pad implicitly ON
     pcfg.embed_object = builtin_pad_cfg(c);
@@ -1448,7 +1425,7 @@ double SLAPrintObject::get_elevation() const {
 
     double ret = en ? m_config.get<double>("support_object_elevation") : 0.;
 
-    if (en && m_config.get<bool>("pad_enable")) {
+    if (en && is_pad_enabled(m_config)) {
         // Normally the elevation for the pad itself would be the thickness of
         // its walls but currently it is half of its thickness. Whatever it
         // will be in the future, we provide the config to the get_pad_elevation
@@ -1542,7 +1519,7 @@ const TriangleMesh& SLAPrintObject::support_mesh() const
 
 const TriangleMesh& SLAPrintObject::pad_mesh() const
 {
-    if (m_config.get<bool>("pad_enable") && is_step_done(slaposPad) && 
+    if (is_pad_enabled(m_config) && is_step_done(slaposPad) && 
         m_preview.has_value() && m_preview->pad)
         return *m_preview->pad;
     return EMPTY_MESH;
