@@ -974,6 +974,7 @@ set(SLIC3R_SHARED_FILES
         include/Slic3r/Biz/ResultExport/IResultExportBinarizeListener.hpp
         include/Slic3r/Biz/ResultExport/ResultExportDataFinalizer.hpp
         include/Slic3r/Biz/ResultExport/SLA/SL1.hpp
+        include/Slic3r/Biz/ResultExport/SLA/SL1Import.hpp
         include/Slic3r/Biz/ResultExport/SLA/SlaArchiveFormat.hpp
         include/Slic3r/Biz/ResultExport/SLA/SlaExportFileTypes.hpp
         include/Slic3r/Biz/ResultExport/SLA/Zipper.hpp
@@ -983,6 +984,7 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/Biz/ResultExport/ResultExportDataFinalizer.cpp
         src/Slic3r/Biz/ResultExport/SLA/SL1.cpp
         src/Slic3r/Biz/ResultExport/SLA/SL1Format.cpp
+        src/Slic3r/Biz/ResultExport/SLA/SL1Import.cpp
         src/Slic3r/Biz/ResultExport/SLA/SlaArchiveFormat.cpp
         src/Slic3r/Biz/ResultExport/SLA/SlaExportFileTypes.cpp
         src/Slic3r/Biz/ResultExport/SLA/Zipper.cpp
@@ -1698,6 +1700,7 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/Biz/ResultExport/SLA/SlaArchiveFormatTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/SlaExportFileTypesTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/SlaExportIdentityTests.cpp
+            test/Slic3r/Biz/ResultExport/SLA/Sl1ImportTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/AnycubicExportTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/PM5ExportTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/GooExportTests.cpp

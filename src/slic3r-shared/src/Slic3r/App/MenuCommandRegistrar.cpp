@@ -55,7 +55,9 @@ constexpr Wildcards::TypeFlag import_file_types = Wildcards::TypeFlag::Project3m
     | Wildcards::TypeFlag::Stl
     | Wildcards::TypeFlag::Obj
     | Wildcards::TypeFlag::Svg
-    | Wildcards::TypeFlag::Step;
+    | Wildcards::TypeFlag::Step
+    | Wildcards::TypeFlag::Sl1
+    | Wildcards::TypeFlag::Sl1S;
 
 /**
  * File types offered when replacing or reloading a volume mesh.
