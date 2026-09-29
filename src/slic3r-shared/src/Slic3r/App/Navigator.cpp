@@ -73,6 +73,19 @@ void Navigator::set_render_module_type(Render::ModuleType type)
     }
 }
 
+void Navigator::activate_plater_tool(Scene::ToolType tool)
+{
+    if (!has_modules()) {
+        return;
+    }
+    // Switching to Prepare initializes the plater module, so its gizmos are usable right away.
+    set_render_module_type(Render::ModuleType::Plater);
+    if (!m_plater_module->is_gizmo_manager_completed()) {
+        return;
+    }
+    m_plater_module->gizmo_controller().activate_tool(tool);
+}
+
 void Navigator::on_selected_project_changed(size_t index)
 {
     if (!has_modules()) {
