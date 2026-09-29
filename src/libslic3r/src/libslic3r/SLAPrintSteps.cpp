@@ -344,10 +344,17 @@ SLAPrint::Steps::Steps(SLAPrint *print)
     : m_print{print}
     , objcount{m_print->m_objects.size()}
     , ilhd{m_print->print_config().get<double>("initial_layer_height")}
-    , ilh{float(ilhd)}
-    , ilhs{scaled(ilhd)}
+    , ilh{0.f}
+    , ilhs{0}
     , objectstep_scale{(max_objstatus - min_objstatus) / (objcount * 100.0)}
-{}
+{
+    if (ilhd <= 0. && !m_print->m_objects.empty()) {
+        double lhd = m_print->m_objects.front()->m_config.get<double>("layer_height");
+        ilhd = lhd;
+    }
+    ilh = float(ilhd);
+    ilhs = scaled(ilhd);
+}
 
 void SLAPrint::Steps::apply_printer_corrections(SLAPrintObject &po, SliceOrigin o)
 {
