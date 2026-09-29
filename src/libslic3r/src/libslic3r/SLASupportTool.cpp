@@ -111,7 +111,9 @@ SupportToolTree build_support_tree_for_tool(const Domain::ModelObject& object,
         if (object_config.get<bool>("pad_enable")) {
             if (stop && stop()) return {tree_mesh, nullptr};
 
-            indexed_triangle_set pad_its = sla::create_pad(supportable_mesh, tree_its, ctl);
+            const indexed_triangle_set empty_its;
+            const indexed_triangle_set& tree_its_for_pad = tree_mesh ? tree_mesh->its : empty_its;
+            indexed_triangle_set pad_its = sla::create_pad(supportable_mesh, tree_its_for_pad, ctl);
             if (validate_pad(pad_its, supportable_mesh.pad_cfg)) {
                 Domain::TriangleMeshStats stats = Biz::Algorithms::TriangleMesh::calculate_stats(pad_its);
                 pad_mesh = std::make_shared<const Domain::TriangleMesh>(std::move(pad_its), std::move(stats));
