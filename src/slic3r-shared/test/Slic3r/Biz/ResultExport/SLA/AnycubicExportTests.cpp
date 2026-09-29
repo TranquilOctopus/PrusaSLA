@@ -144,7 +144,7 @@ TEST_CASE("Anycubic pwmx export", "[export][sla][anycubic]")
     // The separation settings of the resin reach the file: +12 is the wait before the lift in s,
     // +24 the lift distance in mm, +28 the lift speed and +32 the retract speed, both in mm/s.
     REQUIRE(data.size() >= header_payload_offset + 36);
-    const float f = [&data, header_payload_offset](size_t offset) {
+    const auto f = [&data, header_payload_offset](size_t offset) {
         return *reinterpret_cast<const float*>(data.data() + header_payload_offset + offset);
     };
     REQUIRE(f(12) == Catch::Approx(3.0f));  // wait_before_lift

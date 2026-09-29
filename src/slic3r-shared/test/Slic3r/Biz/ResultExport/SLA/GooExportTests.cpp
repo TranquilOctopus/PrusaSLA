@@ -155,7 +155,7 @@ TEST_CASE("Goo export", "[export][sla][goo]")
     // The layer separation of the resin, all in the units of the settings: the six waits in s, the
     // lift and retract distances in mm (there is no retract distance setting, so the plate returns
     // over the lift distance), the speeds in mm/s and the two light PWMs in 0-255.
-    const float f = [&data](size_t offset) {
+    const auto f = [&data](size_t offset) {
         uint32_t bits = read_be<uint32_t>(data.data() + offset);
         float value = 0.f;
         std::memcpy(&value, &bits, sizeof(value));
