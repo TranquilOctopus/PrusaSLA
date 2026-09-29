@@ -50,6 +50,9 @@ public:
     void set_position_by_ratio(double pos, bool keep_normal);
     void set_limiting_plane(const Domain::Vec3d& plane_normal, double plane_offset);
     void set_height_band(const HeightBand& band);
+    // Meshes clipped and capped next to the selected object, e.g. every other model on the build
+    // plate plus the SLA support tree and the raft. Passing the same list twice is cheap.
+    void set_extra_meshes(const std::vector<Clipper::ExtraMesh>& meshes);
     void update_clipper(
         const Domain::Vec3d& clp_normal,
         double clp_offset,
@@ -83,6 +86,10 @@ private:
     void init_main_node(Node* parent_node);
     // build Mesh nodes from selected instance
     void build_meshes_nodes(const Domain::Transform3d& inst_trafo);
+    // build the Mesh nodes of the extra meshes and drop the nodes of a previous set
+    void build_extra_meshes_nodes();
+    // ids of the extra mesh nodes start here, past the ids of the selected object's volumes
+    static constexpr size_t extra_mesh_id_base = 1'000'000;
     // build Plane/Contour nodes from Clipper
     void build_non_mesh_node(
         ClipperElementType type,
