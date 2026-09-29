@@ -28,6 +28,15 @@ public:
         const std::string& text,
         const YesNoCallback& callback
     ) = 0;
+    /// Yes/No dialog with caller supplied button labels, for questions whose answers
+    /// are not plain "yes" and "no" (e.g. "Export anyway" / "Cancel").
+    virtual void show_labeled_yesno_dialog(
+        const std::string& title,
+        const std::string& text,
+        const std::string& yes_label,
+        const std::string& no_label,
+        const YesNoCallback& callback
+    ) = 0;
     virtual void show_rich_yesno_dialog(
         const std::string& title,
         const std::string& text,

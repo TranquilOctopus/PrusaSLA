@@ -83,6 +83,7 @@ class PlaterScenePresenter;
 class PlaterRenderLayout;
 class SidebarPlaterActionButtons;
 class History;
+class SlaHeightBand;
 class ThumbnailImageGenerator;
 
 class PlaterRenderModule final :
@@ -265,6 +266,8 @@ private:
     Yoga::Passthrough<SidebarObject> m_sidebar_object;
     Yoga::Passthrough<SidebarPlaterActionButtons> m_sidebar_action_buttons;
     Yoga::Passthrough<History> m_history;
+    // Owned by PlaterRenderLayout, kept here to reach it when a tool gizmo takes over the shared clipper.
+    SlaHeightBand* m_sla_height_band = nullptr;
     Yoga::Passthrough<PreferencesDialog> m_preferences_dialog;
     Yoga::Passthrough<NumberEntryDialog> m_number_entry_dialog;
     Yoga::Passthrough<PresetUpdaterDialog> m_preset_updater_dialog;

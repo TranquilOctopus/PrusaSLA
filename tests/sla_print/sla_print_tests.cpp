@@ -20,6 +20,7 @@
 #include "Slic3r/TestUtils/HwConfigUtils.hpp"
 #include "libslic3r/IThumbnailImageGenerator.hpp"
 #include "libslic3r/SLAPrint.hpp"
+#include "libslic3r/SLAResult.hpp"
 #include "libslic3r/SlicingInput.hpp"
 
 namespace BB = Slic3r::Biz::Algorithms::BoundingBox;
@@ -268,7 +269,7 @@ float sliced_level_distance(double print_layer_height, double resin_layer_height
     Domain::Model model;
     Domain::ModelObject* object = model.add_object();
     object->name = "cube.stl";
-    Biz::Algorithms::add_volume(object, mesh);
+    Biz::Algorithms::ModelObject::add_volume(object, mesh);
     object->add_instance();
 
     // Setup bed
@@ -311,6 +312,52 @@ float sliced_level_distance(double print_layer_height, double resin_layer_height
     return level1 - level0;
 }
 
+// Slice a 20 mm cube with the given transition layer counts and return the count the engine
+// applied, which is what the print statistics and the .sl1 file (numFade) carry.
+int applied_faded_layers(int print_faded_layers, int resin_faded_layers)
+{
+    using namespace Slic3r;
+
+    Domain::TriangleMesh mesh = Biz::Algorithms::TriangleMesh::make_cube(20.0, 20.0, 20.0);
+    Domain::Model model;
+    Domain::ModelObject* object = model.add_object();
+    object->name = "cube.stl";
+    Biz::Algorithms::add_volume(object, mesh);
+    object->add_instance();
+
+    Domain::Bed model_bed;
+    Domain::BedInstance bed_instance{model_bed};
+    for (const Domain::ModelObject* obj : model.objects) {
+        for (Domain::ModelInstance* inst : obj->instances) {
+            bed_instance.model_instances.push_back(inst);
+        }
+    }
+
+    Domain::ConfigPackSLA config;
+    config.sla_print_settings.items.opt("layer_height").set<double>(0.05);
+    config.sla_print_settings.items.opt("faded_layers").set<int>(print_faded_layers);
+    config.sla_material_settings.items.opt("resin_faded_layers").set<int>(resin_faded_layers);
+
+    auto hw_config = Test::create_dummy_hw_config(1, 0, Domain::PrinterTechnology::SLA);
+    auto preset_metadata = create_dummy_selected_preset_metadata(hw_config);
+    auto metadata = Biz::Slicing::build_gcode_metadata({}, preset_metadata, config);
+
+    std::optional<Domain::SLA::PrintStatistics> statistics;
+    SLAPrint print{[&statistics](Biz::Slicing::SLAResult&& result) {
+                       if (result.export_data && result.export_data->print_statistics)
+                           statistics = result.export_data->print_statistics;
+                   },
+                   [](const Biz::Slicing::Sla::Object&) {}};
+    print.update(model, config, bed_instance, preset_metadata,
+                 Biz::Slicing::build_metadata_serializer(metadata, preset_metadata, config));
+
+    ThumbnailGenerator thumbnail_generator{};
+    print.slice(Domain::SlicingId{0, 0}, thumbnail_generator, std::nullopt);
+
+    REQUIRE(statistics.has_value());
+    return statistics->count_faded_layers;
+}
+
 } // namespace
 
 TEST_CASE("Initial layer height zero uses layer height", "[SLAInitialLayerHeight]") {
@@ -322,4 +369,11 @@ TEST_CASE("Resin layer height overrides the print layer height", "[SLAResinLayer
     REQUIRE(sliced_level_distance(0.05, 0.03) == Approx(0.03).margin(1e-4));
     // A resin without a layer height of its own falls back to the print preset.
     REQUIRE(sliced_level_distance(0.05, 0.) == Approx(0.05).margin(1e-4));
+}
+
+TEST_CASE("Resin transition layers override the print faded layers", "[SLAResinFadedLayers]") {
+    // The resin transition layer count wins on every SLA fade read.
+    REQUIRE(applied_faded_layers(10, 3) == 3);
+    // -1 (the unset value) falls back to the print preset.
+    REQUIRE(applied_faded_layers(10, -1) == 10);
 }

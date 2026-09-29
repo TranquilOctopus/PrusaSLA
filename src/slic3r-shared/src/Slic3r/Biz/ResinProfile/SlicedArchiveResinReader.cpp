@@ -77,7 +77,7 @@ std::optional<std::string> read_text(ForeignResinProfile &profile, std::initiali
         if (it == profile.raw_values.end())
             continue;
 
-        const std::string value = boost::algorithm::trim(it->second);
+        const std::string value = boost::algorithm::trim_copy(it->second);
         if (!value.empty())
             return value;
 

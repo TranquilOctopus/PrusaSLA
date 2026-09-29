@@ -248,6 +248,8 @@ void ClipperPresenter::update_nodes()
             if (tag->type == ClipperElementType::Mesh) {
                 Render::Material material = render_component->material();
                 material.set_uniform("clipping_plane", get_clipping_plane_data(m_clipper));
+                // The clipper holds one plane only, so the band's upper limit travels separately.
+                material.set_uniform("clipping_plane_2", height_band_upper_plane_data(m_clipper->height_band()));
                 node.set_material_override(material);
                 return;
             }
@@ -455,6 +457,14 @@ void ClipperPresenter::set_behavior(bool hide_clipped, bool fill_cut, double con
 {
     if (m_clipper) {
         m_clipper->set_behavior(hide_clipped, fill_cut, contour_width);
+        update_nodes();
+    }
+}
+
+void ClipperPresenter::set_height_band(const HeightBand& band)
+{
+    if (m_clipper) {
+        m_clipper->set_height_band(band);
         update_nodes();
     }
 }

@@ -1,7 +1,11 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
 
+#include <string>
+#include <vector>
+
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
+#include "Slic3r/Domain/SLA/RaftPreset.hpp"
 
 using namespace Catch::Matchers;
 using Slic3r::Domain::ConfigItemDef;
@@ -28,12 +32,16 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         CHECK(def->category == ConfigItemDef::Category::Print_Pad);
         CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
         CHECK(def->label == "Raft type");
+        CHECK(def->gui_type == ConfigItemDef::GUIType::combobox);
         // The raft type turns the raft on or off and decides whether it goes around the object.
-        CHECK(def->tooltip.find("decides whether a raft is printed") != std::string::npos);
+        CHECK(def->tooltip.find("The shape of the raft under the object") != std::string::npos);
+        CHECK(def->tooltip.find("None prints no raft") != std::string::npos);
         // Skate is around object with half the expansion and a 70 degree wall.
         CHECK(def->tooltip.find("half the expansion and a 70 degree wall slope") != std::string::npos);
-        // It does NOT set the height, wall thickness or gap, those stay the user's values.
-        CHECK(def->tooltip.find("does not change the height, wall thickness or gap") != std::string::npos);
+        // The type picks the knobs, so it is shown above them.
+        CHECK(def->tooltip.find("shows only those") != std::string::npos);
+        // raft_type is the first row of the Raft group, the knobs it drives come after it.
+        CHECK(def->order == 0);
     }
 
     // pad_enable ("Use raft") is replaced by raft_type, so it is hidden, not deleted.
@@ -53,8 +61,7 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         CHECK(def->category == ConfigItemDef::Category::Print_Pad);
         CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
         CHECK(def->label == "Raft wall thickness");
-        // The raft type passes the wall thickness through, it does not set it.
-        CHECK(def->tooltip.find("set by the selected raft type") == std::string::npos);
+        CHECK(def->tooltip == "The thickness of the raft walls.");
     }
 
     // Check pad_wall_height (now "Raft height")
@@ -64,7 +71,8 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         CHECK(def->category == ConfigItemDef::Category::Print_Pad);
         CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
         CHECK(def->label == "Raft height");
-        CHECK(def->tooltip.find("set by the selected raft type") == std::string::npos);
+        // The height is the cavity the object sits in, not a general raft height.
+        CHECK(def->tooltip.find("cavity") != std::string::npos);
     }
 
     // Check pad_brim_size (now "Raft expansion")
@@ -74,9 +82,7 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         CHECK(def->category == ConfigItemDef::Category::Print_Pad);
         CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
         CHECK(def->label == "Raft expansion");
-        CHECK(def->tooltip.find("set by the selected raft type") == std::string::npos);
-        // Only Skate overrides it, with half the value.
-        CHECK(def->tooltip.find("Skate raft type uses half of this value") != std::string::npos);
+        CHECK(def->tooltip.find("How far the raft reaches around the object") != std::string::npos);
     }
 
     // Check pad_wall_slope (now "Raft slope")
@@ -86,8 +92,7 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         CHECK(def->category == ConfigItemDef::Category::Print_Pad);
         CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
         CHECK(def->label == "Raft slope");
-        CHECK(def->tooltip.find("set by the selected raft type") == std::string::npos);
-        CHECK(def->tooltip.find("Skate raft type uses 70 degrees") != std::string::npos);
+        CHECK(def->tooltip.find("build plate") != std::string::npos);
     }
 
     // Check pad_object_gap (now "Raft gap to object")
@@ -97,7 +102,7 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         CHECK(def->category == ConfigItemDef::Category::Print_Pad);
         CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
         CHECK(def->label == "Raft gap to object");
-        CHECK(def->tooltip.find("set by the selected raft type") == std::string::npos);
+        CHECK(def->tooltip.find("gap left between the object bottom and the raft") != std::string::npos);
     }
 
     // pad_around_object ("Raft around object") is replaced by raft_type, so it is hidden.
@@ -118,33 +123,211 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         CHECK(def->category == ConfigItemDef::Category::Print_Pad);
         CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
         CHECK(def->label == "Raft around object everywhere");
-        CHECK(def->tooltip.find("overrides elevation-based logic") != std::string::npos);
+        CHECK(def->tooltip.find("follow the object everywhere") != std::string::npos);
     }
 
-    // Verify pad settings NOT driven by raft_type keep "Pad" terminology
+    // Check pad_max_merge_distance, which the raft type passes through
     {
         const ConfigItemDef* def = find_def("pad_max_merge_distance");
         REQUIRE(def != nullptr);
+        CHECK(def->category == ConfigItemDef::Category::Print_Pad);
+        CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
         CHECK(def->label == "Max merge distance");
-        CHECK(def->tooltip.find("pads") != std::string::npos);
+        // The tooltip talks about rafts, not about the FFF pad wording.
+        CHECK(def->tooltip.find("smaller rafts") != std::string::npos);
+        CHECK(def->tooltip.find("pads") == std::string::npos);
     }
 
     {
         const ConfigItemDef* def = find_def("pad_object_connector_stride");
         REQUIRE(def != nullptr);
-        CHECK(def->label == "Pad object connector stride");
+        CHECK(def->label == "Raft object connector stride");
+        CHECK(def->tooltip.find("tie the object to the raft") != std::string::npos);
     }
 
     {
         const ConfigItemDef* def = find_def("pad_object_connector_width");
         REQUIRE(def != nullptr);
-        CHECK(def->label == "Pad object connector width");
+        CHECK(def->label == "Raft object connector width");
+        CHECK(def->tooltip.find("tie the object to the raft") != std::string::npos);
     }
 
     {
         const ConfigItemDef* def = find_def("pad_object_connector_penetration");
         REQUIRE(def != nullptr);
-        CHECK(def->label == "Pad object connector penetration");
+        CHECK(def->label == "Raft object connector penetration");
+        CHECK(def->tooltip.find("tie the object to the raft") != std::string::npos);
+    }
+
+    // The page and the group the raft settings live in are called Raft, not Pad.
+    CHECK(ConfigItemDef::translate_category(
+              ConfigItemDef::Category::Print_Pad,
+              Slic3r::Domain::PrinterTechnology::SLA
+          ) == "Raft");
+    CHECK(ConfigItemDef::translate_option_group(ConfigItemDef::OptionGroup::Print_Pad_Pad)
+          == "Raft");
+}
+
+TEST_CASE("The raft type decides which raft settings are shown", "[Config][SLA][Raft]")
+{
+    using Slic3r::Domain::sla::RaftType;
+    using Slic3r::Domain::SLA::raft_type_uses_setting;
+    using Slic3r::Domain::SLA::raft_type_visible_settings;
+
+    SECTION("the type itself is always shown")
+    {
+        for (const RaftType type : {RaftType::None,
+                                    RaftType::Full,
+                                    RaftType::AroundObject,
+                                    RaftType::Skate}) {
+            INFO("raft type " << static_cast<int>(type));
+            CHECK(raft_type_uses_setting(type, "raft_type"));
+            // The first row of the group is the type, then the knobs it drives.
+            CHECK(raft_type_visible_settings(type).front() == "raft_type");
+        }
+    }
+
+    SECTION("None prints no raft, so no knob applies")
+    {
+        for (const std::string& key : {"pad_wall_height",
+                                       "pad_wall_thickness",
+                                       "pad_brim_size",
+                                       "pad_wall_slope",
+                                       "pad_max_merge_distance",
+                                       "pad_object_gap",
+                                       "pad_around_object_everywhere",
+                                       "pad_object_connector_stride",
+                                       "pad_object_connector_width",
+                                       "pad_object_connector_penetration"}) {
+            INFO("setting " << key);
+            CHECK_FALSE(raft_type_uses_setting(RaftType::None, key));
+        }
+        CHECK(raft_type_visible_settings(RaftType::None).size() == 1);
+    }
+
+    SECTION("a full plate raft never embeds the object")
+    {
+        for (const std::string& key : {"pad_wall_height",
+                                       "pad_wall_thickness",
+                                       "pad_brim_size",
+                                       "pad_wall_slope",
+                                       "pad_max_merge_distance"}) {
+            INFO("setting " << key);
+            CHECK(raft_type_uses_setting(RaftType::Full, key));
+        }
+
+        for (const std::string& key : {"pad_object_gap",
+                                       "pad_around_object_everywhere",
+                                       "pad_object_connector_stride",
+                                       "pad_object_connector_width",
+                                       "pad_object_connector_penetration"}) {
+            INFO("setting " << key);
+            CHECK_FALSE(raft_type_uses_setting(RaftType::Full, key));
+        }
+    }
+
+    SECTION("an around object raft reads everything the user set")
+    {
+        for (const std::string& key : {"pad_wall_height",
+                                       "pad_wall_thickness",
+                                       "pad_brim_size",
+                                       "pad_wall_slope",
+                                       "pad_max_merge_distance",
+                                       "pad_object_gap",
+                                       "pad_around_object_everywhere",
+                                       "pad_object_connector_stride",
+                                       "pad_object_connector_width",
+                                       "pad_object_connector_penetration"}) {
+            INFO("setting " << key);
+            CHECK(raft_type_uses_setting(RaftType::AroundObject, key));
+        }
+    }
+
+    SECTION("Skate replaces the expansion and the wall slope, so those two are hidden")
+    {
+        for (const std::string& key : {"pad_wall_height",
+                                       "pad_wall_thickness",
+                                       "pad_max_merge_distance",
+                                       "pad_object_gap",
+                                       "pad_around_object_everywhere",
+                                       "pad_object_connector_stride",
+                                       "pad_object_connector_width",
+                                       "pad_object_connector_penetration"}) {
+            INFO("setting " << key);
+            CHECK(raft_type_uses_setting(RaftType::Skate, key));
+        }
+
+        // SKATE_BRIM_FACTOR and SKATE_SLOPE_DEG in RaftPreset.cpp override these two.
+        CHECK_FALSE(raft_type_uses_setting(RaftType::Skate, "pad_brim_size"));
+        CHECK_FALSE(raft_type_uses_setting(RaftType::Skate, "pad_wall_slope"));
+    }
+
+    SECTION("a setting that is not a raft knob is not filtered out")
+    {
+        CHECK_FALSE(raft_type_uses_setting(RaftType::None, "layer_height"));
+        CHECK_FALSE(raft_type_uses_setting(RaftType::Skate, "support_pillar_diameter"));
+        // The UI filter asks this first, so such a setting is never hidden.
+        CHECK_FALSE(Slic3r::Domain::SLA::is_raft_setting("layer_height"));
+        CHECK_FALSE(Slic3r::Domain::SLA::is_raft_setting("support_pillar_diameter"));
+        CHECK(Slic3r::Domain::SLA::is_raft_setting("raft_type"));
+        CHECK(Slic3r::Domain::SLA::is_raft_setting("pad_object_gap"));
+    }
+}
+
+TEST_CASE("Every shown raft setting is a real setting in the Raft group", "[Config][SLA][Raft]")
+{
+    using Slic3r::Domain::sla::RaftType;
+    using Slic3r::Domain::SLA::raft_type_visible_settings;
+
+    const auto& defs = Slic3r::Domain::get_defs_sla();
+    auto find_def = [&defs](const std::string& name) -> const ConfigItemDef* {
+        for (const auto& def : defs.defs()) {
+            if (def.name == name)
+                return &def;
+        }
+        return nullptr;
+    };
+
+    for (const RaftType type : {RaftType::None,
+                                RaftType::Full,
+                                RaftType::AroundObject,
+                                RaftType::Skate}) {
+        for (const std::string& key : raft_type_visible_settings(type)) {
+            INFO("raft type " << static_cast<int>(type) << ", setting " << key);
+            const ConfigItemDef* def = find_def(key);
+            REQUIRE(def != nullptr);
+            // Nothing the raft type can show may be hidden or live outside the Raft group,
+            // or the knob would silently disappear for good.
+            CHECK(def->category == ConfigItemDef::Category::Print_Pad);
+            CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
+        }
+    }
+}
+
+TEST_CASE("The Raft group is shown in the order the raft type lists it", "[Config][SLA][Raft]")
+{
+    using Slic3r::Domain::SLA::raft_type_visible_settings;
+
+    const auto& defs = Slic3r::Domain::get_defs_sla();
+    auto find_def = [&defs](const std::string& name) -> const ConfigItemDef* {
+        for (const auto& def : defs.defs()) {
+            if (def.name == name)
+                return &def;
+        }
+        return nullptr;
+    };
+
+    // The dialog sorts the rows of a group by ConfigItemDef::order, so the order values have to
+    // agree with raft_type_visible_settings, which is the order the raft type was designed for.
+    const std::vector<std::string>& settings =
+        raft_type_visible_settings(Slic3r::Domain::sla::RaftType::AroundObject);
+    for (size_t i = 1; i < settings.size(); ++i) {
+        INFO("after " << settings.at(i - 1) << " comes " << settings.at(i));
+        const ConfigItemDef* previous = find_def(settings.at(i - 1));
+        const ConfigItemDef* current = find_def(settings.at(i));
+        REQUIRE(previous != nullptr);
+        REQUIRE(current != nullptr);
+        CHECK(previous->order < current->order);
     }
 }
 

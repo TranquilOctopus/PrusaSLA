@@ -16,20 +16,29 @@ namespace Slic3r::App {
 class PrintSettingsDialog;
 class PrintToolFavoritesItem;
 class Navigator;
+class MaterialSettingsDialog;
+class SlaPrintSettingsDialog;
+class SidebarSlaPrintSettings;
 
 namespace Yoga {
 class LayoutButton;
 class InputTextField;
 class ComboBox;
+class Item;
 class ScrollArea;
 } // namespace Yoga
 
 class SidebarPrint : public Yoga::Window, public Biz::Preset::IPresetChangedListener
 {
 public:
-    explicit SidebarPrint(Biz::ProjectInteractor& project_interactor, Navigator& navigator);
+    explicit SidebarPrint(
+        Biz::ProjectInteractor& project_interactor,
+        Navigator& navigator,
+        MaterialSettingsDialog* material_settings_dialog
+    );
 
     PrintSettingsDialog& print_settings_dialog();
+    SlaPrintSettingsDialog& sla_print_settings_dialog();
 
     void on_preset_selection_changed(
         Domain::SelectionId project_id,
@@ -57,6 +66,7 @@ private:
 
     void update_tools_visibility();
     void update_print_preset_label();
+    void update_sla_visibility();
     void refresh_print_combobox_label_color();
     void refresh_tools_comboboxes_label_colors();
 
@@ -82,10 +92,13 @@ private:
     Yoga::ScrollArea* m_content_area{nullptr};
     PrintToolFavoritesItem* m_favorite_params{nullptr};
 
+    Yoga::Item* m_print_preset_row{nullptr};
     Yoga::ComboBoxListViewSelection<Biz::Preset::PresetItem>* m_combo_print{nullptr};
     ToolHeadListView* m_tool_head_list_view{nullptr};
 
     PrintSettingsDialog* m_print_settings_dialog{nullptr};
+    SlaPrintSettingsDialog* m_sla_print_settings_dialog{nullptr};
+    SidebarSlaPrintSettings* m_sla_print_settings{nullptr};
 
     Yoga::Text* m_print_preset_label{nullptr};
 

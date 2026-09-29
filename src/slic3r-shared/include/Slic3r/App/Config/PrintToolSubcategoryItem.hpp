@@ -57,6 +57,7 @@ private:
 private:
     Biz::PrintToolConfigBoxInteractor& m_cbi;
     Biz::IConfigBoxSetter& m_cbi_setter;
+    Biz::ProjectInteractor& m_project_interactor;
 
     PrintToolRowListView* m_rows_list_view{nullptr};
     Biz::UnsharedPointer<Biz::ObservableListSortFilter<Biz::PrintToolItem>> m_rows_filter_list;

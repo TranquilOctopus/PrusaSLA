@@ -58,8 +58,12 @@ set(SLIC3R_SHARED_FILES
 
         include/Slic3r/App/Hints/SlaHints.hpp
         src/Slic3r/App/Hints/SlaHints.cpp
+        include/Slic3r/App/Plater/SlaUnsupportedObjects.hpp
+        src/Slic3r/App/Plater/SlaUnsupportedObjects.cpp
         include/Slic3r/App/Plater/SlaIssueAnalysis.hpp
         src/Slic3r/App/Plater/SlaIssueAnalysis.cpp
+        include/Slic3r/App/Plater/SlaHeightBand.hpp
+        src/Slic3r/App/Plater/SlaHeightBand.cpp
         include/Slic3r/App/Plater/SimplifyDialog.hpp
         src/Slic3r/App/Plater/SimplifyDialog.cpp
         include/Slic3r/App/Plater/ArrangeDialog.hpp
@@ -227,6 +231,10 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/SidebarBed.cpp
         include/Slic3r/App/SidebarSlaSummary.hpp
         src/Slic3r/App/SidebarSlaSummary.cpp
+        include/Slic3r/App/SidebarSlaPrintSettings.hpp
+        src/Slic3r/App/SidebarSlaPrintSettings.cpp
+        include/Slic3r/App/SlaPrintSettingsDialog.hpp
+        src/Slic3r/App/SlaPrintSettingsDialog.cpp
         include/Slic3r/App/SidebarPrint.hpp
         src/Slic3r/App/SidebarPrint.cpp
         include/Slic3r/App/SidebarObject.hpp
@@ -239,6 +247,7 @@ set(SLIC3R_SHARED_FILES
         include/Slic3r/App/DirtyCategoryList.hpp
         include/Slic3r/App/PrintSettingsDialog.hpp
         src/Slic3r/App/PrintSettingsDialog.cpp
+        include/Slic3r/App/SlaRaftSettings.hpp
         include/Slic3r/App/MaterialSettingsDialog.hpp
         src/Slic3r/App/MaterialSettingsDialog.cpp
         include/Slic3r/App/LogicalPrinterSettingsDialog.hpp
@@ -441,6 +450,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Config/ConfigSubcategoryItem.cpp
         include/Slic3r/App/Config/ConfigRowItem.hpp
         src/Slic3r/App/Config/ConfigRowItem.cpp
+        include/Slic3r/App/Config/SlaSettingsRows.hpp
+        src/Slic3r/App/Config/SlaSettingsRows.cpp
         include/Slic3r/App/Config/ConfigItemContextRowItem.hpp
         src/Slic3r/App/Config/ConfigItemContextRowItem.cpp
         include/Slic3r/App/Config/ConfigRowItems.hpp
@@ -573,6 +584,8 @@ set(SLIC3R_SHARED_FILES
         include/Slic3r/App/Scene/ClipperPresenter.hpp
         include/Slic3r/App/Scene/ClipperPresenterHelper.hpp
         src/Slic3r/App/Scene/ClipperPresenter.cpp
+        include/Slic3r/App/Scene/HeightBand.hpp
+        src/Slic3r/App/Scene/HeightBand.cpp
         include/Slic3r/App/Scene/CameraTargetAnimation.hpp
         src/Slic3r/App/Scene/CameraTargetAnimation.cpp
         include/Slic3r/App/Scene/ModelGeometryProvider.hpp
@@ -802,6 +815,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/ResultExport/ExportPathSelect.cpp
         include/Slic3r/App/ResultExport/ExportActions.hpp
         src/Slic3r/App/ResultExport/ExportActions.cpp
+        include/Slic3r/App/ResultExport/SlaPreExportCheck.hpp
+        src/Slic3r/App/ResultExport/SlaPreExportCheck.cpp
         include/Slic3r/Biz/ResultExport/ExportNameParser.hpp
         src/Slic3r/Biz/ResultExport/ExportNameParser.cpp
 
@@ -1591,6 +1606,8 @@ if(SLIC3R_BUILD_TESTS)
 
             test/Slic3r/App/SidebarSlaSummaryTests.cpp
 
+            test/Slic3r/App/SidebarSlaPrintSettingsTests.cpp
+
             test/Slic3r/App/SlaFirstPreferenceTests.cpp
 
             test/Slic3r/App/SlaHintsTests.cpp
@@ -1598,6 +1615,8 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/App/Scene/Node.cpp
             test/Slic3r/App/Scene/Ray.cpp
         test/Slic3r/App/Scene/MouseBindingScheme.cpp
+
+            test/Slic3r/App/Scene/HeightBandTests.cpp
 
             test/Slic3r/App/Plater/SurfaceMesh.cpp
 
@@ -1610,6 +1629,10 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/App/Plater/SlaHollowGizmoTests.cpp
 
             test/Slic3r/App/Plater/SlaIssueAnalysisTests.cpp
+
+            test/Slic3r/App/Plater/SlaUnsupportedObjectsTests.cpp
+
+            test/Slic3r/App/ResultExport/SlaPreExportCheckTests.cpp
 
             test/Slic3r/App/Undo/ModelSerializeRoundtripTests.cpp
 

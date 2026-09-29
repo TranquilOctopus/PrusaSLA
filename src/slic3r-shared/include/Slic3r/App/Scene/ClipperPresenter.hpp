@@ -3,6 +3,7 @@
 #include "Slic3r/App/Render/GeometryManager.hpp"
 #include "Slic3r/App/Scene/TriangleMeshManager.hpp"
 #include "Slic3r/App/Scene/ClipperPresenterHelper.hpp"
+#include "Slic3r/App/Scene/HeightBand.hpp"
 #include "Slic3r/App/Scene/IGizmo.hpp"
 #include "Slic3r/App/Scene/ISceneProvider.hpp"
 
@@ -48,6 +49,7 @@ public:
     void set_behavior(bool hide_clipped, bool fill_cut, double contour_width);
     void set_position_by_ratio(double pos, bool keep_normal);
     void set_limiting_plane(const Domain::Vec3d& plane_normal, double plane_offset);
+    void set_height_band(const HeightBand& band);
     void update_clipper(
         const Domain::Vec3d& clp_normal,
         double clp_offset,

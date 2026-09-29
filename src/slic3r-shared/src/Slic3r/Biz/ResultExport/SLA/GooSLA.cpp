@@ -300,7 +300,7 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     header.after_lift_time = header.before_lift_time;
     header.after_retract_time = 0.0f;
     header.bottom_exposure_time = get_cfg_value_f(cfg, "initial_exposure_time");
-    header.bottom_layers = get_cfg_value_i(cfg, "faded_layers");
+    header.bottom_layers = Domain::sla_bottom_layer_count(cfg);
     if (layer_count < static_cast<uint32_t>(header.bottom_layers)) {
         header.bottom_layers = layer_count;
     }
@@ -353,7 +353,8 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
 
     header.layer_content_offset = sizeof(goo_header_info);
     header.gray_scale_level = 1;
-    header.transition_layers = 0;
+    // The transition layers are where the exposure fades from the bottom exposure to the normal one.
+    header.transition_layers = int16_t(std::max(0, Domain::sla_effective_faded_layers(cfg)));
 
     try {
         std::ofstream out;

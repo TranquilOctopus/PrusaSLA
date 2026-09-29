@@ -1,8 +1,10 @@
 #include "Slic3r/App/ResultExport/ExportActions.hpp"
 #include "Slic3r/App/ResultExport/ExportPathSelect.hpp"
+#include "Slic3r/App/ResultExport/SlaPreExportCheck.hpp"
 #include "Slic3r/App/Browser/BrowserLogicConnectSelect.hpp"
 #include "Slic3r/App/AppServices.hpp"
 #include "Slic3r/App/IDialogManager.hpp"
+#include "Slic3r/App/IsSlaActive.hpp"
 
 #include <Slic3r/Biz/Platform/PlatformServices.hpp>
 #include "Slic3r/Biz/PhysicalPrinter/PhysicalPrinterInteractor.hpp"
@@ -37,6 +39,11 @@ make_export(Biz::ProjectInteractor& project_interactor, bool to_flash)
 {
     auto call_do_export{[pi_raw = &project_interactor, to_flash]()
                         {
+                            // Resin is expensive, so let the user back out of an SLA export that
+                            // is likely to fail on the printer. FFF plates are unaffected.
+                            if (is_sla_active(*pi_raw) && !SlaPreExportCheck::confirm(SlaPreExportCheck::collect(*pi_raw))) {
+                                return;
+                            }
                             ExportPathSelect::show_export_modal_dialog(
                                 *pi_raw,
                                 to_flash,

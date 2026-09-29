@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #include "Slic3r/Biz/ProjectScoped.hpp"
 #include "Slic3r/Biz/ISelectedProjectChangedListener.hpp"
 
@@ -23,6 +25,10 @@ class PreviewRenderModule;
 namespace Platform {
 class AbstractRenderCanvas;
 } // namespace Platform
+
+namespace Scene {
+enum class ToolType : uint8_t;
+} // namespace Scene
 
 namespace Yoga {
 class Dialog;
@@ -64,6 +70,9 @@ public:
     );
 
     void navigate_to_module_type(Render::ModuleType type);
+
+    /// Switch to Prepare and open one of its tools, e.g. Scene::ToolType::SlaSupportPoints.
+    void activate_plater_tool(Scene::ToolType tool);
 
     void on_selected_project_changed(size_t index) override;
 

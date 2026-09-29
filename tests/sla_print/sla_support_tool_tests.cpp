@@ -4,14 +4,19 @@
 #include "Slic3r/Biz/Algorithms/ModelObject.hpp"
 #include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
 #include "Slic3r/Domain/Model.hpp"
+#include "Slic3r/Domain/Types.hpp"
 #include "Slic3r/Domain/FullConfigSLA.hpp"
 #include "Slic3r/Domain/ConfigBoxesSLA.hpp"
+#include "Slic3r/Domain/ConfigPack.hpp"
 #include "Slic3r/Domain/Config.hpp"
+#include "Slic3r/Domain/Preset/HwConfig.hpp"
+#include "Slic3r/Domain/PrinterTechnology.hpp"
 #include "libslic3r/ConfigViews.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 namespace {
 
@@ -40,30 +45,41 @@ struct SlaConfig
     Slic3r::SLAPrintObjectConfigView view() const { return Slic3r::SLAPrintObjectConfigView{full, object_settings}; }
 };
 
-SlaConfig make_sla_config()
+// No SLA option is declared with location == SLAConfigLocation::Object, so SLAObjectSettings
+// carries no items of its own: every key the tests tweak (supports_enable, pad_enable, ...,
+// all of which only declare overrides_in = Locations{ Object }) has to be set on the print box
+// before the full config is built.
+SlaConfig make_sla_config(Slic3r::Domain::ConfigPackSLA pack)
 {
     SlaConfig cfg;
-    cfg.full = std::make_shared<const Slic3r::Domain::FullConfigSLA>(Slic3r::Domain::FullConfigSLA::defaults());
-    auto obj_settings = std::make_shared<Slic3r::Domain::SLAObjectSettings>();
-    obj_settings->items.opt("supports_enable").set(true);
-    obj_settings->items.opt("pad_enable").set(true);
-    obj_settings->items.opt("support_object_elevation").set(10.0);
-    cfg.object_settings = std::make_shared<const Slic3r::Domain::PartialObjectConfigSLA>(*obj_settings, cfg.full->hw_config());
+    cfg.full = std::make_shared<const Slic3r::Domain::FullConfigSLA>(
+        pack,
+        Slic3r::Domain::Preset::HwPrinterConfig{.technology = Slic3r::Domain::PrinterTechnology::SLA}
+    );
+    cfg.object_settings = std::make_shared<const Slic3r::Domain::PartialObjectConfigSLA>(
+        Slic3r::Domain::SLAObjectSettings{}, cfg.full->hw_config()
+    );
     return cfg;
+}
+
+SlaConfig make_sla_config()
+{
+    Slic3r::Domain::ConfigPackSLA pack;
+    pack.sla_print_settings.items.opt("supports_enable").set(true);
+    pack.sla_print_settings.items.opt("pad_enable").set(true);
+    pack.sla_print_settings.items.opt("support_object_elevation").set(10.0);
+    return make_sla_config(std::move(pack));
 }
 
 SlaConfig make_sla_config_zero_elevation()
 {
-    SlaConfig cfg;
-    cfg.full = std::make_shared<const Slic3r::Domain::FullConfigSLA>(Slic3r::Domain::FullConfigSLA::defaults());
-    auto obj_settings = std::make_shared<Slic3r::Domain::SLAObjectSettings>();
-    obj_settings->items.opt("supports_enable").set(true);
-    obj_settings->items.opt("pad_enable").set(true);
-    obj_settings->items.opt("pad_around_object").set(true);
-    obj_settings->items.opt("pad_around_object_everywhere").set(true);
-    obj_settings->items.opt("support_object_elevation").set(10.0);
-    cfg.object_settings = std::make_shared<const Slic3r::Domain::PartialObjectConfigSLA>(*obj_settings, cfg.full->hw_config());
-    return cfg;
+    Slic3r::Domain::ConfigPackSLA pack;
+    pack.sla_print_settings.items.opt("supports_enable").set(true);
+    pack.sla_print_settings.items.opt("pad_enable").set(true);
+    pack.sla_print_settings.items.opt("pad_around_object").set(true);
+    pack.sla_print_settings.items.opt("pad_around_object_everywhere").set(true);
+    pack.sla_print_settings.items.opt("support_object_elevation").set(10.0);
+    return make_sla_config(std::move(pack));
 }
 
 } // namespace
@@ -74,7 +90,7 @@ TEST_CASE("SLASupportTool: generate_support_points_for_tool returns points for l
     box.object->instances.front()->set_offset({0., 0., 10.}); // lift 10 mm
 
     Slic3r::Domain::Transform3d object_to_world = Slic3r::Domain::Transform3d::Identity();
-    object_to_world.translate({0., 0., 10.});
+    object_to_world.translate(Slic3r::Domain::Vec3d(0., 0., 10.));
 
     SlaConfig config = make_sla_config();
 
@@ -89,7 +105,7 @@ TEST_CASE("SLASupportTool: build_support_tree_for_tool returns tree with correct
     box.object->instances.front()->set_offset({0., 0., 10.}); // lift 10 mm
 
     Slic3r::Domain::Transform3d object_to_world = Slic3r::Domain::Transform3d::Identity();
-    object_to_world.translate({0., 0., 10.});
+    object_to_world.translate(Slic3r::Domain::Vec3d(0., 0., 10.));
 
     SlaConfig config = make_sla_config();
 
@@ -119,7 +135,7 @@ TEST_CASE("SLASupportTool: stop function returns empty result without throwing",
     box.object->instances.front()->set_offset({0., 0., 10.});
 
     Slic3r::Domain::Transform3d object_to_world = Slic3r::Domain::Transform3d::Identity();
-    object_to_world.translate({0., 0., 10.});
+    object_to_world.translate(Slic3r::Domain::Vec3d(0., 0., 10.));
 
     SlaConfig config = make_sla_config();
 
@@ -152,7 +168,7 @@ TEST_CASE("SLASupportTool: build_support_tree_for_tool places tree under moved o
     box.object->instances.front()->set_offset({30., 20., 10.});
 
     Slic3r::Domain::Transform3d object_to_world = Slic3r::Domain::Transform3d::Identity();
-    object_to_world.translate({30., 20., 10.});
+    object_to_world.translate(Slic3r::Domain::Vec3d(30., 20., 10.));
 
     SlaConfig config = make_sla_config();
 

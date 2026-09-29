@@ -21,7 +21,7 @@ std::string MenuBuilder::item_name_translated(UniversalMenuItemName menu_item_na
     return std::visit(
         Domain::overloaded{
             [](const std::string& s) -> std::string { return s; },
-            [](MenuItemName menu_item_name) -> std::string
+            [is_sla](MenuItemName menu_item_name) -> std::string
             {
                 switch (menu_item_name) {
                 case MenuItemName::MainMenu:

@@ -141,6 +141,23 @@ void DialogManager::show_yesno_dialog(const std::string& title, const std::strin
         callback(false);
 }
 
+void DialogManager::show_labeled_yesno_dialog(
+    const std::string& title,
+    const std::string& text,
+    const std::string& yes_label,
+    const std::string& no_label,
+    const YesNoCallback& callback
+)
+{
+    MessageDialog dlg(wxTheApp->GetTopWindow(), from_u8(text), from_u8(title), wxYES_NO);
+    dlg.SetYesNoLabels(from_u8(yes_label), from_u8(no_label));
+    dlg.CenterOnParent();
+    if (dlg.ShowModal() == wxID_YES)
+        callback(true);
+    else
+        callback(false);
+}
+
 void DialogManager::show_yesnocancel_dialog(
     const std::string& title,
     const std::string& text,
