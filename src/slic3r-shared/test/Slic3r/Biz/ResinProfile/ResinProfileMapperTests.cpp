@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+using namespace Slic3r;
 using namespace Slic3r::Biz::ResinProfile;
 
 namespace {

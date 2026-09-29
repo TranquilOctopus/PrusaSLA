@@ -5,8 +5,8 @@
 
 #include <fmt/format.h>
 
-#include <initializer_list>
 #include <optional>
+#include <span>
 #include <string>
 #include <utility>
 
@@ -52,7 +52,7 @@ const char *const PRINTER_HINT_KEYS[]     = {"printer_model", "printerModel", "p
 /// Read a value of type T from the first of the keys the file uses. A key that is there but
 /// does not hold a readable value is a warning, not a value.
 template<typename T>
-std::optional<T> read_value(ForeignResinProfile &profile, std::initializer_list<const char *> keys)
+std::optional<T> read_value(ForeignResinProfile &profile, std::span<const char *const> keys)
 {
     for (const char *key : keys) {
         const auto it = profile.raw_values.find(key);
@@ -70,7 +70,7 @@ std::optional<T> read_value(ForeignResinProfile &profile, std::initializer_list<
 }
 
 /// Read a whole text value, spaces and all, from the first of the keys the file uses.
-std::optional<std::string> read_text(ForeignResinProfile &profile, std::initializer_list<const char *> keys)
+std::optional<std::string> read_text(ForeignResinProfile &profile, std::span<const char *const> keys)
 {
     for (const char *key : keys) {
         const auto it = profile.raw_values.find(key);
@@ -97,7 +97,7 @@ bool SlicedArchiveResinReader::sniff(const std::string &head) const
 
     // The entry names of an SL1 archive follow the zip magic right away, config.ini first.
     // A zip that is not one (a .3mf, a .cfgx) is left for a reader of its own format.
-    return boost::algorithm::ifind(head, std::string(CONFIG_INI)) != head.end();
+    return boost::algorithm::icontains(head, CONFIG_INI);
 }
 
 tl::expected<ForeignResinProfile, std::string> SlicedArchiveResinReader::read(const boost::filesystem::path &path) const

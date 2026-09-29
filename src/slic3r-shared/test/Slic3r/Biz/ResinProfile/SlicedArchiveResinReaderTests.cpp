@@ -16,6 +16,8 @@
 
 using namespace Slic3r::Biz::ResinProfile;
 
+using Catch::Approx;
+
 namespace fs = boost::filesystem;
 
 namespace {
@@ -108,7 +110,8 @@ ForeignResinProfile read_ok(const fs::path& path)
 {
     const SlicedArchiveResinReader reader;
     const auto                     result = reader.read(path);
-    INFO(result.has_value() ? "" : result.error());
+    const std::string              failure = result.has_value() ? "" : result.error();
+    INFO(failure);
     REQUIRE(result.has_value());
     return *result;
 }
