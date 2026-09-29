@@ -2,11 +2,16 @@
 #include <catch2/catch_approx.hpp>
 
 #include "sla_test_utils.hpp"
-#include "Slic3r/Biz/SlaFixture.hpp"
+#include "Slic3r/Domain/ConfigPack.hpp"
+#include "Slic3r/Domain/FullConfigSLA.hpp"
+#include "Slic3r/Domain/ConfigDefsSLA.hpp"
+#include "Slic3r/Domain/ExPolygon.hpp"
+#include "libslic3r/ConfigViews.hpp"
 #include "libslic3r/SLALayerImage.hpp"
 
 using namespace Slic3r;
 using namespace Slic3r::sla;
+using Catch::Approx;
 
 static Domain::ConfigView make_printer_config(Domain::SLADisplayOrientation orientation = Domain::SLADisplayOrientation::sladoLandscape)
 {
