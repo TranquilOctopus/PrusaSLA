@@ -889,8 +889,11 @@ void PreviewRenderModule::init_scene_layout()
 
     m_cube_view   = std::make_unique<CubeView>();
     m_sidebar_bed = std::make_unique<SidebarBed>(m_project_interactor, *m_render_module_navigator);
-    m_sidebar_print =
-        std::make_unique<SidebarPrint>(m_project_interactor, *m_render_module_navigator);
+    m_sidebar_print = std::make_unique<SidebarPrint>(
+        m_project_interactor,
+        *m_render_module_navigator,
+        &m_sidebar_bed->material_selection_dialog().material_settings_dialog()
+    );
     m_sidebar_object             = std::make_unique<SidebarObject>(m_project_interactor);
     m_pop_notification_list_view = std::make_unique<PopNotification::PopNotificationListView>(
         AppServices::instance().pop_notification_center().observable_list()
@@ -1099,6 +1102,7 @@ void PreviewRenderModule::init_dialog_navigation()
     );
 
     m_dialog_navigation.insert_dialog(&m_sidebar_print->print_settings_dialog());
+    m_dialog_navigation.insert_dialog(&m_sidebar_print->sla_print_settings_dialog());
     m_dialog_navigation.insert_dialog(m_invalid_data_dialog.get());
     m_dialog_navigation.insert_dialog(m_preset_updater_dialog.get());
 

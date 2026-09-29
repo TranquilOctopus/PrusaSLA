@@ -607,9 +607,11 @@ void PlaterRenderModule::init_scene_layout()
     m_cube_view = Passthrough{std::make_unique<CubeView>()};
     m_sidebar_bed =
         Passthrough(std::make_unique<SidebarBed>(m_project_interactor, *m_render_module_navigator));
-    m_sidebar_print = Passthrough(
-        std::make_unique<SidebarPrint>(m_project_interactor, *m_render_module_navigator)
-    );
+    m_sidebar_print = Passthrough(std::make_unique<SidebarPrint>(
+        m_project_interactor,
+        *m_render_module_navigator,
+        &m_sidebar_bed->material_selection_dialog().material_settings_dialog()
+    ));
     m_sidebar_object = Passthrough(std::make_unique<SidebarObject>(m_project_interactor));
     m_gizmo_manager->add_listener<Scene::IGizmoActiveToolListener>(m_sidebar_object.get());
     m_pop_notification_list_view =
@@ -835,6 +837,7 @@ void PlaterRenderModule::init_dialog_navigation()
     );
 
     m_dialog_navigation.insert_dialog(&m_sidebar_print->print_settings_dialog());
+    m_dialog_navigation.insert_dialog(&m_sidebar_print->sla_print_settings_dialog());
     m_dialog_navigation.insert_dialog(m_preferences_dialog.get());
     m_dialog_navigation.insert_dialog(m_number_entry_dialog.get());
     m_dialog_navigation.insert_dialog(m_invalid_data_dialog.get());

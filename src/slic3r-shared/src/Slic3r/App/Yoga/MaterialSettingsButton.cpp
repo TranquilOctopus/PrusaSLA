@@ -136,6 +136,8 @@ void MaterialSettingsButton::set_nozzle(const std::string& nozzle)
 
 void MaterialSettingsButton::on_data_update()
 {
+    // SLA resins are selected in the print settings dialog, not in the sidebar
+    set_visible(!is_sla_active(m_project_interactor));
     on_list_selection_changed(m_state->selected_index());
 }
 
