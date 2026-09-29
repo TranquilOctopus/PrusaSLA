@@ -768,7 +768,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "printer_class_from_config - use_tilt decides, then the printer model",
+    "printer_class_from_config - the printer model decides, use_tilt hints for an unknown model",
     "[resin_profile][mapper]"
 )
 {
@@ -801,16 +801,24 @@ TEST_CASE(
         );
     }
 
-    SECTION("use_tilt wins over the model name")
+    SECTION("the model name wins over the use_tilt hint")
     {
+        // use_tilt is a material setting that every view carries, and its default is on, so it
+        // cannot outvote a model name - printer_view(true, "Elegoo Mars 2") and
+        // printer_view(std::nullopt, "Elegoo Mars 2") are the same view and both lift.
         CHECK(
             printer_class_from_config(printer_view(true, "Elegoo Mars 2"))
-            == TargetPrinterClass::Tilt
-        );
-        CHECK(
-            printer_class_from_config(printer_view(false, "Prusa SL1"))
             == TargetPrinterClass::GenericMsla
         );
+        CHECK(
+            printer_class_from_config(printer_view(false, "Prusa SL1")) == TargetPrinterClass::Tilt
+        );
+    }
+
+    SECTION("without a model name use_tilt is the hint")
+    {
+        CHECK(printer_class_from_config(printer_view(true, "")) == TargetPrinterClass::Tilt);
+        CHECK(printer_class_from_config(printer_view(false, "")) == TargetPrinterClass::GenericMsla);
     }
 
     SECTION("the SLA defaults of this fork tilt")

@@ -62,7 +62,7 @@ TEST_CASE("SlaPreExportCheck - long model lists are truncated", "[SlaPreExportCh
     const Problems problems = format_problems({ "A", "B", "C", "D", "E", "F", "G" }, {});
 
     REQUIRE(problems.lines.size() == 1);
-    CHECK(problems.lines.front() == "7 models have no supports: A, B, C, D, E, … and 2 more");
+    CHECK(problems.lines.front() == "7 models have no supports: A, B, C, D, E, \u2026 and 2 more");
 }
 
 TEST_CASE("SlaPreExportCheck - islands are counted with the first layer", "[SlaPreExportCheck]")

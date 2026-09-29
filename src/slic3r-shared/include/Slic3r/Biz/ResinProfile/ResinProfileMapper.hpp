@@ -80,9 +80,10 @@ map_resin_profile(const ForeignResinProfile& profile, TargetPrinterClass printer
 
 /**
  * @brief Decide which mapping table a printer's settings get.
- * "use_tilt" decides it when the settings carry one (a printer that tilts for layer separation
- * is a Tilt printer, one that lifts is a generic MSLA printer). Otherwise the printer model name
- * decides it, and a view with neither hint is treated as the SL1 this fork is built around.
+ * The printer model decides: a Prusa machine that separates the layers by tilting (SL1, SL1S, M1,
+ * SLX) is a Tilt printer, every other model (Anycubic, Elegoo, ...) is a generic MSLA printer. A
+ * settings set that names no model falls back to "use_tilt", and a view with neither hint is
+ * treated as the SL1 this fork is built around.
  * @param printer_config The target printer's settings, finalized: options missing from the view
  *                       are ignored, and an unfinalized view carries none.
  */

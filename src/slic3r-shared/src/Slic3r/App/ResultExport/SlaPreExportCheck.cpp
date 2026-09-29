@@ -21,19 +21,23 @@ constexpr size_t max_listed_names = 5;
 
 std::string format_unsupported_names(const std::vector<std::string>& names)
 {
-    // TRN: Pre-export checklist line. {0} counts models sliced without supports, {1} is the plural suffix.
-    std::string line = fmt::format(
-        fmt::runtime(Biz::_u8L("{0} model{1} has no supports:")),
-        names.size(),
-        names.size() == 1 ? "" : "s"
-    );
+    // TRN: Pre-export checklist line for exactly one model.
+    // "has" turns into "have" with the count, so the two forms are separate strings instead of one
+    // string with a plural suffix.
+    std::string line = names.size() == 1 ?
+        Biz::_u8L("1 model has no supports:") :
+        fmt::format(fmt::runtime(Biz::_u8L("{0} models have no supports:")), names.size());
     for (size_t i = 0; i < names.size() && i < max_listed_names; ++i) {
         line += (i == 0 ? " " : ", ");
         line += names[i];
     }
     if (names.size() > max_listed_names) {
         // TRN: Pre-export checklist line, listing continuation. {0} counts the models left out.
-        line += fmt::format(fmt::runtime(Biz::_u8L(", … and {0} more")), names.size() - max_listed_names);
+        // The ellipsis is escaped so the string does not depend on the source code page.
+        line += fmt::format(
+            fmt::runtime(Biz::_u8L(", \u2026 and {0} more")),
+            names.size() - max_listed_names
+        );
     }
     return line;
 }

@@ -30,7 +30,8 @@ TEST_CASE("HeightBand - make clamps and orders the limits", "[HeightBand]")
     SECTION("Limits are clamped into the print height")
     {
         const HeightBand band = HeightBand::make(-10., 500., 200.);
-        REQUIRE(band.active);
+        // Clamped to the whole print height, so nothing is clipped.
+        REQUIRE_FALSE(band.active);
         REQUIRE(band.z_min == Approx(0.));
         REQUIRE(band.z_max == Approx(200.));
     }

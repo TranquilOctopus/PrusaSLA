@@ -584,11 +584,31 @@ TargetPrinterClass printer_class_from_config(const Domain::ConfigView& printer_c
 {
     const auto& values = printer_config.values();
 
-    // A view carries only the options it was built from, so look the options up leniently.
+    // The printer model decides, and only the Prusa machines that separate the layers by tilting
+    // are Tilt printers - the same list the engine uses in SLAPrint::is_prusa_print(). Every other
+    // model (Anycubic, Elegoo, ...) lifts the build plate, so it is a generic MSLA printer.
+    if (const auto it = values.find("printer_model");
+        it != values.end() && it->second.holds_alternative<std::string>())
+    {
+        const std::string& model = it->second.get<std::string>();
+        if (!model.empty()) {
+            static const std::vector<std::string> prusa_tilt_models{ "SL1", "SL1S", "M1", "SLX" };
+            const bool tilts = std::ranges::any_of(
+                prusa_tilt_models,
+                [&model](const std::string& tilt_model) {
+                    return contains_ignore_case(model, tilt_model);
+                }
+            );
+            return tilts ? TargetPrinterClass::Tilt : TargetPrinterClass::GenericMsla;
+        }
+    }
+
+    // No model to go by. A view always carries use_tilt (its default is on), so it says nothing
+    // about an unknown printer either - it is the fallback for a settings set that names no model.
     if (const auto it = values.find("use_tilt"); it != values.end()) {
         if (it->second.holds_alternative<std::vector<bool>>()) {
             const std::vector<bool>& tilt = it->second.get<std::vector<bool>>();
-            return std::any_of(tilt.begin(), tilt.end(), [](bool uses_tilt) { return uses_tilt; }) ?
+            return std::ranges::any_of(tilt, [](bool uses_tilt) { return uses_tilt; }) ?
                 TargetPrinterClass::Tilt :
                 TargetPrinterClass::GenericMsla;
         }
@@ -598,19 +618,7 @@ TargetPrinterClass printer_class_from_config(const Domain::ConfigView& printer_c
                 TargetPrinterClass::GenericMsla;
     }
 
-    // A printer that lifts the build plate instead of tilting it states no use_tilt, so its model
-    // name decides: SL1 and SL1S tilt, everything else (Anycubic, Elegoo, ...) lifts.
-    if (const auto it = values.find("printer_model");
-        it != values.end() && it->second.holds_alternative<std::string>())
-    {
-        const std::string& model = it->second.get<std::string>();
-        if (!model.empty())
-            return contains_ignore_case(model, "SL1") ?
-                TargetPrinterClass::Tilt :
-                TargetPrinterClass::GenericMsla;
-    }
-
-    // Nothing to go by: this fork is an SL1, so assume the tilt machine.
+    // Neither model nor use_tilt: this fork is an SL1, so assume the tilt machine.
     return TargetPrinterClass::Tilt;
 }
 
