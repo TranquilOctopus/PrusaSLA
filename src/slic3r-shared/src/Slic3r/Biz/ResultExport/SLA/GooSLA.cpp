@@ -199,6 +199,24 @@ static int get_cfg_value_i(const Domain::ConfigView &cfg, const std::string &key
     return def;
 }
 
+// A separation setting is missing from a config view that does not carry the resin, and the SLA
+// definition of every distance and speed below is 0, which would write a printer that does not
+// separate the layers at all, so a non-positive value falls back to the value the format is
+// written with when nothing is set. A delay of 0 is a real value and is kept.
+static float get_cfg_value_f_pos(const Domain::ConfigView& cfg, const std::string& key, float def)
+{
+    const float value = get_cfg_value_f(cfg, key, def);
+    return value > 0.f ? value : def;
+}
+
+// The .goo header holds the light PWM as 0-255, the range of the light_pwm settings, so the value
+// is taken as it is and only clamped to what the field can carry.
+static int16_t get_cfg_pwm(const Domain::ConfigView& cfg, const std::string& key, int def = 255)
+{
+    const int value = get_cfg_value_i(cfg, key, def);
+    return static_cast<int16_t>(value < 0 ? 0 : (value > 255 ? 255 : value));
+}
+
 static void fill_preview(uint16_t *pixels, int w, int h, const Domain::Images &thumbnails)
 {
     std::memset(pixels, 0, w * h * sizeof(uint16_t));
@@ -286,45 +304,55 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     double dh = get_cfg_value_f(cfg, "display_height");
     header.x_size_platform = static_cast<float>(dw);
     header.y_size_platform = static_cast<float>(dh);
-    header.z_size_platform = get_cfg_value_f(cfg, "printer_build_height");
+    header.z_size_platform = get_cfg_value_f(cfg, "max_print_height");
 
     header.layer_thickness = float(Domain::sla_effective_layer_height(cfg));
     header.common_exposure_time = get_cfg_value_f(cfg, "exposure_time");
     header.exposure_delay_mode = 1;
     header.turn_off_time = 0.5f;
 
-    header.bottom_before_lift_time = get_cfg_value_f(cfg, "initial_lift_distance", 6.0f) / get_cfg_value_f(cfg, "initial_lift_speed", 2.0f);
-    header.bottom_after_lift_time = header.bottom_before_lift_time;
-    header.bottom_after_retract_time = 0.0f;
-    header.before_lift_time = get_cfg_value_f(cfg, "lift_distance", 6.0f) / get_cfg_value_f(cfg, "lift_speed", 2.0f);
-    header.after_lift_time = header.before_lift_time;
-    header.after_retract_time = 0.0f;
+    // The six wait fields are seconds, which is the unit of the wait_before_lift family, and the
+    // light-off time above is the only delay this format keeps.
+    header.bottom_before_lift_time = get_cfg_value_f(cfg, "bottom_wait_before_lift");
+    header.bottom_after_lift_time = get_cfg_value_f(cfg, "bottom_wait_after_lift");
+    header.bottom_after_retract_time = get_cfg_value_f(cfg, "bottom_wait_after_retract");
+    header.before_lift_time = get_cfg_value_f(cfg, "wait_before_lift");
+    header.after_lift_time = get_cfg_value_f(cfg, "wait_after_lift");
+    header.after_retract_time = get_cfg_value_f(cfg, "wait_after_retract");
+
     header.bottom_exposure_time = get_cfg_value_f(cfg, "initial_exposure_time");
     header.bottom_layers = Domain::sla_bottom_layer_count(cfg);
     if (layer_count < static_cast<uint32_t>(header.bottom_layers)) {
         header.bottom_layers = layer_count;
     }
 
-    header.bottom_lift_distance = get_cfg_value_f(cfg, "initial_lift_distance", 6.0f);
-    header.bottom_lift_speed = get_cfg_value_f(cfg, "initial_lift_speed", 2.0f);
-    header.lift_distance = get_cfg_value_f(cfg, "lift_distance", 6.0f);
-    header.lift_speed = get_cfg_value_f(cfg, "lift_speed", 2.0f);
-    header.bottom_retract_distance = get_cfg_value_f(cfg, "initial_retract_distance", 6.0f);
-    header.bottom_retract_speed = get_cfg_value_f(cfg, "initial_retract_speed", 3.0f);
-    header.retract_distance = get_cfg_value_f(cfg, "retract_distance", 6.0f);
-    header.retract_speed = get_cfg_value_f(cfg, "retract_speed", 3.0f);
+    // Distances are mm and speeds mm/s, the units the settings are defined in.
+    header.bottom_lift_distance = get_cfg_value_f_pos(cfg, "bottom_lift_height", 6.0f);
+    header.bottom_lift_speed = get_cfg_value_f_pos(cfg, "bottom_lift_speed", 2.0f);
+    header.lift_distance = get_cfg_value_f_pos(cfg, "lift_height", 6.0f);
+    header.lift_speed = get_cfg_value_f_pos(cfg, "lift_speed", 2.0f);
+    // The header has a retract distance but there is no setting for one: the plate returns over the
+    // distance it was lifted.
+    header.bottom_retract_distance = header.bottom_lift_distance;
+    header.bottom_retract_speed = get_cfg_value_f_pos(cfg, "bottom_retract_speed", 3.0f);
+    header.retract_distance = header.lift_distance;
+    header.retract_speed = get_cfg_value_f_pos(cfg, "retract_speed", 3.0f);
 
-    header.bottom_second_lift_distance = 0.0f;
-    header.bottom_second_lift_speed = 0.0f;
-    header.second_lift_distance = 0.0f;
-    header.second_lift_speed = 0.0f;
-    header.bottom_second_retract_distance = 0.0f;
-    header.bottom_second_retract_speed = 0.0f;
-    header.second_retract_distance = 0.0f;
-    header.second_retract_speed = 0.0f;
+    // The second lift and retract fields are the second stage of the separation, which the *_2
+    // settings hold (the layers above the area fill threshold). Their default is 0, and 0 is what
+    // this writer put there before: no second stage.
+    header.bottom_second_lift_distance = get_cfg_value_f(cfg, "bottom_lift_height_2");
+    header.bottom_second_lift_speed = get_cfg_value_f(cfg, "bottom_lift_speed_2");
+    header.second_lift_distance = get_cfg_value_f(cfg, "lift_height_2");
+    header.second_lift_speed = get_cfg_value_f(cfg, "lift_speed_2");
+    header.bottom_second_retract_distance = header.bottom_second_lift_distance;
+    header.bottom_second_retract_speed = get_cfg_value_f(cfg, "bottom_retract_speed_2");
+    header.second_retract_distance = header.second_lift_distance;
+    header.second_retract_speed = get_cfg_value_f(cfg, "retract_speed_2");
 
-    header.bottom_light_pwm = 255;
-    header.light_pwm = 255;
+    // Both PWM fields are 0-255, the unit of the settings.
+    header.bottom_light_pwm = get_cfg_pwm(cfg, "bottom_light_pwm");
+    header.light_pwm = get_cfg_pwm(cfg, "light_pwm");
     header.advance_mode = 0;
 
     float print_time = 0.0f;
@@ -451,6 +479,11 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
                 layer_def.lift_speed = header.bottom_lift_speed;
                 layer_def.retract_distance = header.bottom_retract_distance;
                 layer_def.retract_speed = header.bottom_retract_speed;
+                layer_def.second_lift_distance = header.bottom_second_lift_distance;
+                layer_def.second_lift_speed = header.bottom_second_lift_speed;
+                layer_def.second_retract_distance = header.bottom_second_retract_distance;
+                layer_def.second_retract_speed = header.bottom_second_retract_speed;
+                layer_def.light_pwm = header.bottom_light_pwm;
             } else {
                 layer_def.layer_exposure_time = header.common_exposure_time;
                 layer_def.layer_off_time = header.turn_off_time;
@@ -461,13 +494,13 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
                 layer_def.lift_speed = header.lift_speed;
                 layer_def.retract_distance = header.retract_distance;
                 layer_def.retract_speed = header.retract_speed;
+                layer_def.second_lift_distance = header.second_lift_distance;
+                layer_def.second_lift_speed = header.second_lift_speed;
+                layer_def.second_retract_distance = header.second_retract_distance;
+                layer_def.second_retract_speed = header.second_retract_speed;
+                layer_def.light_pwm = header.light_pwm;
             }
 
-            layer_def.second_lift_distance = header.second_lift_distance;
-            layer_def.second_lift_speed = header.second_lift_speed;
-            layer_def.second_retract_distance = header.second_retract_distance;
-            layer_def.second_retract_speed = header.second_retract_speed;
-            layer_def.light_pwm = header.light_pwm;
             std::memcpy(layer_def.delimiter, GOO_DELIMITER, 2);
             layer_def.data_size = static_cast<int32_t>(data.files.data[i].size());
 

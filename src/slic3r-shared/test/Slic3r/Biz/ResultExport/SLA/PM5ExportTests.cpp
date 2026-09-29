@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 #include "Slic3r/Biz/SlaFixture.hpp"
 #include "Slic3r/Biz/ResultExport/SLA/SlaArchiveFormat.hpp"
@@ -7,7 +8,9 @@
 #include "Slic3r/TestUtils/TestTempDir.hpp"
 
 #include <boost/filesystem.hpp>
+#include <boost/nowide/fstream.hpp>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -18,6 +21,29 @@ using Slic3r::Biz::Slicing::SLAResultData;
 using Slic3r::Biz::PrintHost::Sla::SlaArchiveFormatRegistry;
 using Slic3r::Biz::PrintHost::Sla::register_sla_archive_formats;
 using Slic3r::Biz::Slicing::Sla::FileDataType;
+
+static std::vector<uint8_t> read_file_binary(const fs::path& path)
+{
+    boost::nowide::ifstream file(path.string(), std::ios::binary);
+    file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+    return std::vector<uint8_t>((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+}
+
+static uint32_t read_le32(const std::vector<uint8_t>& data, size_t offset)
+{
+    uint32_t value = 0;
+    for (size_t i = 0; i < 4; ++i)
+        value |= uint32_t(data.at(offset + i)) << (8 * i);
+    return value;
+}
+
+static float read_le_float(const std::vector<uint8_t>& data, size_t offset)
+{
+    const uint32_t bits = read_le32(data, offset);
+    float value = 0.f;
+    std::memcpy(&value, &bits, sizeof(value));
+    return value;
+}
 
 TEST_CASE("PM5 format registry", "[export][sla][pm5]")
 {
@@ -63,6 +89,13 @@ TEST_CASE("PM5 store writes a Photon Workshop version 517 file", "[export][sla][
     config.sla_material_settings.items.opt("exposure_time").set(6.0);
     config.sla_material_settings.items.opt("initial_exposure_time").set(35.0);
     config.sla_print_settings.items.opt("faded_layers").set(10);
+    // Layer separation, the settings the header takes: mm, mm/s and s.
+    config.sla_material_settings.items.opt("lift_height").set(7.5);
+    config.sla_material_settings.items.opt("lift_speed").set(1.25);
+    config.sla_material_settings.items.opt("retract_speed").set(2.5);
+    config.sla_material_settings.items.opt("wait_before_lift").set(3.0);
+    config.sla_material_settings.items.opt("bottom_lift_height").set(9.0);
+    config.sla_material_settings.items.opt("bottom_lift_speed").set(1.75);
     config.sla_material_settings.items.opt("bottle_weight").set(1.0);
     config.sla_material_settings.items.opt("bottle_volume").set(1000.0);
     config.sla_material_settings.items.opt("bottle_cost").set(0.0);
@@ -89,4 +122,31 @@ TEST_CASE("PM5 store writes a Photon Workshop version 517 file", "[export][sla][
     };
     REQUIRE(u32_at(12) == 517u); // format version
     REQUIRE(u32_at(16) == 9u);   // number of addresses
+
+    // The first address is the HEADER block; the container layout is checked in detail in
+    // AnycubicExportTests.cpp, this is about the values the resin puts into it.
+    auto data = read_file_binary(out_path);
+    REQUIRE(data.size() > 20 + 4);
+    const size_t header_body = 20 + read_le32(data, 20) + 12 + 4;
+    REQUIRE(data.size() >= header_body + 36);
+    // The light-off delay in s, the lift height in mm, the lift speed and the retract speed in mm/s
+    // (pm5.md): the settings are already in those units, so they are written as they are.
+    REQUIRE(read_le_float(data, header_body + 12) == Catch::Approx(3.0f));
+    REQUIRE(read_le_float(data, header_body + 24) == Catch::Approx(7.5f));
+    REQUIRE(read_le_float(data, header_body + 28) == Catch::Approx(1.25f));
+    REQUIRE(read_le_float(data, header_body + 32) == Catch::Approx(2.5f));
+
+    // The LAYERDEF entries (the fourth address) carry the lift height and speed of each layer, the
+    // bottom_* settings on the bottom layers. 11 layers are at the bottom exposure time.
+    const size_t layerdef_body = 20 + read_le32(data, 20 + 4 * 4) + 12 + 4 + 4;
+    const uint32_t layer_count = read_le32(data, layerdef_body - 4);
+    REQUIRE(layer_count > 11);
+    REQUIRE(data.size() >= layerdef_body + layer_count * 32);
+    for (uint32_t i = 0; i < layer_count; ++i) {
+        const size_t entry = layerdef_body + i * 32;
+        const bool bottom = i < 11;
+        INFO("layer " << i);
+        REQUIRE(read_le_float(data, entry + 8) == Catch::Approx(bottom ? 9.0f : 7.5f));
+        REQUIRE(read_le_float(data, entry + 12) == Catch::Approx(bottom ? 1.75f : 1.25f));
+    }
 }

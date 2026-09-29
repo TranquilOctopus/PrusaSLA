@@ -366,24 +366,6 @@ TEST_CASE("SLA settings that nothing reads are hidden, not deleted", "[Config][S
           "max_exposure_time",
           "min_initial_exposure_time",
           "max_initial_exposure_time",
-          "lift_height",
-          "lift_height_2",
-          "lift_speed_2",
-          "retract_speed_2",
-          "wait_before_lift",
-          "wait_after_lift",
-          "wait_after_retract",
-          "light_pwm",
-          "bottom_lift_height",
-          "bottom_lift_height_2",
-          "bottom_lift_speed",
-          "bottom_lift_speed_2",
-          "bottom_retract_speed",
-          "bottom_retract_speed_2",
-          "bottom_wait_before_lift",
-          "bottom_wait_after_lift",
-          "bottom_wait_after_retract",
-          "bottom_light_pwm",
           "material_source_note"})
     {
         INFO("setting " << key);
@@ -405,12 +387,32 @@ TEST_CASE("SLA settings next to the hidden ones stay visible", "[Config][SLA][Hi
         return nullptr;
     };
 
-    // The neighbours of the hidden SL1 separation knobs are all read, so hiding them by accident
-    // would cost a real setting: the Elegoo exporter reads lift_speed and retract_speed, and
-    // Domain::sla_bottom_layer_count reads bottom_layer_count for the Elegoo and Goo headers.
+    // The layer-separation knobs were hidden by M1.13d3 because no exporter looked them up. They
+    // are not: the .pwmx/.pm5 and .goo writers take the lift distance, the lift and retract speeds,
+    // the waits around the moves and the light PWM from them, the bottom_* ones for the bottom
+    // layers, so a user on a non-Prusa printer sets them. Hiding them again would take away a real
+    // setting, so they are listed with the other settings the exporters read.
     for (const std::string& key :
-         {"lift_speed",
+         {"lift_height",
+          "lift_height_2",
+          "lift_speed",
+          "lift_speed_2",
           "retract_speed",
+          "retract_speed_2",
+          "wait_before_lift",
+          "wait_after_lift",
+          "wait_after_retract",
+          "light_pwm",
+          "bottom_lift_height",
+          "bottom_lift_height_2",
+          "bottom_lift_speed",
+          "bottom_lift_speed_2",
+          "bottom_retract_speed",
+          "bottom_retract_speed_2",
+          "bottom_wait_before_lift",
+          "bottom_wait_after_lift",
+          "bottom_wait_after_retract",
+          "bottom_light_pwm",
           "bottom_layer_count",
           "exposure_time",
           "initial_exposure_time",

@@ -223,6 +223,16 @@ static int get_cfg_value_i(const Domain::ConfigView &cfg, const std::string &key
     return def;
 }
 
+// A separation setting is missing from a config view that does not carry the resin, and the SLA
+// definition of every one of them is 0, which would write a printer that does not separate the
+// layers at all (and a print time that divides by zero). So a non-positive value falls back to
+// the value the format is written with when nothing is set.
+static float get_cfg_value_f_pos(const Domain::ConfigView& cfg, const std::string& key, float def)
+{
+    const float value = get_cfg_value_f(cfg, key, def);
+    return value > 0.f ? value : def;
+}
+
 template<class T> void crop_value(T &val, T val_min, T val_max)
 {
     if (val < val_min) {
@@ -299,20 +309,30 @@ static void fill_header_and_misc(anycubicsla_format_header &h,
     h.price_currency = '$';
     h.antialiasing = 1;
     h.per_layer_override = 0;
-    h.delay_before_exposure_s = 0.5f;
+
+    // The header has a single delay field and no light PWM field, so of the three waits around the
+    // separation only the one before the lift is written (pm5.md calls it the light-off delay),
+    // and the PWM has nowhere to go in this container.
+    h.delay_before_exposure_s = get_cfg_value_f(cfg, "wait_before_lift", 0.5f);
     crop_value(h.delay_before_exposure_s, 0.0f, 1000.0f);
 
-    h.lift_distance_mm = 8.0f;
+    // lift_height, lift_speed and retract_speed are mm, mm/s and mm/s already, so the header takes
+    // them as they are; the bottom_* ones drive the bottom layers through the misc block.
+    h.lift_distance_mm = get_cfg_value_f_pos(cfg, "lift_height", 8.0f);
     crop_value(h.lift_distance_mm, 0.0f, 100.0f);
 
-    m.bottom_lift_distance_mm = h.lift_distance_mm;
-    h.lift_speed_mms = 2.0f;
+    m.bottom_lift_distance_mm = get_cfg_value_f_pos(cfg, "bottom_lift_height", 8.0f);
+    crop_value(m.bottom_lift_distance_mm, 0.0f, 100.0f);
+
+    h.lift_speed_mms = get_cfg_value_f_pos(cfg, "lift_speed", 2.0f);
     crop_value(h.lift_speed_mms, 0.1f, 20.0f);
 
-    m.bottom_lift_speed_mms = h.lift_speed_mms;
+    m.bottom_lift_speed_mms = get_cfg_value_f_pos(cfg, "bottom_lift_speed", 2.0f);
     crop_value(m.bottom_lift_speed_mms, 0.1f, 20.0f);
 
-    h.retract_speed_mms = 3.0f;
+    // There is no retract distance in the resin settings, so the plate returns over the distance
+    // it was lifted, which is also what the print time below assumes.
+    h.retract_speed_mms = get_cfg_value_f_pos(cfg, "retract_speed", 3.0f);
     crop_value(h.retract_speed_mms, 0.1f, 20.0f);
 
     h.print_time_s = static_cast<std::uint32_t>(
@@ -527,16 +547,32 @@ void store_pm5(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     float bottle_cost = get_cfg_value_f(cfg, "bottle_cost");
     float material_density = (bottle_volume_ml > 0) ? (bottle_weight_g / bottle_volume_ml) : 1.0f;
 
+    // HEADER +12 is the light-off delay in s (pm5.md), +24 the lift height in mm, +28 the lift
+    // speed and +32 the retract speed, both in mm/s, so the resin values go in unchanged. The
+    // bottom_* settings drive the bottom layers of LAYERDEF, which has a lift height and a lift
+    // speed of its own per layer. The fallbacks are the values of the Photon Workshop sample.
+    float wait_before_lift_s = get_cfg_value_f(cfg, "wait_before_lift", 0.5f);
+    float lift_height_mm = get_cfg_value_f_pos(cfg, "lift_height", 8.0f);
+    float bottom_lift_height_mm = get_cfg_value_f_pos(cfg, "bottom_lift_height", 8.0f);
+    float lift_speed_mms = get_cfg_value_f_pos(cfg, "lift_speed", 6.0f);
+    float bottom_lift_speed_mms = get_cfg_value_f_pos(cfg, "bottom_lift_speed", 6.0f);
+    float retract_speed_mms = get_cfg_value_f_pos(cfg, "retract_speed", 6.0f);
+
     float volume_ml = (stats.objects_used_material + stats.support_used_material) / 1000.0f;
     float weight_g = volume_ml * material_density;
     float price = (bottle_volume_ml > 0) ? (volume_ml * bottle_cost / bottle_volume_ml) : 0.0f;
 
+    // The plate returns over the distance it was lifted, there is no retract distance setting, so
+    // a layer spends one lift and one retract on it, plus the wait before the lift.
+    const float bottom_separation_s = bottom_lift_height_mm / retract_speed_mms
+        + bottom_lift_height_mm / bottom_lift_speed_mms;
+    const float separation_s = lift_height_mm / retract_speed_mms + lift_height_mm / lift_speed_mms;
     std::uint32_t print_time_s = static_cast<std::uint32_t>(
         (bottom_layer_count * initial_exposure_time_s) +
         ((layer_count - bottom_layer_count) * exposure_time_s) +
-        (layer_count * 8.0f / 3.0f) + // lift_distance / retract_speed (using defaults)
-        (layer_count * 8.0f / 6.0f) + // lift_distance / lift_speed
-        (layer_count * 0.5f) // delay_before_exposure
+        (bottom_layer_count * bottom_separation_s) +
+        ((layer_count - bottom_layer_count) * separation_s) +
+        (layer_count * wait_before_lift_s)
     );
 
     float display_width_mm = get_cfg_value_f(cfg, "display_width");
@@ -589,12 +625,12 @@ void store_pm5(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     anycubicsla_write_float(out, pixel_size_um);
     anycubicsla_write_float(out, layer_height_mm);
     anycubicsla_write_float(out, exposure_time_s);
-    anycubicsla_write_float(out, 0.5f); // delay_before_exposure_s
+    anycubicsla_write_float(out, wait_before_lift_s);
     anycubicsla_write_float(out, initial_exposure_time_s);
     anycubicsla_write_float(out, static_cast<float>(bottom_layer_count));
-    anycubicsla_write_float(out, 8.0f); // lift_height_mm
-    anycubicsla_write_float(out, 6.0f); // lift_speed
-    anycubicsla_write_float(out, 6.0f); // retract_speed (sample value, likely)
+    anycubicsla_write_float(out, lift_height_mm);
+    anycubicsla_write_float(out, lift_speed_mms);
+    anycubicsla_write_float(out, retract_speed_mms);
     anycubicsla_write_float(out, volume_ml);
     anycubicsla_write_int32(out, PM5_LAYER_COLOR_LEVELS);
     anycubicsla_write_int32(out, res_x);
@@ -684,8 +720,10 @@ void store_pm5(const std::string& file_path, const Biz::Slicing::SLAResultData& 
         // Placeholder: offset=0, size, lift params, exposure, layer_height, lit_count, 0
         anycubicsla_write_int32(out, 0); // image_offset (placeholder)
         anycubicsla_write_int32(out, layer_sizes[i]);
-        anycubicsla_write_float(out, 8.0f); // lift height, mm (sample value, not yet from config)
-        anycubicsla_write_float(out, 6.0f); // lift speed (sample value, not yet from config)
+        // The bottom layers are separated with the bottom_* settings, the rest with the plain ones.
+        const bool bottom_layer = i < bottom_layer_count;
+        anycubicsla_write_float(out, bottom_layer ? bottom_lift_height_mm : lift_height_mm);
+        anycubicsla_write_float(out, bottom_layer ? bottom_lift_speed_mms : lift_speed_mms);
         anycubicsla_write_float(out, i < bottom_layer_count ? initial_exposure_time_s : exposure_time_s);
         // Only the first layer is sliced at initial_layer_height; every other layer, bottom layers
         // included, is sliced at layer_height. The printer moves Z by this value, so giving the
