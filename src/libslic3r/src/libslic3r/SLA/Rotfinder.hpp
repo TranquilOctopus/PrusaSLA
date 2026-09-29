@@ -59,6 +59,23 @@ public:
 Vec2d find_best_misalignment_rotation(const Domain::ModelObject &modelobj,
                                       const RotOptimizeParams & = {});
 
+/**
+  * Find the rotation that needs the least support material for the object.
+  *
+  * The object is assumed to rest on the build plate, so the poses worth trying are the ones that
+  * lay a convex hull face flat on the plate. They are scored by the supportedness of the mesh:
+  * the faces lying on the plate are rewarded by their area (they need no support at all), and
+  * everything hanging over the plate is penalised, the steeper the better.
+  *
+  * @param modelobj The model object representing the 3d mesh.
+  * @param params The optimization accuracy and the status callback, as above.
+  *
+  * @return Returns the rotations around the X and Y axes in the same convention as the functions
+  * above: R = Ry(y) * Rx(x).
+  */
+Vec2d find_least_supports_rotation(const Domain::ModelObject &modelobj,
+                                   const RotOptimizeParams & = {});
+
 Vec2d find_min_z_height_rotation(const Domain::ModelObject &mo,
                                  const RotOptimizeParams &params = {});
 
