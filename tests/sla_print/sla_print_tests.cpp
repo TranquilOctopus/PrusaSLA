@@ -5,7 +5,6 @@
 #include <algorithm>
 
 #include "sla_test_utils.hpp"
-#include "test_data.hpp"
 
 #include <libslic3r/TriangleMeshSlicer.hpp>
 #include <libslic3r/SLA/SupportTreeMesher.hpp>
@@ -13,8 +12,13 @@
 #include "Slic3r/Biz/Algorithms/BoundingBox.hpp"
 #include "Slic3r/Biz/Algorithms/ModelObject.hpp"
 #include "Slic3r/Biz/Slicing/BackgroundProcess.hpp"
+#include "Slic3r/Domain/BedInstance.hpp"
+#include "Slic3r/Domain/ConfigPack.hpp"
 #include "Slic3r/Domain/Preset/HwConfig.hpp"
+#include "Slic3r/Domain/Preset/SelectedPreset.hpp"
 #include "Slic3r/Domain/PrinterTechnology.hpp"
+#include "Slic3r/TestUtils/HwConfigUtils.hpp"
+#include "libslic3r/IThumbnailImageGenerator.hpp"
 #include "libslic3r/SLAPrint.hpp"
 #include "libslic3r/SlicingInput.hpp"
 
@@ -37,6 +41,31 @@ const char *const SUPPORT_TEST_MODELS[] = {
     "cube_with_concave_hole_enlarged_standing.obj",
     "A_upsidedown.obj",
     "extruder_idler.obj"
+};
+
+// Local stand-in for the fff_print test helper, which is not on this target's include path.
+Domain::Preset::SelectedPresetMetadata
+create_dummy_selected_preset_metadata(const Domain::Preset::HwPrinterConfig& hw_config)
+{
+    return Domain::Preset::SelectedPresetMetadata{
+        .hw_config = hw_config,
+        .tools     = std::vector<Domain::Preset::EvaluatedPresetMetadata>{hw_config.tool_count},
+        .materials = std::vector<Domain::Preset::EvaluatedPresetMetadata>{hw_config.material_slot_count()}
+    };
+}
+
+// The tests never inspect thumbnails, so requests are dropped right away.
+class ThumbnailGenerator : public Biz::Slicing::IThumbnailImageGenerator
+{
+    std::future<Biz::Slicing::ThumbnailImageResults> enqueue_thumbnail_requests(
+        const Biz::Slicing::ThumbnailImageRequests&) override
+    {
+        std::promise<Biz::Slicing::ThumbnailImageResults> promise;
+        promise.set_value(Biz::Slicing::ThumbnailImageResults{});
+        return promise.get_future();
+    }
+
+    void handle_enqueued_requests() override {}
 };
 
 } // namespace
@@ -228,16 +257,13 @@ TEST_CASE("halfcone test", "[halfcone]") {
 
 TEST_CASE("Initial layer height zero uses layer height", "[SLAInitialLayerHeight]") {
     using namespace Slic3r;
-    using namespace Slic3r::Domain;
-    using namespace Slic3r::Biz::Algorithms;
-    using namespace Slic3r::Test;
 
     // Create a simple 20mm cube model
-    TriangleMesh mesh = TriangleMesh::make_cube(20.0, 20.0, 20.0);
+    Domain::TriangleMesh mesh = Biz::Algorithms::TriangleMesh::make_cube(20.0, 20.0, 20.0);
     Domain::Model model;
     Domain::ModelObject* object = model.add_object();
     object->name = "cube.stl";
-    add_volume(object, mesh);
+    Biz::Algorithms::add_volume(object, mesh);
     object->add_instance();
 
     // Setup bed
@@ -255,7 +281,7 @@ TEST_CASE("Initial layer height zero uses layer height", "[SLAInitialLayerHeight
     config.sla_material_settings.items.opt("initial_layer_height").set<double>(0.0);
 
     auto hw_config = Test::create_dummy_hw_config(1, 0, Domain::PrinterTechnology::SLA);
-    auto preset_metadata = Test::create_dummy_selected_preset_metadata(hw_config);
+    auto preset_metadata = create_dummy_selected_preset_metadata(hw_config);
     auto metadata = Biz::Slicing::build_gcode_metadata({}, preset_metadata, config);
 
     SLAPrint print{[](Biz::Slicing::SLAResult&&) {}, [](const Biz::Slicing::Sla::Object&) {}};
@@ -264,16 +290,18 @@ TEST_CASE("Initial layer height zero uses layer height", "[SLAInitialLayerHeight
 
     // Slice the model
     ThumbnailGenerator thumbnail_generator{};
-    print.slice(SlicingId{0, 0}, thumbnail_generator, std::nullopt);
+    print.slice(Domain::SlicingId{0, 0}, thumbnail_generator, std::nullopt);
 
     // Get the slice levels from the first object
     REQUIRE(print.m_objects.size() == 1);
-    const SLAPrintObject& po = *print.m_objects.front();
-    REQUIRE(po.m_slice_index.size() >= 2);
+    const SLAPrint::PrintLayers& layers = print.print_layers();
+    REQUIRE(layers.size() >= 2);
+    REQUIRE(layers[0].slices().size() == 1);
+    REQUIRE(layers[1].slices().size() == 1);
 
     // First two slice levels should be 0.03 mm apart
-    float level0 = po.m_slice_index[0].slice_level();
-    float level1 = po.m_slice_index[1].slice_level();
+    float level0 = layers[0].slices().front().get().slice_level();
+    float level1 = layers[1].slices().front().get().slice_level();
     float diff = level1 - level0;
 
     REQUIRE(diff == Approx(0.03).margin(1e-4));
