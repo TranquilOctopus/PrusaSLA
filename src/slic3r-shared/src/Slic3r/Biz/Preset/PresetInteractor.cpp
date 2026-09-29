@@ -578,7 +578,11 @@ void PresetInteractor::save_user_preset(
     save_user_preset_internal(kind, slot_index, {}, std::move(new_name), bag);
 }
 
-void PresetInteractor::save_selected_preset_as(PresetKind kind, size_t slot_index, std::string new_name)
+void PresetInteractor::save_selected_preset_as(
+    Domain::Preset::PresetKind kind,
+    size_t slot_index,
+    std::string new_name
+)
 {
     if (new_name.empty()) {
         return;
