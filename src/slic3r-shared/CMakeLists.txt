@@ -53,6 +53,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Plater/SlaIssueNotification.cpp
         include/Slic3r/App/Plater/SlaUnsupportedNotification.hpp
         src/Slic3r/App/Plater/SlaUnsupportedNotification.cpp
+        include/Slic3r/App/Plater/SlaUnsupportedObjects.hpp
+        src/Slic3r/App/Plater/SlaUnsupportedObjects.cpp
         include/Slic3r/App/Plater/SlaIssueAnalysis.hpp
         src/Slic3r/App/Plater/SlaIssueAnalysis.cpp
         include/Slic3r/App/Plater/SimplifyDialog.hpp
@@ -797,6 +799,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/ResultExport/ExportPathSelect.cpp
         include/Slic3r/App/ResultExport/ExportActions.hpp
         src/Slic3r/App/ResultExport/ExportActions.cpp
+        include/Slic3r/App/ResultExport/SlaPreExportCheck.hpp
+        src/Slic3r/App/ResultExport/SlaPreExportCheck.cpp
         include/Slic3r/Biz/ResultExport/ExportNameParser.hpp
         src/Slic3r/Biz/ResultExport/ExportNameParser.cpp
 
@@ -1597,6 +1601,10 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/App/Plater/SlaHollowGizmoTests.cpp
 
             test/Slic3r/App/Plater/SlaIssueAnalysisTests.cpp
+
+            test/Slic3r/App/Plater/SlaUnsupportedObjectsTests.cpp
+
+            test/Slic3r/App/ResultExport/SlaPreExportCheckTests.cpp
 
             test/Slic3r/App/Undo/ModelSerializeRoundtripTests.cpp
 

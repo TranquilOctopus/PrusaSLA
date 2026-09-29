@@ -1,5 +1,7 @@
 #include "Slic3r/App/Plater/SlaUnsupportedNotification.hpp"
 
+#include "Slic3r/App/Plater/SlaUnsupportedObjects.hpp"
+
 #include <Slic3r/App/AppServices.hpp>
 #include <Slic3r/App/PopNotification/PopNotificationCenter.hpp>
 #include <Slic3r/App/PopNotification/PopNotificationData.hpp>
@@ -111,35 +113,6 @@ void SlaUnsupportedNotification::on_project_changed(Domain::SelectionId project_
     }
 }
 
-std::vector<const Domain::ModelObject*> SlaUnsupportedNotification::collect_unsupported_objects(
-    const Domain::SlicingId& slicing_id,
-    const Domain::BedInstance& bed_instance,
-    const Domain::Project& project)
-{
-    std::vector<const Domain::ModelObject*> unsupported_objects;
-    for (const Domain::ModelInstance* instance : bed_instance.model_instances) {
-        if (!instance || !instance->is_printable()) {
-            continue;
-        }
-        const Domain::ModelObject* model_object = project.find_object_by_id(instance->get_object()->id().id);
-        if (!model_object) {
-            continue;
-        }
-        // Skip if already added
-        if (std::find(unsupported_objects.begin(), unsupported_objects.end(), model_object) != unsupported_objects.end()) {
-            continue;
-        }
-        // Check if the object has no support structure in the slice result
-        const SLAObjectCache::Key key{slicing_id, model_object->id()};
-        const SLAObjectOptRef opt_ref = m_project_interactor.sla_object_cache().get_instance(key);
-        bool unsupported = !opt_ref.has_value() || !opt_ref->get().support_structure || opt_ref->get().support_structure->empty();
-        if (unsupported) {
-            unsupported_objects.push_back(model_object);
-        }
-    }
-    return unsupported_objects;
-}
-
 void SlaUnsupportedNotification::recreate_notification(Domain::SelectionId project_id, bool open_when_closed)
 {
     if (project_id != m_project_interactor.selected_project_id()) {
@@ -161,7 +134,8 @@ void SlaUnsupportedNotification::recreate_notification(Domain::SelectionId proje
         return;
     }
 
-    std::vector<const Domain::ModelObject*> unsupported_objects = collect_unsupported_objects(m_current_slicing_id, *bed_instance, project);
+    std::vector<const Domain::ModelObject*> unsupported_objects =
+        collect_unsupported_objects(m_project_interactor.sla_object_cache(), m_current_slicing_id, *bed_instance, project);
 
     if (unsupported_objects.empty()) {
         return;
