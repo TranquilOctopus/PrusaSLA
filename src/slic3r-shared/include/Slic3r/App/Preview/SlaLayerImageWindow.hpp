@@ -8,6 +8,8 @@
 
 #include <memory>
 #include <optional>
+#include <string>
+#include <vector>
 
 namespace Slic3r::App::Render { class Device; }
 namespace Slic3r::Biz { class ProjectInteractor; }
@@ -37,6 +39,15 @@ protected:
 private:
     void rebuild_texture_if_needed();
     void rebuild_zoom_texture();
+    void render_plot(
+        const std::vector<float>& values,
+        const std::string& title,
+        size_t current_layer,
+        Platform::Color line_color,
+        float width,
+        float height
+    );
+    std::string layer_stats_text() const;
     void on_prev_layer();
     void on_next_layer();
     // Turns a click on the fitted layer image into slice mm and opens the native resolution zoom on it.
@@ -50,6 +61,12 @@ private:
     DoubleSliderForLayers* m_slider{nullptr};
     const Biz::Slicing::SLAResult* m_last_result{nullptr};
     size_t m_last_layer_index{SIZE_MAX};
+
+    // Per layer statistics owned by the result, kept alive as long as we draw them
+    std::shared_ptr<const Biz::Slicing::SLAResultData> m_result_data;
+    std::shared_ptr<const std::vector<float>> m_layer_areas;
+    std::shared_ptr<const std::vector<float>> m_layer_peel_force;
+    size_t m_current_layer{0};
 
     Render::TexturePtr m_texture;
     size_t m_texture_width{0};

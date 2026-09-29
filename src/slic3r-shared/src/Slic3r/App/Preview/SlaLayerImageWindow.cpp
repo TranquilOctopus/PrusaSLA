@@ -33,6 +33,9 @@ static constexpr float  zoom_header_height  = 22.f;
 static constexpr float  zoom_panel_height =
     zoom_header_height + zoom_panel_gap + float(zoom_region_size_px);
 
+// Height of a single statistics plot in the layer image window
+static constexpr float plot_height = 50.f;
+
 SlaLayerImageWindow::SlaLayerImageWindow(Render::Device& device, Biz::ProjectInteractor& project_interactor)
     : CollapsibleWindow(_u8L("Layer image"), "SlaLayerImageWindow")
     , m_device(device)
@@ -136,6 +139,16 @@ void SlaLayerImageWindow::update(const Biz::Slicing::SLAResult* result)
     bool result_changed = m_last_result != result;
     bool layer_changed = m_last_layer_index != size_t(higher_pos);
 
+    if (result_changed) {
+        // The statistics are owned by the result, alias them to keep them alive while we draw
+        m_result_data = result->export_data;
+        auto alias    = [this](const std::vector<float>& values) {
+            return std::shared_ptr<const std::vector<float>>(m_result_data, &values);
+        };
+        m_layer_areas      = m_result_data ? alias(m_result_data->layer_areas) : nullptr;
+        m_layer_peel_force = m_result_data ? alias(m_result_data->layer_peel_force) : nullptr;
+    }
+
     bool needs_rebuild = false;
     if (result_changed || layer_changed) {
         m_last_result = result;
@@ -154,6 +167,9 @@ void SlaLayerImageWindow::update(const Biz::Slicing::SLAResult* result)
         if (m_zoom_panel->is_visible())
             render_zoom_region(current_layer);
     }
+
+    // The chart marker has to follow the layer the image above was rendered for.
+    m_current_layer = m_last_layer_index;
 
     size_t current_layer = current_layer_index();
 
@@ -332,15 +348,33 @@ void SlaLayerImageWindow::render_body(const Domain::Vec2f& pos, const Domain::Ve
 
     const bool zoom_visible = m_zoom_panel->is_visible();
 
-    // Render the image centered in the available space
-    if (m_current_layer_image.has_value() && m_texture) {
+    const bool has_areas = m_layer_areas && !m_layer_areas->empty();
+    const bool has_peel  = m_layer_peel_force && !m_layer_peel_force->empty();
+
+    const int   plot_count  = static_cast<int>(has_areas) + static_cast<int>(has_peel);
+    const float text_height = ImGui::GetTextLineHeightWithSpacing();
+
+    // Reserve a fixed strip at the bottom for the charts, the image takes the rest
+    const float stats_height = plot_count * plot_height + (plot_count > 0 ? text_height : 0.f);
+
+    const ImVec2 region      = ImGui::GetContentRegionAvail();
+    const ImVec2 region_min  = ImGui::GetCursorScreenPos();
+    const ImVec2 region_max  = region_min + region;
+
+    // The image is fitted into the space left above the chart strip, between the controls
+    // and the zoom panel on top.
+    ImVec2 avail = region;
+    if (zoom_visible)
+        avail.y -= m_zoom_panel->height();
+    avail.y = std::max(avail.y - stats_height, 0.f);
+
+    // Render the image centered in that space. The click to mm mapping uses the rect of
+    // this image, so the image must be drawn as the last item before handling the click.
+    if (m_current_layer_image.has_value() && m_texture && avail.y > 0.f) {
         const auto& img = *m_current_layer_image;
         float img_w = static_cast<float>(img.width);
         float img_h = static_cast<float>(img.height);
 
-        ImVec2 avail = ImGui::GetContentRegionAvail();
-        if (zoom_visible)
-            avail.y -= m_zoom_panel->height();
         float scale = std::min(avail.x / img_w, avail.y / img_h);
         scale = std::max(scale, 0.1f);
 
@@ -348,10 +382,9 @@ void SlaLayerImageWindow::render_body(const Domain::Vec2f& pos, const Domain::Ve
         float draw_h = img_h * scale;
 
         // Center the image in the available space
-        ImVec2 cursor = ImGui::GetCursorScreenPos();
         float center_offset_x = (avail.x - draw_w) * 0.5f;
         float center_offset_y = (avail.y - draw_h) * 0.5f;
-        ImGui::SetCursorScreenPos(ImVec2(cursor.x + center_offset_x, cursor.y + center_offset_y));
+        ImGui::SetCursorScreenPos(ImVec2(region_min.x + center_offset_x, region_min.y + center_offset_y));
 
         ImGui::PushStyleVar(ImGuiStyleVar_ImageRounding, 0.f);
         render_image(m_texture, ImVec2(draw_w, draw_h), ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 1), ImVec4(1, 1, 1, 1));
@@ -359,6 +392,34 @@ void SlaLayerImageWindow::render_body(const Domain::Vec2f& pos, const Domain::Ve
 
         if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             on_layer_image_clicked();
+    }
+
+    // The charts fill the reserved strip at the bottom of the window
+    if (plot_count > 0) {
+        ImGui::SetCursorScreenPos(ImVec2(region_min.x, region_max.y - stats_height));
+
+        if (has_areas) {
+            render_plot(
+                *m_layer_areas,
+                _u8L("Area (mm²)"),
+                m_current_layer,
+                Platform::Color::SlaLayerArea,
+                region.x,
+                plot_height
+            );
+        }
+        if (has_peel) {
+            render_plot(
+                *m_layer_peel_force,
+                _u8L("Peel force (N)"),
+                m_current_layer,
+                Platform::Color::AccentSecondary,
+                region.x,
+                plot_height
+            );
+        }
+
+        ImGui::TextUnformatted(layer_stats_text().c_str());
     }
 
     // The native resolution window is drawn below the label and the close button of the zoom panel.
@@ -376,6 +437,77 @@ void SlaLayerImageWindow::render_body(const Domain::Vec2f& pos, const Domain::Ve
             ImVec4(0, 0, 0, 1),
             ImVec4(1, 1, 1, 1));
     }
+}
+
+void SlaLayerImageWindow::render_plot(
+    const std::vector<float>& values,
+    const std::string& title,
+    size_t current_layer,
+    Platform::Color line_color,
+    float width,
+    float height
+)
+{
+    if (values.empty()) {
+        return;
+    }
+
+    // Scale from zero so that the peaks (high cross sections) are easy to spot
+    const float max_value = *std::max_element(values.begin(), values.end());
+
+    // The label is drawn on top of the plot, hide it from the plot itself
+    const std::string id = "##" + title;
+
+    ImGui::PushStyleColor(ImGuiCol_PlotLines, m_theme->color_imgui(line_color));
+    ImGui::PlotLines(
+        id.c_str(),
+        values.data(),
+        static_cast<int>(values.size()),
+        0,
+        title.c_str(),
+        0.f,
+        max_value > 0.f ? max_value : 1.f,
+        ImVec2(width, height)
+    );
+    ImGui::PopStyleColor();
+
+    // Marker of the layer currently shown in the slider
+    const ImVec2 padding   = ImGui::GetStyle().FramePadding;
+    const ImVec2 inner_min = ImGui::GetItemRectMin() + padding;
+    const ImVec2 inner_max = ImGui::GetItemRectMax() - padding;
+    if (inner_max.x <= inner_min.x) {
+        return;
+    }
+
+    float t = 0.f;
+    if (values.size() > 1) {
+        t = static_cast<float>(current_layer) / static_cast<float>(values.size() - 1);
+        t = std::clamp(t, 0.f, 1.f);
+    }
+
+    const float  x     = inner_min.x + t * (inner_max.x - inner_min.x);
+    const ImU32  color = ImU32(m_theme->color_imgui(Platform::Color::Text));
+    ImGui::GetWindowDrawList()->AddLine(ImVec2(x, inner_min.y), ImVec2(x, inner_max.y), color);
+}
+
+std::string SlaLayerImageWindow::layer_stats_text() const
+{
+    std::string text;
+
+    if (m_layer_areas && !m_layer_areas->empty() && m_current_layer < m_layer_areas->size()) {
+        const float area = (*m_layer_areas)[m_current_layer];
+        text += fmt::format(fmt::runtime(_u8L("Area {:.1f} mm²")), area);
+    }
+
+    if (m_layer_peel_force && !m_layer_peel_force->empty() && m_current_layer < m_layer_peel_force->size()) {
+        const float peel = (*m_layer_peel_force)[m_current_layer];
+        if (!text.empty()) {
+            text += "  ·  ";
+        }
+        text += fmt::format(fmt::runtime(_u8L("Peel {:.1f} N")), peel);
+    }
+
+    return text;
 }
 
 void SlaLayerImageWindow::on_prev_layer()
