@@ -15,7 +15,7 @@
 #include "Slic3r/App/Scene/ClipperPresenter.hpp"
 #include "Slic3r/App/Scene/AuxiliaryElementId.hpp"
 #include "Slic3r/App/Yoga/Item.hpp"
-#include "Slic3r/Biz/JThread/JThread.hpp"
+#include "jthread/JThread.hpp"
 #include "Slic3r/Domain/Config.hpp"
 #include "Slic3r/Domain/FullConfigSLA.hpp"
 #include "libslic3r/SLASupportTool.hpp"

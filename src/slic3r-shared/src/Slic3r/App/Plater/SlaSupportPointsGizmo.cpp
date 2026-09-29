@@ -19,7 +19,7 @@
 #include "Slic3r/Biz/IUndoProvider.hpp"
 #include "Slic3r/Biz/Utils/MeshRaycaster.hpp"
 #include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
-#include "Slic3r/Biz/JThread/JThread.hpp"
+#include "jthread/JThread.hpp"
 #include "Slic3r/Biz/Platform/PlatformServices.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
 #include "Slic3r/Domain/SelectionId.hpp"
