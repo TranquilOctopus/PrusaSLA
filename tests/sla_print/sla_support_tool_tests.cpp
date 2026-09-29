@@ -31,26 +31,39 @@ struct BoxModel
     }
 };
 
-Slic3r::SLAPrintObjectConfigView make_sla_config()
+// The tool API takes the raw config pointers and resolves the SLA object view itself.
+struct SlaConfig
 {
-    auto full = std::make_shared<const Slic3r::Domain::FullConfigSLA>(Slic3r::Domain::FullConfigSLA::defaults());
+    Slic3r::Domain::FullConfigSLAPtr full;
+    Slic3r::Domain::PartialObjectConfigSLAPtr object_settings;
+
+    Slic3r::SLAPrintObjectConfigView view() const { return Slic3r::SLAPrintObjectConfigView{full, object_settings}; }
+};
+
+SlaConfig make_sla_config()
+{
+    SlaConfig cfg;
+    cfg.full = std::make_shared<const Slic3r::Domain::FullConfigSLA>(Slic3r::Domain::FullConfigSLA::defaults());
     auto obj_settings = std::make_shared<Slic3r::Domain::SLAObjectSettings>();
     obj_settings->items.opt("supports_enable").set(true);
     obj_settings->items.opt("pad_enable").set(true);
     obj_settings->items.opt("support_object_elevation").set(10.0);
-    return Slic3r::SLAPrintObjectConfigView(full, obj_settings);
+    cfg.object_settings = std::make_shared<const Slic3r::Domain::PartialObjectConfigSLA>(*obj_settings, cfg.full->hw_config());
+    return cfg;
 }
 
-Slic3r::SLAPrintObjectConfigView make_sla_config_zero_elevation()
+SlaConfig make_sla_config_zero_elevation()
 {
-    auto full = std::make_shared<const Slic3r::Domain::FullConfigSLA>(Slic3r::Domain::FullConfigSLA::defaults());
+    SlaConfig cfg;
+    cfg.full = std::make_shared<const Slic3r::Domain::FullConfigSLA>(Slic3r::Domain::FullConfigSLA::defaults());
     auto obj_settings = std::make_shared<Slic3r::Domain::SLAObjectSettings>();
     obj_settings->items.opt("supports_enable").set(true);
     obj_settings->items.opt("pad_enable").set(true);
     obj_settings->items.opt("pad_around_object").set(true);
     obj_settings->items.opt("pad_around_object_everywhere").set(true);
     obj_settings->items.opt("support_object_elevation").set(10.0);
-    return Slic3r::SLAPrintObjectConfigView(full, obj_settings);
+    cfg.object_settings = std::make_shared<const Slic3r::Domain::PartialObjectConfigSLA>(*obj_settings, cfg.full->hw_config());
+    return cfg;
 }
 
 } // namespace
@@ -63,9 +76,9 @@ TEST_CASE("SLASupportTool: generate_support_points_for_tool returns points for l
     Slic3r::Transform3d object_to_world = Slic3r::Transform3d::Identity();
     object_to_world.translate({0., 0., 10.});
 
-    auto config = make_sla_config();
+    SlaConfig config = make_sla_config();
 
-    auto points = Slic3r::sla::generate_support_points_for_tool(*box.object, object_to_world, config, []{ return false; });
+    auto points = Slic3r::sla::generate_support_points_for_tool(*box.object, object_to_world, config.full, config.object_settings, []{ return false; });
 
     REQUIRE(points.size() > 0);
 }
@@ -78,14 +91,14 @@ TEST_CASE("SLASupportTool: build_support_tree_for_tool returns tree with correct
     Slic3r::Transform3d object_to_world = Slic3r::Transform3d::Identity();
     object_to_world.translate({0., 0., 10.});
 
-    auto config = make_sla_config();
+    SlaConfig config = make_sla_config();
 
     // First generate points
-    auto points = Slic3r::sla::generate_support_points_for_tool(*box.object, object_to_world, config, []{ return false; });
+    auto points = Slic3r::sla::generate_support_points_for_tool(*box.object, object_to_world, config.full, config.object_settings, []{ return false; });
     REQUIRE(points.size() > 0);
 
     // Then build tree
-    auto tree = Slic3r::sla::build_support_tree_for_tool(*box.object, object_to_world, points, config, []{ return false; });
+    auto tree = Slic3r::sla::build_support_tree_for_tool(*box.object, object_to_world, points, config.full, config.object_settings, []{ return false; });
 
     REQUIRE(tree.tree != nullptr);
     REQUIRE_FALSE(tree.tree->empty());
@@ -94,7 +107,7 @@ TEST_CASE("SLASupportTool: build_support_tree_for_tool returns tree with correct
     // Object mesh min z in world frame = 10 (lift) + 0 (box bottom) = 10
     // Elevation = 10 (support_object_elevation)
     // Expected tree min z ~= 10 - 10 = 0
-    double expected_min_z = 10.0 - config.get<double>("support_object_elevation");
+    double expected_min_z = 10.0 - config.view().get<double>("support_object_elevation");
     double actual_min_z = tree.tree->bounding_box().min.z();
 
     CHECK(std::abs(actual_min_z - expected_min_z) < 0.2);
@@ -108,26 +121,26 @@ TEST_CASE("SLASupportTool: stop function returns empty result without throwing",
     Slic3r::Transform3d object_to_world = Slic3r::Transform3d::Identity();
     object_to_world.translate({0., 0., 10.});
 
-    auto config = make_sla_config();
+    SlaConfig config = make_sla_config();
 
     // Stop immediately
-    auto points = Slic3r::sla::generate_support_points_for_tool(*box.object, object_to_world, config, []{ return true; });
+    auto points = Slic3r::sla::generate_support_points_for_tool(*box.object, object_to_world, config.full, config.object_settings, []{ return true; });
     CHECK(points.empty());
 
-    auto tree = Slic3r::sla::build_support_tree_for_tool(*box.object, object_to_world, points, config, []{ return true; });
+    auto tree = Slic3r::sla::build_support_tree_for_tool(*box.object, object_to_world, points, config.full, config.object_settings, []{ return true; });
     CHECK(tree.tree == nullptr);
     CHECK(tree.pad == nullptr);
 }
 
 TEST_CASE("SLASupportTool: support_tool_elevation returns correct values", "[SLASupportTool]")
 {
-    auto config = make_sla_config();
-    double elev = Slic3r::sla::support_tool_elevation(config);
+    SlaConfig config = make_sla_config();
+    double elev = Slic3r::sla::support_tool_elevation(config.full, config.object_settings);
     // support_object_elevation (10) + pad required elevation (when pad enabled and not embedded)
     CHECK(elev >= 10.0);
 
-    auto config_zero = make_sla_config_zero_elevation();
-    double elev_zero = Slic3r::sla::support_tool_elevation(config_zero);
+    SlaConfig config_zero = make_sla_config_zero_elevation();
+    double elev_zero = Slic3r::sla::support_tool_elevation(config_zero.full, config_zero.object_settings);
     // In zero-elevation mode (pad around object), elevation should be 0
     CHECK(elev_zero == 0.0);
 }
@@ -141,14 +154,14 @@ TEST_CASE("SLASupportTool: build_support_tree_for_tool places tree under moved o
     Slic3r::Transform3d object_to_world = Slic3r::Transform3d::Identity();
     object_to_world.translate({30., 20., 10.});
 
-    auto config = make_sla_config();
+    SlaConfig config = make_sla_config();
 
     // Generate points (they come back in object's mesh frame)
-    auto points = Slic3r::sla::generate_support_points_for_tool(*box.object, object_to_world, config, []{ return false; });
+    auto points = Slic3r::sla::generate_support_points_for_tool(*box.object, object_to_world, config.full, config.object_settings, []{ return false; });
     REQUIRE(points.size() > 0);
 
     // Build tree
-    auto tree = Slic3r::sla::build_support_tree_for_tool(*box.object, object_to_world, points, config, []{ return false; });
+    auto tree = Slic3r::sla::build_support_tree_for_tool(*box.object, object_to_world, points, config.full, config.object_settings, []{ return false; });
 
     REQUIRE(tree.tree != nullptr);
     REQUIRE_FALSE(tree.tree->empty());

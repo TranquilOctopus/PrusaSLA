@@ -1,8 +1,10 @@
 #include "libslic3r/SLASupportTool.hpp"
 
+#include "libslic3r/ConfigViews.hpp"
 #include "libslic3r/SLAPrint.hpp"
 #include "libslic3r/SLA/SupportPointGenerator.hpp"
 #include "libslic3r/SLA/SupportTree.hpp"
+#include "libslic3r/SLA/SupportIslands/SampleConfigFactory.hpp"
 #include "libslic3r/SLA/Pad.hpp"
 #include "libslic3r/SLA/JobController.hpp"
 #include "libslic3r/TriangleMeshSlicer.hpp"
@@ -13,12 +15,15 @@
 #include <Slic3r/Biz/Algorithms/BoundingBox.hpp>
 #include <Slic3r/Biz/Algorithms/AABBMesh.hpp>
 #include <Slic3r/Domain/TriangleMesh.hpp>
+#include <Slic3r/Domain/ConfigCommon.hpp>
 #include <Slic3r/Domain/Constants.hpp>
 #include <Slic3r/Exception.hpp>
 
 namespace Slic3r::sla {
 
 namespace {
+
+using Domain::its_merge;
 
 // Build the object's merged mesh (MODEL PART volumes only) transformed by object_to_world.
 Domain::TriangleMesh build_object_mesh(const Domain::ModelObject& object,
@@ -60,14 +65,17 @@ SupportToolTree empty_tree() {
 SupportToolTree build_support_tree_for_tool(const Domain::ModelObject& object,
     const Domain::Transform3d& object_to_world,
     const Domain::SLA::SupportPoints& points,
-    const Domain::ConfigView& object_config,
+    const Domain::FullConfigSLAPtr& full_config,
+    const Domain::PartialObjectConfigSLAPtr& object_settings,
     const SupportToolStop& stop)
 {
     try {
         if (stop && stop()) return empty_tree();
 
+        const SLAPrintObjectConfigView cfg{full_config, object_settings};
+
         // Check if supports are enabled
-        bool supports_enable = object_config.get<bool>("supports_enable");
+        bool supports_enable = cfg.get<bool>("supports_enable");
         if (!supports_enable || points.empty()) {
             return empty_tree();
         }
@@ -76,18 +84,20 @@ SupportToolTree build_support_tree_for_tool(const Domain::ModelObject& object,
         Domain::TriangleMesh mesh = build_object_mesh(object, object_to_world);
         if (mesh.empty()) return empty_tree();
 
-        // Create SupportableMesh
-        sla::SupportableMesh supportable_mesh;
-        supportable_mesh.emesh = AABBMesh(mesh.its);
         // Points are in object's mesh frame; transform to world frame
         Domain::SLA::SupportPoints world_points = points;
         for (auto& sp : world_points) {
             sp.pos = (object_to_world * sp.pos.cast<double>()).cast<float>();
         }
-        supportable_mesh.pts = std::make_shared<const Domain::SLA::SupportPoints>(std::move(world_points));
-        supportable_mesh.zoffset = mesh.bounding_box().min.z();
-        supportable_mesh.cfg = make_support_cfg(object_config);
-        supportable_mesh.pad_cfg = make_pad_cfg(object_config);
+
+        // Create SupportableMesh (aggregate: cfg and pad_cfg have no default ctor)
+        sla::SupportableMesh supportable_mesh{
+            .emesh    = AABBMesh(mesh.its),
+            .pts      = std::make_shared<const Domain::SLA::SupportPoints>(std::move(world_points)),
+            .cfg      = make_support_cfg(cfg),
+            .pad_cfg  = make_pad_cfg(cfg),
+            .zoffset  = mesh.bounding_box().min.z(),
+        };
 
         // JobController with stop condition
         sla::JobController ctl;
@@ -106,7 +116,7 @@ SupportToolTree build_support_tree_for_tool(const Domain::ModelObject& object,
 
         // Create pad if enabled
         std::shared_ptr<const Domain::TriangleMesh> pad_mesh;
-        if (object_config.get<bool>("pad_enable")) {
+        if (cfg.get<bool>("pad_enable")) {
             if (stop && stop()) return {tree_mesh, nullptr};
 
             const indexed_triangle_set empty_its;
@@ -129,26 +139,29 @@ SupportToolTree build_support_tree_for_tool(const Domain::ModelObject& object,
 
 Domain::SLA::SupportPoints generate_support_points_for_tool(const Domain::ModelObject& object,
     const Domain::Transform3d& object_to_world,
-    const Domain::ConfigView& object_config,
+    const Domain::FullConfigSLAPtr& full_config,
+    const Domain::PartialObjectConfigSLAPtr& object_settings,
     const SupportToolStop& stop)
 {
     Domain::SLA::SupportPoints result;
     try {
         if (stop && stop()) return result;
 
+        const SLAPrintObjectConfigView cfg{full_config, object_settings};
+
         // Build merged mesh in world frame
         Domain::TriangleMesh mesh = build_object_mesh(object, object_to_world);
         if (mesh.empty()) return result;
 
         // Compute slice heights
-        double layer_height = object_config.get<double>("layer_height");
+        double layer_height = cfg.get<double>("layer_height");
         std::vector<float> heights = compute_slice_heights(mesh, layer_height);
         if (heights.empty()) return result;
 
         // Slice the mesh
         MeshSlicingParamsEx params;
-        params.closing_radius = float(object_config.get<double>("slice_closing_radius"));
-        switch (object_config.get<Domain::SlicingMode>("slicing_mode")) {
+        params.closing_radius = float(cfg.get<double>("slice_closing_radius"));
+        switch (cfg.get<Domain::SlicingMode>("slicing_mode")) {
             case Domain::SlicingMode::Regular:    params.mode = MeshSlicingParams::SlicingMode::Regular; break;
             case Domain::SlicingMode::EvenOdd:    params.mode = MeshSlicingParams::SlicingMode::EvenOdd; break;
             case Domain::SlicingMode::CloseHoles: params.mode = MeshSlicingParams::SlicingMode::Positive; break;
@@ -167,15 +180,15 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const Domain::ModelO
 
         // Configure support point generator
         sla::SupportPointGeneratorConfig config;
-        config.density_relative = float(object_config.get<int>("support_points_density_relative") / 100.f);
+        config.density_relative = float(cfg.get<int>("support_points_density_relative") / 100.f);
 
-        switch (object_config.get<Domain::sla::SupportTreeType>("support_tree_type")) {
+        switch (cfg.get<Domain::sla::SupportTreeType>("support_tree_type")) {
             case Domain::sla::SupportTreeType::Default:
             case Domain::sla::SupportTreeType::Organic:
-                config.head_diameter = float(object_config.get<double>("support_head_front_diameter"));
+                config.head_diameter = float(cfg.get<double>("support_head_front_diameter"));
                 break;
             case Domain::sla::SupportTreeType::Branching:
-                config.head_diameter = float(object_config.get<double>("branchingsupport_head_front_diameter"));
+                config.head_diameter = float(cfg.get<double>("branchingsupport_head_front_diameter"));
                 break;
         }
 
@@ -193,7 +206,7 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const Domain::ModelO
             layer_support_points, AABBMesh(mesh.its), allowed_move, throw_on_cancel);
 
         // Zero-elevation filter
-        if (is_zero_elevation(object_config)) {
+        if (is_zero_elevation(cfg)) {
             float lvl = float(mesh.bounding_box().min.z() + Domain::EPSILON);
             std::erase_if(support_points, [lvl](const Domain::SLA::SupportPoint& sp) {
                 return sp.pos.z() <= lvl;
@@ -215,15 +228,17 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const Domain::ModelO
     }
 }
 
-double support_tool_elevation(const Domain::ConfigView& object_config)
+double support_tool_elevation(const Domain::FullConfigSLAPtr& full_config,
+                              const Domain::PartialObjectConfigSLAPtr& object_settings)
 {
-    if (is_zero_elevation(object_config)) return 0.;
+    const SLAPrintObjectConfigView cfg{full_config, object_settings};
+    if (is_zero_elevation(cfg)) return 0.;
 
-    bool supports_enable = object_config.get<bool>("supports_enable");
-    double ret = supports_enable ? object_config.get<double>("support_object_elevation") : 0.;
+    bool supports_enable = cfg.get<bool>("supports_enable");
+    double ret = supports_enable ? cfg.get<double>("support_object_elevation") : 0.;
 
-    if (supports_enable && object_config.get<bool>("pad_enable")) {
-        sla::PadConfig pcfg = make_pad_cfg(object_config);
+    if (supports_enable && cfg.get<bool>("pad_enable")) {
+        sla::PadConfig pcfg = make_pad_cfg(cfg);
         if (!pcfg.embed_object.enabled) {
             ret += pcfg.required_elevation();
         }
