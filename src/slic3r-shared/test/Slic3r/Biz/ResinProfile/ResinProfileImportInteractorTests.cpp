@@ -18,6 +18,7 @@
 
 #include <fmt/format.h>
 
+#include <cctype>
 #include <memory>
 #include <optional>
 #include <string>
@@ -37,6 +38,20 @@ constexpr std::string_view generic_msla_printer = "Photon Mono M5";
 constexpr std::string_view fallback_resin = "Generic Fast Resin";
 /// @brief The other system resin of that printer, which a profile can name to pick it instead.
 constexpr std::string_view named_resin = "Generic Resin";
+
+/// @brief True for a YYYY-MM-DD string, the date the importer writes into the source note. The note
+/// carries the day the import ran on, so the test checks the shape of that day rather than pinning
+/// a calendar date, which would start failing the day after it was written.
+bool is_iso_date(std::string_view text)
+{
+    if (text.size() != 10 || text[4] != '-' || text[7] != '-')
+        return false;
+    for (size_t i = 0; i < text.size(); ++i) {
+        if (i != 4 && i != 7 && !std::isdigit(static_cast<unsigned char>(text[i])))
+            return false;
+    }
+    return true;
+}
 
 /// @brief A Chitubox profile, written by hand the way the slicer exports one.
 std::string chitubox_cfg(std::string_view profile_name, std::string_view bottom_layers)
@@ -167,7 +182,7 @@ TEST_CASE(
     ResinImportFixture fx;
     const fs::path profile = fx.write_profile("photon.cfg", chitubox_cfg("Grey resin", "8"));
 
-    ResinProfile::ResinProfileImportInteractor interactor(fx.project_interactor, [] { return "2026-09-29"; });
+    ResinProfile::ResinProfileImportInteractor interactor(fx.project_interactor);
     const ResinProfile::ResinImportResult result = interactor.import_file(profile, fx.target());
 
     REQUIRE(result.ok);
@@ -204,12 +219,17 @@ TEST_CASE(
 
     const Domain::ConfigItem* note = imported->config_box().items.find("material_source_note");
     REQUIRE(note != nullptr);
-    CHECK(note->get<std::string>() == "Chitubox photon.cfg, imported 2026-09-29");
+    // The note names the file and the day it was imported, so the date is only checked for its
+    // shape: the test does not know which day it runs on.
+    constexpr std::string_view note_prefix = "Chitubox photon.cfg, imported ";
+    const std::string source_note = note->get<std::string>();
+    REQUIRE(source_note.starts_with(note_prefix));
+    CHECK(is_iso_date(source_note.substr(note_prefix.size())));
 
     // The new preset inherits from the base, so the printer specific settings stay sensible.
     const auto inherits = imported->features.find(Preset::IO::FEATURE_BASED_ID);
     REQUIRE(inherits != imported->features.end());
-    CHECK(std::get<std::string>(*inherits) == base_id);
+    CHECK(std::get<std::string>(inherits->second) == base_id);
 }
 
 TEST_CASE(
@@ -220,7 +240,7 @@ TEST_CASE(
     ResinImportFixture fx;
     const fs::path profile = fx.write_profile("grey.cfg", chitubox_cfg("Grey resin", "8"));
 
-    ResinProfile::ResinProfileImportInteractor interactor(fx.project_interactor, [] { return "2026-09-29"; });
+    ResinProfile::ResinProfileImportInteractor interactor(fx.project_interactor);
     const ResinProfile::ResinImportResult first = interactor.import_file(profile, fx.target());
     const ResinProfile::ResinImportResult second = interactor.import_file(profile, fx.target());
 
@@ -240,7 +260,7 @@ TEST_CASE(
     // The printer also ships this resin, so the name of the profile picks it over the fallback.
     const fs::path profile = fx.write_profile("generic.cfg", chitubox_cfg("Generic Resin", "8"));
 
-    ResinProfile::ResinProfileImportInteractor interactor(fx.project_interactor, [] { return "2026-09-29"; });
+    ResinProfile::ResinProfileImportInteractor interactor(fx.project_interactor);
     const ResinProfile::ResinImportResult result = interactor.import_file(profile, fx.target(), /*dry_run=*/true);
 
     REQUIRE(result.ok);
@@ -252,7 +272,7 @@ TEST_CASE("ResinProfileImportInteractor writes nothing on a dry run", "[resin_pr
     ResinImportFixture fx;
     const fs::path profile = fx.write_profile("grey.cfg", chitubox_cfg("Grey resin", "8"));
 
-    ResinProfile::ResinProfileImportInteractor interactor(fx.project_interactor, [] { return "2026-09-29"; });
+    ResinProfile::ResinProfileImportInteractor interactor(fx.project_interactor);
     const ResinProfile::ResinImportResult result = interactor.import_file(profile, fx.target(), /*dry_run=*/true);
 
     // What the import would do is reported, name collisions included.
@@ -272,7 +292,7 @@ TEST_CASE("ResinProfileImportInteractor imports a folder, one result per file", 
     fx.write_profile("a_grey.cfg", chitubox_cfg("Grey resin", "8"));
     fx.write_profile("b_broken.cfg", "this file is not a resin profile at all\n");
 
-    ResinProfile::ResinProfileImportInteractor interactor(fx.project_interactor, [] { return "2026-09-29"; });
+    ResinProfile::ResinProfileImportInteractor interactor(fx.project_interactor);
     const std::vector<ResinProfile::ResinImportResult> results = interactor.import_folder(folder, fx.target());
 
     // The good file imports, the unreadable one only fills in its own result.
@@ -289,7 +309,7 @@ TEST_CASE("ResinProfileImportInteractor reports a target that is not selected", 
     ResinImportFixture fx;
     const fs::path profile = fx.write_profile("grey.cfg", chitubox_cfg("Grey resin", "8"));
 
-    ResinProfile::ResinProfileImportInteractor interactor(fx.project_interactor, [] { return "2026-09-29"; });
+    ResinProfile::ResinProfileImportInteractor interactor(fx.project_interactor);
     ResinProfile::ResinImportTarget target = fx.target();
     target.config_container_id = target.config_container_id + 1;
 
