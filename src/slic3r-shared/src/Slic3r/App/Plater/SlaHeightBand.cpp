@@ -26,6 +26,8 @@ using namespace Slic3r::App::Yoga;
 
 namespace Slic3r::App::Plater {
 
+using Biz::_u8L;
+
 static constexpr double band_step   = 0.1;
 static constexpr int band_precision = 1;
 

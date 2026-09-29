@@ -12,7 +12,9 @@
 #include "Slic3r/Biz/I18N/I18N.hpp"
 #include "Slic3r/Biz/OverrideItem.hpp"
 #include "Slic3r/Biz/OverridableCBIObservableList.hpp"
+#include "Slic3r/Biz/OverridableConfigBoxObservableList.hpp"
 #include "Slic3r/Biz/Preset/PresetSelectionCheck.hpp"
+#include "Slic3r/Biz/PrintToolConfigObservableList.hpp"
 #include "Slic3r/Biz/PrintToolItem.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 

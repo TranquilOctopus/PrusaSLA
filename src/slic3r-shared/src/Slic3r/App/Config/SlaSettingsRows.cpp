@@ -1,6 +1,7 @@
 #include "Slic3r/App/Config/SlaSettingsRows.hpp"
 
 #include "Slic3r/App/Config/ConfigRowItem.hpp"
+#include "Slic3r/App/Yoga/Namespace.hpp"
 
 #include "Slic3r/Biz/IConfigBoxSetter.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
@@ -9,12 +10,14 @@ using namespace Slic3r::App::Yoga;
 
 namespace Slic3r::App {
 
+using Yoga::operator""_fpx;
+
 SlaSettingsRows::SlaSettingsRows(std::vector<Key> keys, Biz::IConfigBoxSetter& cb_setter) :
     Yoga::Item(), m_keys(std::move(keys)), m_cb_setter(cb_setter)
 {
     set_object_name("SlaSettingsRows");
     set_orientation(Orientation::Vertical);
-    set_gap(5.fpx);
+    set_gap(5_fpx);
     set_flex_shrink(0);
 }
 

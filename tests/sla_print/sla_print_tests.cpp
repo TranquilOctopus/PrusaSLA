@@ -322,7 +322,7 @@ int applied_faded_layers(int print_faded_layers, int resin_faded_layers)
     Domain::Model model;
     Domain::ModelObject* object = model.add_object();
     object->name = "cube.stl";
-    Biz::Algorithms::add_volume(object, mesh);
+    Biz::Algorithms::ModelObject::add_volume(object, mesh);
     object->add_instance();
 
     Domain::Bed model_bed;

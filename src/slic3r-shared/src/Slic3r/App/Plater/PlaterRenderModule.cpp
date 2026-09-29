@@ -100,6 +100,7 @@
 #include "Slic3r/App/MaterialSelectionDialog.hpp"
 #include "Slic3r/App/MaterialSettingsDialog.hpp"
 #include "Slic3r/App/PrintSettingsDialog.hpp"
+#include "Slic3r/App/SlaPrintSettingsDialog.hpp"
 #include "Slic3r/App/PrinterAddDialog.hpp"
 #include "Slic3r/App/PresetUpdater/PresetUpdaterDialog.hpp"
 #include "Slic3r/App/UIItemCommand.hpp"
