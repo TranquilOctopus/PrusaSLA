@@ -1,6 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 
+#include <set>
+#include <string>
+#include <vector>
+
 #include <libslic3r/SLAPrint.hpp>
 #include <Slic3r/Domain/ConfigDefsSLA.hpp>
 
@@ -231,6 +235,42 @@ TEST_CASE("SLAInvalidation: every SLA config key has an invalidation entry", "[S
     for (const auto& key : keys) {
         INFO("Key: " << key);
         REQUIRE(invalidated_by.contains(key));
+    }
+}
+
+TEST_CASE("SLAInvalidation: branching support keys the engine reads are defined", "[SLAInvalidation]") {
+    // The def file builds these as prefix + "support_..." with prefix == "branching", which yields
+    // "branchingsupport_..." - the spelling SLAPrint::make_support_cfg reads. Guard against a future
+    // edit of the prefix introducing the other spelling, which would leave the keys undefined.
+    const std::vector<std::string> keys = {
+        "branchingsupport_base_diameter",
+        "branchingsupport_base_height",
+        "branchingsupport_base_safety_distance",
+        "branchingsupport_buildplate_only",
+        "branchingsupport_critical_angle",
+        "branchingsupport_head_front_diameter",
+        "branchingsupport_head_penetration",
+        "branchingsupport_head_width",
+        "branchingsupport_max_bridge_length",
+        "branchingsupport_max_bridges_on_pillar",
+        "branchingsupport_max_pillar_link_distance",
+        "branchingsupport_max_weight_on_model",
+        "branchingsupport_object_elevation",
+        "branchingsupport_pillar_connection_mode",
+        "branchingsupport_pillar_diameter",
+        "branchingsupport_pillar_widening_factor",
+        "branchingsupport_small_pillar_diameter_percent",
+    };
+
+    std::set<std::string> defined;
+    for (const auto& def : Slic3r::Domain::get_defs_sla().defs())
+        defined.insert(def.name);
+
+    for (const auto& key : keys) {
+        INFO("Key: " << key);
+        REQUIRE(defined.contains(key));
+        // The underscore spelling must not exist.
+        REQUIRE_FALSE(defined.contains("branching" + key.substr(std::string("branchingsupport").size())));
     }
 }
 
