@@ -53,6 +53,11 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Plater/SlaIssueNotification.cpp
         include/Slic3r/App/Plater/SlaUnsupportedNotification.hpp
         src/Slic3r/App/Plater/SlaUnsupportedNotification.cpp
+        include/Slic3r/App/Plater/SlaFirstModelNotification.hpp
+        src/Slic3r/App/Plater/SlaFirstModelNotification.cpp
+
+        include/Slic3r/App/Hints/SlaHints.hpp
+        src/Slic3r/App/Hints/SlaHints.cpp
         include/Slic3r/App/Plater/SlaIssueAnalysis.hpp
         src/Slic3r/App/Plater/SlaIssueAnalysis.cpp
         include/Slic3r/App/Plater/SimplifyDialog.hpp
@@ -1581,6 +1586,8 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/App/SidebarSlaSummaryTests.cpp
 
             test/Slic3r/App/SlaFirstPreferenceTests.cpp
+
+            test/Slic3r/App/SlaHintsTests.cpp
 
             test/Slic3r/App/Scene/Node.cpp
             test/Slic3r/App/Scene/Ray.cpp

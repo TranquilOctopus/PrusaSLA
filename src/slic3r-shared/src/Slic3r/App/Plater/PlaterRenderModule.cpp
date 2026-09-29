@@ -37,6 +37,7 @@
 #include "Slic3r/App/Plater/SimplifyNotification.hpp"
 #include "Slic3r/App/Plater/SlaIssueNotification.hpp"
 #include "Slic3r/App/Plater/SlaUnsupportedNotification.hpp"
+#include "Slic3r/App/Plater/SlaFirstModelNotification.hpp"
 #include "Slic3r/App/Plater/PaintOnSupportsGizmo.hpp"
 #include "Slic3r/App/Plater/PaintOnSupportsDialog.hpp"
 #include "Slic3r/App/Plater/PaintOnSeamsGizmo.hpp"
@@ -1058,6 +1059,10 @@ void PlaterRenderModule::init_gizmos()
         AppServices::instance().pop_notification_center()
     );
     m_sla_unsupported_notification = std::make_unique<SlaUnsupportedNotification>(
+        m_project_interactor,
+        AppServices::instance().pop_notification_center()
+    );
+    m_sla_first_model_notification = std::make_unique<SlaFirstModelNotification>(
         m_project_interactor,
         AppServices::instance().pop_notification_center()
     );
