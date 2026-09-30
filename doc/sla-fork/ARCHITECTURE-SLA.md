@@ -789,6 +789,14 @@ must be told apart **by lightness**, at a threshold of 10 L\*, and the same rule
 `slic3r-shared-tests`. Commands and how to make a reference:
 `doc/sla-fork/visual-regression.md`. No reference images are committed yet.
 
+`doc/sla-fork/tools/visual_ci.py` (standard library only) is the CI half: `plan` reads
+`doc/sla-fork/visual-regression/manifest.json` and prints the renders or the reason there is
+nothing to do, and `run` drives the app and `visual_diff.py check` over them into one exit code
+(0 passed or nothing to compare, 1 a render changed, 2 the run could not be made).
+`doc/sla-fork/tools/test_visual_ci.py` tests it with a fake app. The `visual-regression` job in
+`.github/workflows/sla-ci.yml` is manual only, like the whole file, and skips everything that
+costs minutes while the manifest names no reference.
+
 ### Other tools
 
 - `doc/sla-fork/tools/` — `bench_diff.py`, `orientation_test_piece.py`, `pm5_layout.py`,

@@ -5,12 +5,18 @@
 #   * the Actions tab: this workflow -> Run workflow, or
 #   * the `run-ci` label on a pull request that targets an sla/ branch.
 #
-# What a run does, in step order: install the system packages doc/Build.md lists, restore the deps
-# prefix from the Actions cache (the expensive part, a cache miss rebuilds it), configure and build
-# only sla_print_tests and slic3r-shared-tests in Release, run both and upload their output, run the
-# M0.13 benchmark harness over the committed tests/data models, and diff its metrics against
-# doc/sla-fork/baseline.json. A second job posts that table as a comment on the pull request, and
-# that job is the only one with write permissions.
+# Two jobs, each on its own runner, both manual and both with the same gate:
+#   * build-and-test: install the system packages doc/Build.md lists, restore the deps prefix from
+#     the Actions cache (the expensive part, a cache miss rebuilds it), configure and build only
+#     sla_print_tests and slic3r-shared-tests in Release, run both and upload their output, run the
+#     M0.13 benchmark harness over the committed tests/data models, and diff its metrics against
+#     doc/sla-fork/baseline.json. A second job posts that table as a comment on the pull request,
+#     and that job is the only one with write permissions.
+#   * visual-regression (roadmap M6.2d): build the app, render the fixture views offscreen with
+#     --render-to and compare them with the committed references through visual_diff.py. It starts
+#     with a cheap plan step, and every step that costs minutes is skipped while there are no
+#     references to compare against, which is the state the fork is in until a person makes them
+#     (M6.2a).
 name: SLA CI (manual)
 
 on:
@@ -235,6 +241,180 @@ jobs:
             sla_benchmark.log
             sla_benchmark.json
             sla_bench_diff.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+  visual-regression:
+    # The same gate as build-and-test: by hand, or with the `run-ci` label on a pull request. A
+    # render needs the app, which is the wx shell, so this job is the expensive one: it is manual
+    # for the same reason the whole file is.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       contains(github.event.pull_request.labels.*.name, 'run-ci'))
+    runs-on: ubuntu-24.04
+    # GitHub's maximum, a hard cap. The app build is the step that can reach it.
+    timeout-minutes: 360
+    env:
+      BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@v4
+
+      # Cheap first, so nothing that costs minutes runs on a fork that has no references yet. The
+      # unit tests of the glue come before the plan: a broken plan is worth knowing about before
+      # anything is built, and they need no build and no app.
+      - name: Run the unit tests of the visual CI glue
+        run: python3 -m unittest discover -s doc/sla-fork/tools -p "test_visual_ci.py"
+
+      - name: Plan the renders
+        id: plan
+        # Prints one line per render, or the reason there is nothing to do, and writes
+        # have_references into the output file the steps below read. pipefail: the plan exits 0
+        # when there is nothing to compare and 2 when the manifest names something this commit
+        # does not have, and the second has to fail the step.
+        run: |
+          set -o pipefail
+          python3 doc/sla-fork/tools/visual_ci.py plan --github-output "$GITHUB_OUTPUT" \
+            | tee visual-plan.txt
+
+      - name: System packages
+        # Same list as the test job, plus xvfb: the render is offscreen but the GL context belongs
+        # to the window, so the app still opens one, and a GitHub runner has no display. Xvfb plus
+        # the software rasteriser below is what gives it one.
+        if: steps.plan.outputs.have_references == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            autoconf automake build-essential cmake libtool ninja-build pkg-config texinfo \
+            libdbus-1-dev libgl1-mesa-dev libglu1-mesa-dev libgtk-3-dev zlib1g-dev xvfb
+
+      - name: Restore the deps prefix from the cache
+        if: steps.plan.outputs.have_references == 'true'
+        id: deps_cache
+        uses: actions/cache@v4
+        with:
+          path: deps/build/destdir
+          # The same path and the same key as the test job, on purpose: one prefix serves both
+          # jobs, so one build of the 50 dependencies is paid for once. Two jobs that both miss on
+          # a cold run both try to save it; the second one is skipped by the cache action, with a
+          # warning, and the next run finds the entry.
+          key: >-
+            sla-deps-${{ runner.os }}-${{ hashFiles('deps/CMakeLists.txt', 'deps/CMakePresets.json',
+            'deps/+*/CMakeLists.txt', 'cmake/modules/AddCMakeProject.cmake') }}
+
+      - name: Build the deps
+        if: steps.plan.outputs.have_references == 'true' && steps.deps_cache.outputs.cache-hit != 'true'
+        timeout-minutes: 150
+        run: |
+          cmake -S deps -B deps/build -DCMAKE_BUILD_TYPE=Release -DDEP_DEBUG=OFF
+          cmake --build deps/build
+
+      - name: Check the deps prefix
+        if: steps.plan.outputs.have_references == 'true'
+        run: |
+          test -d deps/build/destdir/usr/local
+          # The wx shell links wxWidgets out of the prefix, and a cache entry from an interrupted
+          # deps build is caught here rather than halfway through the app build.
+          find deps/build/destdir/usr/local -name 'wx-config*' -print -quit | grep -q .
+
+      - name: Configure
+        if: steps.plan.outputs.have_references == 'true'
+        run: |
+          # The same preset, prefix and generator as the test job. SLIC3R_GUI (which the preset
+          # turns on and which this job needs, since the render lives in the wx shell) is left
+          # alone; the webkit shell stays off because it is a large dependency and nothing here
+          # uses it.
+          cmake --preset default -G Ninja \
+            -DCMAKE_PREFIX_PATH="$PWD/deps/build/destdir/usr/local" \
+            -DSLIC3R_ENABLE_WEBKIT=OFF \
+            -DSLIC3R_RELEASE_DEBUG_SYMBOLS=OFF
+
+      - name: Build the app
+        if: steps.plan.outputs.have_references == 'true'
+        timeout-minutes: 240
+        run: |
+          # One target: slic3r-app-launcher is the binary that takes --sla-fixture and --render-to
+          # (ReadCLI.cpp) and the one that renders the fixture views (DesktopApp.cpp). It brings in
+          # libslic3r and slic3r-shared on the way, so this is at least as long as the test job's
+          # two test targets together.
+          cmake --build build-default --parallel "$BUILD_JOBS" --target slic3r-app-launcher
+
+      - name: Locate the app
+        if: steps.plan.outputs.have_references == 'true'
+        id: app
+        run: |
+          # Both names: the CMake target is slic3r-app-launcher, and doc/sla-fork/visual-regression.md
+          # spells the binary prusa-slicer-launcher. Whichever the build produces is the one to run.
+          app=$(find build-default -type f \( -name 'slic3r-app-launcher' \
+                                           -o -name 'prusa-slicer-launcher' \) -print -quit)
+          if [ -z "$app" ]; then
+            # Where CMake actually put it, so a layout change is a one line fix: src/slic3r-app-launcher
+            # is the directory add_executable() defaults to.
+            find build-default -maxdepth 4 -name '*slic3r-app*' -type f
+            exit 1
+          fi
+          echo "app=$app" >> "$GITHUB_OUTPUT"
+
+      - name: Render the fixtures and compare them with the references
+        if: steps.plan.outputs.have_references == 'true'
+        # Nine minutes per render. The app has a five minute backstop of its own for the slice of
+        # the fixture; this is the whole run around it, on a software rasteriser.
+        env:
+          # The runner has no GPU, so the GL context is llvmpipe. The render is a fixed size and a
+          # fixed camera, but the driver is not the one a reference was made with, so the run
+          # reports the percentage of changed pixels and a person decides, not a tolerance guess.
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          GALLIUM_DRIVER: llvmpipe
+          # The Slice button stays the only way to slice (AGENTS.md): --render-to renders the slice
+          # --sla-fixture started, it does not start one.
+          APP: ${{ steps.app.outputs.app }}
+        run: |
+          set +e
+          xvfb-run -a --server-args='-screen 0 1600x1200x24' \
+            python3 doc/sla-fork/tools/visual_ci.py run \
+              --app "$APP" \
+              --out visual-out \
+              --report visual-regression.md \
+              --commit "$GITHUB_SHA" \
+              --render-timeout 540 2>&1 | tee visual-ci.log
+          code=${PIPESTATUS[0]}
+          set -e
+          echo "exit code: $code" | tee -a visual-ci.log
+          # 0 passed or nothing to compare, 1 a render changed or a lightness pair is too close,
+          # 2 the run could not be made. Both of the last two fail the job: a changed picture is
+          # the thing the job exists to catch, and a run that could not be made has no verdict
+          # about the picture at all, which must not read as a pass.
+          if [ "$code" -ne 0 ]; then
+            echo "::error::visual_ci.py exit $code: a render changed, a lightness check failed, or the run could not be made (see visual-ci.log)"
+            exit "$code"
+          fi
+
+      - name: Job summary
+        # Always, so a run that compared nothing and a run that failed both say something.
+        if: always()
+        run: |
+          {
+            echo "### Visual regression"
+            echo
+            if [ -f visual-regression.md ]; then
+              cat visual-regression.md
+            else
+              # No report means the run stopped before it: either the plan found no references, or
+              # a step above this one failed.
+              cat visual-plan.txt 2>/dev/null || echo "The plan did not run."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the renders, the diff images and the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sla-visual-regression
+          path: |
+            visual-regression.md
+            visual-plan.txt
+            visual-ci.log
+            visual-out/
           if-no-files-found: warn
           retention-days: 14
 

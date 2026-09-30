@@ -167,15 +167,106 @@ To make a reference, or to update one after a change that is meant to change the
 it with the command above, look at the greyscale variant, and commit the PNG, its sidecar and a
 probe file. A diff that is a whole new picture is not an accident to work around with a tolerance.
 
+### The manifest
+
+The CI job (below) needs to know which renders to make and what to compare them with, so the
+references are listed in `doc/sla-fork/visual-regression/manifest.json`, written by the same
+person who commits them:
+
+```json
+{
+  "size": "1280x960",
+  "fixtures": [
+    {
+      "id": "bracket-prepare",
+      "fixture": "tests/data/sla_fixtures/bracket.3mf",
+      "view": "prepare",
+      "size": "1280x960",
+      "reference": "doc/sla-fork/visual-regression/bracket-prepare.png",
+      "probes": "doc/sla-fork/visual-regression/bracket-prepare.probes.json"
+    }
+  ]
+}
+```
+
+| key | meaning |
+|---|---|
+| `size` | the render size of every entry that names none, the app's own default `1280x960` |
+| `id` | the name of the render and of its output files, a name and not a path |
+| `fixture` | the 3MF `--sla-fixture` gets, relative to the repository root |
+| `view` | `prepare` or `preview` |
+| `size` (in an entry) | overrides the top level one, for a render of another size |
+| `reference` | the committed PNG to compare with |
+| `probes` | the optional probe file that puts the lightness check on the rendered pixels too |
+
+One entry is one (fixture, view) pair, so the prepare and the preview view of a fixture are two
+entries. A reference PNG whose sidecar and probes are in the repository is not enough on its own:
+without its row in the manifest no job renders it, and without the manifest there is nothing to
+compare against.
+
+## In CI
+
+`doc/sla-fork/tools/visual_ci.py` is the glue: the renders are the app's and the comparison is
+`visual_diff.py`, and this drives both and turns them into one exit code.
+
+```powershell
+# What a run would do, without rendering anything.
+python doc\sla-fork\tools\visual_ci.py plan
+
+# The run itself. The app needs a GL context even though the render is offscreen, so on a headless
+# machine the command goes through Xvfb.
+xvfb-run -a python doc\sla-fork\tools\visual_ci.py run --app <path to slic3r-app-launcher> --out visual-out
+
+# One render of one fixture, to see what a run would do for it.
+python doc\sla-fork\tools\visual_ci.py run --only bracket-prepare --app <path> --out visual-out
+```
+
+It writes a Markdown report (`visual-regression.md` by default) with a table of the verdicts and
+what `visual_diff.py` said for each of them, and it exits 0 when every render matched its reference,
+1 when a render changed more than the tolerances allow or a lightness check failed, and 2 when the
+run could not be made at all (no app, a manifest that is not valid, a reference the manifest names
+but that is not in the commit, a render that wrote no PNG, a missing sidecar).
+
+**A fork with no references yet is not a failing run.** While `manifest.json` is missing or empty
+the tool says so, writes that in the report and exits 0, and the job skips the render and the
+comparison instead of building an app to compare against nothing.
+
+Its unit tests need no app and no build:
+
+```bash
+python doc/sla-fork/tools/test_visual_ci.py
+python -m unittest discover -s doc/sla-fork/tools -p "test_visual_ci.py"
+```
+
+### The job
+
+`sla-ci.yml` has a `visual-regression` job beside the test one ([ci.md](ci.md) has the cost and the
+first-run watch list). It is manual only, like the rest of that file: the Actions tab, or the
+`run-ci` label on a pull request. A run:
+
+1. runs `test_visual_ci.py` and then `visual_ci.py plan`, which prints one line per render or the
+   reason there is nothing to do, and writes `have_references` for the steps that follow,
+2. installs the system packages, restores the deps prefix from the Actions cache and builds the
+   app, all of it skipped while `have_references` is false,
+3. renders every entry of the manifest with `--render-to` and compares it with `visual_diff.py
+   check`, under Xvfb and the llvmpipe software rasteriser because a GitHub runner has no GPU,
+4. writes the report into the job summary and uploads the renders, the diff images, the greyscale
+   variants and the log as the artifact `sla-visual-regression`, whether it passed or not.
+
+Nothing in the job slices: `--render-to` renders the slice that `--sla-fixture` started, and the
+Slice button is still the only other way to start one.
+
 ## Left
 
 - No references and no probe files yet, so nothing here has been run end to end: the render path
   and the tool are unbuilt, and the first render is what will tell whether the offscreen path needs
-  a fix.
-- Three fixture scenes and both themes (F3) are still to be chosen and rendered by a person.
+  a fix. The job skips itself for the same reason, and the first run of it is a person's job too.
+- Three fixture scenes and both themes (F3) are still to be chosen and rendered by a person. The
+  job renders with the default theme, because there is no command line flag for another one.
 - The render is the scene, not the window: the left bar, the sidebar, the top bar and the preview
   overlays are not covered by this. A window screenshot would need a fixed window size and a fixed
   desktop theme, which is a bigger job than this todo.
-- Nothing runs the tool in CI yet. That is M0.14 plus a job; the exit codes are there for it.
+- The job has never been run on a runner, and neither has the test one. The steps worth watching on
+  a first run are in [ci.md](ci.md).
 - `--render-view preview` renders the sliced print through the plater scene, the way the objects
   list thumbnails do, not the app's Preview tab with its own camera and overlays.
