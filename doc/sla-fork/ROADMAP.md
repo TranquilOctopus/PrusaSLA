@@ -489,7 +489,30 @@ Unit and meaning questions marked "verify" get settled in M3.1 by comparing a sa
     Result: `IResinProfileReader` gained `reads_container_lazily()` and `sniff_path()`, both defaulting to false, and `ResinProfileReaderRegistry::read_file()` asks those readers first, on the path alone, and only then applies `MAX_FILE_SIZE` to a plain text file. `SlicedArchiveResinReader` claims a `.sl1`/`.sl1s` by extension plus a zip that opens (opening one reads the central directory alone, so it costs the same on a 300 MB file), extracts only `config.ini` and `prusaslicer.ini` and never a layer image, and caps what it reads against what the central directory declares: `MAX_INI_ENTRY_SIZE` (1 MB) per ini entry, checked by `read_zip_entry()` before a buffer is allocated, and `MAX_ENTRIES_SCANNED` (16384) entries walked through. `.cfg` keeps the 8 MB ceiling. 4 tests in `SlicedArchiveResinReaderTests.cpp` (10 -> 14 cases in that file): a 20 MB archive of a stored padding entry plus a `config.ini` imports through the registry, an ini entry one byte over the cap is refused with the entry name and both sizes in the error, a zip written byte by byte whose `config.ini` claims 3.75 GB is refused instead of allocated, and an archive over the entry cap is refused by name. The user guide's 8 MB paragraph for archives was corrected.
     Left: miniz reads the whole central directory into memory when a zip is opened, so the number of entries an archive may declare is bounded by what that costs before the reader's own cap applies; `bottom_layer_count` is still usually absent because the SL1 writers do not record it (M3.8).
 - [ ] **M3.8c** `fill_iniconf` in `SL1.cpp` never records `bottom_layer_count`, so `SlicedArchiveResinReader` imports a sliced archive without the bottom-layer count the print was made with: write the value `Domain::sla_bottom_layer_count()` already computes and round-trip it in `SlicedArchiveResinReaderTests.cpp`. · S · needs M3.8b
-- [ ] **M3.8d** Opening a zip through miniz reads the whole central directory into memory, so how many entries an archive may declare is bounded by what that costs before the reader's own `MAX_ENTRIES_SCANNED` cap applies: cap what the central directory may cost (or count the entries from the end-of-central-directory record before parsing it) and refuse an archive over the cap. · M · needs M3.8b
+- [x] **M3.8d** Opening a zip through miniz reads the whole central directory into memory, so how many entries an archive may declare is bounded by what that costs before the reader's own `MAX_ENTRIES_SCANNED` cap applies: cap what the central directory may cost (or count the entries from the end-of-central-directory record before parsing it)   and refuse an archive over the cap. · M · needs M3.8b
+  Result: the counts are taken from the end-of-central-directory record before the open, which is
+  the number miniz sizes its directory and its index from. `ArchiveIni.{hpp,cpp}` gained
+  `ZipLimits` (max entries, max directory bytes), `ZipDirectoryInfo`, the pure
+  `read_zip_directory_info(tail, file_size)` and `is_zip_file(fname)`, and `ZipReader` takes limits
+  and carries the reason in `error()`; with no limits (the default, so `SL1Import` is untouched) it
+  does not even read the file. The record is looked for from the end of the last 64 kB + 22 bytes
+  backwards and only taken when its comment length reaches the end of the file, so a `PK\x05\x06`
+  inside a comment is not mistaken for it, and a zip64 record is followed through its locator when
+  the 16 bit count or the 32 bit sizes are saturated - the only way an archive can declare more than
+  miniz reads. `SlicedArchiveResinReader` passes `MAX_ENTRIES_SCANNED` and the new
+  `MAX_CENTRAL_DIRECTORY_SIZE` (4 MB, which 16384 entries of a job stay well under), so an archive
+  over either is refused with the file, both numbers and the cap in the error and is never opened;
+  the post-open entry count stays as a second line of defence. `sniff_path()` now asks
+  `is_zip_file()` instead of opening the archive, which is cheaper and keeps the refusal with its
+  numbers on the path the user is really on: the registry still dispatches the file to this reader,
+  so the import says what was wrong with the archive rather than that nothing recognised it. Tests
+  in `SlicedArchiveResinReaderTests.cpp` (2 cases, 6 sections): the record of a plain zip, a comment
+  that carries a signature of its own, a zip64 record, a file that is not a zip; and the refusals -
+  500000 entries in an archive of one, a 3 GB central directory, the same promise in a zip64 record,
+  all three through `read()` (and the first through the registry as well, with `sniff_path()` still
+  claiming the file), against an archive with a comment inside the caps that imports as before. The
+  user guide's archive paragraph and its known limits carry the numbers. NOT BUILT when it was
+  written; a human builds and runs the suites.
 - [x] **M3.9** CLI `--import-resin-profile` with `--dry-run` and a JSON `--report` option. · S · needs M3.7
   Done when: running it on the fixtures produces a stable JSON report, checked by a test.
   Result: `--import-resin-profile <FILE-OR-FOLDER>` is parsed in `ReadCLI.cpp` and run in `ProcessActions.cpp` through the existing `ResinProfileImportInteractor`, with `--dry-run` and `--report <FILE>`; a folder imports every file, anything else imports that one file, the target is the selected printer (`--printer-profile` picks it), one line per file goes to stdout and the exit code is 0 only when every file imported. The report is `Biz::ResinProfile::resin_import_report_json()` (`Slic3r/Biz/ResinProfile/ResinImportReport.{hpp,cpp}`): compact JSON, fixed key order, mapping rows sorted by key, file name only, no timestamp. 5 tests in `ResinImportReportTests.cpp` pin the document of a two-file dry run, the sorting, the empty batch and a file no reader recognizes; the import fixture moved to `ResinProfileImportTestFixture.hpp` so both test files share it. Not built when it was written; build 32 (2026-09-30) builds it and both suites are green.

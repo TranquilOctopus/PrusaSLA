@@ -1,6 +1,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "Slic3r/Biz/ArchiveIni.hpp"
 #include "Slic3r/Biz/ResinProfile/ChituboxCfgReader.hpp"
 #include "Slic3r/Biz/ResinProfile/ResinProfileReaderRegistry.hpp"
 #include "Slic3r/Biz/ResinProfile/SlicedArchiveResinReader.hpp"
@@ -129,11 +130,28 @@ void put_u32(std::string& out, std::uint32_t value)
     out.push_back(static_cast<char>((value >> 24) & 0xffu));
 }
 
+void put_u64(std::string& out, std::uint64_t value)
+{
+    put_u32(out, static_cast<std::uint32_t>(value & 0xffffffffu));
+    put_u32(out, static_cast<std::uint32_t>((value >> 32) & 0xffffffffu));
+}
+
+// What the end-of-central-directory record of a raw_zip() claims about the archive, which is what
+// opening it costs and what the caps are checked against. A zero claims the truth.
+struct Claims
+{
+    std::uint64_t entries = 0;         ///< Number of entries the record declares.
+    std::uint64_t directory_bytes = 0; ///< Size of the central directory the record declares.
+    std::string comment;               ///< Written after the record, as a zip comment is.
+    bool zip64 = false;                ///< The numbers go into a zip64 record, the 16 and 32 bit
+                                       ///< fields of the ordinary one being saturated.
+};
+
 // A zip of stored (or, where the test says so, deflated) entries, built from the three
 // records of the format. Written here rather than through the Zipper so that the sizes in
 // the central directory, which is all a reader of an archive looks at, are the ones the
 // test means.
-std::string raw_zip(const std::vector<RawEntry>& entries)
+std::string raw_zip(const std::vector<RawEntry>& entries, const Claims& claims = {})
 {
     std::string body, central;
 
@@ -179,15 +197,46 @@ std::string raw_zip(const std::vector<RawEntry>& entries)
         central += entry.name;
     }
 
+    const std::uint64_t declared_entries = claims.entries != 0 ? claims.entries : entries.size();
+    const std::uint64_t declared_bytes = claims.directory_bytes != 0 ? claims.directory_bytes : central.size();
+
     std::string out = body + central;
+    if (claims.zip64) {
+        // A zip64 end-of-central-directory record and the locator that points at it, which is the
+        // only way an archive can declare more entries than the 16 bit field of the record holds.
+        const std::uint64_t zip64_record_offset = static_cast<std::uint64_t>(out.size());
+        out += "PK\x06\x06";
+        put_u64(out, 44); // size of this record after these eight bytes
+        put_u16(out, 45); // version made by
+        put_u16(out, 45); // version needed
+        put_u32(out, 0);  // this disk
+        put_u32(out, 0);  // disk with the central directory
+        put_u64(out, declared_entries);
+        put_u64(out, declared_entries);
+        put_u64(out, declared_bytes);
+        put_u64(out, static_cast<std::uint64_t>(body.size()));
+        out += "PK\x06\x07";
+        put_u32(out, 0); // disk with the zip64 record
+        put_u64(out, zip64_record_offset);
+        put_u32(out, 1); // total number of disks
+    }
     out += "PK\x05\x06";
     put_u16(out, 0); // this disk
     put_u16(out, 0); // disk with the central directory
-    put_u16(out, static_cast<std::uint16_t>(entries.size()));
-    put_u16(out, static_cast<std::uint16_t>(entries.size()));
-    put_u32(out, static_cast<std::uint32_t>(central.size()));
-    put_u32(out, static_cast<std::uint32_t>(body.size()));
-    put_u16(out, 0); // comment
+    if (claims.zip64) {
+        // Saturated, so the numbers are the ones of the zip64 record above.
+        put_u16(out, 0xffff);
+        put_u16(out, 0xffff);
+        put_u32(out, 0xffffffffu);
+        put_u32(out, 0xffffffffu);
+    } else {
+        put_u16(out, static_cast<std::uint16_t>(declared_entries));
+        put_u16(out, static_cast<std::uint16_t>(declared_entries));
+        put_u32(out, static_cast<std::uint32_t>(declared_bytes));
+        put_u32(out, static_cast<std::uint32_t>(body.size()));
+    }
+    put_u16(out, static_cast<std::uint16_t>(claims.comment.size()));
+    out += claims.comment;
     return out;
 }
 
@@ -208,6 +257,16 @@ ForeignResinProfile read_ok(const fs::path& path)
     INFO(failure);
     REQUIRE(result.has_value());
     return *result;
+}
+
+/// The end-of-central-directory record of a zip built here, read the way the reader reads it off
+/// the disk. The bytes are the whole file, which is what the tail of a small file is.
+Slic3r::Biz::ZipDirectoryInfo directory_info_of(const std::string& zip)
+{
+    const std::optional<Slic3r::Biz::ZipDirectoryInfo> info = Slic3r::Biz::read_zip_directory_info(zip, zip.size());
+    REQUIRE(info.has_value());
+    REQUIRE(info->found);
+    return *info;
 }
 
 double number(const std::optional<double>& value)
@@ -456,4 +515,137 @@ TEST_CASE("SlicedArchiveResinReader - an archive with more entries than are scan
     REQUIRE_FALSE(result.has_value());
     REQUIRE(result.error().find("config.ini") == std::string::npos);
     REQUIRE(result.error().find("entries") != std::string::npos);
+}
+
+TEST_CASE(
+    "read_zip_directory_info - what the end of the file says the archive costs",
+    "[resin_profile][sl1]"
+)
+{
+    SECTION("a plain record of two entries")
+    {
+        const std::vector<RawEntry> entries{{"config.ini", CONFIG_INI}, {"prusaslicer.ini", PROFILE_INI}};
+        const Slic3r::Biz::ZipDirectoryInfo info = directory_info_of(raw_zip(entries));
+
+        CHECK(info.entries == 2);
+        CHECK(info.directory_bytes > 0);
+        CHECK(info.directory_offset > 0);
+    }
+
+    SECTION("a comment does not hide the record, and a signature inside one is not the record")
+    {
+        // The signature of the record inside the comment is the trap: it is nearer the end of the
+        // file than the record itself, and taking it for the record would report whatever the bytes
+        // after it happen to say. Two entries are declared and two are there, so the count comes
+        // from the record.
+        Claims claims;
+        claims.comment = std::string("a comment with a PK\x05\x06 in it, and more text after that");
+        const std::vector<RawEntry> entries{{"config.ini", CONFIG_INI}, {"prusaslicer.ini", PROFILE_INI}};
+        const Slic3r::Biz::ZipDirectoryInfo info = directory_info_of(raw_zip(entries, claims));
+
+        CHECK(info.entries == 2);
+    }
+
+    SECTION("a zip64 record is followed when the ordinary one is saturated")
+    {
+        Claims claims;
+        claims.zip64           = true;
+        claims.entries         = 200000;
+        claims.directory_bytes = 30000000;
+        const std::vector<RawEntry> entries{{"config.ini", CONFIG_INI}};
+        const Slic3r::Biz::ZipDirectoryInfo info = directory_info_of(raw_zip(entries, claims));
+
+        CHECK(info.entries == 200000);
+        CHECK(info.directory_bytes == 30000000);
+    }
+
+    SECTION("a file that is not a zip at all has no record in it")
+    {
+        const std::string text = "not a zip file, just some text";
+        CHECK_FALSE(Slic3r::Biz::read_zip_directory_info(text, text.size()).has_value());
+        CHECK_FALSE(Slic3r::Biz::read_zip_directory_info("", 0).has_value());
+    }
+}
+
+TEST_CASE(
+    "SlicedArchiveResinReader - an archive over the caps is refused before it is opened",
+    "[resin_profile][sl1]"
+)
+{
+    LocalDir dir;
+    const SlicedArchiveResinReader reader;
+
+    SECTION("more entries than the cap, in an archive of one")
+    {
+        // The promise is in the record, not in the file: one entry on disk, half a million declared,
+        // which is the number miniz would size its index from.
+        Claims claims;
+        claims.entries = 500000;
+        const fs::path path = dir.path() / "too-many.sl1";
+        write_text(path, raw_zip({{"config.ini", CONFIG_INI}}, claims));
+
+        const SlicedArchiveResinReader reader;
+        const auto                     result = reader.read(path);
+        REQUIRE_FALSE(result.has_value());
+        // The error names the file, the count and the cap, so this is told apart from a file that is
+        // merely not a zip.
+        REQUIRE(result.error().find("too-many.sl1") != std::string::npos);
+        REQUIRE(result.error().find("entries") != std::string::npos);
+        REQUIRE(result.error().find("500000") != std::string::npos);
+        REQUIRE(result.error().find(std::to_string(SlicedArchiveResinReader::MAX_ENTRIES_SCANNED))
+                != std::string::npos);
+        // The file is still a sliced archive as far as the format goes, so the registry hands it to
+        // this reader and the user is told what was wrong with it instead of that nothing here
+        // recognises it. The archive itself is never opened.
+        REQUIRE(reader.sniff_path(path));
+        ResinProfileReaderRegistry registry;
+        register_resin_profile_readers(registry);
+        const auto                 through_registry = registry.read_file(path);
+        REQUIRE_FALSE(through_registry.has_value());
+        REQUIRE(through_registry.error().find("500000") != std::string::npos);
+    }
+
+    SECTION("a central directory over the cap, in an archive of one")
+    {
+        Claims claims;
+        claims.directory_bytes = 3ull * 1024 * 1024 * 1024;
+        const fs::path path = dir.path() / "huge-directory.sl1";
+        write_text(path, raw_zip({{"config.ini", CONFIG_INI}}, claims));
+
+        const SlicedArchiveResinReader reader;
+        const auto                     result = reader.read(path);
+        REQUIRE_FALSE(result.has_value());
+        REQUIRE(result.error().find("huge-directory.sl1") != std::string::npos);
+        REQUIRE(result.error().find("central directory") != std::string::npos);
+        REQUIRE(result.error().find("3221225472") != std::string::npos);
+        REQUIRE(result.error().find(std::to_string(SlicedArchiveResinReader::MAX_CENTRAL_DIRECTORY_SIZE))
+                != std::string::npos);
+    }
+
+    SECTION("the same promise in a zip64 record, which is the only way to make one that big")
+    {
+        Claims claims;
+        claims.zip64  = true;
+        claims.entries = 200000;
+        const fs::path path = dir.path() / "too-many-zip64.sl1";
+        write_text(path, raw_zip({{"config.ini", CONFIG_INI}}, claims));
+
+        const auto result = reader.read(path);
+        REQUIRE_FALSE(result.has_value());
+        REQUIRE(result.error().find("200000") != std::string::npos);
+    }
+
+    SECTION("an archive within the caps is opened as before")
+    {
+        Claims claims;
+        claims.comment = "written by a slicer";
+        const fs::path path = dir.path() / "with-comment.sl1";
+        write_text(path, raw_zip({{"config.ini", CONFIG_INI}, {"prusaslicer.ini", PROFILE_INI}}, claims));
+
+        // A comment after the record is what a real archive can have, and the record is still found
+        // in it, so the file is not refused for a shape it is allowed to have.
+        REQUIRE(reader.sniff_path(path));
+        const ForeignResinProfile profile = read_ok(path);
+        CHECK(number(profile.material.exposure_time_s) == Approx(2.5));
+    }
 }

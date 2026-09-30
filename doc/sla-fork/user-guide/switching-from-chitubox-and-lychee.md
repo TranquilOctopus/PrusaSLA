@@ -47,7 +47,9 @@ Prusa archive from Lychee, it opens and the same applies to it.
 An archive is of any size: only its `config.ini` and `prusaslicer.ini` are opened, a few
 kilobytes each, so a job of a few hundred megabytes of layer images reads like a small one. Each
 of those two is capped at 1 MB on its own, and an entry that claims to be larger is refused by
-name.
+name. The archive is also capped before it is opened at all, because opening one reads its central
+directory whole: 16384 entries and 4 MB of directory, which is a print of sixteen thousand layers,
+and an archive that declares more of either is refused with both numbers in the message.
 
 ### Why `.cfgx` and `.lyr` are not read yet
 
@@ -359,7 +361,8 @@ not use yet, so they arrive as *Unknown* rather than silently:
   `--export-resin-profile` command line above names them on the console.
 
 - A single text profile (`.cfg`) is capped at 8 MB and a folder import at 1000 files. A sliced
-  archive (`.sl1`, `.sl1s`) has no cap on the file: only its two ini entries are read.
+  archive (`.sl1`, `.sl1s`) has no cap on the file: only its two ini entries are read, and the
+  central directory it declares is capped at 16384 entries and 4 MB.
 - The table shows at most 500 rows, so a `.cfg` with a very long machine section is cut off there.
 
 ## See also

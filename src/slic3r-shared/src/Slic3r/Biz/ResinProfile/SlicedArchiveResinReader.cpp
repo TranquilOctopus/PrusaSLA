@@ -22,6 +22,7 @@ using Slic3r::Biz::ArchiveIniMap;
 using Slic3r::Biz::parse_ini_value;
 using Slic3r::Biz::parse_archive_ini;
 using Slic3r::Biz::read_zip_entry;
+using Slic3r::Biz::ZipLimits;
 using Slic3r::Biz::ZipReader;
 
 const char *const CONFIG_INI  = "config.ini";
@@ -113,6 +114,17 @@ bool is_sliced_archive_extension(const boost::filesystem::path &path)
     return ext == ".sl1" || ext == ".sl1s";
 }
 
+/// What this reader is willing to have an archive declare, checked before the archive is opened:
+/// the open reads the whole central directory and indexes every entry in it, which is the memory
+/// a zip crafted to be expensive would otherwise cost.
+ZipLimits limits()
+{
+    return ZipLimits{
+        .max_entries          = SlicedArchiveResinReader::MAX_ENTRIES_SCANNED,
+        .max_directory_bytes  = SlicedArchiveResinReader::MAX_CENTRAL_DIRECTORY_SIZE,
+    };
+}
+
 } // anonymous namespace
 
 bool SlicedArchiveResinReader::sniff(const std::string &head) const
@@ -130,21 +142,28 @@ bool SlicedArchiveResinReader::sniff_path(const boost::filesystem::path &path) c
     if (!is_sliced_archive_extension(path))
         return false;
 
-    // Opening a zip is cheap: the reader looks for the end of central directory record at
-    // the end of the file and reads that index alone, so a file of a few hundred megabytes
-    // costs the same as a small one here. What the index says about the file is left to
-    // read(), which can name the entry that is missing.
-    ZipReader zip{path.string()};
-    return zip.ok();
+    // Whether this is a zip is read from the end of the file alone, so a file of a few hundred
+    // megabytes costs the same as a small one here, and nothing is opened. What opening it would
+    // cost is left to read(), which refuses an archive over the caps with both numbers in the error
+    // and never opens it: the format of the file and what this reader is willing to read from it
+    // are two different questions, and the registry asks the first one here.
+    return Slic3r::Biz::is_zip_file(path.string());
 }
 
 tl::expected<ForeignResinProfile, std::string> SlicedArchiveResinReader::read(const boost::filesystem::path &path) const
 {
-    ZipReader zip{path.string()};
-    if (!zip.ok())
+    ZipReader zip{path.string(), limits()};
+    if (!zip.ok()) {
+        // What the caps refused comes with both numbers in it, so the user can tell a zip that is
+        // not worth opening from a file that is not a zip at all.
         return tl::make_unexpected(
-            fmt::format("{} cannot be opened as a sliced archive (.sl1 or .sl1s).", path.string()));
+            zip.error().empty() ?
+                fmt::format("{} cannot be opened as a sliced archive (.sl1 or .sl1s).", path.string()) :
+                fmt::format("{}: {}", path.string(), zip.error()));
+    }
 
+    // The entry count is read from the directory once more here: the cap before the open is a guard
+    // against what the record claims, and this is the count the directory really holds.
     const mz_uint num_entries = mz_zip_reader_get_num_files(&zip.archive());
     if (num_entries > MAX_ENTRIES_SCANNED)
         return tl::make_unexpected(
