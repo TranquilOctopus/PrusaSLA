@@ -668,11 +668,11 @@ double SlaLayerImageWindow::peel_warning_n() const
     // The same resolution of the setting the slicer used, see peel_force_warning_n() in
     // SLA/LayerStats.hpp: a negative setting takes the default of the vat film.
     const Domain::ConfigView& config = m_result_data->config;
-    ::Slic3r::sla::PeelForceSettings settings;
+    ::Slic3r::SLA::PeelForceSettings settings;
     settings.film                 = config.get<Domain::sla::VatFilmType>("vat_film_type");
     settings.area_coefficient     = config.get<double>("peel_area_coefficient");
     settings.perimeter_coefficient = config.get<double>("peel_perimeter_coefficient");
-    return ::Slic3r::sla::peel_force_warning_n(
+    return ::Slic3r::SLA::peel_force_warning_n(
         config.get<double>("peel_force_warning"), settings.coefficients());
 }
 
