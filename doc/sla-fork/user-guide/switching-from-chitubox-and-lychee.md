@@ -130,14 +130,16 @@ The report is one object with a `results` array, one entry per file that was tri
 included:
 
 ```json
-{"results":[{"file":"grey.cfg","ok":true,"error":"","preset_name":"Grey resin","base_preset":"Generic Fast Resin","mapping":[{"key":"normalExposureTime","target_key":"exposure_time","source_value":"2.5","value":"2.5","status":"Exact","note":"Both in seconds, no conversion."}]}]}
+{"results":[{"file":"grey.cfg","ok":true,"error":"","preset_name":"Grey resin","base_preset":"Generic Fast Resin","mapping":[{"key":"normalExposureTime","target_key":"exposure_time","source_value":"2.5","source_unit":"s","value":"2.5","target_unit":"s","status":"Exact","note":"Both in seconds, no conversion."}]}]}
 ```
 
 Each `mapping` row is one key of the file: the key as it appeared (`key`), the resin setting it
-becomes (`target_key`, empty when nothing is written), the value the file had (`source_value`), the
-value written to it (`value`, empty when none is), the `status` and the `note` that says why. A
-converted value is therefore readable on its own: `150` as the file had it next to the `2.5` that
-goes into the preset.
+becomes (`target_key`, empty when nothing is written), the value the file had (`source_value`) and
+the unit it was in (`source_unit`), the value written to it (`value`, empty when none is) and the
+unit of that (`target_unit`), then the `status` and the `note` that says why. A converted value is
+therefore readable on its own: `150` in `mm/min` as the file had it next to the `2.5` in `mm/s` that
+goes into the preset. A key that is not a quantity, such as a layer count or the profile name, has no
+unit on either side rather than a guessed one, so read it as the plain number it is.
 
 ### Writing a profile back out
 
