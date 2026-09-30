@@ -93,6 +93,15 @@ struct SupportTreeConfig
         return std::min(safety_distance_mm, r * safety_distance_mm / head_back_radius_mm);
     }
 
+    // The upper bound for a per point pillar diameter (the support presets):
+    // a preset may not ask for a pillar fatter than this multiple of the
+    // configured one. See sla::head_back_radius().
+    double head_back_radius_limit_mm() const
+    {
+        return SupportTreeConfig::max_pillar_radius_factor *
+               std::max(head_back_radius_mm, head_fallback_radius_mm);
+    }
+
     // /////////////////////////////////////////////////////////////////////////
     // Compile time configuration values (candidates for runtime)
     // /////////////////////////////////////////////////////////////////////////
@@ -104,6 +113,10 @@ struct SupportTreeConfig
     // struts smaller than head_back_radius, the safety distance is scaled
     // down accordingly. see method safety_distance()
     static const double constexpr safety_distance_mm = 0.5;
+
+    // How much fatter than the configured pillar radius a support point's own
+    // pillar diameter may ask to be. See head_back_radius_limit_mm().
+    static const double constexpr max_pillar_radius_factor = 4.;
 
     static const double constexpr max_solo_pillar_height_mm = 15.0;
     static const double constexpr max_dual_pillar_height_mm = 35.0;

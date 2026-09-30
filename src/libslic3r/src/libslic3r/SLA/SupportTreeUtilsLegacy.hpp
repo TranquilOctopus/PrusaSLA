@@ -104,7 +104,8 @@ std::pair<bool, long> create_ground_pillar(
     double                 end_radius,
     long                   head_id = SupportTreeNode::ID_UNSET,
     double                 base_height_override = 0.,
-    double                 base_radius_override = 0.)
+    double                 base_radius_override = 0.,
+    double                 full_pillar_radius = 0.)
 {
     Vec3d  jp           = pinhead_junctionpt, endp = jp, dir = sourcedir;
     long   pillar_id    = SupportTreeNode::ID_UNSET;
@@ -118,11 +119,18 @@ std::pair<bool, long> create_ground_pillar(
 
     auto to_floor = [&gndlvl](const Vec3d &p) { return Vec3d{p.x(), p.y(), gndlvl}; };
 
+    // A pillar counts as full (and may carry a base) when it is as wide as the
+    // one its own head asked for. A head with a per point pillar diameter (the
+    // support presets) passes that radius in, so a thin preset still gets the
+    // base it asked for instead of being treated as a mini pillar.
+    const double full_r = full_pillar_radius > 0. ? full_pillar_radius
+                                                  : sm.cfg.head_back_radius_mm;
+
     auto eval_limits = [&sm, &radius, &can_add_base, &gndlvl, &gap_dist, &jp_gnd,
-                        base_radius_override]
+                        base_radius_override, full_r]
         (bool base_en = true)
     {
-        can_add_base  = base_en && radius >= sm.cfg.head_back_radius_mm;
+        can_add_base  = base_en && radius >= full_r;
         double base_r = can_add_base ? (base_radius_override > 0. ? base_radius_override : sm.cfg.base_radius_mm) : 0.;
         gndlvl        = ground_level(sm);
         if (!can_add_base) gndlvl -= sm.pad_cfg.wall_thickness_mm;

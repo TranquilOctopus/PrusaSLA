@@ -321,6 +321,24 @@ std::vector<size_t> non_duplicate_suppt_indices(const PtIndex &index,
     return ret;
 }
 
+// The radius of the pillar that carries this support point's head. Points with
+// a per point pillar diameter (the Light/Medium/Heavy support presets) get
+// their own pillar width, bounded by the global config: never thinner than the
+// fallback radius the algorithm may shrink a head to and never fatter than a
+// small multiple of the configured pillar radius. Points without an override
+// keep the globally configured width.
+inline double head_back_radius(const SupportableMesh            &sm,
+                               const Domain::SLA::SupportPoint &sp)
+{
+    if (!(sp.pillar_diameter > 0.f))
+        return sm.cfg.head_back_radius_mm;
+
+    const double hi = sm.cfg.head_back_radius_limit_mm();
+    const double lo = std::min(sm.cfg.head_fallback_radius_mm, hi);
+
+    return std::clamp(0.5 * double(sp.pillar_diameter), lo, hi);
+}
+
 template<class Ex>
 bool optimize_pinhead_placement(Ex                     policy,
                                 const SupportableMesh &m,
@@ -349,15 +367,14 @@ bool optimize_pinhead_placement(Ex                     policy,
     // save the head (pinpoint) position
     Vec3d hp = head.pos;
 
-    double lmin = m.cfg.head_width_mm, lmax = lmin;
+    double lmin = head.width_mm > 0. ? head.width_mm : m.cfg.head_width_mm, lmax = lmin;
 
     if (back_r < m.cfg.head_back_radius_mm) {
-        lmin = 0., lmax = m.cfg.head_penetration_mm;
+        lmin = 0., lmax = head.penetration_mm;
     }
 
     // The distance needed for a pinhead to not collide with model.
-    double w = lmin + 2 * back_r + 2 * m.cfg.head_front_radius_mm -
-               m.cfg.head_penetration_mm;
+    double w = lmin + 2 * back_r + 2 * head.r_pin_mm - head.penetration_mm;
 
     double pin_r = head.r_pin_mm;
 
@@ -426,7 +443,7 @@ std::optional<Head> calculate_pinhead_placement(Ex                     policy,
 
     const Domain::SLA::SupportPoint &sp = sm.pts->at(suppt_idx);
     Head                head{
-        sm.cfg.head_back_radius_mm,
+        head_back_radius(sm, sp),
         sp.head_front_radius,
         0.,
         sm.cfg.head_penetration_mm,

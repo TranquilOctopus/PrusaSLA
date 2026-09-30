@@ -83,6 +83,19 @@ TEST_CASE("SlaSupportPreviewService - hash_support_points", "[SlaSupportPreviewS
     {
         REQUIRE(hash_support_points(make_points(3)) != hash_support_points(make_points(4)));
     }
+
+    SECTION("A changed pillar or base size changes the hash")
+    {
+        SupportPoints a = make_points(3);
+        SupportPoints b = make_points(3);
+        b[2].pillar_diameter = 1.8f;
+        REQUIRE(hash_support_points(a) != hash_support_points(b));
+
+        SupportPoints c = make_points(3);
+        c[1].base_diameter = 4.f;
+        c[1].base_height   = 1.f;
+        REQUIRE(hash_support_points(a) != hash_support_points(c));
+    }
 }
 
 TEST_CASE("SlaSupportPreviewService - make_sla_support_preview_key", "[SlaSupportPreviewService]")
