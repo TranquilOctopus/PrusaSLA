@@ -14,7 +14,8 @@ RaftPadValues raft_preset_to_pad_values(
     double wall_thickness_mm,
     double expansion_mm,
     double slope_deg,
-    double object_gap_mm
+    double object_gap_mm,
+    double edge_taper_mm
 ) {
     RaftPadValues vals;
     vals.pad_wall_height_mm = wall_height_mm;
@@ -22,6 +23,7 @@ RaftPadValues raft_preset_to_pad_values(
     vals.pad_brim_size_mm = expansion_mm;
     vals.pad_wall_slope_deg = slope_deg;
     vals.pad_object_gap_mm = object_gap_mm;
+    vals.raft_edge_taper_mm = edge_taper_mm;
 
     switch (type) {
     case sla::RaftType::None:
@@ -53,8 +55,8 @@ RaftPadValues raft_preset_to_pad_values(
 namespace {
 
 // The knobs every printed raft reads: the cavity height, the wall thickness, how far the raft
-// reaches around the geometry, how steep its walls are and how close separate pieces are
-// allowed to be before they become one raft.
+// reaches around the geometry, how steep its walls are, how far its top edge is bevelled in and
+// how close separate pieces are allowed to be before they become one raft.
 const std::vector<std::string>& raft_shape_settings()
 {
     static const std::vector<std::string> settings{
@@ -62,6 +64,7 @@ const std::vector<std::string>& raft_shape_settings()
         "pad_wall_thickness",
         "pad_brim_size",
         "pad_wall_slope",
+        "raft_edge_taper",
         "pad_max_merge_distance",
     };
     return settings;

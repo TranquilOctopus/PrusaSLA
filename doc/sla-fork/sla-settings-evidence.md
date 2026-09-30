@@ -100,6 +100,7 @@ Short paths in the evidence column: `SLAPrint*.cpp`, `SLALayerImage.cpp`, `SLASu
 | `pad_object_connector_width` | Pad object connector width | Print | **used** | engine `SLAPrint.cpp:186,200` |
 | `pad_object_connector_penetration` | Pad object connector penetration | Print | **used** | engine `SLAPrint.cpp:188,202` |
 | `raft_type` | Raft type | Print | **used** | engine `SLAPrint.cpp:75,77` (zero elevation), `:169,171` (embedded pad), `:216,218` (pad cfg); the mapping lives in `Domain/SLA/RaftPreset.cpp:9-49` |
+| `raft_edge_taper` | Raft edge taper | Print | **used** | engine `SLAPrint.cpp:98,222,232` (raft values for the pad cfg); the bevelled rim is built in `SLA/Pad.cpp` (`create_outer_pad_geometry`) |
 | `hollowing_enable` | Enable hollowing | Print | **used** | engine `SLAPrintSteps.cpp:551` (hollowing step), `:1583` (statistics) |
 | `hollowing_min_thickness` | Wall thickness | Print | **used** | engine `SLAPrintSteps.cpp:558` |
 | `hollowing_quality` | Accuracy | Print | **used** | engine `SLAPrintSteps.cpp:559` |

@@ -54,6 +54,7 @@
 | pad_object_connector_width | Pad object connector width | Print_Pad | keep | Connector width |
 | pad_object_connector_penetration | Pad object connector penetration | Print_Pad | keep | Connector penetration |
 | raft_type | Raft type | Print_Pad | keep | Raft type selection |
+| raft_edge_taper | Raft edge taper | Print_Pad | keep | Bevel on the top edge of the raft |
 | hollowing_enable | Enable hollowing | Print_Hollowing | keep | Hollowing enable |
 | hollowing_min_thickness | Wall thickness | Print_Hollowing | keep | Hollow wall thickness |
 | hollowing_quality | Accuracy | Print_Hollowing | keep | Hollowing accuracy |

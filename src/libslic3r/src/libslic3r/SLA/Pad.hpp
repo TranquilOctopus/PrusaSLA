@@ -34,6 +34,9 @@ struct PadConfig {
     double max_merge_dist_mm = 50;
     double wall_slope = std::atan(1.0);          // Universal constant for Pi/4
     double brim_size_mm = 1.6;
+    // How far the top edge of the outer wall is bevelled in, so the pad has a thin lip that can
+    // be pried off the build plate. Zero keeps the sharp edge. The bevel is as deep as it is wide.
+    double edge_taper_mm = 0.;
 
     struct EmbedObject {
         double object_gap_mm = 1.;
