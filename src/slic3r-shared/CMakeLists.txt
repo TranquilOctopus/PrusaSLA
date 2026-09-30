@@ -1013,6 +1013,7 @@ set(SLIC3R_SHARED_FILES
         include/Slic3r/Biz/ResultExport/SLA/Zipper.hpp
         include/Slic3r/Biz/ResultExport/SLA/AnycubicSLA.hpp
         include/Slic3r/Biz/ResultExport/SLA/GooSLA.hpp
+        include/Slic3r/Biz/ResultExport/SLA/CtbSLA.hpp
         src/Slic3r/Biz/ResultExport/ResultExportInteractor.cpp
         src/Slic3r/Biz/ResultExport/ResultExportDataFinalizer.cpp
         src/Slic3r/Biz/ResultExport/SLA/SL1.cpp
@@ -1023,6 +1024,7 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/Biz/ResultExport/SLA/Zipper.cpp
         src/Slic3r/Biz/ResultExport/SLA/AnycubicSLA.cpp
         src/Slic3r/Biz/ResultExport/SLA/GooSLA.cpp
+        src/Slic3r/Biz/ResultExport/SLA/CtbSLA.cpp
 
         include/Slic3r/Biz/PrintHost/IPrintHost.hpp
         include/Slic3r/Biz/PrintHost/PrintHostJob.hpp
@@ -1775,6 +1777,8 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/Biz/ResultExport/SLA/AnycubicExportTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/PM5ExportTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/GooExportTests.cpp
+            test/Slic3r/Biz/ResultExport/SLA/CtbExportTests.cpp
+            test/Slic3r/Biz/ResultExport/SLA/SlaLayerDecoders.hpp
             test/Slic3r/Biz/ResultExport/SLA/SlaRasterOrientationTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/SlaUnsupportedSliceTests.cpp
 

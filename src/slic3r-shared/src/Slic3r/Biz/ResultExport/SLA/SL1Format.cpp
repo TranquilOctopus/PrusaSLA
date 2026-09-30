@@ -3,6 +3,7 @@
 #include <libslic3r/SlicingStatus.hpp>
 #include "Slic3r/Biz/ResultExport/SLA/AnycubicSLA.hpp"
 #include "Slic3r/Biz/ResultExport/SLA/GooSLA.hpp"
+#include "Slic3r/Biz/ResultExport/SLA/CtbSLA.hpp"
 
 #include <vector>
 #include <memory>
@@ -82,6 +83,23 @@ public:
     }
 };
 
+// Chitubox .ctb, the unencrypted v2/v3 container. No printer profile selects it yet (there is no
+// Chitubox-sliced sample to check the layout against), so it is reachable through the registry and
+// the format picker, and only a preset that sets sla_archive_format: ctb by hand would slice for it.
+class CtbFormat : public ISlaArchiveFormat
+{
+public:
+    std::string name() const override { return "CTB"; }
+    std::string description() const override { return "Chitubox CTB format (unencrypted v3)"; }
+    std::vector<std::string> extensions() const override { return {"ctb"}; }
+    Slic3r::Biz::Slicing::Sla::FileDataType file_data_type() const override { return Slic3r::Biz::Slicing::Sla::FileDataType::ctb; }
+
+    void store(const std::string& file_path, const Biz::Slicing::SLAResultData& data) const override
+    {
+        store_ctb(file_path, data);
+    }
+};
+
 void register_sla_archive_formats()
 {
     static std::once_flag once;
@@ -92,6 +110,7 @@ void register_sla_archive_formats()
         registry.register_format("Anycubic", []() { return std::make_unique<AnycubicFormat>(); });
         registry.register_format("PM5", []() { return std::make_unique<PM5Format>(); });
         registry.register_format("Goo", []() { return std::make_unique<GooFormat>(); });
+        registry.register_format("CTB", []() { return std::make_unique<CtbFormat>(); });
     });
 }
 
