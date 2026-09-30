@@ -137,17 +137,17 @@ branch, one commit, the box ticked in the same commit.
 
 ## Progress
 
-**194 of 236 todos done (82%)** · updated 2026-09-30 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**197 of 238 todos done (83%)** · updated 2026-09-30 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
 | M0: Foundation | 13/15 | `██████████░░` 87% |
 | M1: Look, feel and SLA-first shell | 40/42 | `███████████░` 95% |
-| M2: SLA editing tools (porting the legacy gizmos) | 63/67 | `███████████░` 94% |
+| M2: SLA editing tools (porting the legacy gizmos) | 64/68 | `███████████░` 94% |
 | M3: Resin profile import (Chitubox, Lychee and others) | 16/20 | `██████████░░` 80% |
 | M4: Engine quality (measure first; every PR includes before/after metrics) | 18/27 | `████████░░░░` 67% |
 | M5: Formats and inspection | 32/35 | `███████████░` 91% |
-| M6: Quality gates and release | 7/13 | `██████░░░░░░` 54% |
+| M6: Quality gates and release | 9/14 | `████████░░░░` 64% |
 | M7: Excellent auto-supports *(parked)* | 5/17 | `████░░░░░░░░` 29% |
 
 ### Waiting on you
@@ -212,9 +212,8 @@ branch, one commit, the box ticked in the same commit.
 
 </details>
 
-<details><summary>M6: Quality gates and release — 6 open</summary>
+<details><summary>M6: Quality gates and release — 5 open</summary>
 
-- [ ] **M6.2** Visual regression renders, including the grayscale lightness check (PLAN G3).
 - [ ] **M6.3** Nightly upstream merge rehearsal with a conflict report (PLAN G4).
 - [ ] **M6.4** End-to-end walk through the M1.1 journeys on an integrated build, filing new todos for gaps. *(needs you)*
 - [ ] **M6.5** Retune default presets after the M4 changes.
