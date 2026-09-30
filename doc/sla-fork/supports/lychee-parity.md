@@ -7,7 +7,7 @@ Refreshed 2026-09-30 against what is merged: M2.12 (per-point sizes), M2.13 (tip
 | # | Lychee option | Our equivalent (config key or UI place) | Status | Evidence | Note |
 |---|---|---|---|---|---|
 | 1 | **Presets: Light / Medium / Heavy (plus custom)** — named bundle of tip, stem, base dims | `support_preset_light|medium|heavy_head_diameter`, `..._pillar_diameter`, `..._base_diameter`, `..._base_height`; the Light / Medium / Heavy buttons in the support tool | covered | ConfigDefsSLA.cpp; SlaSupportPointsDialog.hpp; SlaSupportPointsGizmo.cpp; DefaultSupportTree.cpp | Twelve keys, four per preset, read from the selected print preset (M2.18b). The buttons size a new point or the selected points (M2.18a), and a preset tip, pillar and base size reach the support tree (M2.18c). Still missing: a penetration value per preset. |
-| 2 | **Presets: Mini / tiny supports** — very small presets for fine detail | — | missing | — | Only Light, Medium and Heavy exist. Light (0.30 mm tip, 0.8 mm pillar, 2.0 mm base) is the smallest bundle; there is no named mini/tiny preset. |
+| 2 | **Presets: Mini / tiny supports** — very small presets for fine detail | `support_preset_mini_head_diameter` / `_pillar_diameter` / `_base_diameter` / `_base_height`; "Mini" button in the support tool | covered | ConfigDefsSLA.cpp:1678,1692-1733; SlaSupportPointsDialog.cpp:140-144; SlaSupportPointsGizmo.cpp:1562-1566 | Four settings like the other three presets (M2.18b), so Mini is 0.2 mm tip, 0.5 mm pillar, 1.4 mm base of 0.4 mm, all smaller than Light. Placed by the button next to Light / Medium / Heavy. |
 | 3 | **Tip: Contact (tip) diameter** — diameter where tip touches model | `support_head_front_diameter` (global/per-object); per-point `head_front_radius` in `SupportPoint`; the head-diameter control in the support tool + **Apply to selected**; the presets of row 1 | partial | ConfigDefsSLA.cpp; SupportPoint.hpp; SlaSupportPointsDialog.hpp; SlaSupportPointsEditing.cpp | Still no per-point value in the config: `support_head_front_diameter` is global or per object, so a point's tip diameter is set by selecting the points or by a preset button. The tree uses each point's own `head_front_radius`. |
 | 4 | **Tip: Tip length** — length of tapered tip section | `support_head_width` (global, the pinhead width); per-point `tip_length` in `SupportPoint` (0 = global) | partial | ConfigDefsSLA.cpp; SupportPoint.hpp; DefaultSupportTree.cpp | M2.13 added `tip_length` and the tree uses it per point, falling back to `support_head_width`, but there is no UI control for it and the geometry is still our double-sphere pinhead, not a cone, so Lychee's tip length has no exact equivalent. |
 | 5 | **Tip: Tip depth / penetration** — how far tip sinks into model surface | `support_head_penetration` (global/per-object); per-point `contact_depth` in `SupportPoint` (0 = global) | covered | ConfigDefsSLA.cpp; SupportPoint.hpp; DefaultSupportTree.cpp | Global and per point, and the tree uses each point's `contact_depth` (M2.13). The per-point value has no UI control yet. |
@@ -25,27 +25,6 @@ Refreshed 2026-09-30 against what is merged: M2.12 (per-point sizes), M2.13 (tip
 | 17 | **Raft: Raft type** — standard, skate, grid/honeycomb, none | `raft_type` (None / Full plate / Around object / Skate) mapped onto `pad_enable`, `pad_wall_height`, `pad_wall_thickness`, `pad_brim_size`, `pad_wall_slope`, `pad_object_gap` | partial | ConfigDefsSLA.cpp; RaftPreset.hpp; RaftPreset.cpp; SlaRaftSettings.hpp; SLAPrint.cpp; Pad.cpp | The dropdown, its per-type knob filtering and the raft wording are in (M2.14c) and `raft_type` is the single source of truth, so `pad_enable` and `pad_around_object` are hidden (M2.14d). "Standard" is Full plate, Skate is a named bundle, None prints no raft. Grid and honeycomb infill are M2.14b2, still open. |
 | 18 | **Raft: Raft thickness, margin/offset, chamfer/slope** | Thickness: `pad_wall_thickness`; Margin: `pad_brim_size`; Slope: `pad_wall_slope`; Chamfer: `raft_edge_taper` | partial | ConfigDefsSLA.cpp; RaftPreset.hpp; SLAPrint.cpp; Pad.cpp | Margin and slope covered, plus a top-edge bevel for a raft that is printed (M2.14b1). "Thickness" is the wall thickness; there is no separate raft-floor thickness, and the Skate preset fixes its own slope and expansion. |
 | 19 | **Placement: Model elevation (Z lift)** | `support_object_elevation`; `raft_type = Around object` (was `pad_around_object` / `pad_around_object_everywhere`) | covered | ConfigDefsSLA.cpp; RaftPreset.hpp; SLAPrint.cpp | Elevation config exists, and the Around-object raft type now decides whether the raft follows the object (M2.14d). |
-| 20 | **Placement: Auto-support density and minimum distance** | Density: `support_points_density_relative`; Minimum distance: — | partial | ConfigDefsSLA.cpp; SupportPointGenerator.cpp | Density (%) covered. Still no minimum-distance-between-points key; the generator's island support distance is not exposed. |
-| 21 | **Placement: Overhang angle threshold and island detection** | Island detection: `SupportPointType::island` in `SupportPoint`; Overhang angle: — | partial | SupportPoint.hpp; SupportPointGenerator.cpp; ConfigDefsSLA.cpp | Unchanged: island points are tagged and can be locked in the UI (`lock_island_supports`). The overhang-angle threshold for auto-generation is still not a setting. |
-| 1 | **Presets: Light / Medium / Heavy (plus custom)** — named bundle of tip, stem, base dims | — | missing | — | No support-specific preset bundles. We have `support_tree_type` (Default/Branching) but no named dimension presets. |
-| 2 | **Presets: Mini / tiny supports** — very small presets for fine detail | `support_preset_mini_head_diameter` / `_pillar_diameter` / `_base_diameter` / `_base_height`; "Mini" button in the support tool | covered | ConfigDefsSLA.cpp:1678,1692-1733; SlaSupportPointsDialog.cpp:140-144; SlaSupportPointsGizmo.cpp:1562-1566 | Four settings like the other three presets (M2.18b), so Mini is 0.2 mm tip, 0.5 mm pillar, 1.4 mm base of 0.4 mm, all smaller than Light. Placed by the button next to Light / Medium / Heavy. |
-| 3 | **Tip: Contact (tip) diameter** — diameter where tip touches model | `support_head_front_diameter` (global/per-object); per-point `head_front_radius` in `SupportPoint`; UI head-diameter slider + **Apply to selected** | partial | ConfigDefsSLA.cpp:1274; SupportPoint.hpp:37; SlaSupportPointsDialog.hpp:25,43; SlaSupportPointsEditing.cpp:131-138 | Config is global/per-object only. Per-point editing exists in UI (select points → set head diameter → Apply). Lychee allows per-point in preset; we require manual selection. |
-| 4 | **Tip: Tip length** — length of tapered tip section | `support_head_width` (pinhead width, back-sphere to front-sphere center) | partial | ConfigDefsSLA.cpp:1300 | `support_head_width` controls pinhead length, not a pure tip taper length. Geometry differs (double-sphere pinhead vs. simple cone). |
-| 5 | **Tip: Tip depth / penetration** — how far tip sinks into model surface | `support_head_penetration` | partial | ConfigDefsSLA.cpp:1287 | Global/per-object config only; no per-point override in config. |
-| 6 | **Tip: Tip shape** — cone or sphere/ball contact | — | missing | — | Our pinhead is always a double-sphere (front + back). No cone-only or sphere-only choice. |
-| 7 | **Tip: Knot / joint** — optional ball between tip and stem, and its size | — | missing | — | No knot/joint parameter. Pinhead connects directly to pillar. |
-| 8 | **Stem: Stem (body) diameter** — main column diameter | `support_pillar_diameter` | partial | ConfigDefsSLA.cpp:1314 | Global/per-object config only; no per-point override in config. |
-| 9 | **Stem: Stem geometry** — cross-section (round, square, polygon side count) | — | missing | — | Pillars are always round. No polygon/cross-section choice. |
-| 10 | **Stem: Stem taper** — diameter changes along stem | — | missing | — | Pillars are constant-diameter cylinders. No taper parameter. |
-| 11 | **Stem: Support on model** — stems that start on model instead of raft | `support_max_weight_on_model`; `support_buildplate_only` | partial | ConfigDefsSLA.cpp:1361,1395 | `support_max_weight_on_model` limits total branch length ending on model; `support_buildplate_only` disables model supports entirely. No per-point "start on model" toggle. |
-| 12 | **Stem: Support on support / branching** — stems that join into other stems | `support_tree_type = Branching`; `support_max_bridges_on_pillar`; `support_max_pillar_link_distance`; `support_pillar_connection_mode` | covered | ConfigDefsSLA.cpp:522-538,1343,1497,1376 | Branching tree type enables pillar-to-pillar links. Bridging/linking params control density/length. |
-| 13 | **Base: Base (foot) diameter** — diameter where stem meets raft/plate | `support_base_diameter` | partial | ConfigDefsSLA.cpp:1423 | Global/per-object config only; no per-point override in config. |
-| 14 | **Base: Base height and shape** — cone or cylinder foot, and its height | `support_base_height` | partial | ConfigDefsSLA.cpp:1437 | Height covered. Shape is always a cone; no cylinder/flat option. |
-| 15 | **Bracing: Braces / cross-braces** — automatic links between stems | `support_pillar_connection_mode` (zigzag/cross/dynamic) | covered | ConfigDefsSLA.cpp:1376 | Cross/zigzag modes create automatic cross-bracing between nearby pillars. |
-| 16 | **Bracing: Brace diameter, spacing, angle, pattern** — brace size and layout | Pattern: `support_pillar_connection_mode`; Angle: `support_critical_angle`; Spacing: `support_max_pillar_link_distance`; Diameter: `support_brace_diameter` (0 = as thick as the pillar) | covered | ConfigDefsSLA.cpp:1432,1462,1561,1591; DefaultSupportTree.cpp:206,256 | All four covered. Since M2.15 the brace diameter is a setting of its own, next to `support_brace_enable` and `support_brace_start_height`. |
-| 17 | **Raft: Raft type** — standard, skate, grid/honeycomb, none | Pad system (`pad_enable`, `pad_wall_thickness`, `pad_wall_height`, `pad_brim_size`, `pad_wall_slope`) | partial | ConfigDefsSLA.cpp:562-652 | Pad is a solid base with optional cavity walls. No "skate", "grid", or "honeycomb" type selection. `pad_enable=false` ≈ "none". |
-| 18 | **Raft: Raft thickness, margin/offset, chamfer/slope** | Thickness: `pad_wall_thickness` (conflated with wall); Margin: `pad_brim_size`; Chamfer/slope: `pad_wall_slope` | partial | ConfigDefsSLA.cpp:572,602,640 | Margin and slope covered. "Thickness" is the wall thickness; no separate raft-floor thickness parameter. |
-| 19 | **Placement: Model elevation (Z lift)** | `support_object_elevation`; `pad_around_object` / `pad_around_object_everywhere` | covered | ConfigDefsSLA.cpp:1511,654,664 | Elevation config exists. Pad-around-object modes modify behavior. |
 | 20 | **Placement: Auto-support density and minimum distance** | Density: `support_points_density_relative`; Minimum distance: `support_points_minimal_distance` | covered | ConfigDefsSLA.cpp:575,587; SupportPointGenerator.hpp:39-45; SupportPointGenerator.cpp:257-312 | Density (%) still covered. M2.22 adds the minimal distance: the generator refuses an overhang point nearer to another one than the value, measured in the layer. Island points are never filtered out, and zero (the default) leaves every point where it was. |
 | 21 | **Placement: Overhang angle threshold and island detection** | Overhang angle: `support_points_overhang_angle`; Island detection: `SupportPointType::island` in SupportPoint | covered | ConfigDefsSLA.cpp:601; SupportPointGenerator.cpp:565-598; SupportIslands/SampleConfig.hpp:38-41; SupportPoint.hpp:20,42; ConfigDefsSLA.cpp:1607 (`support_critical_angle` is for stick junctions, not overhang) | Island points are tagged and can be locked in UI (`lock_island_supports`). Since M2.22 the overhang angle is a setting: surfaces steeper than it from horizontal get no overhang point, islands keep theirs. The default of 90 degrees keeps every overhang, `support_critical_angle` stays the stick junction angle. |
 
@@ -55,12 +34,9 @@ Refreshed 2026-09-30 against what is merged: M2.12 (per-point sizes), M2.13 (tip
 
 | Status | Count |
 |---|---|
-| **covered** | 7 (rows 1, 5, 8, 12, 15, 16, 19) |
-| **partial** | 13 (rows 3, 4, 6, 7, 9, 10, 11, 13, 14, 17, 18, 20, 21) |
-| **missing** | 1 (row 2) |
-| **covered** | 7 (rows 2, 12, 15, 16, 19, 20, 21) |
-| **partial** | 9 (rows 3, 4, 5, 8, 11, 13, 14, 17, 18) |
-| **missing** | 5 (rows 1, 6, 7, 9, 10) |
+| **covered** | 10 (rows 1, 2, 5, 8, 12, 15, 16, 19, 20, 21) |
+| **partial** | 11 (rows 3, 4, 6, 7, 9, 10, 11, 13, 14, 17, 18) |
+| **missing** | 0 |
 
 Row 11 is partial because the related configs exist. Rows 6, 7, 9 and 10 are partial because M2.13 and M2.16 store and persist the value on the support point, but no mesh builder and no UI reads it yet.
 
@@ -68,7 +44,7 @@ Row 11 is partial because the related configs exist. Rows 6, 7, 9 and 10 are par
 
 ## Numbered gap list (with roadmap todo mapping)
 
-1. **Support preset bundles (Light/Medium/Heavy/Mini)** → **M2.18a-c** for Light, Medium and Heavy (closed: the twelve `support_preset_*` keys, the three buttons, and a preset point's own tip, pillar and base in the tree); the Mini/tiny preset → no todo yet
+1. **Support preset bundles (Light/Medium/Heavy/Mini)** → **M2.18a-c** for Light, Medium and Heavy (closed: the twelve `support_preset_*` keys, the three buttons, and a preset point's own tip, pillar and base in the tree); the Mini preset → **M2.22** (closed: `support_preset_mini_*` and a Mini button)
 2. **Per-point tip diameter in config** (currently UI-only via selection) → no todo yet (M2.12 delivered the stem diameter, the base diameter and the base height per point, not the tip diameter)
 3. **Tip length as distinct parameter** (separate from pinhead width) → **M2.13** for the stored, tree-honoured per-point `tip_length`; the UI control and the cone geometry → no todo yet
 4. **Tip shape choice (cone vs. sphere)** → **M2.13** stores `tip_shape` per point; the head geometry and the UI → no todo yet
@@ -80,22 +56,8 @@ Row 11 is partial because the related configs exist. Rows 6, 7, 9 and 10 are par
 10. **Independent brace diameter** (separate from pillar diameter) → **M2.15 bracing** (closed: `support_brace_diameter`, with `support_brace_enable` and `support_brace_start_height`)
 11. **Raft type selection (standard/skate/grid/honeycomb/none)** → **M2.14a** (the four types) and **M2.14d** (one source of truth); grid/honeycomb → **M2.14b2**, open
 12. **Separate raft floor thickness** (distinct from wall thickness) → no todo yet (M2.14a gives the wall thickness and the wall height; M2.14b3 is the interface layer, which is a different thing)
-13. **Minimum distance between auto-support points** → no todo yet (M2.12 was per-point sizes, not auto-placement density)
-14. **Overhang angle threshold for auto-generation** → no todo yet (auto-placement logic)
-1. **Support preset bundles (Light/Medium/Heavy/Mini)** → **M2.18 presets** (closed: Light / Medium / Heavy, M2.22 adds Mini)
-2. **Per-point tip diameter in config** (currently UI-only via selection) → **M2.12 per-point sizes**
-3. **Tip length as distinct parameter** (separate from pinhead width) → **M2.13 tip geometry**
-4. **Tip shape choice (cone vs. sphere)** → **M2.13 tip geometry**
-5. **Knot/joint between tip and stem** → **M2.13 tip geometry**
-6. **Stem cross-section geometry (round/square/polygon)** → **M2.16 stem geometry**
-7. **Stem taper (variable diameter along length)** → **M2.16 stem geometry**
-8. **Per-point "support on model" toggle** → **M2.12 per-point sizes** (or no todo yet)
-9. **Base shape choice (cone vs. cylinder)** → **M2.14 rafts** (base is part of pillar, but raft todo may cover)
-10. **Independent brace diameter** (separate from pillar diameter) → **M2.15 bracing** (closed: `support_brace_diameter`)
-11. **Raft type selection (standard/skate/grid/honeycomb/none)** → **M2.14 rafts**
-12. **Separate raft floor thickness** (distinct from wall thickness) → **M2.14 rafts**
-13. **Minimum distance between auto-support points** → **M2.12 per-point sizes** (closed by M2.22: `support_points_minimal_distance`)
-14. **Overhang angle threshold for auto-generation** → **M2.22 auto-support placement** (closed: `support_points_overhang_angle`)
+13. **Minimum distance between auto-support points** → **M2.22** (closed: `support_points_minimal_distance`, 0 = off)
+14. **Overhang angle threshold for auto-generation** → **M2.22** (closed: `support_points_overhang_angle`, 90° = keep all; island points always kept)
 
 ---
 
