@@ -227,7 +227,20 @@ ResinImportDialog::ResinImportDialog(
 
 void ResinImportDialog::open(const boost::filesystem::path& path)
 {
-    m_file = path;
+    m_file    = path;
+    m_profile.reset();
+    fill_for_review();
+}
+
+void ResinImportDialog::open(const Biz::ResinProfile::ForeignResinProfile& profile)
+{
+    m_file.clear();
+    m_profile = profile;
+    fill_for_review();
+}
+
+void ResinImportDialog::fill_for_review()
+{
     m_imported_preset_name.clear();
     m_result = Biz::ResinProfile::ResinImportResult{};
     m_name_input->set_text(std::string{});
@@ -238,7 +251,7 @@ void ResinImportDialog::open(const boost::filesystem::path& path)
     // What the file is, before anything is picked: the base the importer chooses for it and the name
     // it suggests. Both are worked out by the import itself, so the dialog shows what the import
     // will do rather than guessing at it.
-    m_result = m_importer.import_file(m_file, import_target(), /*dry_run=*/true);
+    m_result = run_import(/*dry_run=*/true, {}, {});
     if (m_result.ok) {
         const auto picked = std::ranges::find(m_base_ids, m_result.base_preset_id);
         if (picked != m_base_ids.end()) {
@@ -251,6 +264,19 @@ void ResinImportDialog::open(const boost::filesystem::path& path)
 
     // Opened even when the import cannot go on, because then the dialog says why.
     m_navigator.set_opened_dialog(this);
+}
+
+Biz::ResinProfile::ResinImportResult ResinImportDialog::run_import(
+    bool dry_run,
+    const std::string& base_id,
+    const std::string& preset_name
+)
+{
+    // A profile that was built without a file is already read, so it goes in whole; a file goes
+    // through the registry, which is what bounds it.
+    if (m_profile)
+        return m_importer.import_profile(*m_profile, import_target(), dry_run, base_id, preset_name);
+    return m_importer.import_file(m_file, import_target(), dry_run, base_id, preset_name);
 }
 
 void ResinImportDialog::close_action()
@@ -311,13 +337,7 @@ void ResinImportDialog::refresh_report()
     // The name the user typed goes in, so the table and the name always describe the same import.
     // The importer makes that name unique and the input follows it, which is how a name that is
     // already taken is shown before anything is saved.
-    m_result = m_importer.import_file(
-        m_file,
-        import_target(),
-        /*dry_run=*/true,
-        base_preset_id(),
-        wanted_name()
-    );
+    m_result = run_import(/*dry_run=*/true, base_preset_id(), wanted_name());
     if (m_result.ok && m_name_input->text() != m_result.preset_name) {
         m_name_input->set_text(m_result.preset_name);
     }
@@ -432,13 +452,7 @@ void ResinImportDialog::save(bool select)
     Biz::Preset::PresetInteractor& presets = m_project_interactor.preset_interactor();
     const std::string previous_material    = presets.selected_printer_preset().materials[0].id;
 
-    m_result = m_importer.import_file(
-        m_file,
-        import_target(),
-        /*dry_run=*/false,
-        base_preset_id(),
-        m_name_input->text()
-    );
+    m_result = run_import(/*dry_run=*/false, base_preset_id(), m_name_input->text());
     if (!m_result.ok) {
         set_error(m_result.error);
         return;

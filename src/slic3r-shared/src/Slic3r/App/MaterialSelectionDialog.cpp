@@ -12,6 +12,7 @@
 #include "Slic3r/App/AppConfigInteractor.hpp"
 #include "Slic3r/App/PrinterSearchFunction.hpp"
 #include "Slic3r/App/ResinImportDialog.hpp"
+#include "Slic3r/App/ResinDatasheetDialog.hpp"
 #include "Slic3r/App/IsSlaActive.hpp"
 #include "Slic3r/App/IDialogManager.hpp"
 #include "Slic3r/App/Wildcards.hpp"
@@ -50,9 +51,10 @@ void MaterialSelectionDialog::update_type_filter_visibility()
 {
     bool sla_active = is_sla_active(m_project_interactor);
 
-    // A resin profile is written into a resin preset, so the button that imports one is only of use
-    // where the selected printer takes a resin.
+    // A resin profile is written into a resin preset, so the buttons that bring one in are only of
+    // use where the selected printer takes a resin.
     m_import_resin_profile_button->set_visible(sla_active);
+    m_new_datasheet_resin_button->set_visible(sla_active);
 
     // Show/hide the appropriate button set (excluding shared "All")
     for (auto* btn : m_fff_type_filter_buttons) {
@@ -124,9 +126,16 @@ MaterialSelectionDialog::MaterialSelectionDialog(
     m_material_settings_dialog =
         content_item()->emplace_back<MaterialSettingsDialog>(project_interactor, m_navigator, this);
     // The resin import review dialog lives here because this is where a profile comes in from: the
-    // "Import resin profile" button of M3.10b opens it through open_resin_import().
+    // "Import resin profile" button of M3.10b opens it through open_resin_import(), and the
+    // "New resin from datasheet" form of M3.11 through open_resin_datasheet(), which hands it the
+    // profile the form built.
     m_resin_import_dialog =
         content_item()->emplace_back<ResinImportDialog>(project_interactor, m_navigator);
+    m_datasheet_dialog = content_item()->emplace_back<ResinDatasheetDialog>(m_navigator);
+    m_datasheet_dialog->set_next_callback(
+        [this](const Biz::ResinProfile::ForeignResinProfile& profile)
+        { m_resin_import_dialog->open(profile); }
+    );
     m_material_presets.add_listener<Biz::IListObserver<Biz::Preset::PresetItemObservableList>>(
         this
     );
@@ -312,9 +321,19 @@ m_material_filter->set_filter_fn(
     m_import_resin_profile_button->set_visible(false);
     m_import_resin_profile_button->callbacks().action = [this]() { pick_resin_profile(); };
 
+    // And the way in for a resin whose profile nobody has: the datasheet form of M3.11, which types
+    // the few values a datasheet states and then goes through the same review and save. No ellipsis
+    // here: it opens the form, not a file picker.
+    m_new_datasheet_resin_button =
+        content()->emplace_back<LayoutButton>(_u8L("New resin from datasheet"));
+    m_new_datasheet_resin_button->set_width_percent(100.f);
+    m_new_datasheet_resin_button->set_visible(false);
+    m_new_datasheet_resin_button->callbacks().action = [this]() { open_resin_datasheet(); };
+
     // Material Settings Dialog setup
     m_material_settings_dialog->attach_to_item(content_item(), Position::Left);
     m_resin_import_dialog->attach_to_item(content_item(), Position::Left);
+    m_datasheet_dialog->attach_to_item(content_item(), Position::Left);
 
     m_material_settings_dialog->dialog_callbacks().tab_selected = [this](size_t current_index)
     {
@@ -419,9 +438,21 @@ void MaterialSelectionDialog::open_resin_import(const boost::filesystem::path& p
     m_resin_import_dialog->open(path);
 }
 
+void MaterialSelectionDialog::open_resin_datasheet()
+{
+    // The form is opened from here, so this dialog is the opened one while the user is filling it in.
+    m_navigator.set_opened_dialog(this);
+    m_datasheet_dialog->open();
+}
+
 ResinImportDialog& MaterialSelectionDialog::resin_import_dialog()
 {
     return *m_resin_import_dialog;
+}
+
+ResinDatasheetDialog& MaterialSelectionDialog::resin_datasheet_dialog()
+{
+    return *m_datasheet_dialog;
 }
 
 void MaterialSelectionDialog::pick_resin_profile()
