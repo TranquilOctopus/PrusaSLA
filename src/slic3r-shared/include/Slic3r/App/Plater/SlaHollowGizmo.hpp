@@ -11,6 +11,7 @@
 #include "Slic3r/App/Render/GeometryManager.hpp"
 #include "Slic3r/Biz/Algorithms/AABBMesh.hpp"
 #include "Slic3r/Biz/Slicing/SlicingInteractor.hpp"
+#include "Slic3r/Domain/SLA/HollowingLatticeSettings.hpp"
 #include "Slic3r/App/Yoga/Item.hpp"
 
 #include <memory>
@@ -104,6 +105,16 @@ private:
     void write_hollowing_config(Domain::ModelObject* model_object, bool enable, double min_thickness, double quality, double closing_distance);
     void take_undo_snapshot();
 
+    // The infill lattice of the cavity (M2.29b): the pattern and the two knobs of a lattice, which
+    // the tool writes on a plate that is marked modified and never slices by itself.
+    void on_infill_changed(int index);
+    void on_infill_spacing_changed(double spacing_mm);
+    void on_infill_strut_changed(double strut_mm);
+    void read_infill_config(const Domain::ModelObject* model_object);
+    void sync_infill_controls();
+    void apply_infill_change();
+    void write_infill_config(Domain::ModelObject* model_object);
+
     // Drain hole editing helpers
     void begin_editing();
     void end_editing();
@@ -170,10 +181,17 @@ private:
     // Current config values
     bool m_current_enable = false;
     double m_current_min_thickness = 3.0;
+    Domain::sla::HollowingInfillType m_current_infill = Domain::sla::HollowingInfillType::None;
+    double m_current_infill_spacing = 3.0;
+    double m_current_infill_strut = 0.5;
     double m_current_quality = 0.5;
     double m_current_closing_distance = 2.0;
     double m_current_hole_radius = 5.0;
     double m_current_hole_height = 10.0;
+
+    // True while the tool shows the values of the selection in its own controls. A slider reports
+    // a value it is given, so without this every new selection would write the values it shows.
+    bool m_syncing_dialog = false;
 
     // Editing state
     std::optional<DrainHoleEditState> m_edit_state;

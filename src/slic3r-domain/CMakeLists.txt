@@ -73,6 +73,9 @@ add_library(slic3r-domain STATIC
     include/Slic3r/Domain/SLA/RaftPreset.hpp
     src/Slic3r/Domain/SLA/RaftPreset.cpp
 
+    include/Slic3r/Domain/SLA/HollowingLatticeSettings.hpp
+    src/Slic3r/Domain/SLA/HollowingLatticeSettings.cpp
+
     include/Slic3r/Domain/SlaLayerHeight.hpp
     src/Slic3r/Domain/SlaLayerHeight.cpp
 
