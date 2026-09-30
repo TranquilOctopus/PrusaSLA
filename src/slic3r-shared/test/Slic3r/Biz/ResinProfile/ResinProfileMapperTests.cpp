@@ -671,6 +671,51 @@ TEST_CASE(
         CHECK(result.material_values.count("bottle_cost") == 0);
         CHECK(row_of(result, "resinPrice").note.find("per litre") != std::string::npos);
     }
+
+    SECTION("a price per bottle is the cost of that bottle and is written as it is")
+    {
+        // A price per bottle is what bottle_cost holds, so there is nothing to convert: the value
+        // the source gave is the value that is written, which is what the review table has to show
+        // for a datasheet. The per-litre equivalent goes in the note, where the conversion is still
+        // auditable without being the number on the row.
+        const MappingResult result = map_resin_profile(
+            profile_of({{"resinPrice", "25"}, {"resinUnit", "/bottle"}, {"bottleVolume", "500"}}),
+            TargetPrinterClass::GenericMsla
+        );
+
+        CHECK(result.material_values.at("bottle_cost") == "25");
+        const MappedField& row = row_of(result, "resinPrice");
+        CHECK(row.source_value == "25");
+        CHECK(row.value == "25");
+        // 25 for a 500 ml bottle is 50 per litre, and the note says so.
+        CHECK(row.note.find("50") != std::string::npos);
+        CHECK(row.note.find("per litre") != std::string::npos);
+        CHECK(row.note.find("500") != std::string::npos);
+    }
+
+    SECTION("a price per bottle without a bottle size assumes the same 1 litre bottle")
+    {
+        const MappingResult result = map_resin_profile(
+            profile_of({{"resinPrice", "25"}, {"resinUnit", "per bottle"}}),
+            TargetPrinterClass::Tilt
+        );
+
+        CHECK(result.material_values.at("bottle_cost") == "25");
+        CHECK(row_of(result, "resinPrice").note.find("1000") != std::string::npos);
+    }
+
+    SECTION("a price per kilo is not a bottle cost")
+    {
+        // A per-bottle unit is a price the preset holds; a per-kilo one is not, whatever the bottle
+        // size, so it is reported and nothing is written.
+        const MappingResult result = map_resin_profile(
+            profile_of({{"resinPrice", "25"}, {"resinUnit", "/kg"}, {"bottleVolume", "500"}}),
+            TargetPrinterClass::Tilt
+        );
+
+        CHECK(result.material_values.count("bottle_cost") == 0);
+        CHECK(row_of(result, "resinPrice").note.find("Nothing written") != std::string::npos);
+    }
 }
 
 TEST_CASE(

@@ -270,10 +270,6 @@ void put_number(ForeignResinProfile& profile, const char* key, const std::string
         profile.raw_values[key] = text;
 }
 
-// The bottle the mapper assumes when a profile states no bottle size, the same 1 litre bottle it
-// assumes for a Chitubox price per litre.
-constexpr double ASSUMED_BOTTLE_VOLUME_ML = 1000.;
-
 // The two keys the price block writes, which go in together rather than one field at a time.
 constexpr std::string_view PRICE_KEY{"resinPrice"};
 constexpr std::string_view VOLUME_KEY{"bottleVolume"};
@@ -340,23 +336,20 @@ ForeignResinProfile datasheet_to_profile(const ResinDatasheet& datasheet)
         put_number(profile, rule.key, datasheet.*(rule.value));
     }
 
-    // The mapping table only turns a per-litre price into a bottle cost, and a datasheet states a
-    // price per bottle. So the price is written as the per-litre price of that same bottle:
-    // bottle_cost = price x volume / 1000, and with the price written as the per-litre price of the
-    // bottle the volume came in, that is the price of the bottle again. Both numbers are in the
-    // mapping report, so the arithmetic stays auditable in the review table.
+    // A datasheet states a price per bottle, which is what bottle_cost holds, so the price goes in as
+    // it is and the unit says so. The mapping table writes it unchanged and puts the per-litre
+    // equivalent of that bottle in the note of the row, so the review table shows the number that
+    // was typed instead of one this form had to invent, and the conversion is still auditable.
     const std::optional<double> price  = parse_number(trim(datasheet.price_per_bottle));
     const std::optional<double> volume = parse_number(trim(datasheet.bottle_volume_ml));
-    // A datasheet that states no bottle size gets the mapper's own assumption, which is what it
-    // would assume for a file that states none. A bottle of no resin is not a bottle, so it is never
-    // turned into a per-litre price either.
-    const double volume_ml = volume && *volume > 0. ? *volume : ASSUMED_BOTTLE_VOLUME_ML;
     if (price) {
-        profile.raw_values[std::string(PRICE_KEY)] = format_number(*price * 1000. / volume_ml);
-        // The unit says how the price is counted, and it is what tells the mapping table that this
-        // is a price it can turn into a bottle cost at all.
-        profile.raw_values["resinUnit"] = "/L";
+        profile.raw_values[std::string(PRICE_KEY)] = format_number(*price);
+        // The unit is what tells the mapping table how the price is counted, and a per-bottle price
+        // is one it can use as it is.
+        profile.raw_values["resinUnit"] = "/bottle";
     }
+    // The bottle size does not change the price any more, but it is what the per-litre equivalent in
+    // the note is counted for, and it is a setting a resin preset holds of its own.
     if (volume && *volume > 0.)
         profile.raw_values[std::string(VOLUME_KEY)] = format_number(*volume);
 

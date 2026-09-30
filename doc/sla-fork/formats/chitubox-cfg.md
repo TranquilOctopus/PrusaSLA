@@ -69,7 +69,7 @@ table is the one that is read, and the other one gets a row of its own saying so
 | `bottomLayerCount`, `bottomLayCount` | tilt: `resin_faded_layers` (clamped to 3-20); generic MSLA: `bottom_layer_count` | a layer count | a layer count | Approximated (tilt) / Exact (generic) | unverified |
 | `layerHeight` | `resin_layer_height` | mm | mm | Exact | unverified |
 | `resinDensity` | `material_density` | g/ml | g/ml | Exact | unverified |
-| `resinPrice` with `resinUnit` | `bottle_cost` | a price per litre | money per bottle | Converted | unverified |
+| `resinPrice` with `resinUnit` | `bottle_cost` | a price per litre, or a price per bottle | money per bottle | Converted | unverified |
 | `bottleVolume`, `bottle_volume` | read with `resinPrice`, writes nothing | ml | - | Converted | unverified |
 | `lightOffTime`, `bottomLightOffTime` | `delay_before_exposure` (the same value above and below the area fill) | s | s | Approximated | unverified |
 | `resetTimeBeforeLift` | tilt: `delay_after_exposure`; generic MSLA: `wait_before_lift` | s | s | Approximated (tilt) / Exact (generic) | unverified |
@@ -135,8 +135,10 @@ The list M3.1 exists to answer, in the order it would be cheapest to check:
    or mm/s decides whether every lift and retract speed of every imported profile is out by a factor
    of 60. Compare the file against the values the Chitubox UI shows.
 3. **The unit of `resinPrice` and the spellings of `resinUnit`.** A price only becomes a bottle cost
-   when the unit is a per-litre one, and this fork accepts the usual ways of writing that and refuses
-   the rest.
+   when the unit says how it is counted: a per-litre price is multiplied by the bottle volume, a
+   per-bottle price already is the cost of one bottle, and anything else (a per-kilo price, no unit
+   at all) is reported and nothing is written. This fork accepts the usual spellings of the first two
+   and refuses the rest.
 4. **What `lightOffTime` means.** It is written as a delay before the exposure, above and below the
    area fill, which is an approximation rather than a conversion.
 5. **What `resetTimeBeforeLift` and `resetTimeAfterLift` mean** on a tilt printer, where they become a

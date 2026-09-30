@@ -201,8 +201,8 @@ holds, so a speed is compared as the mm/s it becomes.
 **Next** checks the fields and hands them to the same review dialog, where **Save** or
 **Save & select** finishes the job. A value the datasheet does not state is left out of the profile
 altogether instead of being written as a zero, so it does not appear in the review table either. A
-datasheet gives a price per bottle, so it is turned into a per-litre price of that same bottle, and
-the bottle cost in the review is the price the datasheet stated, with both numbers in the note.
+datasheet gives a price per bottle, which is what the resin preset holds, so the row shows the price
+as it was typed and the note says what it works out to per litre.
 
 ![TODO screenshot: the New resin from datasheet form filled in from a vendor datasheet]()
 
@@ -278,7 +278,7 @@ by the printer you import into.
 | `bottomLayerCount`, `bottomLayCount` | SL1: `resin_faded_layers`; MSLA: `bottom_layer_count` | count, clamped to 3-20 on tilt | Approximated | Exact |
 | `layerHeight` | `resin_layer_height` | mm to mm | Exact | Exact |
 | `resinDensity` | `material_density` | g/ml to g/ml | Exact | Exact |
-| `resinPrice` with `resinUnit` | `bottle_cost` | price per litre x bottle volume / 1000 | Converted | Converted |
+| `resinPrice` with `resinUnit` | `bottle_cost` | per bottle as it is; per litre x bottle volume / 1000 | Converted | Converted |
 | `bottleVolume`, `bottle_volume` | read with `resinPrice`, writes nothing of its own | ml | Converted | Converted |
 | `lightOffTime`, `bottomLightOffTime` | `delay_before_exposure` | s, written twice as `v,v` | Approximated | Approximated |
 | `resetTimeBeforeLift` | SL1: `delay_after_exposure`; MSLA: `wait_before_lift` | s, `v,v` on tilt | Approximated | Exact |
@@ -326,10 +326,12 @@ not use yet, so they arrive as *Unknown* rather than silently:
   so every converted speed is divided by 60. The note on each of those rows says so, because the
   unit is not confirmed against a real file yet. If a lift speed looks far too slow or too fast
   after an import, this is the first thing to check.
-- **A price only becomes a bottle cost when the file says it is per litre.** A per-kilo price, or a
-  file with no unit, is reported and nothing is written. The currency is never converted, so the
-  cost estimate stays in the currency of the source profile. Without a `bottleVolume` in the file a
-  1 litre bottle is assumed, and the note says so.
+- **A price becomes a bottle cost when the file says how it is counted.** A per-litre price is
+  multiplied by the bottle volume and divided by 1000; a per-bottle price already is the cost of one
+  bottle and is written as it is, with the per-litre equivalent of that bottle in the note. A
+  per-kilo price, or a file with no unit, is reported and nothing is written. The currency is never
+  converted, so the cost estimate stays in the currency of the source profile. Without a
+  `bottleVolume` in the file a 1 litre bottle is assumed, and the note says so.
 - **On a tilt printer the bottom layer count becomes the transition layer count**, clamped to the
   3 to 20 layers a tilt printer fades the exposure over, because a tilt printer has no block of
   bottom layers. If the file states a transition layer count as well, that one is what lands in

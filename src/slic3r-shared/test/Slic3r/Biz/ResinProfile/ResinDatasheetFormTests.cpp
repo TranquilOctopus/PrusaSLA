@@ -94,15 +94,16 @@ const std::vector<OptionField>& option_fields()
          nullptr,
          nullptr,
          &ResinDatasheet::light_off_delay_s},
-        // A price is a bottle cost only when the unit says it is a per-litre price, so the unit
-        // comes along: without it the mapping table writes nothing and the row has no target.
+        // A price is a bottle cost only when the unit says how it is counted, so the unit comes
+        // along: without it the mapping table writes nothing and the row has no target. The one the
+        // form writes is "/bottle" (M3.11c), a per-litre one lands in the same setting.
         {"Price of a bottle",
          "resinPrice",
          "bottle_cost",
          1.,
          true,
          "resinUnit",
-         "/L",
+         "/bottle",
          &ResinDatasheet::price_per_bottle},
         {"Bottle volume",
          "bottleVolume",
@@ -409,9 +410,7 @@ TEST_CASE(
         INFO("field " << field.label);
         // A value the setting takes, so the row is written rather than refused for its content, and
         // the speeds are the other way round: one unit of the setting is what the form asks in.
-        std::map<std::string, std::string> values{
-            {field.key, as_number(1. / field.to_option_unit)}
-        };
+        std::map<std::string, std::string> values{{field.key, as_number(1. / field.to_option_unit)}};
         if (field.companion_key != nullptr)
             values[field.companion_key] = field.companion_value;
 
@@ -515,10 +514,11 @@ TEST_CASE("datasheet_to_profile writes the values the mapping table reads", "[re
         // The name is written the way a Chitubox file writes it, so the mapper suggests the preset
         // name from it and the importer looks for a resin of that name to use as the base.
         CHECK(profile.raw_values.at("currProfile") == "Grey resin");
-        // The price of a bottle is written as the per-litre price of that bottle, because that is
-        // the only price the mapping table turns into a bottle cost. 25 for 500 ml is 50 per litre.
-        CHECK(profile.raw_values.at("resinPrice") == "50");
-        CHECK(profile.raw_values.at("resinUnit") == "/L");
+        // The price of a bottle goes in as the price of a bottle, which is what bottle_cost holds,
+        // so the review table shows the number that was typed rather than one the form had to make
+        // up. 25 for a 500 ml bottle is 50 per litre, and that is what the note of the row carries.
+        CHECK(profile.raw_values.at("resinPrice") == "25");
+        CHECK(profile.raw_values.at("resinUnit") == "/bottle");
         CHECK(profile.raw_values.at("bottleVolume") == "500");
         // The layer separation goes in under the keys a foreign .cfg states it with, and the speeds
         // in the unit that file uses, so the mapper converts them the way it converts a file's.
@@ -545,14 +545,55 @@ TEST_CASE("datasheet_to_profile writes the values the mapping table reads", "[re
         CHECK(profile.raw_values.count("machineName") == 0);
     }
 
-    SECTION("a price without a bottle size is the per-litre price of the assumed litre")
+    SECTION("a price without a bottle size is still the price of a bottle")
     {
         ResinDatasheet datasheet          = full_datasheet();
         datasheet.bottle_volume_ml        = "";
         const ForeignResinProfile profile = datasheet_to_profile(datasheet);
+        // The price no longer depends on the bottle at all, so nothing about the price changes with
+        // it; the per-litre equivalent the note gives is the assumed 1 litre bottle, as it is for a
+        // file that states no bottle size either.
         CHECK(profile.raw_values.at("resinPrice") == "25");
+        CHECK(profile.raw_values.at("resinUnit") == "/bottle");
         CHECK(profile.raw_values.count("bottleVolume") == 0);
     }
+}
+
+TEST_CASE(
+    "the review row of the price shows the price the datasheet stated",
+    "[resin_datasheet][mapper]"
+)
+{
+    // The row used to name a per-litre price the form had computed, so the number on the left was
+    // not the one that was typed. It is now the price as stated, and the conversion is in the note.
+    const MappingResult mapping =
+        map_resin_profile(datasheet_to_profile(full_datasheet()), TargetPrinterClass::GenericMsla);
+
+    const MappedField* price_row = nullptr;
+    for (const MappedField& row : mapping.report)
+        if (row.source_key == "resinPrice")
+            price_row = &row;
+    REQUIRE(price_row != nullptr);
+
+    // What the datasheet said: 25 for a 500 ml bottle.
+    CHECK(price_row->source_value == "25");
+    // What is written is the same number, because a price per bottle is what bottle_cost holds.
+    CHECK(price_row->target_key == "bottle_cost");
+    CHECK(price_row->value == "25");
+    // The per-litre equivalent the row does not show any more is in its note, so the conversion
+    // stays auditable.
+    CHECK(price_row->note.find("50") != std::string::npos);
+    CHECK(price_row->note.find("per litre") != std::string::npos);
+    CHECK(price_row->note.find("500") != std::string::npos);
+
+    // A price per bottle is a price this preset already holds, so the unit says so rather than
+    // naming a per-litre price the source never gave.
+    const MappedField* unit_row = nullptr;
+    for (const MappedField& row : mapping.report)
+        if (row.source_key == "resinUnit")
+            unit_row = &row;
+    REQUIRE(unit_row != nullptr);
+    CHECK(unit_row->source_value == "/bottle");
 }
 
 TEST_CASE(
