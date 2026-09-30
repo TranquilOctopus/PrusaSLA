@@ -226,6 +226,22 @@ struct Pillar: public SupportTreeNode {
         : Pillar(endp, h, start_radius, start_radius)
     {}
 
+    // The same pillar with the stem geometry of the support point that owns it
+    // (M2.16b), so a caller that has a StemGeometry to hand does not have to
+    // taper the radius and store the stem in two steps. end_radius is the radius
+    // the pillar is asked to end in and the taper of the stem is applied to it,
+    // the way add_pillar(headid, length) does it there. This is what
+    // add_pillar(endp, h, start_radius, end_radius, stem) builds.
+    Pillar(const Vec3d &endp, double h, double start_radius, double end_radius,
+           const StemGeometry &stem_geom)
+        : height{h}
+        , r_start(start_radius)
+        , r_end(stem_geom.end_radius(end_radius))
+        , endpt(endp)
+        , starts_from_head(false)
+        , stem(stem_geom)
+    {}
+
     Vec3d startpoint() const
     {
         return {endpt.x(), endpt.y(), endpt.z() + height};
