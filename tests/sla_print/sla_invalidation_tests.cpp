@@ -98,6 +98,7 @@ std::vector<std::string> get_all_sla_config_keys() {
     keys.push_back("peel_force_warning");
     keys.push_back("peel_perimeter_coefficient");
     keys.push_back("raft_edge_taper");
+    keys.push_back("raft_floor_thickness");
     keys.push_back("raft_infill");
     keys.push_back("raft_infill_spacing");
     keys.push_back("raft_infill_wall");
@@ -341,6 +342,7 @@ TEST_CASE("SLAInvalidation: table-driven expected steps for representative keys"
         {"material_correction", all_steps()},
         {"pad_brim_size", steps({propagate(slaposPad)})},
         {"pad_enable", steps({propagate(slaposObjectSlice)})},
+        {"raft_floor_thickness", steps({propagate(slaposPad)})},
         {"raft_interface_thickness", steps({propagate(slapsMergeSlicesAndEval)})},
         {"raft_type", steps({propagate(slaposObjectSlice), propagate(slaposPad)})},
         {"relative_correction", all_steps()},

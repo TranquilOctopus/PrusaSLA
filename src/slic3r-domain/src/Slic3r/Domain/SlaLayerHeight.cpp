@@ -87,11 +87,17 @@ RaftInterface raft_interface_band(double raft_height_mm,
 RaftInterface sla_raft_interface(const ConfigView& cfg, int layer_count)
 {
     // The height of the raft is the thickness of its walls plus the height of the cavity the object
-    // sits in, which is what the pad generator builds (PadConfig::full_height()).
-    RaftInterface ret = raft_interface_band(
-        lenient_double(cfg, "pad_wall_height") + lenient_double(cfg, "pad_wall_thickness"),
-        lenient_double(cfg, "raft_interface_thickness"),
-        sla_effective_layer_height(cfg));
+    // sits in, which is what the pad generator builds (PadConfig::full_height()). A raft with a
+    // floor thickness of its own stands on a slab that thick instead of one as thick as the walls,
+    // which makes it taller, and the interface is the top of it.
+    const double wall_thickness{lenient_double(cfg, "pad_wall_thickness")};
+    const double floor_thickness{lenient_double(cfg, "raft_floor_thickness")};
+    const double raft_height{lenient_double(cfg, "pad_wall_height") +
+                             (floor_thickness > 0. ? floor_thickness : wall_thickness)};
+
+    RaftInterface ret = raft_interface_band(raft_height,
+                                            lenient_double(cfg, "raft_interface_thickness"),
+                                            sla_effective_layer_height(cfg));
 
     if (ret.empty())
         return ret;
