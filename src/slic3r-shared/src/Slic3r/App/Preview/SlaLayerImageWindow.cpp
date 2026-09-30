@@ -104,16 +104,11 @@ ImVec2 bed_mm_to_image_px(
 }
 
 // The vat film the peel force coefficients came from, spelled as the vat film combo box spells
-// it. These are the chemical names of the films, not words to translate.
+// it. These are the chemical names of the films, not words to translate, so the one table of them
+// next to the coefficients serves both here and the pre-export checklist.
 std::string vat_film_name(const Domain::ConfigView& config)
 {
-    switch (config.get<Domain::sla::VatFilmType>("vat_film_type")) {
-    case Domain::sla::VatFilmType::nFEP: return "nFEP";
-    case Domain::sla::VatFilmType::PFA:  return "PFA";
-    case Domain::sla::VatFilmType::ACF:  return "ACF";
-    case Domain::sla::VatFilmType::FEP:  break;
-    }
-    return "FEP";
+    return std::string(::Slic3r::SLA::vat_film_name(config.get<Domain::sla::VatFilmType>("vat_film_type")));
 }
 
 } // namespace

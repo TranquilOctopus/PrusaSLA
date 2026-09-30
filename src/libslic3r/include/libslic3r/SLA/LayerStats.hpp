@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <string_view>
 #include <vector>
 
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
@@ -25,6 +26,10 @@ struct PeelForceCoefficients
 
 /// The coefficients a vat film type brings, before the override keys are applied.
 PeelForceCoefficients peel_force_coefficients(Domain::sla::VatFilmType film);
+
+/// The name of a vat film, spelled as the vat_film_type combo box spells it. These are chemical
+/// abbreviations rather than words to translate, so the name is handed out as it is.
+std::string_view vat_film_name(Domain::sla::VatFilmType film);
 
 /// What the slicer was told about the printer for the peel force model: the vat film, which
 /// picks the coefficients, and the two overrides of them. The suction term and the warning
