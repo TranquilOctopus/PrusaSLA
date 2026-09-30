@@ -4,9 +4,11 @@
 #include <memory>
 
 #include <wx/wx.h>
+#include <wx/timer.h>
 
 #include <Slic3r/Domain/Workbench.hpp>
 #include <Slic3r/Domain/Bed.hpp>
+#include <Slic3r/App/FixtureRender.hpp>
 #include <Slic3r/App/Plater/PlaterRenderModule.hpp>
 #include <Slic3r/App/Preview/PreviewRenderModule.hpp>
 #include <Slic3r/App/Init.hpp>
@@ -94,6 +96,26 @@ private:
     // For --sla-fixture handling
     std::unique_ptr<Biz::IProjectsChangedListener> m_sla_fixture_listener;
     void process_sla_fixture(Domain::SelectionId project_id);
+
+    /**
+     * @name The visual regression render of --render-to (roadmap M6.2, PLAN G3)
+     *
+     * Renders one view of the loaded fixture offscreen through the thumbnail path, writes the PNG
+     * and its sidecar and quits. See doc/sla-fork/visual-regression.md.
+     * @{
+     */
+    struct FixtureRenderListener;
+    std::unique_ptr<FixtureRenderListener> m_fixture_render_listener;
+    std::unique_ptr<wxTimer> m_fixture_render_timer;
+    App::FixtureView m_fixture_render_view{App::FixtureView::Prepare};
+    Domain::Size m_fixture_render_size;
+    Domain::SlicingId m_fixture_render_slicing_id{};
+    Domain::SelectionId m_fixture_render_project_id{Domain::INVALID_ID};
+
+    void start_fixture_render(Domain::SelectionId project_id, Domain::SlicingId slicing_id);
+    void do_fixture_render();
+    void quit_after_fixture_render(bool ok);
+    /**@}*/
 };
 
 } // namespace Slic3r::App::Desktop

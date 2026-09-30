@@ -137,6 +137,14 @@ struct InputParams
     std::optional<std::string> printer_profile_preset;
 
     std::optional<std::string> sla_fixture;
+
+    /// Visual regression renders (roadmap M6.2, PLAN G3). With --sla-fixture, renders one view of
+    /// the loaded fixture to a PNG offscreen, writes a sidecar with the lightness of the drawn
+    /// tokens next to it and quits. --render-view is "prepare" or "preview", --render-size is
+    /// WIDTHxHEIGHT.
+    std::optional<std::string> render_to;
+    std::optional<std::string> render_view;
+    std::optional<std::string> render_size;
 };
 
 struct TransformParams

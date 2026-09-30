@@ -1,5 +1,6 @@
 #include "Slic3r/App/Plater/ThumbnailImageGenerator.hpp"
 #include "Slic3r/Biz/Platform/PlatformServices.hpp"
+#include "Slic3r/Domain/Project.hpp"
 #include "Slic3r/Domain/Workbench.hpp"
 #include "Slic3r/App/Scene/IProjectSceneProvider.hpp"
 #include "Slic3r/App/Scene/Scene.hpp"
@@ -140,6 +141,39 @@ void ThumbnailImageGenerator::handle_enqueued_requests()
 bool ThumbnailImageGenerator::initialized() const
 {
     return m_workbench != nullptr && m_device != nullptr && m_scene_provider != nullptr && m_renderer;
+}
+
+Domain::Images ThumbnailImageGenerator::render_view(
+    Domain::SelectionId project_id,
+    Domain::SelectionId bed_instance_id,
+    const Domain::Sizes& sizes,
+    FixtureView view
+)
+{
+    if (!initialized()) {
+        SPDLOG_ERROR("The thumbnail generator is not initialized, cannot render a fixture view.");
+        return Domain::Images();
+    }
+    const Domain::Project* project = m_workbench->find_project_by_id(project_id);
+    if (project == nullptr) {
+        SPDLOG_ERROR("Project {} is gone, cannot render a fixture view.", project_id);
+        return Domain::Images();
+    }
+
+    // The same params the objects list and the gallery thumbnails use. The renderer sets the
+    // camera viewport per size, and the customizer hides what the view does not show.
+    ThumbnailRendererParams params{
+        .scene        = m_scene_provider->project_scene(project_id),
+        .pixel_format = Domain::PixelFormat::RGBA8,
+        .sizes        = sizes,
+    };
+
+    // A perspective camera, which is what the plater shows; the objects list asks for an
+    // orthographic one.
+    const Scene::CameraProjectionType camera_type = Scene::CameraProjectionType::Perspective;
+    if (view == FixtureView::Preview)
+        return m_renderer->generate_gcode_thumbnails(params, *project, bed_instance_id, camera_type);
+    return m_renderer->generate_bed_thumbnails(params, *project, bed_instance_id, false, camera_type);
 }
 
 } // namespace Slic3r::App::Plater
