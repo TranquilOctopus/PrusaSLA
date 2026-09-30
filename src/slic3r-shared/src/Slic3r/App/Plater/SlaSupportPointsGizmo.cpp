@@ -264,6 +264,19 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
             this->apply_support_on_model_to_selected(on_model);
         }
     };
+    // The shape of the foot of the selected points (M2.23b), a value of its own like the rest of the
+    // per-point geometry: the foot of a point is a cone, a cylinder or a flat disc, and the tree is
+    // built again for the ones that changed.
+    m_dialog->callbacks().base_shape_changed = [this](Domain::SLA::SupportPoint::BaseShape shape)
+    {
+        if (m_syncing_dialog) {
+            return;
+        }
+        if (m_edit_state.has_value()) {
+            m_edit_state->editing.support_geometry.base_shape = shape;
+            this->apply_support_geometry_to_selected(SupportGeometryField::BaseShape);
+        }
+    };
     m_dialog->callbacks().preset_light = [this]() { this->apply_preset_light(); };
     m_dialog->callbacks().preset_medium = [this]() { this->apply_preset_medium(); };
     m_dialog->callbacks().preset_heavy = [this]() { this->apply_preset_heavy(); };
@@ -1714,6 +1727,11 @@ SlaSupportGeometry SlaSupportPointsGizmo::support_geometry_defaults(const Domain
     }
     if (auto result = settings.find("support_stem_taper"); result.item != nullptr) {
         geometry.stem_taper = result.item->get<double>();
+    }
+    // The foot of a new point is the shape support_base_shape asks for (M2.23b), so a point placed
+    // by hand gets the foot the user configured rather than the cone of before.
+    if (auto result = settings.find("support_base_shape"); result.item != nullptr) {
+        geometry.base_shape = support_base_shape_of(result.item->get<Domain::sla::SupportBaseShape>());
     }
 
     return geometry;

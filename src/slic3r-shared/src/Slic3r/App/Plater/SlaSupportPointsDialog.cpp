@@ -212,6 +212,30 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
         }
     };
 
+    // The shape of the foot where the pillar of the selected points meets the raft or the plate
+    // (M2.23b). It sits with the rest of the per-point geometry and names the same three shapes as
+    // the support_base_shape setting of "Supports & raft", which a new point takes.
+    add_row_with_combo_box(_u8L("Foot shape"), settings, &m_base_shape_combo);
+    m_base_shape_combo->set_items(
+        {_u8L("Default"), _u8L("Cone"), _u8L("Cylinder"), _u8L("Flat disc")});
+    m_base_shape_combo->callbacks().selection_changed = [this](int index)
+    {
+        switch (index) {
+        case 1:
+            m_callbacks.base_shape_changed(Domain::SLA::SupportPoint::BaseShape::Cone);
+            break;
+        case 2:
+            m_callbacks.base_shape_changed(Domain::SLA::SupportPoint::BaseShape::Cylinder);
+            break;
+        case 3:
+            m_callbacks.base_shape_changed(Domain::SLA::SupportPoint::BaseShape::Flat);
+            break;
+        default:
+            m_callbacks.base_shape_changed(Domain::SLA::SupportPoint::BaseShape::Default);
+            break;
+        }
+    };
+
     add_row_with_slider(
         content(),
         &m_clipping_plane_slider,
@@ -392,6 +416,7 @@ void SlaSupportPointsDialog::set_support_geometry(
         // show no value, so the user is never shown a value only some of the points have. A
         // dropdown has no empty state of its own, so it says the one word the app uses for this.
         m_tip_shape_combo->set_override_label(_u8L("Mixed"));
+        m_base_shape_combo->set_override_label(_u8L("Mixed"));
         m_tip_length_slider->set_undef_value();
         m_knot_diameter_slider->set_undef_value();
         m_stem_sides_slider->set_undef_value();
@@ -427,6 +452,22 @@ void SlaSupportPointsDialog::set_support_geometry(
     m_knot_diameter_slider->set_value(geometry->knot_diameter_mm);
     m_stem_sides_slider->set_value(geometry->stem_sides);
     m_stem_taper_slider->set_value(geometry->stem_taper);
+    m_base_shape_combo->set_override_label(std::string());
+    switch (geometry->base_shape) {
+    case Domain::SLA::SupportPoint::BaseShape::Cone:
+        m_base_shape_combo->set_current_index(1);
+        break;
+    case Domain::SLA::SupportPoint::BaseShape::Cylinder:
+        m_base_shape_combo->set_current_index(2);
+        break;
+    case Domain::SLA::SupportPoint::BaseShape::Flat:
+        m_base_shape_combo->set_current_index(3);
+        break;
+    case Domain::SLA::SupportPoint::BaseShape::Default:
+    default:
+        m_base_shape_combo->set_current_index(0);
+        break;
+    }
 }
 
 void SlaSupportPointsDialog::set_support_on_model(const std::optional<SupportOnModel>& on_model)

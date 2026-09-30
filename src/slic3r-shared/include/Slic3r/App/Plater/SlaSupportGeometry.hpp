@@ -9,11 +9,11 @@
 namespace Slic3r::App::Plater {
 
 /// The per-point support geometry the support tool edits: the tip diameter, the tip shape, the tip
-/// length, the knot ball between tip and stem, the stem cross-section and the stem taper. Every
-/// value is a default that reproduces the geometry the support tree has always built (the
-/// configured pinhead diameter, TipShape::Default, a tip length derived from the pinhead width, no
-/// knot, a round stem of one diameter), which is what the Supports & raft settings ship with, so a
-/// point that carries none of these is an ordinary support.
+/// length, the knot ball between tip and stem, the stem cross-section, the stem taper and the shape
+/// of the foot. Every value is a default that reproduces the geometry the support tree has always
+/// built (the configured pinhead diameter, TipShape::Default, a tip length derived from the pinhead
+/// width, no knot, a round stem of one diameter and a cone for the foot), which is what the
+/// Supports & raft settings ship with, so a point that carries none of these is an ordinary support.
 struct SlaSupportGeometry
 {
     double tip_diameter_mm{0.4}; // [mm] the diameter where the tip touches the model
@@ -22,12 +22,16 @@ struct SlaSupportGeometry
     double knot_diameter_mm{0.}; // [mm] 0 = no knot
     int    stem_sides{0};        // 0 = round, 4 = square, 6 = hexagon, ...
     double stem_taper{0.};       // fraction of the stem diameter lost base -> tip, 0 = no taper
+    // The foot where this pillar meets the raft or the plate (M2.23). Default keeps the shape
+    // support_base_shape configures, which is the cone the tree has always built.
+    Domain::SLA::SupportPoint::BaseShape base_shape{Domain::SLA::SupportPoint::BaseShape::Cone};
 
     friend bool operator==(const SlaSupportGeometry& lhs, const SlaSupportGeometry& rhs)
     {
         return lhs.tip_diameter_mm == rhs.tip_diameter_mm && lhs.tip_shape == rhs.tip_shape &&
                lhs.tip_length_mm == rhs.tip_length_mm && lhs.knot_diameter_mm == rhs.knot_diameter_mm &&
-               lhs.stem_sides == rhs.stem_sides && lhs.stem_taper == rhs.stem_taper;
+               lhs.stem_sides == rhs.stem_sides && lhs.stem_taper == rhs.stem_taper &&
+               lhs.base_shape == rhs.base_shape;
     }
 
     friend bool operator!=(const SlaSupportGeometry& lhs, const SlaSupportGeometry& rhs)
@@ -38,8 +42,16 @@ struct SlaSupportGeometry
 
 /// The one of the values an edit is about. The support tool writes one value at a time, so setting
 /// the tip shape of a point does not overwrite the tip diameter, the tip length, the knot, the
-/// cross-section or the taper it already carries.
-enum class SupportGeometryField { TipDiameter, TipShape, TipLength, KnotDiameter, StemSides, StemTaper };
+/// cross-section, the taper or the foot shape it already carries.
+enum class SupportGeometryField {
+    TipDiameter,
+    TipShape,
+    TipLength,
+    KnotDiameter,
+    StemSides,
+    StemTaper,
+    BaseShape
+};
 
 /// The geometry @p point carries, in the units the tool shows: the tip and the knot are diameters
 /// there, while the point stores their radii.
@@ -68,5 +80,9 @@ std::optional<SlaSupportGeometry> selection_support_geometry(
 /// The three tip shapes, as the config stores them and as the point carries them.
 Domain::SLA::SupportPoint::TipShape support_tip_shape_of(Domain::sla::SupportTipShape shape);
 Domain::sla::SupportTipShape config_support_tip_shape_of(Domain::SLA::SupportPoint::TipShape shape);
+
+/// The three shapes a foot can be built as, as the config stores them (support_base_shape, M2.23)
+/// and as the point carries them.
+Domain::SLA::SupportPoint::BaseShape support_base_shape_of(Domain::sla::SupportBaseShape shape);
 
 } // namespace Slic3r::App::Plater
