@@ -31,6 +31,8 @@
 #include "Slic3r/App/SlaPrintSettingsDialog.hpp"
 #include "Slic3r/App/MaterialSelectionDialog.hpp"
 #include "Slic3r/App/MaterialSettingsDialog.hpp"
+#include "Slic3r/App/ResinImportDialog.hpp"
+#include "Slic3r/App/ResinDatasheetDialog.hpp"
 #include "Slic3r/App/InvalidDataDialog.hpp"
 #include "Slic3r/App/UIItemCommand.hpp"
 #include "Slic3r/App/AppConfig.hpp"
