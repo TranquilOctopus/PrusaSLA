@@ -6,6 +6,7 @@
 
 #include "Slic3r/Biz/SlaFixture.hpp"
 #include "Slic3r/Biz/ResultExport/SLA/SlaArchiveFormat.hpp"
+#include "Slic3r/Biz/ResultExport/SLA/SlaLayerDecoders.hpp"
 #include "Slic3r/TestUtils/TestTempDir.hpp"
 
 #include <boost/filesystem.hpp>
@@ -26,160 +27,14 @@ using Slic3r::Biz::PrintHost::Sla::SlaArchiveFormatRegistry;
 using Slic3r::Biz::PrintHost::Sla::register_sla_archive_formats;
 using Slic3r::Biz::Slicing::Sla::FileDataType;
 using Slic3r::Domain::Vec3d;
+using Slic3r::Test::Sla::decode_goo_layer;
+using Slic3r::Test::Sla::decode_pw0_layer;
 
 static std::vector<uint8_t> read_file_binary(const fs::path& path)
 {
     boost::nowide::ifstream file(path.string(), std::ios::binary);
     file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
     return std::vector<uint8_t>((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-}
-
-// ---------------------------------------------------------------------------
-// GOO format decoder (from libslic3r/src/libslic3r/Format/GooSLA.cpp GooSLARasterEncoder)
-// ---------------------------------------------------------------------------
-// Encoded format (per encoder):
-//   First byte: 0x55 (magic)
-//   Runs: each run starts with a type byte (high nibble = type, low nibble = length bits)
-//   Last byte: checksum (sum of all preceding bytes mod 256)
-//
-// Types:
-//   0x0: black (0x00), run_len = low_nibble (1-15)
-//   0x1: black, run_len = (low_nibble<<8) | next_byte (16-4095)
-//   0x2: black, run_len = (low_nibble<<16) | next_byte<<8 | next_byte (4096-1048575)
-//   0x3: black, run_len = (low_nibble<<24) | ... 4 bytes total
-//   0x4: gray, run_len = low_nibble (1-15), followed by gray_val byte (1-14)
-//   0x5: gray, run_len = (low_nibble<<8)|next_byte, followed by gray_val byte
-//   0x6: gray, run_len = 3 bytes, followed by gray_val byte
-//   0x7: gray, run_len = 4 bytes, followed by gray_val byte
-//   0xC: white (0xFF), run_len = low_nibble (1-15)
-//   0xD: white, run_len = (low_nibble<<8)|next_byte
-//   0xE: white, run_len = 3 bytes
-//   0xF: white, run_len = 4 bytes
-//
-// Gray values 1-14 map to pixel values 16,32,...,224 (gray_val * 16)
-
-static std::vector<uint8_t> decode_goo_layer(const std::vector<uint8_t>& encoded, size_t expected_pixels)
-{
-    std::vector<uint8_t> pixels;
-    pixels.reserve(expected_pixels);
-
-    size_t i = 0;
-    // Skip leading 0x55 if present
-    if (!encoded.empty() && encoded[0] == 0x55) i = 1;
-
-    // Last byte is checksum, don't process it
-    size_t end = encoded.size();
-    if (end > i) end -= 1;
-
-    while (i < end && pixels.size() < expected_pixels) {
-        uint8_t byte = encoded[i++];
-        uint8_t type = byte >> 4;
-        uint8_t len_low = byte & 0x0F;
-
-        uint32_t run_len = 0;
-        uint8_t pixel_val = 0;
-
-        if (type == 0x0 || type == 0xC) { // black or white, len <= 15
-            run_len = len_low;
-            pixel_val = (type == 0x0) ? 0x00 : 0xFF;
-        }
-        else if (type == 0x1 || type == 0xD) { // black or white, len <= 4095
-            if (i >= end) break;
-            run_len = (len_low << 8) | encoded[i++];
-            pixel_val = (type == 0x1) ? 0x00 : 0xFF;
-        }
-        else if (type == 0x2 || type == 0xE) { // black or white, len <= 1M
-            if (i + 1 >= end) break;
-            run_len = (uint32_t(len_low) << 16) | (uint32_t(encoded[i]) << 8) | encoded[i + 1];
-            i += 2;
-            pixel_val = (type == 0x2) ? 0x00 : 0xFF;
-        }
-        else if (type == 0x3 || type == 0xF) { // black or white, len > 1M
-            if (i + 2 >= end) break;
-            run_len = (uint32_t(len_low) << 24) | (uint32_t(encoded[i]) << 16) | (uint32_t(encoded[i + 1]) << 8) | encoded[i + 2];
-            i += 3;
-            pixel_val = (type == 0x3) ? 0x00 : 0xFF;
-        }
-        else if (type == 0x4) { // gray, len <= 15
-            run_len = len_low;
-            if (i >= end) break;
-            uint8_t gray_val = encoded[i++]; // 1-14
-            pixel_val = gray_val * 16;
-        }
-        else if (type == 0x5) { // gray, len <= 4095
-            if (i >= end) break;
-            run_len = (len_low << 8) | encoded[i++];
-            if (i >= end) break;
-            uint8_t gray_val = encoded[i++];
-            pixel_val = gray_val * 16;
-        }
-        else if (type == 0x6) { // gray, len <= 1M
-            if (i + 1 >= end) break;
-            run_len = (uint32_t(len_low) << 16) | (uint32_t(encoded[i]) << 8) | encoded[i + 1];
-            i += 2;
-            if (i >= end) break;
-            uint8_t gray_val = encoded[i++];
-            pixel_val = gray_val * 16;
-        }
-        else if (type == 0x7) { // gray, len > 1M
-            if (i + 2 >= end) break;
-            run_len = (uint32_t(len_low) << 24) | (uint32_t(encoded[i]) << 16) | (uint32_t(encoded[i + 1]) << 8) | encoded[i + 2];
-            i += 3;
-            if (i >= end) break;
-            uint8_t gray_val = encoded[i++];
-            pixel_val = gray_val * 16;
-        }
-        else {
-            // Unknown type, skip
-            continue;
-        }
-
-        // Clamp to expected pixels
-        if (pixels.size() + run_len > expected_pixels) {
-            run_len = expected_pixels - pixels.size();
-        }
-        pixels.insert(pixels.end(), run_len, pixel_val);
-    }
-
-    return pixels;
-}
-
-// ---------------------------------------------------------------------------
-// Anycubic PW0 format decoder (from libslic3r/src/libslic3r/Format/AnycubicSLA.cpp AnycubicSLARasterEncoder)
-// ---------------------------------------------------------------------------
-// Each run: high nibble = pixel value (0-15), low nibble = run length
-// For pixel value 0 (black) or 15 (white): run length = ((byte & 0x0F) << 8) | next_byte
-// For other pixel values: run length = byte & 0x0F (1-15)
-// Pixel values 0-15 map to 0-255 by *17
-
-static std::vector<uint8_t> decode_pw0_layer(const std::vector<uint8_t>& encoded, size_t expected_pixels)
-{
-    std::vector<uint8_t> pixels;
-    pixels.reserve(expected_pixels);
-
-    size_t i = 0;
-    while (i < encoded.size() && pixels.size() < expected_pixels) {
-        uint8_t byte = encoded[i++];
-        uint8_t pixel_val = byte >> 4;
-        uint8_t len_low = byte & 0x0F;
-
-        uint32_t run_len = 0;
-        if (pixel_val == 0 || pixel_val == 0xF) {
-            if (i >= encoded.size()) break;
-            run_len = (len_low << 8) | encoded[i++];
-        }
-        else {
-            run_len = len_low;
-        }
-
-        uint8_t gray = pixel_val * 17; // 0->0, 15->255
-        if (pixels.size() + run_len > expected_pixels) {
-            run_len = expected_pixels - pixels.size();
-        }
-        pixels.insert(pixels.end(), run_len, gray);
-    }
-
-    return pixels;
 }
 
 // ---------------------------------------------------------------------------
