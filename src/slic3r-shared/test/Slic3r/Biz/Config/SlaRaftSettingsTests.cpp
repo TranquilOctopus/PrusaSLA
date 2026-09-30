@@ -96,6 +96,28 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         CHECK(def->tooltip.find("build plate") != std::string::npos);
     }
 
+    // Check raft_floor_thickness, the slab on the build plate the raft stands on
+    {
+        const ConfigItemDef* def = find_def("raft_floor_thickness");
+        REQUIRE(def != nullptr);
+        CHECK(def->category == ConfigItemDef::Category::Print_Pad);
+        CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
+        CHECK(def->label == "Raft floor thickness");
+        CHECK(def->gui_type == ConfigItemDef::GUIType::textfield);
+        CHECK(def->tooltip.find("slab on the build plate") != std::string::npos);
+        CHECK(def->tooltip.find("Zero keeps the floor as thick as the walls") != std::string::npos);
+        // It is off by default, so a raft without a floor of its own is the raft of today.
+        REQUIRE(def->init_fn != nullptr);
+        CHECK(def->init_fn().get<double>() == Catch::Approx(0.));
+        // It belongs with the wall thickness it is a second value of.
+        const ConfigItemDef* wall = find_def("pad_wall_thickness");
+        const ConfigItemDef* brim = find_def("pad_brim_size");
+        REQUIRE(wall != nullptr);
+        REQUIRE(brim != nullptr);
+        CHECK(wall->order < def->order);
+        CHECK(def->order < brim->order);
+    }
+
     // Check raft_edge_taper, the bevel on the top edge of the raft
     {
         const ConfigItemDef* def = find_def("raft_edge_taper");
@@ -292,6 +314,7 @@ TEST_CASE("The raft type decides which raft settings are shown", "[Config][SLA][
     {
         for (const std::string& key : {"pad_wall_height",
                                        "pad_wall_thickness",
+                                       "raft_floor_thickness",
                                        "pad_brim_size",
                                        "pad_wall_slope",
                                        "raft_edge_taper",
@@ -317,6 +340,7 @@ TEST_CASE("The raft type decides which raft settings are shown", "[Config][SLA][
     {
         for (const std::string& key : {"pad_wall_height",
                                        "pad_wall_thickness",
+                                       "raft_floor_thickness",
                                        "pad_brim_size",
                                        "pad_wall_slope",
                                        "raft_edge_taper",
@@ -345,6 +369,7 @@ TEST_CASE("The raft type decides which raft settings are shown", "[Config][SLA][
     {
         for (const std::string& key : {"pad_wall_height",
                                        "pad_wall_thickness",
+                                       "raft_floor_thickness",
                                        "pad_brim_size",
                                        "pad_wall_slope",
                                        "raft_edge_taper",
@@ -369,6 +394,7 @@ TEST_CASE("The raft type decides which raft settings are shown", "[Config][SLA][
     {
         for (const std::string& key : {"pad_wall_height",
                                        "pad_wall_thickness",
+                                       "raft_floor_thickness",
                                        "raft_edge_taper",
                                        "raft_infill",
                                        "raft_infill_spacing",

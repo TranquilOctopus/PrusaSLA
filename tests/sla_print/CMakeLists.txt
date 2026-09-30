@@ -17,6 +17,7 @@ add_executable(${_TEST_NAME}_tests ${_TEST_NAME}_tests_main.cpp
     sla_raft_type_tests.cpp
     sla_raft_edge_taper_tests.cpp
     sla_raft_infill_tests.cpp
+    sla_raft_floor_thickness_tests.cpp
     sla_invalidation_tests.cpp
     sla_rotfinder_tests.cpp
     sla_layer_image_tests.cpp

@@ -172,6 +172,14 @@ struct PadConfig3D {
         return (thickness + wing_height) / std::tan(slope);
     }
 
+    /// The height over which the outer wall slopes, which is the wall thickness plus the height
+    /// of the cavity. A floor that is thicker than the wall is a straight prism below this, so
+    /// the raft grows towards the build plate without its wall moving.
+    inline double sloped_height() const
+    {
+        return thickness + wing_height;
+    }
+
     /// The z where the open cells of the infill begin, that is, the top of the cells. The object
     /// rests on the solid skin under the top face and, in a raft with a cavity, on the floor of
     /// the cavity, so the cells may not reach into either of them. The skin is what is left of the
@@ -625,7 +633,7 @@ indexed_triangle_set create_outer_pad_geometry(const ExPolygons & skeleton,
     // leaves a thin lip a spatula can get under, so the pad can be pried off the build plate. The
     // bevel runs at 45 degrees, as deep as it is wide. A bevel that would eat the whole wall is not
     // a bevel, so then the pad keeps its sharp edge.
-    const double taper = cfg.edge_taper < cfg.height ? cfg.edge_taper : 0.;
+    const double taper = cfg.edge_taper < cfg.sloped_height() ? cfg.edge_taper : 0.;
 
     for (const ExPolygon &pad_part : skeleton) {
         // The rim at z = 0 and, with a bevel, the point where the bevel meets the sloped wall.
@@ -637,7 +645,7 @@ indexed_triangle_set create_outer_pad_geometry(const ExPolygons & skeleton,
             // The wall keeps the pad slope below the bevel, so it starts from the skeleton pulled
             // in by whatever is left of the height.
             ExPolygon wall = offset_contour_only(
-                pad_part, -scaled((cfg.height - taper) / std::tan(cfg.slope)));
+                pad_part, -scaled((cfg.sloped_height() - taper) / std::tan(cfg.slope)));
 
             // A bevel the offset cannot deliver would leave a hole in the pad, so it is dropped
             // and the part gets the sharp edge.
@@ -664,7 +672,15 @@ indexed_triangle_set create_outer_pad_geometry(const ExPolygons & skeleton,
             its_merge(ret, walls(bevel_poly.contour, top_poly.contour, taper_z, z_max));
             z_max = taper_z;
         }
-        its_merge(ret, walls(bevel_poly.contour, bottom_poly.contour, z_max, z_min));
+
+        // The wall slopes over the top of the raft and stands straight below it where the floor is
+        // thicker than the wall, so the floor grows towards the build plate and the outline on it,
+        // the wall and the top face are where they were. A floor as thick as the wall reaches the
+        // bottom already, which is the pad of today.
+        const double z_slope_min = std::max(z_min, -cfg.sloped_height());
+        its_merge(ret, walls(bevel_poly.contour, bottom_poly.contour, z_max, z_slope_min));
+        if (z_slope_min > z_min)
+            its_merge(ret, straight_walls(bottom_poly.contour, z_slope_min, z_min));
 
         if (cfg.wing_height > 0. && add_cavity(ret, top_poly, cfg, thr))
             z_max = -cfg.wing_height;
