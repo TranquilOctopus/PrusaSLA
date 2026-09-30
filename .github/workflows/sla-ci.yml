@@ -1,0 +1,307 @@
+# SLA CI (PLAN G1, todo M0.14).
+#
+# Manual on purpose. This is a personal fork and Actions minutes can cost money, so nothing here
+# runs on a push. Two ways in, both described in doc/sla-fork/ci.md:
+#   * the Actions tab: this workflow -> Run workflow, or
+#   * the `run-ci` label on a pull request that targets an sla/ branch.
+#
+# What a run does, in step order: install the system packages doc/Build.md lists, restore the deps
+# prefix from the Actions cache (the expensive part, a cache miss rebuilds it), configure and build
+# only sla_print_tests and slic3r-shared-tests in Release, run both and upload their output, run the
+# M0.13 benchmark harness over the committed tests/data models, and diff its metrics against
+# doc/sla-fork/baseline.json. A second job posts that table as a comment on the pull request, and
+# that job is the only one with write permissions.
+name: SLA CI (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      fail_on_hash_change:
+        description: 'Fail the run when a benchmark layer_hash changes'
+        default: false
+        type: boolean
+  pull_request:
+    # No `push`: a run is only ever created by a label or by hand.
+    types: [opened, synchronize, reopened, labeled]
+    branches:
+      - 'sla/**'
+
+# Least privilege: reading the source is all the build job needs. The comment job widens this to
+# writing one comment, and only for itself.
+permissions:
+  contents: read
+
+# One run per branch or pull request, and a new push to a labelled pull request replaces the run
+# that is already going instead of burning minutes next to it. Taking the label off stops a run in
+# flight as well: the `labeled` event starts a run whose jobs are all skipped, and that run is in
+# this group.
+concurrency:
+  group: sla-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    # A manual dispatch needs no guard. A pull_request run needs the run-ci label, and the label
+    # list is in the event payload, so this needs no token and no gate job. The head repo check
+    # keeps pull requests from forks out, which is also what keeps untrusted code away from a
+    # write token.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       contains(github.event.pull_request.labels.*.name, 'run-ci'))
+    runs-on: ubuntu-24.04
+    # The GitHub maximum is 360, so this is a hard cap rather than a choice. A cold run (deps cache
+    # miss) is the one that can reach it; see doc/sla-fork/ci.md.
+    timeout-minutes: 360
+    env:
+      BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System packages
+        run: |
+          sudo apt-get update
+          # doc/Build.md's list, minus libwebkit2gtk-4.1-dev: nothing here builds the wx shell
+          # that links it (SLIC3R_ENABLE_WEBKIT=OFF below), and it is a large install. zlib1g-dev
+          # is here because deps/CMakeLists.txt takes ZLIB from the system on UNIX.
+          sudo apt-get install -y --no-install-recommends \
+            autoconf automake build-essential cmake libtool ninja-build pkg-config texinfo \
+            libdbus-1-dev libgl1-mesa-dev libglu1-mesa-dev libgtk-3-dev zlib1g-dev
+
+      - name: Restore the deps prefix from the cache
+        id: deps_cache
+        uses: actions/cache@v4
+        with:
+          path: deps/build/destdir
+          # Keyed on the deps build itself, so bumping a dependency or the module that drives the
+          # builds rebuilds the prefix and leaves the old entry to expire.
+          key: >-
+            sla-deps-${{ runner.os }}-${{ hashFiles('deps/CMakeLists.txt', 'deps/CMakePresets.json',
+            'deps/+*/CMakeLists.txt', 'cmake/modules/AddCMakeProject.cmake') }}
+
+      - name: Build the deps
+        # Skipped on a hit: the installed prefix is all the application configure needs, and
+        # rebuilding it is the part that costs the minutes.
+        if: steps.deps_cache.outputs.cache-hit != 'true'
+        timeout-minutes: 150
+        run: |
+          # deps/README.md: out of source, and deliberately not parallel at the top level, because
+          # every dependency parallelises itself. DEP_DEBUG is a Windows-only flag, passed for the
+          # same reason as on Windows: it triggers a second pass of dependencies nothing uses.
+          cmake -S deps -B deps/build -DCMAKE_BUILD_TYPE=Release -DDEP_DEBUG=OFF
+          cmake --build deps/build
+
+      - name: Check the deps prefix
+        run: |
+          test -d deps/build/destdir/usr/local
+          # Catch2 is what the two test targets need to be configured at all, so a cache entry
+          # from an interrupted deps build is caught here rather than three minutes into cmake.
+          find deps/build/destdir/usr/local -name 'Catch2Config.cmake' -print -quit | grep -q .
+
+      - name: Configure
+        run: |
+          # The default preset, as doc/sla-fork/BUILD.md uses it. SLIC3R_STATIC (the preset sets
+          # it) is required on UNIX by deps/README.md. Two deviations from BUILD.md, both about
+          # not building more than the tests need: the webkit shell is off, and Release has no
+          # debug symbols, which is also the combination BUILD.md uses to fit on disk.
+          cmake --preset default -G Ninja \
+            -DCMAKE_PREFIX_PATH="$PWD/deps/build/destdir/usr/local" \
+            -DSLIC3R_ENABLE_WEBKIT=OFF \
+            -DSLIC3R_RELEASE_DEBUG_SYMBOLS=OFF
+
+      - name: Build the two test targets
+        timeout-minutes: 200
+        run: |
+          # Not ctest: ctest also runs the other suites this repository registers. One target per
+          # invocation so a failure says which suite failed to build, at -j2 because a GitHub
+          # runner has 4 cores and 16 GB and slic3r-shared translation units are hungry (the same
+          # reason BUILD.md caps the MSVC build at /MP2).
+          cmake --build build-default --parallel "$BUILD_JOBS" --target slic3r-shared-tests
+          cmake --build build-default --parallel "$BUILD_JOBS" --target sla_print_tests
+
+      - name: Locate the test binaries
+        id: binaries
+        run: |
+          sla_print=$(find build-default/tests/sla_print -type f -name 'sla_print_tests' | head -1)
+          shared=$(find build-default/src/slic3r-shared -type f -name 'slic3r-shared-tests' | head -1)
+          if [ -z "$sla_print" ] || [ -z "$shared" ]; then
+            # Where CMake actually put them, so a layout change is a one line fix and not a
+            # mystery: the two directories above are the ones add_executable() defaults to.
+            find build-default -maxdepth 4 -name '*_tests*' -type f
+            exit 1
+          fi
+          echo "sla_print_tests=$sla_print" >> "$GITHUB_OUTPUT"
+          echo "slic3r_shared_tests=$shared" >> "$GITHUB_OUTPUT"
+
+      - name: Run sla_print_tests
+        run: |
+          set +e
+          "${{ steps.binaries.outputs.sla_print_tests }}" 2>&1 | tee sla_print_tests.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "exit code: $rc" | tee -a sla_print_tests.log
+          exit "$rc"
+
+      - name: Run slic3r-shared-tests
+        # Not skipped when the other suite failed: which suite broke is the first thing to know,
+        # and a binary that cannot start fails here in seconds anyway.
+        if: always()
+        # The working directory add_test() gives this suite on Windows and Linux alike.
+        working-directory: src/slic3r-shared
+        run: |
+          set +e
+          "${{ steps.binaries.outputs.slic3r_shared_tests }}" 2>&1 \
+            | tee "$GITHUB_WORKSPACE/slic3r_shared_tests.log"
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "exit code: $rc" | tee -a "$GITHUB_WORKSPACE/slic3r_shared_tests.log"
+          exit "$rc"
+
+      - name: Run the benchmark harness on the committed models
+        # Skipped when a suite failed: the metrics of a broken engine are worth nothing and the
+        # run would waste the minutes that the failure already cost.
+        env:
+          # SLA_BENCH_DIR is deliberately not set. Unset, the harness runs its own built in set,
+          # the six small models of tests/data, and no other folder is ever read: local-samples/
+          # is not in the repository and must not be used here, and the filter keeps the run on
+          # that category even if the folder list ever grows.
+          SLA_BENCH_FILTER: testdata
+          SLA_BENCH_OUT: ${{ github.workspace }}/sla_benchmark.json
+        run: |
+          set +e
+          "${{ steps.binaries.outputs.sla_print_tests }}" "[benchmark]" 2>&1 | tee sla_benchmark.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "exit code: $rc" | tee -a sla_benchmark.log
+          test "$rc" -eq 0
+          test -f sla_benchmark.json
+
+      - name: Metrics diff against the committed baseline
+        env:
+          # Only a manual run can ask for the gate; the checkbox defaults off because a baseline
+          # produced on Windows is expected to differ from a first Linux run (see ci.md).
+          FAIL_ON_HASH_CHANGE: ${{ github.event_name == 'workflow_dispatch' && inputs.fail_on_hash_change }}
+        run: |
+          set +e
+          if [ -f doc/sla-fork/baseline.json ]; then
+            # bench_diff.py exits 1 when a layer hash changed, which is a real change in the sliced
+            # geometry and not a run wobble.
+            python3 doc/sla-fork/tools/bench_diff.py doc/sla-fork/baseline.json sla_benchmark.json --changed \
+              2>&1 | tee sla_bench_diff.txt
+            rc=${PIPESTATUS[0]}
+          else
+            echo "No doc/sla-fork/baseline.json in this commit (M0.13 has not produced one yet), so" \
+                 "there is nothing to diff against. The run wrote sla_benchmark.json; the table" \
+                 "appears once a baseline is committed." | tee sla_bench_diff.txt
+            rc=0
+          fi
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            echo "::warning::bench_diff.py exit $rc: a layer_hash changed, see sla_bench_diff.txt"
+            if [ "$FAIL_ON_HASH_CHANGE" = "true" ]; then exit 1; fi
+          fi
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "### SLA CI"
+            for log in sla_print_tests.log slic3r_shared_tests.log; do
+              if [ -f "$log" ]; then
+                echo ""
+                echo "**$log**"
+                echo '```'
+                tail -n 5 "$log"
+                echo '```'
+              fi
+            done
+            if [ -f sla_bench_diff.txt ]; then
+              echo ""
+              echo "**metrics diff**"
+              echo '```'
+              head -c 4000 sla_bench_diff.txt
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the test output and the metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sla-test-output
+          path: |
+            sla_print_tests.log
+            slic3r_shared_tests.log
+            sla_benchmark.log
+            sla_benchmark.json
+            sla_bench_diff.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+  pr-comment:
+    needs: build-and-test
+    # Always, so a failed run still gets a comment, but never for a skipped (unlabelled) one.
+    if: >-
+      always() && github.event_name == 'pull_request' &&
+      needs.build-and-test.result != 'skipped'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      # Exactly one comment on one pull request. createComment lives in the issues API, which asks
+      # for issues: write; the pull request endpoint wants pull-requests: write.
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Download the test output
+        uses: actions/download-artifact@v4
+        with:
+          name: sla-test-output
+          path: artifact
+
+      - name: Comment the metrics table
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            // The marker identifies our comment, so a new push edits the old comment instead of
+            // filling the pull request with one table per push.
+            const marker = '<!-- sla-ci-metrics -->';
+            const path = 'artifact/sla_bench_diff.txt';
+            const missing = 'The metrics diff did not run. The logs of this run are in its '
+              + '`sla-test-output` artifact.';
+            let text = fs.existsSync(path) ? fs.readFileSync(path, 'utf8').trim() : '';
+            if (!text) text = missing;
+            // GitHub rejects a comment body over 65536 characters.
+            const limit = 60000;
+            if (text.length > limit) {
+              text = text.slice(0, limit) + '\n... truncated, the full table is in the artifact';
+            }
+            const suites = ['sla_print_tests.log', 'slic3r_shared_tests.log']
+              .map((name) => {
+                const file = 'artifact/' + name;
+                if (!fs.existsSync(file)) return null;
+                const line = fs.readFileSync(file, 'utf8').trim().split('\n').pop();
+                return line ? `* \`${name}\`: ${line}` : null;
+              })
+              .filter(Boolean)
+              .join('\n');
+            const body = marker + '\n### SLA metrics diff\n\n'
+              + (suites ? suites + '\n\n' : '')
+              + '```\n' + text + '\n```\n'
+              + '\nRun: ' + context.serverUrl + '/' + context.repo.owner.repo + '/actions/runs/' + context.runId;
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner.repo,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const mine = comments.find((c) => c.body && c.body.startsWith(marker) && c.user.type === 'Bot');
+            if (mine) {
+              await github.rest.issues.updateComment({ ...context.repo, comment_id: mine.id, body });
+            } else {
+              await github.rest.issues.createComment({
+                ...context.repo, issue_number: context.issue.number, body,
+              });
+            }
