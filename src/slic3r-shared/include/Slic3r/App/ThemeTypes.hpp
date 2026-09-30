@@ -33,6 +33,8 @@ enum class Color
     SlaPad,
     SlaSupportPointAuto,
     SlaSupportPointManual,
+    SlaSupportPointHovered, ///< glyph state: the pointer is over the point
+    SlaSupportPointSelected, ///< glyph state: the point is part of the selection
     SlaIslandWarning,
     SlaDrainHole,
     SlaHollowInterior,

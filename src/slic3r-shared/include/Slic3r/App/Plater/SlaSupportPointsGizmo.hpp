@@ -150,7 +150,10 @@ private:
     // Visuals
     void update_point_visuals();
     void clear_point_visuals();
-    Domain::ColorRGBA get_point_color(const Domain::SLA::SupportPoint& point, bool highlighted) const;
+    // Colour state of a point glyph (M2.9c): the point's own type token at rest, the hovered
+    // token while the pointer is on it and the selected token while it is part of the selection.
+    enum class PointGlyphState { Resting, Hovered, Selected };
+    Domain::ColorRGBA get_point_color(const Domain::SLA::SupportPoint& point, PointGlyphState state) const;
 
     // Raycasting helpers (adapted from PaintOnGizmoBase)
     struct VolumeHitPoint

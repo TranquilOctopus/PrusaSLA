@@ -670,13 +670,15 @@ void SlaHollowGizmo::show_preview_mesh(const Biz::Slicing::Sla::Object& sla_obje
     // Instance transform
     const Domain::Transform3d instance_trafo = instance->get_matrix();
 
-    // Semi-transparent material for preview
-    ColorRGBA color = AppServices::instance().theme().color(Platform::Color::SlaSupportPointAuto, Platform::ColorGroup::Default);
-    color = ColorRGBA{color.r(), color.g(), color.b(), 0.3f};
+    // Semi-transparent material for preview: the hollow interior token, not a support point token
+    // (M2.9c), so the interior reads as the inside of the model and not as a support point.
+    static constexpr float PREVIEW_ALPHA = 0.3f;
+    const ColorRGBA color = AppServices::instance().theme().color(Platform::Color::SlaHollowInterior, Platform::ColorGroup::Default);
+    const ColorRGBA preview_color{color.r(), color.g(), color.b(), PREVIEW_ALPHA};
 
     Render::Material material = Render::Material{}
         .set_shader(m_device.context().shader_manager().shader("gouraud_light"))
-        .set_uniform("uniform_color", color);
+        .set_uniform("uniform_color", preview_color);
 
     Domain::Transform3d xform = instance_trafo;
 
@@ -1261,7 +1263,7 @@ void SlaHollowGizmo::update_hole_visuals()
         Domain::Vec3d world_pos = instance_trafo * hole.pos.cast<double>();
 
         // Color based on hole state
-        ColorRGBA color = get_hole_color(hole, highlighted || is_selected);
+        ColorRGBA color = get_hole_color(hole, highlighted, is_selected);
 
         Render::Material material = Render::Material{}
             .set_shader(m_device.context().shader_manager().shader("gouraud_light"))
@@ -1298,28 +1300,24 @@ void SlaHollowGizmo::clear_hole_visuals()
     }
 }
 
-Domain::ColorRGBA SlaHollowGizmo::get_hole_color(const Domain::SLA::DrainHole& hole, bool highlighted) const
+Domain::ColorRGBA SlaHollowGizmo::get_hole_color(const Domain::SLA::DrainHole& hole, bool highlighted, bool selected) const
 {
     const auto& theme = AppServices::instance().theme();
 
-    ColorRGBA base_color;
+    // A failed hole stays the error color in every state (M2.9c): it is a problem, not a handle.
     if (hole.failed) {
-        base_color = theme.color(Platform::Color::Error, Platform::ColorGroup::Default);
-    } else {
-        base_color = theme.color(Platform::Color::SlaDrainHole, Platform::ColorGroup::Default);
+        return theme.color(Platform::Color::Error, Platform::ColorGroup::Default);
     }
 
+    // A normal hole uses its own token, whose hovered and active entries replace the hard-coded
+    // brightening this used to apply to the default color.
+    Platform::ColorGroup group = Platform::ColorGroup::Default;
     if (highlighted) {
-        // Brighten for highlight
-        return ColorRGBA{
-            std::min(base_color.r() * 1.5f, 1.0f),
-            std::min(base_color.g() * 1.5f, 1.0f),
-            std::min(base_color.b() * 1.5f, 1.0f),
-            base_color.a()
-        };
+        group = Platform::ColorGroup::Hovered;
+    } else if (selected) {
+        group = Platform::ColorGroup::Active;
     }
-
-    return base_color;
+    return theme.color(Platform::Color::SlaDrainHole, group);
 }
 
 void SlaHollowGizmo::create_cylinder_geometry_if_needed()
