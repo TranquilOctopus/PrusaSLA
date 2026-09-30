@@ -111,7 +111,7 @@ ResinImportDialog::ResinImportDialog(
 
     // Which file this is, and what it says about itself. Bold because the file is the first thing
     // the user drops and the first thing they check afterwards.
-    m_source_line = content()->emplace_back<Text>();
+    m_source_line = content()->emplace_back<Text>(std::string{});
     m_source_line->set_width_percent(full_width_percent);
     m_source_line->set_font_type(Render::ImguiFontType::Bold);
     m_source_line->set_text_color(m_theme->color_imgui(Platform::Color::Text));
@@ -119,7 +119,7 @@ ResinImportDialog::ResinImportDialog(
 
     // Why the import cannot go on. Hidden while there is nothing to say, so no line is reserved for
     // it on every import.
-    m_error_line = content()->emplace_back<Text>();
+    m_error_line = content()->emplace_back<Text>(std::string{});
     m_error_line->set_width_percent(full_width_percent);
     m_error_line->set_text_color(m_theme->color_imgui(Platform::Color::Error));
     m_error_line->set_wrap_mode(Text::WrapMode::Wrap);
@@ -139,7 +139,7 @@ ResinImportDialog::ResinImportDialog(
     // the base says how the printer separates the layers, which decides the mapping table that is
     // used. The rest of the printer's settings are inherited with it.
     Item* base_row = labeled_row(Biz::_u8L("Base material"));
-    m_base_combo   = base_row->emplace_back<ComboBox>();
+    m_base_combo   = base_row->emplace_back<ComboBox>("Base material");
     m_base_combo->set_flex_grow(1.f);
     m_base_combo->callbacks().selection_changed = [this](int)
     {
@@ -154,7 +154,7 @@ ResinImportDialog::ResinImportDialog(
     m_name_input->set_tooltip(Biz::_u8L("The new resin profile is saved under this name."));
     m_name_input->callbacks().text_edited = [this]() { update_name_error(); };
 
-    m_name_error_line = content()->emplace_back<Text>();
+    m_name_error_line = content()->emplace_back<Text>(std::string{});
     m_name_error_line->set_width_percent(full_width_percent);
     m_name_error_line->set_text_color(m_theme->color_imgui(Platform::Color::Error));
     m_name_error_line->set_visible(false);
@@ -187,7 +187,7 @@ ResinImportDialog::ResinImportDialog(
     m_table->set_orientation(Orientation::Vertical);
     m_table->set_gap(3_fpx);
 
-    m_summary_line = content()->emplace_back<Text>();
+    m_summary_line = content()->emplace_back<Text>(std::string{});
     m_summary_line->set_width_percent(full_width_percent);
     m_summary_line->set_text_color(
         m_theme->color_imgui(Platform::Color::Text, Platform::ColorGroup::Disabled)
