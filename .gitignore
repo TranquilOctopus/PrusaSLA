@@ -50,4 +50,6 @@ __pycache__/
 /start_gcode_*_debug.txt
 # SLA benchmark harness default output (M0.13, tests/sla_print/sla_benchmark_tests.cpp)
 /sla_benchmark.json
+# Scratch folder for render_icons.py's Inkscape exports (M1.12c), removed when the tool ends
+/resources/icons/.render_icons-*/
 /src/slic3r-shared/test/data/resin_import_scratch/
