@@ -24,7 +24,7 @@ open the picker; type filter buttons above it narrow the list to **Tough**, **Fl
 named `Resin 1`, `Resin 2`, and so on. That is where **Layer height**, **Transition layers**,
 **Exposure time**, **Initial exposure time**, the lift / retract / tilt speeds and wait times, the
 material type and colour, and the bottle volume, weight and cost live. Two resins ship with the
-fork: **Generic Resin** and **Generic Fast Resin**.
+fork: **Generic Resin** and **Generic Fast Resin**. Under the list are the two buttons that bring a resin in from elsewhere, **Import resin profile...** and **New resin from datasheet**, both covered in [Switching from Chitubox and Lychee](switching-from-chitubox-and-lychee.md).
 
 **Print settings.** For a resin printer the third block is a **Print settings** button instead of a
 dropdown, with a one-line summary under it: the resin name, the layer height and the two exposure
