@@ -60,8 +60,8 @@ namespace {
 
 // The knobs every printed raft reads: the cavity height, the wall thickness, how far the raft
 // reaches around the geometry, how steep its walls are, how far its top edge is bevelled in, what
-// its inside is filled with and how close separate pieces are allowed to be before they become
-// one raft.
+// its inside is filled with, the skin of the interface the object rests on and how close separate
+// pieces are allowed to be before they become one raft.
 const std::vector<std::string>& raft_shape_settings()
 {
     static const std::vector<std::string> settings{
@@ -74,6 +74,8 @@ const std::vector<std::string>& raft_shape_settings()
         "raft_infill_spacing",
         "raft_infill_wall",
         "raft_infill_skin",
+        "raft_interface_thickness",
+        "raft_interface_exposure",
         "pad_max_merge_distance",
     };
     return settings;

@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
 
 #include <string>
@@ -160,6 +161,41 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         CHECK(wall->order < skin->order);
     }
 
+    // Check raft_interface_thickness and raft_interface_exposure, the band at the top of the raft
+    {
+        const ConfigItemDef* def = find_def("raft_interface_thickness");
+        REQUIRE(def != nullptr);
+        CHECK(def->category == ConfigItemDef::Category::Print_Pad);
+        CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
+        CHECK(def->label == "Raft interface thickness");
+        CHECK(def->gui_type == ConfigItemDef::GUIType::textfield);
+        CHECK(def->units.size() == 1);
+        // It is off by default, so a print without it is the print of today.
+        REQUIRE(def->init_fn != nullptr);
+        CHECK(def->init_fn().get<double>() == Catch::Approx(0.));
+        // The formats with one exposure for the whole print cannot apply it, and the setting says so.
+        CHECK(def->tooltip.find("no per-layer exposure") != std::string::npos);
+        // A layer that is a bottom layer is exposed at the bottom exposure, not the interface one.
+        CHECK(def->tooltip.find("bottom layers is exposed at the bottom exposure") != std::string::npos);
+
+        const ConfigItemDef* exposure = find_def("raft_interface_exposure");
+        REQUIRE(exposure != nullptr);
+        CHECK(exposure->category == ConfigItemDef::Category::Print_Pad);
+        CHECK(exposure->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
+        CHECK(exposure->label == "Raft interface exposure");
+        CHECK(exposure->gui_type == ConfigItemDef::GUIType::textfield);
+        CHECK(exposure->tooltip.find("single exposure for the whole print") != std::string::npos);
+
+        // They come with the raft itself, after the pattern cut into it.
+        const ConfigItemDef* skin = find_def("raft_infill_skin");
+        const ConfigItemDef* merge = find_def("pad_max_merge_distance");
+        REQUIRE(skin != nullptr);
+        REQUIRE(merge != nullptr);
+        CHECK(skin->order < def->order);
+        CHECK(def->order < exposure->order);
+        CHECK(exposure->order < merge->order);
+    }
+
     // Check pad_object_gap (now "Raft gap to object")
     {
         const ConfigItemDef* def = find_def("pad_object_gap");
@@ -263,6 +299,8 @@ TEST_CASE("The raft type decides which raft settings are shown", "[Config][SLA][
                                        "raft_infill_spacing",
                                        "raft_infill_wall",
                                        "raft_infill_skin",
+                                       "raft_interface_thickness",
+                                       "raft_interface_exposure",
                                        "pad_max_merge_distance",
                                        "pad_object_gap",
                                        "pad_around_object_everywhere",
@@ -286,6 +324,8 @@ TEST_CASE("The raft type decides which raft settings are shown", "[Config][SLA][
                                        "raft_infill_spacing",
                                        "raft_infill_wall",
                                        "raft_infill_skin",
+                                       "raft_interface_thickness",
+                                       "raft_interface_exposure",
                                        "pad_max_merge_distance"}) {
             INFO("setting " << key);
             CHECK(raft_type_uses_setting(RaftType::Full, key));
@@ -312,6 +352,8 @@ TEST_CASE("The raft type decides which raft settings are shown", "[Config][SLA][
                                        "raft_infill_spacing",
                                        "raft_infill_wall",
                                        "raft_infill_skin",
+                                       "raft_interface_thickness",
+                                       "raft_interface_exposure",
                                        "pad_max_merge_distance",
                                        "pad_object_gap",
                                        "pad_around_object_everywhere",
@@ -332,6 +374,8 @@ TEST_CASE("The raft type decides which raft settings are shown", "[Config][SLA][
                                        "raft_infill_spacing",
                                        "raft_infill_wall",
                                        "raft_infill_skin",
+                                       "raft_interface_thickness",
+                                       "raft_interface_exposure",
                                        "pad_max_merge_distance",
                                        "pad_object_gap",
                                        "pad_around_object_everywhere",

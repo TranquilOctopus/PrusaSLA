@@ -747,6 +747,10 @@ const std::map<std::string, std::vector<Step>> invalidated_by{
     {"raft_infill_spacing", steps({propagate(slaposPad)})},
     {"raft_infill_wall", steps({propagate(slaposPad)})},
     {"raft_infill_skin", steps({propagate(slaposPad)})},
+    // The interface changes no geometry, it is an exposure the file writers read out of the config,
+    // so only the export data has to be built again.
+    {"raft_interface_exposure", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"raft_interface_thickness", steps({propagate(slapsMergeSlicesAndEval)})},
     {"raft_type", steps({propagate(slaposObjectSlice), propagate(slaposPad)})},
     {"printer_model", steps({})},
     {"printer_notes", steps({})},

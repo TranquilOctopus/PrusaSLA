@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+
 #include "Slic3r/Domain/Config.hpp"
 
 namespace Slic3r::Domain {
@@ -26,5 +28,70 @@ int sla_effective_faded_layers(const ConfigView& cfg);
 /// using the bottom_* parameters, which the engine does not read) wins over that default.
 /// @return The burn-in layer count, never negative.
 int sla_bottom_layer_count(const ConfigView& cfg);
+
+/// The band of layers the raft interface is printed as: the skin between the raft and the object,
+/// with a thickness of its own and, where the file format has room for one, an exposure of its own.
+struct RaftInterface
+{
+    /// First layer of the band, counted from the build plate.
+    int first_layer = 0;
+    /// Last layer of the band, -1 when there is no band.
+    int last_layer  = -1;
+    /// Exposure of the band in seconds, 0 when it is exposed like the rest of the print.
+    double exposure_s = 0.;
+
+    /// How many layers the band has, 0 when it is off.
+    int count() const { return last_layer < first_layer ? 0 : last_layer - first_layer + 1; }
+    bool empty() const { return count() == 0; }
+
+    /// Whether the given layer, counted from the build plate, is one of the interface layers.
+    bool contains(std::size_t layer) const
+    {
+        return !empty() && layer >= static_cast<std::size_t>(first_layer)
+            && layer <= static_cast<std::size_t>(last_layer);
+    }
+
+    /// The exposure of the band, or the given normal exposure when it brings none of its own.
+    double exposure_for(double normal_exposure_s) const
+    {
+        return exposure_s > 0. ? exposure_s : normal_exposure_s;
+    }
+
+    /// The exposure of one layer: the interface exposure inside the band, the normal one outside.
+    double layer_exposure_s(std::size_t layer, double normal_exposure_s) const
+    {
+        return contains(layer) ? exposure_for(normal_exposure_s) : normal_exposure_s;
+    }
+
+    /// What the band spends on top of the normal exposure over the whole print, for the print time
+    /// the formats write. Zero while the interface is off, which leaves that print time as it was.
+    double print_time_delta_s(double normal_exposure_s) const
+    {
+        return empty() ? 0. : count() * (exposure_for(normal_exposure_s) - normal_exposure_s);
+    }
+};
+
+/// The layers the raft interface covers: the top that many millimetres of the raft, rounded to
+/// whole layers. A thickness of zero, a raft of no height or a layer height of zero gives an
+/// empty band, which is the raft as it prints without an interface.
+/// @param raft_height_mm Height of the whole raft from the build plate in mm.
+/// @param interface_thickness_mm How deep the interface reaches down into the raft in mm.
+/// @param layer_height_mm Layer height of the print in mm.
+/// @return The band, empty when the interface is off.
+RaftInterface raft_interface_band(double raft_height_mm,
+                                  double interface_thickness_mm,
+                                  double layer_height_mm);
+
+/// The raft interface of a print, read from the config: the band of raft_interface_band() for the
+/// raft the config describes (its wall thickness plus the height of its cavity), with
+/// raft_interface_exposure as the exposure of the band. A band that reaches into the bottom layers
+/// is cut back to them, because the bottom exposure wins there: the burn-in is what holds the raft
+/// to the build plate, so it is not the interface's to decide.
+/// @param cfg A finalized config view. Options missing from the view count as 0, so a view with no
+///             raft settings (a printer-only view) has no interface.
+/// @param layer_count How many layers the file has, or a negative number when that is not known;
+///                   the band is cut to it either way.
+/// @return The band, empty when the interface is off or reaches nowhere but the bottom layers.
+RaftInterface sla_raft_interface(const ConfigView& cfg, int layer_count = -1);
 
 } // namespace Slic3r::Domain
