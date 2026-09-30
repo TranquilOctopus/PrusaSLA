@@ -118,7 +118,7 @@ TEST_CASE("A raft with no infill is the solid slab of today", "[SLA][RaftInfill]
     test_pad("20mm_cube.obj", infilled_raft(Slic3r::Domain::sla::RaftInfillType::None), none_cfg);
 
     // Choosing None over the default is the same mesh, so a raft without an infill is unchanged.
-    REQUIRE(none_cfg.mesh.its.size() == default_cfg.mesh.its.size());
+    REQUIRE(none_cfg.mesh.facets_count() == default_cfg.mesh.facets_count());
     CHECK(double(none_cfg.mesh.volume()) == Approx(double(default_cfg.mesh.volume())));
 
     // A solid slab has no hole in it anywhere.

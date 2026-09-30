@@ -540,8 +540,9 @@ ModelMetrics run_model(const ModelSpec& spec, Slic3r::Domain::TriangleMesh mesh)
 
     Slic3r::Domain::Bed bed;
     Slic3r::Domain::BedInstance bed_instance{bed};
-    for (const Slic3r::Domain::ModelObject* model_object : model.objects)
-        for (const Slic3r::Domain::ModelInstance* instance : model_object->instances)
+    // BedInstance::model_instances holds non-const pointers, so the walk stays non-const too.
+    for (Slic3r::Domain::ModelObject* model_object : model.objects)
+        for (Slic3r::Domain::ModelInstance* instance : model_object->instances)
             bed_instance.model_instances.push_back(instance);
 
     auto preset_metadata = make_preset_metadata(hw_config);

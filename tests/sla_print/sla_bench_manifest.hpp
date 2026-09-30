@@ -48,6 +48,15 @@ struct Manifest
     std::vector<ManifestEntry> models;
 };
 
+} // namespace Bench
+
+// The struct descriptions have to come before the first parse_struct_unwrap<Manifest> below: a
+// specialization may not be declared after it has already been instantiated.
+STRUCT_DESC_SIMPLE(Bench::ManifestEntry, id, file, category);
+STRUCT_DESC_SIMPLE(Bench::Manifest, models);
+
+namespace Bench {
+
 /// One model of the corpus. file_name and folder stay with the harness: only id and category
 /// reach a report.
 struct ModelSpec
@@ -154,6 +163,3 @@ inline std::string describe_error(const std::string& message, const ModelSpec& s
 }
 
 } // namespace Bench
-
-STRUCT_DESC_SIMPLE(Bench::ManifestEntry, id, file, category);
-STRUCT_DESC_SIMPLE(Bench::Manifest, models);

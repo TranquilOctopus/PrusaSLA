@@ -304,7 +304,9 @@ TEST_CASE("object_resin_use - the raft is shared by footprint", "[object_resin_u
     {
         const ObjectID a = object_id(1);
         const ObjectID b = object_id(2);
-        std::vector<ObjectLayerUse> layers{column(b, "b", 10., 0., 2), column(a, "a", 20., 30., 2)};
+        std::vector<ObjectLayerUse> layers = column(a, "a", 20., 30., 2);
+        const std::vector<ObjectLayerUse> second = column(b, "b", 10., 0., 2);
+        layers.insert(layers.end(), second.begin(), second.end());
         std::reverse(layers.begin(), layers.end());
 
         const std::vector<ObjectResinUse> use = object_resin_use(layers, scaling_sq);

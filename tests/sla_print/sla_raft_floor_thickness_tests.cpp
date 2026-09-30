@@ -110,7 +110,7 @@ TEST_CASE("A raft floor thickness of zero is the raft of today", "[SLA][RaftFloo
 
     // Zero asks for no floor of its own, so the raft is built with a floor as thick as its walls,
     // which is the only raft the generator had before the setting existed.
-    REQUIRE(no_floor.mesh.its.size() == floor_as_the_wall.mesh.its.size());
+    REQUIRE(no_floor.mesh.facets_count() == floor_as_the_wall.mesh.facets_count());
     CHECK(double(no_floor.mesh.volume()) == Approx(double(floor_as_the_wall.mesh.volume())));
 
     // A 1 mm cavity on a 2 mm floor, so the raft is 3 mm tall as it was.

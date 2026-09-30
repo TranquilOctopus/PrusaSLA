@@ -164,8 +164,8 @@ struct BedWithInstances {
 
     explicit BedWithInstances(Slic3r::Domain::Model& model)
     {
-        for (const Slic3r::Domain::ModelObject* object : model.objects)
-            for (const Slic3r::Domain::ModelInstance* instance : object->instances)
+        for (Slic3r::Domain::ModelObject* object : model.objects)
+            for (Slic3r::Domain::ModelInstance* instance : object->instances)
                 bed_instance.model_instances.push_back(instance);
     }
 };

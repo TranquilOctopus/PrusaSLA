@@ -70,6 +70,8 @@ namespace Clipper = Slic3r::Biz::Algorithms::ClipperUtils;
 
 using Slic3r::Domain::ExPolygon;
 using Slic3r::Domain::ExPolygons;
+/// The layers of a sliced model: one ExPolygons per layer height, in the order of the heights.
+using Layers = std::vector<ExPolygons>;
 using Slic3r::Domain::SLA::SupportPoints;
 using Slic3r::Domain::Vec2d;
 
@@ -161,7 +163,7 @@ bool touches_previous_layer(const ExPolygons& below, const ExPolygon& region)
 /// For how many layers above a region the surface keeps growing, following the region above it
 /// that overlaps it the most. Zero means the surface closes upwards at this layer, which is what
 /// most of a model does.
-int growth_layers(const ExPolygons& layers, size_t layer, const ExPolygon& region, double area)
+int growth_layers(const Layers& layers, size_t layer, const ExPolygon& region, double area)
 {
     const ExPolygon* current = &region;
     auto             extents = ExPoly::get_extents(*current);
@@ -197,7 +199,7 @@ int growth_layers(const ExPolygons& layers, size_t layer, const ExPolygon& regio
 }
 
 /// Every island of the M4.8d rule that no support point covers, and how many islands there were.
-std::vector<UncoveredRegion> find_uncovered_islands(const ExPolygons&        layers,
+std::vector<UncoveredRegion> find_uncovered_islands(const Layers&             layers,
                                                     const std::vector<float>& heights,
                                                     const SupportPoints&      points,
                                                     size_t&                    island_count)
@@ -221,7 +223,7 @@ std::vector<UncoveredRegion> find_uncovered_islands(const ExPolygons&        lay
 /// below, but which are the lowest point of a surface that opens upwards: a support point there is
 /// the one a user would call the most valuable. Reported, never asserted on. Which of them a
 /// support point should reach is a question for M4.4, not a pass or a fail of this test.
-std::vector<UncoveredRegion> find_local_minima(const ExPolygons&        layers,
+std::vector<UncoveredRegion> find_local_minima(const Layers&             layers,
                                                const std::vector<float>& heights,
                                                const SupportPoints&      points)
 {
@@ -309,8 +311,8 @@ Coverage analyse_model(const Bench::ModelSpec& spec)
             break;
     }
 
-    const ExPolygons layers = Slic3r::slice_mesh_ex(mesh.its, heights, params);
-    out.layer_count        = layers.size();
+    const Layers layers = Slic3r::slice_mesh_ex(mesh.its, heights, params);
+    out.layer_count = layers.size();
 
     out.uncovered_islands = find_uncovered_islands(layers, heights, points, out.island_count);
     out.local_minima      = find_local_minima(layers, heights, points);
