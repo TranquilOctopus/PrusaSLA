@@ -8,6 +8,7 @@
 #include <cctype>
 #include <charconv>
 #include <string_view>
+#include <utility>
 
 namespace Slic3r::App {
 
@@ -25,6 +26,9 @@ constexpr std::string_view ellipsis{"\xE2\x80\xA6"};
 /// The UTF-8 bytes of U+00B2, the superscript two of "mm²", see ellipsis above.
 constexpr std::string_view squared{"\xC2\xB2"};
 
+/// The UTF-8 bytes of U+00B3, the superscript three of "mm³", see ellipsis above.
+constexpr std::string_view cubed{"\xC2\xB3"};
+
 std::string kind_name(SlaIssue::Kind kind)
 {
     switch (kind) {
@@ -35,13 +39,22 @@ std::string kind_name(SlaIssue::Kind kind)
     case SlaIssue::Kind::Cup:
         // TRN: Kind of an issue in the SLA sidebar issues list, a hole in a printed layer.
         return Biz::_u8L("Cup");
+    case SlaIssue::Kind::TrappedResin:
+        // TRN: Kind of an issue in the SLA sidebar issues list, resin in a cavity of the print
+        // that has no way out.
+        return Biz::_u8L("Trapped resin");
+    case SlaIssue::Kind::HighPeelForce:
+        // TRN: Kind of an issue in the SLA sidebar issues list, a layer the peel force model
+        // calls too hard to peel off the film.
+        return Biz::_u8L("High peel force");
     default:
         // TRN: Kind of an issue in the SLA sidebar issues list of a kind without a name yet.
         return Biz::_u8L("Issue");
     }
 }
 
-/// Islands before cups, so that the rows of a layer read in that order.
+/// Islands before cups before trapped resin before the layers that are hard to peel, so that the
+/// rows of a layer read in that order.
 int kind_order(SlaIssue::Kind kind)
 {
     switch (kind) {
@@ -49,9 +62,87 @@ int kind_order(SlaIssue::Kind kind)
         return 0;
     case SlaIssue::Kind::Cup:
         return 1;
-    default:
+    case SlaIssue::Kind::TrappedResin:
         return 2;
+    case SlaIssue::Kind::HighPeelForce:
+        return 3;
+    default:
+        return 4;
     }
+}
+
+/// How big the issue is, in whichever unit its note carried: the biggest piece of a layer is the
+/// one most likely to fall off, the biggest pocket of resin the one that wastes the most and the
+/// hardest layer to peel the one that can rip the print off the plate.
+std::optional<double> size_of(const SlaIssueRow& row)
+{
+    if (row.area_mm2) {
+        return row.area_mm2;
+    }
+    if (row.volume_mm3) {
+        return row.volume_mm3;
+    }
+    return row.peel_force_n;
+}
+
+/// Parse the half open range [@p begin, @p end) of @p note as a number. Empty when it is not one.
+std::optional<double> parse_number(const std::string& note, size_t begin, size_t end)
+{
+    double value      = 0.;
+    const auto parsed = std::from_chars(note.data() + begin, note.data() + end, value);
+    if (parsed.ec != std::errc{} || parsed.ptr != note.data() + end) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+/// Whether @p c can be part of the decimal number a note carries.
+bool part_of_number(char c)
+{
+    return (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '+';
+}
+
+/// The number in front of @p unit in @p note, e.g. 21.0 in "layers 3-5, 21.00 mm3" for "mm3".
+/// Empty when there is none, so a note that only names a layer is not read as a size.
+std::optional<double> number_before_unit(const std::string& note, std::string_view unit)
+{
+    const size_t unit_at = note.rfind(unit);
+    if (unit_at == std::string::npos || unit_at == 0) {
+        return std::nullopt;
+    }
+
+    // The slicer separates the number from the unit with a space, so the scan starts past it.
+    size_t begin = unit_at;
+    while (begin > 0 && (note[begin - 1] == ' ' || note[begin - 1] == '\t')) {
+        --begin;
+    }
+
+    // From there the number ends, and it reaches back over the digits, the dot and the sign in
+    // front of them.
+    const size_t number_end = begin;
+    while (begin > 0 && part_of_number(note[begin - 1])) {
+        --begin;
+    }
+    if (begin == number_end) {
+        return std::nullopt;
+    }
+
+    return parse_number(note, begin, number_end);
+}
+
+/// The number that starts at @p begin in @p note and runs until the first character that cannot be
+/// part of it. Empty when there is none there, so a word is never read as a size.
+std::optional<double> number_after(const std::string& note, size_t begin)
+{
+    size_t end = begin;
+    while (end < note.size() && part_of_number(note[end])) {
+        ++end;
+    }
+    if (end == begin) {
+        return std::nullopt;
+    }
+
+    return parse_number(note, begin, end);
 }
 
 } // namespace
@@ -77,6 +168,23 @@ std::optional<double> sla_issue_area_mm2(const std::string& note)
     return area;
 }
 
+std::optional<double> sla_issue_volume_mm3(const std::string& note)
+{
+    return number_before_unit(note, "mm3");
+}
+
+std::optional<double> sla_issue_peel_force_n(const std::string& note)
+{
+    // The note of a high peel layer is "peel force 12.30 N over 8.00 N": the force is the number
+    // behind the name, the limit behind it is not read. Found by its prefix rather than by its
+    // unit, because the unit is in front of both numbers.
+    const size_t number_at = note.find("peel force ");
+    if (number_at == std::string::npos) {
+        return std::nullopt;
+    }
+    return number_after(note, number_at + std::string_view("peel force ").size());
+}
+
 std::string SlaIssueRows::title() const
 {
     // TRN: Header of the issues list in the SLA sidebar. {0} counts every issue the slicer found.
@@ -98,19 +206,42 @@ SlaIssueRows build_sla_issue_rows(const std::vector<SlaIssue>& issues, size_t ma
 {
     SlaIssueRows out;
     for (const SlaIssue& issue : issues) {
-        // Only islands and cups are listed for now. The other kinds (trapped resin) have no
-        // meaning in the sidebar yet, but they still count, so the header does not lie.
-        if (issue.kind != SlaIssue::Kind::Island && issue.kind != SlaIssue::Kind::Cup) {
+        // Islands, the two kinds of cavity and the layers the peel force model calls high are
+        // listed. The other kinds have no meaning in the sidebar yet, but they still count, so
+        // the header does not lie.
+        if (issue.kind != SlaIssue::Kind::Island
+            && issue.kind != SlaIssue::Kind::Cup
+            && issue.kind != SlaIssue::Kind::TrappedResin
+            && issue.kind != SlaIssue::Kind::HighPeelForce)
+        {
             continue;
         }
         if (issue.kind == SlaIssue::Kind::Island) {
             out.island_count++;
-        } else {
+        } else if (issue.kind == SlaIssue::Kind::Cup) {
             out.cup_count++;
+        } else if (issue.kind == SlaIssue::Kind::TrappedResin) {
+            out.trapped_resin_count++;
+        } else {
+            out.high_peel_force_count++;
         }
-        out.rows.push_back(
-            SlaIssueRow{issue.kind, issue.layer, sla_issue_area_mm2(issue.note), issue.object_name}
-        );
+
+        SlaIssueRow row;
+        row.kind        = issue.kind;
+        row.layer       = issue.layer;
+        row.position    = issue.position;
+        row.object_name = issue.object_name;
+        // Every kind reports its size in its own unit and reads it out of a note written for it:
+        // a pocket of trapped resin has no area and its note starts with the layer range, and the
+        // note of a high peel layer names the force and then the limit it was compared against.
+        if (issue.kind == SlaIssue::Kind::TrappedResin) {
+            row.volume_mm3 = sla_issue_volume_mm3(issue.note);
+        } else if (issue.kind == SlaIssue::Kind::HighPeelForce) {
+            row.peel_force_n = sla_issue_peel_force_n(issue.note);
+        } else {
+            row.area_mm2 = sla_issue_area_mm2(issue.note);
+        }
+        out.rows.push_back(std::move(row));
     }
     out.total_count = out.rows.size();
 
@@ -123,13 +254,15 @@ SlaIssueRows build_sla_issue_rows(const std::vector<SlaIssue>& issues, size_t ma
                 return a.layer < b.layer;
             if (a.kind != b.kind)
                 return kind_order(a.kind) < kind_order(b.kind);
-            if (a.area_mm2.has_value() != b.area_mm2.has_value()) {
-                // An issue of a known area is the more useful one, so it comes first.
-                return a.area_mm2.has_value();
+            const std::optional<double> size_a = size_of(a);
+            const std::optional<double> size_b = size_of(b);
+            if (size_a.has_value() != size_b.has_value()) {
+                // An issue of a known size is the more useful one, so it comes first.
+                return size_a.has_value();
             }
-            if (a.area_mm2 && b.area_mm2) {
+            if (size_a && size_b) {
                 // The biggest piece of a layer is the one most likely to fall off.
-                return *a.area_mm2 > *b.area_mm2;
+                return *size_a > *size_b;
             }
             return false;
         }
@@ -166,6 +299,12 @@ std::string sla_issue_row_text(const SlaIssueRow& row)
         // The unit is spelled outside the translatable part, for the same reason the ellipsis is,
         // see ellipsis above.
         text += fmt::format("  {0:.1f} mm", *row.area_mm2) + std::string(squared);
+    } else if (row.volume_mm3) {
+        text += fmt::format("  {0:.1f} mm", *row.volume_mm3) + std::string(cubed);
+    } else if (row.peel_force_n) {
+        // TRN: The peel force of a layer in the issues list of the SLA sidebar, the force the
+        // model calls high. {0} is the force in newtons, one decimal.
+        text += fmt::format(fmt::runtime(Biz::_u8L("  {0:.1f} N")), *row.peel_force_n);
     }
     return text;
 }

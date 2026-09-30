@@ -123,7 +123,7 @@ void SlaIssueNotification::recreate_notification(Domain::SelectionId project_id,
     const auto& issues = sla_result->get().export_data->issues;
     SlaIssueAnalysis info = analyze_sla_issues_for_notification(issues);
 
-    if (info.island_count == 0) {
+    if (info.empty()) {
         return;
     }
 

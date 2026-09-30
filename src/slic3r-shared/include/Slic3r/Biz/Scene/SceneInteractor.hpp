@@ -326,6 +326,16 @@ public:
         const std::function<void(Domain::ModelObject&)>& modifier
     );
 
+    /**
+     * @brief Modify the SLA drain holes for the given object.
+     * @param object_ref Reference to the object to modify (only object_id is used).
+     * @param modifier Called with the ModelObject to perform modification of the drain holes.
+     */
+    void modify_sla_drain_holes(
+        const Domain::ElementRef& object_ref,
+        const std::function<void(Domain::ModelObject&)>& modifier
+    );
+
     void edit_name(const Domain::ElementRef& id, const std::string& new_name);
     void set_printable(const Domain::ElementRef& id, bool is_printable);
     void set_selected_instances_printable(bool is_printable);
@@ -605,6 +615,10 @@ private:
         bool postpone_slicing_invalidation = false
     );
     void invoke_slicing_input_changed(const Domain::BedRef& bed_instance);
+    /// The tail of the modifiers that change what is printed of an object without moving it: the
+    /// bed placement of its instances is tracked again and every bed it sits on is told that its
+    /// slice is out of date, which is what marks the plate as modified.
+    void notify_object_print_changed(const Domain::ElementRef& object_ref, Domain::ModelObject& model_object);
     void update_config_container_bed(Domain::SelectionId project_id, Domain::SelectionId config_container_id);
     void normalize_object_selection(ObjectSelection& object_selection) const;
 

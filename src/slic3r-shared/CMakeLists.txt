@@ -1111,6 +1111,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/Biz/SLAResultCache.cpp
         include/Slic3r/Biz/SLAObjectCache.hpp
         src/Slic3r/Biz/SLAObjectCache.cpp
+        include/Slic3r/Biz/Sla/DrainHoleSuggestion.hpp
+        src/Slic3r/Biz/Sla/DrainHoleSuggestion.cpp
         include/Slic3r/Biz/ResinProfile/ForeignResinProfile.hpp
         include/Slic3r/Biz/ResinProfile/IResinProfileReader.hpp
         include/Slic3r/Biz/ResinProfile/ResinProfileReaderRegistry.hpp
@@ -1724,6 +1726,7 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/Biz/ExportGcodeTests.cpp
             test/Slic3r/Biz/SlaFixture.hpp
             test/Slic3r/Biz/SlaFixture.cpp
+            test/Slic3r/Biz/Sla/DrainHoleSuggestionTests.cpp
             test/Slic3r/Biz/ResinProfile/ChituboxCfgReaderTests.cpp
             test/Slic3r/Biz/ResinProfile/SlicedArchiveResinReaderTests.cpp
             test/Slic3r/Biz/ResinProfile/ResinProfileMapperTests.cpp

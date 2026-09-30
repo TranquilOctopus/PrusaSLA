@@ -16,8 +16,9 @@ namespace Slic3r::App::Plater {
 /**
  * @brief Manage notification about SLA slicing issues (islands, cups, trapped resin).
  *
- * Listens to SLA result cache changes and shows a notification when islands are detected.
- * The notification is closed when the project changes or a new slice starts.
+ * Listens to SLA result cache changes and shows a notification when islands, cups or pockets of
+ * trapped resin are detected. The notification is closed when the project changes or a new slice
+ * starts.
  */
 class SlaIssueNotification final :
     public Biz::ISLAResultCacheChangedListener,
