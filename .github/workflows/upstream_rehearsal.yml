@@ -1,0 +1,97 @@
+name: Upstream merge rehearsal
+
+# Roadmap M6.3, PLAN G4. Manual only: the rehearsal fetches upstream and does a merge in a
+# throwaway worktree, which is worth running on a schedule but not on every push. Start it from
+# the Actions tab, or let a nightly `gh workflow run` do it once a day once the fork's CI (M0.14)
+# is in place. The report is written to the job summary and uploaded as an artifact either way,
+# including when there are conflicts: a conflict is the point of the run, so the job only fails
+# when `fail_on_conflicts` is set (or when the rehearsal itself failed, exit code 2).
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Fork branch to merge upstream into
+        default: sla/main
+        type: string
+      upstream_url:
+        description: Upstream repository to merge from
+        default: https://github.com/prusa3d/PrusaSlicer.git
+        type: string
+      upstream_branch:
+        description: Upstream branch
+        default: master
+        type: string
+      fail_on_conflicts:
+        description: Fail the job when the merge conflicts
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstream-rehearsal
+  cancel-in-progress: false
+
+jobs:
+  rehearsal:
+    name: Rehearse merging upstream into the fork
+    runs-on: ubuntu-latest
+    steps:
+      # fetch-depth: 0, so the branch under test and the merge base are in the clone: a shallow
+      # clone has no merge base and the tool would refuse to run.
+      - name: Check out the fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add the upstream remote
+        run: |
+          git remote remove upstream 2>/dev/null || true
+          git remote add upstream "${{ github.event.inputs.upstream_url || 'https://github.com/prusa3d/PrusaSlicer.git' }}"
+          git remote -v
+
+      - name: Run the unit tests of the report builder
+        run: python3 -m unittest discover -s doc/sla-fork/tools -p "test_upstream_rehearsal.py"
+
+      - name: Rehearse the merge
+        id: rehearse
+        continue-on-error: ${{ github.event.inputs.fail_on_conflicts == 'true' }}
+        run: |
+          set -o pipefail
+          python3 doc/sla-fork/tools/upstream_rehearsal.py \
+            --repo . \
+            --branch "${{ github.event.inputs.branch || 'sla/main' }}" \
+            --remote upstream \
+            --upstream-branch "${{ github.event.inputs.upstream_branch || 'master' }}" \
+            --report upstream-rehearsal.md \
+            --json upstream-rehearsal.json | tee rehearsal.log
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit "$code"
+
+      - name: Publish the report in the job summary
+        if: always()
+        run: |
+          {
+            echo "### Upstream merge rehearsal"
+            echo
+            echo '```markdown'
+            cat upstream-rehearsal.md 2>/dev/null || echo "The report was not written: exit code 2."
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo "exit code: ${{ steps.rehearse.outputs.exit_code || '2' }} (0 clean, 1 conflicts, 2 failed)" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-rehearsal-${{ github.run_id }}
+          path: |
+            upstream-rehearsal.md
+            upstream-rehearsal.json
+            rehearsal.log
+          if-no-files-found: warn
