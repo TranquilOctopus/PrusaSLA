@@ -12,19 +12,29 @@ bool has_facets(const Domain::FacetsAnnotation& facets_annotation, TriangleState
 
 indexed_triangle_set get_facets(const Domain::FacetsAnnotation& facets_annotation, const Domain::ModelVolume& model_volume, TriangleStateType type)
 {
-    TriangleSelector selector(model_volume.mesh());
-    // Reset of TriangleSelector is done inside TriangleSelector's constructor, so we don't need it
-    // to perform it again in deserialize().
-    selector.deserialize(facets_annotation.triangle_splitting_data, false);
-    return selector.get_facets(type);
+    return get_facets(facets_annotation.triangle_splitting_data, model_volume.mesh(), type);
 }
 
 indexed_triangle_set get_facets_strict(const Domain::FacetsAnnotation& facets_annotation, const Domain::ModelVolume& model_volume, TriangleStateType type)
 {
-    TriangleSelector selector(model_volume.mesh());
+    return get_facets_strict(facets_annotation.triangle_splitting_data, model_volume.mesh(), type);
+}
+
+indexed_triangle_set get_facets(const Domain::TriangleSelector::TriangleSplittingData& painting, const Domain::TriangleMesh& mesh, TriangleStateType type)
+{
+    TriangleSelector selector(mesh);
     // Reset of TriangleSelector is done inside TriangleSelector's constructor, so we don't need it
     // to perform it again in deserialize().
-    selector.deserialize(facets_annotation.triangle_splitting_data, false);
+    selector.deserialize(painting, false);
+    return selector.get_facets(type);
+}
+
+indexed_triangle_set get_facets_strict(const Domain::TriangleSelector::TriangleSplittingData& painting, const Domain::TriangleMesh& mesh, TriangleStateType type)
+{
+    TriangleSelector selector(mesh);
+    // Reset of TriangleSelector is done inside TriangleSelector's constructor, so we don't need it
+    // to perform it again in deserialize().
+    selector.deserialize(painting, false);
     return selector.get_facets_strict(type);
 }
 

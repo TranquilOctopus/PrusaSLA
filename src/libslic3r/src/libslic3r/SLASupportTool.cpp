@@ -2,6 +2,7 @@
 
 #include "libslic3r/ConfigViews.hpp"
 #include "libslic3r/SLAPrint.hpp"
+#include "libslic3r/SLA/SupportFacetPaint.hpp"
 #include "libslic3r/SLA/SupportPointGenerator.hpp"
 #include "libslic3r/SLA/SupportTree.hpp"
 #include "libslic3r/SLA/SupportIslands/SampleConfigFactory.hpp"
@@ -85,7 +86,8 @@ SupportToolModelMesh support_tool_model_mesh(const Domain::ModelObject& object)
         std::shared_ptr<const Domain::TriangleMesh> mesh = vol->mesh_ptr();
         if (!mesh)
             continue;
-        snapshot.parts.push_back({std::move(mesh), vol->get_matrix()});
+        // The painting is indexed by the triangles of this very mesh, so it has to travel with it.
+        snapshot.parts.push_back({std::move(mesh), vol->get_matrix(), vol->supported_facets.get_data()});
     }
     return snapshot;
 }
@@ -215,12 +217,18 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const SupportToolMod
 
         std::vector<Domain::ExPolygons> slices = slice_mesh_ex(mesh.its, heights, params, throw_on_cancel);
 
+        // The facets the user painted on the model: no support point on a blocked facet and support
+        // points on an enforced one, in every layer. An object with nothing painted gives an empty
+        // paint, and the points of such an object are the points of the algorithm without painting.
+        sla::SupportFacetPaint facet_paint =
+            sla::support_facet_paint(model_mesh, object_to_world, heights, throw_on_cancel);
+
         // Prepare generator data
         sla::PrepareSupportConfig prepare_cfg;
         prepare_cfg.overhang_angle_threshold =
             cfg.get<double>("support_points_overhang_angle");
         sla::SupportPointGeneratorData gen_data = sla::prepare_generator_data(
-            std::move(slices), heights, prepare_cfg, throw_on_cancel, [](int){});
+            std::move(slices), heights, prepare_cfg, throw_on_cancel, [](int){}, std::move(facet_paint));
 
         // Configure support point generator
         sla::SupportPointGeneratorConfig config;

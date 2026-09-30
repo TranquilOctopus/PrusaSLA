@@ -4,6 +4,7 @@
 #include "Slic3r/Domain/Config.hpp"
 #include "Slic3r/Domain/FullConfigSLA.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
+#include "Slic3r/Domain/TriangleSelector.hpp"
 #include "libslic3r/SLAResult.hpp"
 
 #include <functional>
@@ -28,11 +29,16 @@ struct SupportToolTree {
  * preview service) snapshot the model on the main thread and let a worker thread read it while the
  * model keeps changing: the meshes behind the pointers are const and the model replaces them, it
  * never rewrites one in place.
+ *
+ * The painting of the volume (the facets the support paint tool marked as enforcers or blockers,
+ * Domain::ModelVolume::supported_facets) travels with the part. It is a bit stream over the
+ * triangles of that very mesh, so it stays small and is empty for a volume with nothing painted.
  */
 struct SupportToolModelMesh {
     struct Part {
         std::shared_ptr<const Domain::TriangleMesh> mesh; // shared with the model, never null
         Domain::Transform3d                          matrix{Domain::Transform3d::Identity()};
+        Domain::TriangleSelector::TriangleSplittingData painting; // facets painted as enforcer/blocker
     };
 
     std::vector<Part> parts;

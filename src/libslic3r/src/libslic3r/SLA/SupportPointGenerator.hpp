@@ -12,6 +12,7 @@
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
 #include "Slic3r/Domain/Types.hpp"
 
+#include "libslic3r/SLA/SupportFacetPaint.hpp"
 #include "libslic3r/SLA/SupportIslands/SampleConfig.hpp"
 
 namespace Slic3r::sla {
@@ -161,6 +162,10 @@ struct SupportPointGeneratorData
 
     // Manualy edited supports by user should be permanent
     Domain::SLA::SupportPoints permanent_supports;
+
+    // The facets the user painted as enforcers and as blockers, sliced into the same layers as the
+    // slices above. Empty for a model with nothing painted, and then every rule reading it is off.
+    SupportFacetPaint facet_paint;
 };
 
 // call during generation of support points to check cancel event
@@ -189,6 +194,8 @@ Need to regenerate on mesh change(Should be connected with ObjectId) OR change o
 @param config Preparation parameters
 @param throw_on_cancel Call in meanwhile to check cancel event
 @param statusfn Say progress of generation into gui
+@param facet_paint The facets the user painted on the mesh, sliced into the same heights. It is the
+last parameter, so that a caller that has no painting keeps the call as it was.
 @return Data prepared for generate support points
 */
 SupportPointGeneratorData prepare_generator_data(
@@ -196,7 +203,8 @@ SupportPointGeneratorData prepare_generator_data(
     const std::vector<float> &heights,
     const PrepareSupportConfig &config = {},
     ThrowOnCancel throw_on_cancel = []() {},
-    StatusFunction statusfn = [](int) {}
+    StatusFunction statusfn = [](int) {},
+    SupportFacetPaint facet_paint = {}
 );
 
 /**
