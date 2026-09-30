@@ -390,6 +390,12 @@ Painting writes `ModelVolume::supported_facets` through `SceneInteractor::modify
 which marks the bed modified (no slice for SLA); the points come from the Auto support button and the
 M2.21 preview service draws the tree.
 
+User-facing: the *Paint where the automatic supports go* section of
+`doc/sla-fork/user-guide/getting-started.md`, and one line in *What works today* in `README.md`.
+`doc/sla-fork/supports/lychee-parity.md` has no row for painting: the table is generated from
+`doc/sla-fork/supports/lychee-features.md` and that list carries no painting option, which is an
+item for the M7 research pass rather than a row to invent here.
+
 Parity checklists against the legacy gizmos: `doc/sla-fork/parity/support-points.md` and
 `doc/sla-fork/parity/hollow.md`.
 

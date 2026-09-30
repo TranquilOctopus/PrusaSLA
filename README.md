@@ -24,6 +24,9 @@ Everything below is merged on `sla/main`; the open todos are in the progress tab
   per point and are built into the tree; *Supports & raft* sets what a new point starts from.
 - **Auto support.** For the selected models or for all of them, writing the points into the models so you can still
   edit them. In Prepare and from the Preview sidebar, which also says when every model has its points.
+- **Support painting.** The *Paint-on supports* tool (`L`) paints *Paint supports* and *Block supports* on
+  the model; **Auto support** then places the points inside the painted regions and none in the
+  blocked ones, except for the points that catch an island. Painting never slices.
 - **Placement rules.** A minimal distance between generated points and an overhang angle above which no point is
   placed, both off by default; the points that catch an island are never filtered.
 - **Bracing.** Pillars lean on each other by default; its diameter and start height are in *Supports & raft*, and the
@@ -139,16 +142,16 @@ branch, one commit, the box ticked in the same commit.
 
 ## Progress
 
-**239 of 278 todos done (86%)** · updated 2026-09-30 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**249 of 288 todos done (86%)** · updated 2026-09-30 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
 | M0: Foundation | 14/15 | `███████████░` 93% |
 | M1: Look, feel and SLA-first shell | 43/44 | `████████████` 98% |
-| M2: SLA editing tools (porting the legacy gizmos) | 78/79 | `████████████` 99% |
+| M2: SLA editing tools (porting the legacy gizmos) | 85/86 | `████████████` 99% |
 | M3: Resin profile import (Chitubox, Lychee and others) | 24/28 | `██████████░░` 86% |
-| M4: Engine quality (measure first; every PR includes before/after metrics) | 22/32 | `████████░░░░` 69% |
-| M5: Formats and inspection | 37/42 | `███████████░` 88% |
+| M4: Engine quality (measure first; every PR includes before/after metrics) | 24/34 | `████████░░░░` 71% |
+| M5: Formats and inspection | 38/43 | `███████████░` 88% |
 | M6: Quality gates and release | 16/21 | `█████████░░░` 76% |
 | M7: Excellent auto-supports *(parked)* | 5/17 | `████░░░░░░░░` 29% |
 
