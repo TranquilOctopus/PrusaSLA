@@ -199,9 +199,10 @@ void store_ctb(const std::string& file_path, const Biz::Slicing::SLAResultData& 
         : 0.;
 
     const float layer_height = float(Domain::sla_effective_layer_height(cfg));
-    // The engine slices the first layer thicker when the resin states its own initial layer height.
-    const float initial_layer_height = get_cfg_value_f(cfg, "initial_layer_height");
-    const float first_layer_height = initial_layer_height > 0.f ? initial_layer_height : layer_height;
+    // The engine slices the first layer thicker when the resin states its own initial layer height,
+    // and at the layer height of the print when it states none, which is what a resin preset from
+    // before the setting moved from the print preset says.
+    const float first_layer_height = float(Domain::sla_effective_initial_layer_height(cfg));
     const float normal_exposure = get_cfg_value_f(cfg, "exposure_time");
     const float bottom_exposure = get_cfg_value_f(cfg, "initial_exposure_time");
 

@@ -1,9 +1,16 @@
 #include "Slic3r/Biz/Config/ConfigLoad.hpp"
 #include <nlohmann/json.hpp>
 #include <tl/expected.hpp>
+#include "Slic3r/Log.hpp"
 #include "Slic3r/Biz/Config/ConfigJson.hpp" // IWYU pragma: keep
 #include "Slic3r/Biz/Config/SelectedPresetJson.hpp"
 #include "Slic3r/Biz/Format/ProjectFileConstants.hpp"
+#include "Slic3r/Domain/SLA/RaftPreset.hpp"
+
+#include <map>
+#include <optional>
+#include <string>
+#include <vector>
 
 
 namespace Slic3r::Biz::Config {
@@ -173,6 +180,28 @@ bool is_object(const std::string& location_name, const ordered_json& json)
     return json.contains(location_name) && json[location_name].is_object();
 }
 
+// A project written before raft_type named the raft with the two checkboxes raft_type replaced.
+// The type those two meant is filled in here, so the project prints the raft it was saved with
+// instead of the one raft_type defaults to. The checkboxes keep the values the file gave them,
+// and a file that names raft_type keeps that.
+void fill_in_legacy_raft_type(SLAPrintSettings& print_settings, const ordered_json& print_json)
+{
+    if (print_json.contains("raft_type"))
+        return;
+
+    // The boxes of a project carry every option of their location, so a missing checkbox reads as
+    // the default it had before raft_type, which is what that project would have printed.
+    const Domain::ConfigItem* pad_enable         = print_settings.items.find("pad_enable");
+    const Domain::ConfigItem* pad_around_object = print_settings.items.find("pad_around_object");
+    if (pad_enable == nullptr)
+        return;
+
+    print_settings.items.opt("raft_type")
+        .set(Domain::SLA::raft_type_of_legacy_pad(
+            pad_enable->get<bool>(), pad_around_object != nullptr && pad_around_object->get<bool>()
+        ));
+}
+
 bool is_empty(const std::vector<BoxIssues>& issues)
 {
     for (const BoxIssues& box_issues : issues) {
@@ -329,6 +358,7 @@ tl::expected<LoadResult, GlobalParsingIssue> load_sla(const ordered_json& json)
     }
     SLAPrintSettings print_settings;
     const auto print_issues = load_box(json[print_location_name], print_settings);
+    fill_in_legacy_raft_type(print_settings, json[print_location_name]);
 
     IssuesPerLocation issues;
     if (!printer_issues.empty()) {
@@ -401,6 +431,61 @@ load(const ordered_json& json, const Domain::Preset::HwPrinterConfig& hw_config)
     }
 }
 
+namespace {
+
+const char* issue_type_name(ItemParsingIssueType type)
+{
+    switch (type) {
+    case ItemParsingIssueType::InvalidFormat: return "the value could not be read";
+    case ItemParsingIssueType::NotFound: return "the setting is not in the file";
+    case ItemParsingIssueType::ExtraKey: return "this build has no such setting";
+    }
+    return "the setting could not be read";
+}
+
+void log_box_issues(const std::string& location, const BoxIssues& issues)
+{
+    for (const auto& [key, issue] : issues) {
+        // A setting that is not in the file is one the file predates, which every project written
+        // before that setting existed is, so it is not worth a line per key. A setting this build
+        // does not have, or a value it cannot read, is: the file names something that no longer
+        // does what it says, and that must be visible rather than silently dropped.
+        if (issue.type == ItemParsingIssueType::NotFound)
+            continue;
+
+        SPDLOG_WARN(
+            "The configuration of {} names \"{}\", which {}.",
+            location,
+            key,
+            issue.message.empty() ? issue_type_name(issue.type) : issue.message
+        );
+    }
+}
+
+// The issues of a configuration that did load are reported, not thrown away: a project written by
+// another version of the app keeps loading, and what it names that this build no longer has is
+// said out loud once.
+void log_issues(const IssuesPerLocation& issues)
+{
+    for (const auto& [location, location_issues] : issues) {
+        std::visit(
+            overloaded{
+                [&](const BoxIssues& box_issues) {
+                    log_box_issues(get_location_name(location), box_issues);
+                },
+                [&](const std::vector<BoxIssues>& boxes_issues) {
+                    for (size_t i = 0; i < boxes_issues.size(); ++i)
+                        log_box_issues(get_location_name(location) + " " + std::to_string(i),
+                                       boxes_issues[i]);
+                },
+            },
+            location_issues
+        );
+    }
+}
+
+} // namespace
+
 tl::expected<PresetAndConfig, std::string> load_preset_and_config(
     const ordered_json& project_config_json
 )
@@ -427,6 +512,11 @@ tl::expected<PresetAndConfig, std::string> load_preset_and_config(
     if (!config.has_value()) {
         return tl::make_unexpected(std::string{"The configuration data could not be parsed."});
     }
+
+    // The config is usable whatever the issues are: the settings that are there are read and the
+    // rest keeps its default. Saying the rest out loud is what tells a setting that stopped doing
+    // something apart from one that was never set.
+    log_issues(config->issues);
 
     return PresetAndConfig{
         .preset_metadata = std::move(preset_metadata.value()),
