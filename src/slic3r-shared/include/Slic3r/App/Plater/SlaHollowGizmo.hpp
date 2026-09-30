@@ -118,7 +118,7 @@ private:
     // Visuals
     void update_hole_visuals();
     void clear_hole_visuals();
-    Domain::ColorRGBA get_hole_color(const Domain::SLA::DrainHole& hole, bool highlighted) const;
+    Domain::ColorRGBA get_hole_color(const Domain::SLA::DrainHole& hole, bool highlighted, bool selected) const;
 
     // Raycasting helpers (adapted from PaintOnGizmoBase)
     struct VolumeHitPoint
