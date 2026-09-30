@@ -1209,6 +1209,15 @@ static constexpr std::array<std::string_view, 3> ON_MODEL_NAMES = {"inherit", "a
 // names of the three real shapes at the indices the point uses.
 static constexpr std::array<std::string_view, 4> BASE_SHAPE_NAMES = {"default", "cone", "cylinder", "flat"};
 
+// Whether the point type of a file is one this build knows. A build of the future may write a
+// type this one has no name for, and that must not become a point of a kind it cannot build: the
+// point keeps manual_add then, which is what the island flag would have given it anyway. The
+// fields read as a name ("bs", "ts", "om") fall back to their default the same way, silently.
+bool is_known_type(json::number_integer_t type_int) {
+    return type_int > static_cast<json::number_integer_t>(Domain::SLA::SupportPointType::manual_add)
+        && type_int <= static_cast<json::number_integer_t>(Domain::SLA::SupportPointType::slope);
+}
+
 json to_json(const Domain::SLA::SupportPoints &points) {
     json r = json::array();
     for (const Domain::SLA::SupportPoint &p : points) {
@@ -1300,7 +1309,7 @@ void load(const json &pts_json, Domain::SLA::SupportPoints &pts, Read3mfIssues& 
         }
         if (is_island)
             pt.type = Domain::SLA::SupportPointType::island;
-        else if (type_int != static_cast<json::number_integer_t>(Domain::SLA::SupportPointType::manual_add))
+        else if (is_known_type(type_int))
             pt.type = static_cast<Domain::SLA::SupportPointType>(type_int);
         pts.push_back(pt);
     }
