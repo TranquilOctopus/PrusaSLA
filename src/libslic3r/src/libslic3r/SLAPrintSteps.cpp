@@ -1757,9 +1757,9 @@ void SLAPrint::Steps::rasterize()
     // (granularity 1, no concurrency cap) made that multiplier the core count. The batch makes
     // the peak a function of the budget in RasterMemory.hpp instead. See
     // doc/sla-fork/profiling/raster-memory.md.
-    const size_t batch = raw_raster_batch_size(rasterizer_ptr->raw_raster_bytes(),
-                                               layers.size(),
-                                               execution::max_concurrency(execution::ex_tbb));
+    const size_t batch = sla::raw_raster_batch_size(rasterizer_ptr->raw_raster_bytes(),
+                                                    layers.size(),
+                                                    execution::max_concurrency(execution::ex_tbb));
     for (size_t first = 0; first < layers.size(); first += batch) {
         if (cancel_fn())
             break;
