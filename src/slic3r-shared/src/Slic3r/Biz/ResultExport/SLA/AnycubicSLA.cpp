@@ -4,6 +4,7 @@
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/Domain/Image.hpp"
 #include "Slic3r/Domain/SlaLayerHeight.hpp"
+#include "Slic3r/Domain/SLA/PrintTime.hpp"
 #include "Slic3r/Biz/Algorithms/ImageUtils.hpp"
 #include "Slic3r/Time.hpp"
 #include "Slic3r/Utils.hpp"
@@ -302,9 +303,8 @@ static void fill_header_and_misc(anycubicsla_format_header &h,
         h.bottom_layer_count = layer_count;
     }
     // The raft interface is the band of layers at the top of the raft with an exposure of their
-    // own. The header counts what the print spends on it, the layer records in store_anycubic()
-    // carry it per layer.
-    const Domain::RaftInterface raft_interface = Domain::sla_raft_interface(cfg, int(layer_count));
+    // own; the layer records in store_anycubic() carry it per layer, and the print time the header
+    // holds is the shared estimate, which counts it (M1.11c).
     h.res_x     = get_cfg_value_i(cfg, "display_pixels_x");
     h.res_y     = get_cfg_value_i(cfg, "display_pixels_y");
 
@@ -345,15 +345,13 @@ static void fill_header_and_misc(anycubicsla_format_header &h,
     h.retract_speed_mms = get_cfg_value_f_pos(cfg, "retract_speed", 3.0f);
     crop_value(h.retract_speed_mms, 0.1f, 20.0f);
 
-    h.print_time_s = static_cast<std::uint32_t>(
-        (h.bottom_layer_count * h.bottom_exposure_time_s) +
-        ((layer_count - h.bottom_layer_count) * h.exposure_time_s) +
-        // The interface layers are spent on the interface exposure instead of the normal one.
-        raft_interface.print_time_delta_s(h.exposure_time_s) +
-        (layer_count * h.lift_distance_mm / h.retract_speed_mms) +
-        (layer_count * h.lift_distance_mm / h.lift_speed_mms) +
-        (layer_count * h.delay_before_exposure_s)
-    );
+    // The print time the header carries is the shared MSLA estimate (M1.11c): the exposure, the
+    // light-off waits and the lift/retract separation of every layer, summed. It counts the
+    // bottom_* values on the burn-in layers, the raft interface exposure inside the band and the
+    // second stage of the separation where the print sets one, which is more than the single
+    // delay and the single lift distance this container has fields for. See
+    // doc/sla-fork/profiling/print-time.md.
+    h.print_time_s = static_cast<std::uint32_t>(Domain::sla_estimate_print_time(cfg, int(layer_count)).total_s);
 
     h.payload_size = sizeof(h) - sizeof(h.tag) - sizeof(h.payload_size);
 
@@ -626,20 +624,11 @@ void store_pm_workshop(const std::string& file_path, const Biz::Slicing::SLAResu
     float weight_g = volume_ml * material_density;
     float price = (bottle_volume_ml > 0) ? (volume_ml * bottle_cost / bottle_volume_ml) : 0.0f;
 
-    // The plate returns over the distance it was lifted, there is no retract distance setting, so
-    // a layer spends one lift and one retract on it, plus the wait before the lift.
-    const float bottom_separation_s = bottom_lift_height_mm / retract_speed_mms
-        + bottom_lift_height_mm / bottom_lift_speed_mms;
-    const float separation_s = lift_height_mm / retract_speed_mms + lift_height_mm / lift_speed_mms;
-    std::uint32_t print_time_s = static_cast<std::uint32_t>(
-        (bottom_layer_count * initial_exposure_time_s) +
-        ((layer_count - bottom_layer_count) * exposure_time_s) +
-        // The interface layers are spent on the interface exposure instead of the normal one.
-        raft_interface.print_time_delta_s(exposure_time_s) +
-        (bottom_layer_count * bottom_separation_s) +
-        ((layer_count - bottom_layer_count) * separation_s) +
-        (layer_count * wait_before_lift_s)
-    );
+    // The plate returns over the distance it was lifted, there is no retract distance setting, and
+    // the print time is the shared MSLA estimate (M1.11c): exposure, light-off waits and
+    // lift/retract separation per layer, summed. See doc/sla-fork/profiling/print-time.md.
+    std::uint32_t print_time_s =
+        static_cast<std::uint32_t>(Domain::sla_estimate_print_time(cfg, int(layer_count)).total_s);
 
     float display_width_mm = get_cfg_value_f(cfg, "display_width");
     float display_height_mm = get_cfg_value_f(cfg, "display_height");

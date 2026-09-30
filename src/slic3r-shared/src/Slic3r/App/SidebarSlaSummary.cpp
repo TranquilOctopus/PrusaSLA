@@ -31,6 +31,7 @@
 #include "libslic3r/SLAResult.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <iomanip>
 #include <optional>
 #include <sstream>
@@ -160,6 +161,7 @@ void SidebarSlaSummary::refresh()
         add_row(_u8L("Resin"), "—");
         add_row(_u8L("Cost"), "—");
         add_row(_u8L("Layers"), "—");
+        add_row(_u8L("Print time"), "—");
         return;
     }
 
@@ -167,8 +169,9 @@ void SidebarSlaSummary::refresh()
     ResinEconomicsInteractor economics_interactor(m_project_interactor);
     const BedResinEconomics bed_economics = economics_interactor.compute_bed_economics(project_id, bed_instance_id);
 
-    // Get layer count and issues from SLA result cache
+    // Get layer count, print time and issues from SLA result cache
     std::optional<size_t> layer_count;
+    std::optional<double> print_time_s;
     SlaIssueRows issue_rows;
     if (bed_economics.has_result) {
         const SLAResultCache& sla_cache = m_project_interactor.sla_result_cache();
@@ -180,6 +183,9 @@ void SidebarSlaSummary::refresh()
                 if (sla_result.export_data->files.data.size() > 0) {
                     layer_count = sla_result.export_data->files.data.size();
                 }
+                // The estimate the engine made for a printer without a tilt (M1.11c); it is empty
+                // for a print that has not been sliced yet, which is the en dash case.
+                print_time_s = sla_result.export_data->print_time_s;
                 issue_rows = build_sla_issue_rows(sla_result.export_data->issues);
             }
         }
@@ -222,6 +228,9 @@ void SidebarSlaSummary::refresh()
     std::string layers_label = _u8L("Layers");
     std::string layers_value = SidebarSlaSummaryFormat::format_layers(layer_count);
     add_row(layers_label, layers_value);
+
+    // Estimated print time row, beside the layer count it is summed from (M1.11c).
+    add_row(_u8L("Print time"), SidebarSlaSummaryFormat::format_print_time(print_time_s));
 
     add_issue_rows(issue_rows);
 }
@@ -440,6 +449,23 @@ std::string format_layers(std::optional<size_t> layers)
         return "—";
     }
     return std::to_string(*layers);
+}
+
+std::string format_print_time(std::optional<double> seconds)
+{
+    if (!seconds.has_value()) {
+        return "—";
+    }
+    // A negative or non-finite estimate is not a time: it is the "no estimate" state, which the
+    // engine marks by leaving the value out, so a stale one shows as the dash and not as 0:00.
+    if (!std::isfinite(*seconds) || *seconds < 0.) {
+        return "—";
+    }
+    const double whole_minutes = std::floor(*seconds / 60.);
+    const std::ostringstream ss;
+    ss << static_cast<long long>(whole_minutes / 60.) << ':' << std::setfill('0') << std::setw(2)
+       << static_cast<long long>(whole_minutes) % 60;
+    return ss.str();
 }
 
 } // namespace SidebarSlaSummaryFormat

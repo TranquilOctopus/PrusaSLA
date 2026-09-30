@@ -4,6 +4,7 @@
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/Domain/Image.hpp"
 #include "Slic3r/Domain/SlaLayerHeight.hpp"
+#include "Slic3r/Domain/SLA/PrintTime.hpp"
 #include "Slic3r/Biz/Algorithms/ImageUtils.hpp"
 #include "Slic3r/Time.hpp"
 #include "Slic3r/Utils.hpp"
@@ -369,17 +370,12 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     header.light_pwm = get_cfg_pwm(cfg, "light_pwm");
     header.advance_mode = 0;
 
-    float print_time = 0.0f;
-    for (uint32_t i = 0; i < layer_count; ++i) {
-        if (i < static_cast<uint32_t>(header.bottom_layers)) {
-            print_time += header.bottom_exposure_time;
-            print_time += header.bottom_before_lift_time + header.bottom_after_lift_time + header.bottom_after_retract_time;
-        } else {
-            print_time += float(raft_interface.layer_exposure_s(i, header.common_exposure_time));
-            print_time += header.before_lift_time + header.after_lift_time + header.after_retract_time;
-        }
-    }
-    header.printing_time = static_cast<int32_t>(print_time);
+    // The print time the header carries is the shared MSLA estimate (M1.11c): the exposure, the
+    // light-off waits and the lift/retract separation of every layer, summed, so the bottom_* waits
+    // and distances, the raft interface exposure inside the band and the second stage of the
+    // separation all count. See doc/sla-fork/profiling/print-time.md.
+    header.printing_time = static_cast<int32_t>(
+        Domain::sla_estimate_print_time(cfg, int(layer_count)).total_s);
 
     float bottle_weight_g = get_cfg_value_f(cfg, "bottle_weight") * 1000.0;
     float bottle_volume_ml = get_cfg_value_f(cfg, "bottle_volume");

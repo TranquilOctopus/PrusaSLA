@@ -120,6 +120,13 @@ struct SLAResultData
     std::vector<float> layer_peel_force;
     // Reserved for M4.8/M5.8: print-level issue list (islands, cups, trapped resin, etc.)
     std::vector<Sla::SlaIssue> issues;
+
+    // M1.11c: the estimated print time of a printer without a tilt, in seconds: the whole print in
+    // print_time_s (empty while there is no print to estimate) and the time of every layer in
+    // print order in layer_print_times_s (index = layer). Domain::sla_estimate_print_time() is
+    // where they come from, doc/sla-fork/profiling/print-time.md has the formula.
+    std::optional<double> print_time_s;
+    std::vector<double> layer_print_times_s;
 };
 
 // Result of slicing steps

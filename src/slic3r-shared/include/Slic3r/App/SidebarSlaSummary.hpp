@@ -76,6 +76,9 @@ std::string format_resin_ml(std::optional<double> ml);
 std::string format_cost(std::optional<double> cost);
 std::string format_bottles(std::optional<double> bottles);
 std::string format_layers(std::optional<size_t> layers);
+// The estimated print time as hh:mm, the way Chitubox and Lychee show it: whole hours without a
+// leading zero (a print of a day and a half reads 36:00), minutes always two digits.
+std::string format_print_time(std::optional<double> seconds);
 } // namespace SidebarSlaSummaryFormat
 
 } // namespace Slic3r::App

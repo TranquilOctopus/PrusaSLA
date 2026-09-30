@@ -4,6 +4,7 @@
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/Domain/Image.hpp"
 #include "Slic3r/Domain/SlaLayerHeight.hpp"
+#include "Slic3r/Domain/SLA/PrintTime.hpp"
 #include "Slic3r/Version.hpp"
 #include "libslic3r/SLAResult.hpp"
 
@@ -239,20 +240,13 @@ void store_ctb(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     const std::uint32_t light_pwm = get_cfg_pwm(cfg, "light_pwm");
     const std::uint32_t bottom_light_pwm = get_cfg_pwm(cfg, "bottom_light_pwm");
 
-    // Accumulated in whole milliseconds, the precision the layer definitions use, so the result
-    // does not depend on the order the floats are added in: the same settings rounded to ms.
-    std::uint64_t print_time_ms = 0;
-    for (std::uint32_t i = 0; i < layer_count; ++i) {
-        if (i < bottom_layers) {
-            print_time_ms += scaled(bottom_exposure) + scaled(bottom_before_lift_time)
-                + scaled(bottom_after_lift_time) + scaled(bottom_after_retract_time);
-        } else {
-            // The interface layers are spent on the interface exposure instead of the normal one.
-            print_time_ms += scaled(float(raft_interface.layer_exposure_s(i, normal_exposure)))
-                + scaled(before_lift_time) + scaled(after_lift_time) + scaled(after_retract_time);
-        }
-    }
-    const std::uint32_t print_time_s = std::uint32_t((print_time_ms + 500) / 1000);
+    // The print time the header carries is the shared MSLA estimate (M1.11c): the exposure, the
+    // light-off waits and the lift/retract separation of every layer, summed, so the bottom_* waits
+    // and distances, the raft interface exposure inside the band and the second stage of the
+    // separation all count. It is rounded to the nearest second, as it was when this writer summed
+    // the same terms in whole milliseconds itself. See doc/sla-fork/profiling/print-time.md.
+    const std::uint32_t print_time_s = std::uint32_t(
+        Domain::sla_estimate_print_time(cfg, int(layer_count)).total_s + 0.5);
 
     const float bottle_weight_g = get_cfg_value_f(cfg, "bottle_weight") * 1000.0f;
     const float bottle_volume_ml = get_cfg_value_f(cfg, "bottle_volume");

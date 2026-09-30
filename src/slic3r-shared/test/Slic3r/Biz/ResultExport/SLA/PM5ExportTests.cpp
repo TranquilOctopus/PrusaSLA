@@ -173,7 +173,7 @@ TEST_CASE("PM5 store writes a Photon Workshop version 517 file", "[export][sla][
     // The address table holds absolute offsets, and a block starts with its 12-byte name and a u32
     // length, so the body of the block at that address starts 16 bytes further in (0x48 here).
     const size_t header_body = read_le32(data, 20) + 12 + 4;
-    REQUIRE(data.size() >= header_body + 36);
+    REQUIRE(data.size() >= header_body + 72);
     // The light-off delay in s, the lift height in mm, the lift speed and the retract speed in mm/s
     // (pm5.md): the settings are already in those units, so they are written as they are.
     REQUIRE(read_le_float(data, header_body + 12) == Catch::Approx(3.0f));
@@ -195,6 +195,18 @@ TEST_CASE("PM5 store writes a Photon Workshop version 517 file", "[export][sla][
         REQUIRE(read_le_float(data, entry + 8) == Catch::Approx(bottom ? 9.0f : 7.5f));
         REQUIRE(read_le_float(data, entry + 12) == Catch::Approx(bottom ? 1.75f : 1.25f));
     }
+
+    // The estimated print time in whole seconds at HEADER +68 (pm5.md), the shared MSLA estimate
+    // of M1.11c: every layer spends its exposure, its light-off waits and its lift and retract,
+    // the burn-in layers on the bottom_* values. This test sets no wait but the one before the
+    // lift and no bottom retract speed, so a bottom layer pays 35 s of exposure and its 9 mm lift
+    // at 1.75 mm/s, and a normal one 6 s of exposure, the 3 s wait and 7.5 mm up and back down.
+    // See doc/sla-fork/profiling/print-time.md.
+    const double bottom_layer_s    = 35. + 9. / 1.75;
+    const double normal_layer_s    = 6. + 3. + 7.5 / 1.25 + 7.5 / 2.5;
+    const double expected_print_time_s = 11. * bottom_layer_s
+        + (double(layer_count) - 11.) * normal_layer_s;
+    REQUIRE(read_le32(data, header_body + 68) == std::uint32_t(expected_print_time_s));
 }
 
 // The raft interface is the band of layers at the top of the raft that the file gives an exposure
