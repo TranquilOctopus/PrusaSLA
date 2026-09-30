@@ -80,6 +80,33 @@ Run from the repository root in PowerShell, executing each command only after th
 
 Do not push, force-push, or rewrite `master` or `sla/main`. No fetch, merge from a remote, or network-access check was performed for M0.3; verification covered local remote configuration, branch creation history, and this documented procedure.
 
+## Localization (translatable strings)
+
+`resources/localization/list.txt` is the list of source files `xgettext` extracts translatable strings from. **A file that is not on that list never reaches translators**, so every new file under `src/` that contains `L("…")`, `_L("…")` or `_u8L("…")` has to be added to it. The legacy `src/slic3r/GUI` tree is not built and stays off the list.
+
+The list is ordered by the top-level `src/` subdirectory (`libslic3r`, `slic3r`, `slic3r-app-desktop`, `slic3r-domain`, `slic3r-platform`, `slic3r-shared`, `slic3r-shared-wx`) and, inside a subdirectory, case-insensitively by path. Keep that order when adding or removing an entry, and drop an entry when its file is gone.
+
+`xgettext` is **not** part of the tools in this worktree, so `resources/localization/PrusaSlicer.pot` cannot be regenerated here. With GNU gettext on `PATH` (Windows: the gettext distribution's `bin` directory; Debian/Ubuntu: `apt install gettext`), regenerate it from the repository root with the target `cmake/modules/Localization.cmake` defines:
+
+```
+cmake --build build-default --target gettext_make_pot
+```
+
+That target runs `hintsToPot` first and then, from the repository root, exactly:
+
+```
+xgettext --keyword=L --keyword=_L --keyword=_u8L --keyword=L_CONTEXT:1,2c --keyword=_ctx_u8L:1,2c --keyword=_L_PLURAL:1,2 --add-comments=TRN --from-code=UTF-8 --debug --boost -f resources/localization/list.txt -o resources/localization/PrusaSlicer.pot
+```
+
+Then update the shipped catalogues with `gettext_merge_community_po_with_pot` (msgmerge + msgattrib), `gettext_concat_wx_po_with_po` (msgcat) and `gettext_po_to_mo` (msgfmt). `doc/Localization_guide.md` is the upstream guide for translators.
+
+Rules for the strings themselves (see `L`, `_u8L` in `src/slic3r-shared/include/Slic3r/Biz/I18N/I18N.hpp`):
+
+- `L("…")` marks a string for extraction without translating it (units, log text, values read back from a file); `_u8L("…")` marks **and** translates it.
+- A `// TRN:` comment above the macro is copied into the `.pot` and is what the translator reads; say what the placeholders `{0}`, `{1}` are.
+- Keep non-ASCII out of the macro unless it is a unit symbol the translator cannot change (`°`, `mm²`, `mm³`). A separator or an ellipsis goes outside the macro, the way `MaterialSelectionDialog.cpp` writes `_u8L("Import resin profile") + "..."`: `boost::locale` looks the string up through the UI locale, and the bytes above `0x7F` of a literal concatenated afterwards are dropped on the way to the translation.
+- One translatable sentence with `{}` placeholders beats several translated fragments glued together with `+`, because word order differs per language.
+
 ## Debug flags
 
 ### `--sla-fixture <file.3mf>`

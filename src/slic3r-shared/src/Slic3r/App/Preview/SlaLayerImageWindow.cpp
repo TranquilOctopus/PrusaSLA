@@ -757,8 +757,25 @@ std::string SlaLayerImageWindow::island_row_text(const Island& island) const
         text = fmt::
             format(fmt::runtime(_u8L("{0} - Layer {1}")), island.object_name, island.layer + 1);
     }
-    if (island.area_mm2)
-        text += fmt::format(fmt::runtime(_u8L(" · {0:.1f} mm²")), *island.area_mm2);
+    if (island.area_mm2) {
+        // The middle dot is the separator between the two halves of the row, not a word, so it
+        // stays outside the translatable string and the rest of the half is one phrase a
+        // translator can move as a whole.
+        text += " · ";
+        // TRN: The second half of one row of the island list in the layer image window, when the
+        // island has an area. {0} is the area in square millimetres, {1} and {2} the position of
+        // the island on the build plate.
+        text += fmt::format(
+            fmt::runtime(_u8L("{0:.1f} mm² at ({1:.1f}, {2:.1f})")),
+            *island.area_mm2,
+            island.x_mm,
+            island.y_mm
+        );
+        return text;
+    }
+    // TRN: The second half of one row of the island list in the layer image window, for an
+    // island the slicer could not measure. {0} and {1} are the position of the island on the
+    // build plate.
     text += fmt::format(fmt::runtime(_u8L(" at ({0:.1f}, {1:.1f})")), island.x_mm, island.y_mm);
     return text;
 }
