@@ -50,6 +50,11 @@ struct SupportPoint
     // Per-point base height override. 0 = use global config.
     float base_height = 0.f; // [in mm]
 
+    // Shape of the foot where the pillar of this point meets the raft or the plate.
+    // Default keeps the globally configured shape.
+    enum class BaseShape : uint8_t { Default, Cone, Cylinder, Flat };
+    BaseShape base_shape = BaseShape::Default;
+
     // Tip shape for this point. Default keeps the standard pinhead geometry.
     // Cone replaces the front sphere with a point, Ball with a ball of the front
     // radius.

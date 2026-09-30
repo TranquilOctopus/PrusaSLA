@@ -185,6 +185,7 @@ sla::SupportTreeConfig make_support_cfg(const SLAPrintObjectConfigView& c)
         scfg.pillar_widening_factor = c.get<double>("support_pillar_widening_factor");
         scfg.base_radius_mm = 0.5*c.get<double>("support_base_diameter");
         scfg.base_height_mm = c.get<double>("support_base_height");
+        scfg.base_shape = c.get<Domain::sla::SupportBaseShape>("support_base_shape");
         scfg.pillar_base_safety_distance_mm =
             c.get<double>("support_base_safety_distance") < EPSILON ?
                 scfg.safety_distance_mm : c.get<double>("support_base_safety_distance");
@@ -213,6 +214,7 @@ sla::SupportTreeConfig make_support_cfg(const SLAPrintObjectConfigView& c)
         scfg.pillar_widening_factor = c.get<double>("branchingsupport_pillar_widening_factor");
         scfg.base_radius_mm = 0.5*c.get<double>("branchingsupport_base_diameter");
         scfg.base_height_mm = c.get<double>("branchingsupport_base_height");
+        scfg.base_shape = c.get<Domain::sla::SupportBaseShape>("branchingsupport_base_shape");
         scfg.pillar_base_safety_distance_mm =
             c.get<double>("branchingsupport_base_safety_distance") < EPSILON ?
                 scfg.safety_distance_mm : c.get<double>("branchingsupport_base_safety_distance");
@@ -650,6 +652,7 @@ const std::map<std::string, std::vector<Step>> invalidated_by{
     {"branchingsupport_base_diameter", steps({propagate(slaposSupportTree)})},
     {"branchingsupport_base_height", steps({propagate(slaposSupportTree)})},
     {"branchingsupport_base_safety_distance", steps({propagate(slaposSupportTree)})},
+    {"branchingsupport_base_shape", steps({propagate(slaposSupportTree)})},
     {"branchingsupport_buildplate_only", steps({propagate(slaposSupportTree)})},
     {"branchingsupport_critical_angle", steps({propagate(slaposSupportTree)})},
     {"branchingsupport_head_front_diameter", steps({propagate(slaposSupportTree)})},
@@ -772,6 +775,7 @@ const std::map<std::string, std::vector<Step>> invalidated_by{
     {"support_base_diameter", steps({propagate(slaposSupportTree)})},
     {"support_base_height", steps({propagate(slaposSupportTree)})},
     {"support_base_safety_distance", steps({propagate(slaposSupportTree)})},
+    {"support_base_shape", steps({propagate(slaposSupportTree)})},
     {"support_brace_diameter", steps({propagate(slaposSupportTree)})},
     {"support_brace_enable", steps({propagate(slaposSupportTree)})},
     {"support_brace_start_height", steps({propagate(slaposSupportTree)})},
