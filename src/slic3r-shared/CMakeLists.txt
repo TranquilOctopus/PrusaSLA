@@ -1793,6 +1793,7 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/Biz/ResultExport/SLA/SlaArchiveOrientationTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/SlaPm5WorkshopOrientationTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/SlaUnsupportedSliceTests.cpp
+            test/Slic3r/Biz/ResultExport/SLA/SlaAntiAliasingTests.cpp
 
             test/Slic3r/Biz/PrintHost/PrintHostFormatsTests.cpp
 
