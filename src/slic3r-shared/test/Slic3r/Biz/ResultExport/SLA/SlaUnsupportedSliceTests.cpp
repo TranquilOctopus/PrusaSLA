@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
 #include "Slic3r/Biz/SlaFixture.hpp"
@@ -6,18 +7,21 @@
 #include "Slic3r/Domain/Model.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
 
+using Catch::Approx;
+
 // Slicing a model without supports is part of the planned workflow: an unsupported model is
 // sliced and the user is warned, not refused. With the pad around the object, the pad and
 // support slicing steps run although the support tree step left no mesh; they used to
 // dereference that null mesh (SIGSEGV).
 //
-// Supports off with a pad *under* the object (raft Full) still fails, with NoPadGenerated as in
-// upstream: there is nothing for that pad to hold. M2.17a has to decide what an unsupported
-// model gets in that case.
+// A raft *under* the model (raft Full) has nothing to hold, because the model without supports
+// stands on the plate: such a model gets no raft at all instead of failing the whole bed with
+// NoPadGenerated (M2.17j). The case below is the same for every raft type then, so the whole
+// set is generated.
 TEST_CASE("SLA slicing with supports disabled", "[slicing][sla][supports]")
 {
     using Slic3r::Domain::sla::RaftType;
-    const RaftType raft = GENERATE(RaftType::AroundObject, RaftType::None);
+    const RaftType raft = GENERATE(RaftType::AroundObject, RaftType::None, RaftType::Full);
     const bool pad_enable = raft != RaftType::None;
     CAPTURE(pad_enable);
 
@@ -105,6 +109,92 @@ TEST_CASE("SLA slicing an unsupported model with the default raft", "[slicing][s
     // 5 mm support elevation (about 500).
     CHECK(sla_result->files.data.size() < 450);
     CHECK(sla_result->files.data.size() >= 390);
+}
+
+// The same with supports off and a raft *under* the model (raft Full, the default), which is
+// the case the todo names: such a raft has nothing to hold, because the model without supports
+// stands on the plate, so the model gets no raft at all and the bed slices. The first layer is
+// the model's own 20 x 20 mm footprint, so neither a raft under it nor a raft around it was
+// printed: both would put their own area into that layer (the first under it, the second around
+// it), and a raft under it would lift the model off the plate as well.
+TEST_CASE("SLA slicing an unsupported model with a raft under it", "[slicing][sla][supports]")
+{
+    using Slic3r::Domain::sla::RaftType;
+
+    Slic3r::Test::SlaSlicingFixture fixture;
+    auto model = Slic3r::Test::generate_cubes(1, 1);
+    // Model has no support points (sla_support_points is empty).
+
+    auto config = Slic3r::Domain::ConfigPackSLA{};
+    config.sla_printer_settings.items.opt("sla_archive_format").set(std::string("goo"));
+    config.sla_printer_settings.items.opt("display_pixels_x").set(1440);
+    config.sla_printer_settings.items.opt("display_pixels_y").set(800);
+    config.sla_printer_settings.items.opt("display_width").set(144.0);
+    config.sla_printer_settings.items.opt("display_height").set(80.0);
+    config.sla_print_settings.items.opt("layer_height").set(0.05);
+    config.sla_material_settings.items.opt("initial_layer_height").set(0.05);
+    config.sla_print_settings.items.opt("supports_enable").set(false);
+    config.sla_print_settings.items.opt("pad_enable").set(true);
+    config.sla_print_settings.items.opt("raft_type").set(RaftType::Full);
+
+    auto sla_result = fixture.slice_sla_model(model, config);
+    REQUIRE(sla_result != nullptr);          // no NoPadGenerated
+    REQUIRE_FALSE(sla_result->layer_areas.empty());
+
+    // The model stands on the plate, so the print is as tall as the model itself: about 400
+    // layers at 0.05 mm, with no raft below it and no support elevation above it.
+    CHECK(sla_result->files.data.size() >= 390);
+    CHECK(sla_result->files.data.size() < 450);
+
+    // The first layer is the 20 x 20 mm bottom face of the model and nothing else.
+    CHECK(sla_result->layer_areas[0] == Approx(400.f).margin(20.f));
+}
+
+// One model on the bed cannot take the others down with it: a bed with a supported and an
+// unsupported model under a raft that can hold it slices both, the supported one lifted by its
+// supports (about 500 layers at 0.05 mm) and the unsupported one standing on the plate without
+// a raft of its own.
+TEST_CASE("SLA slicing a bed with a supported and an unsupported model", "[slicing][sla][supports]")
+{
+    using Slic3r::Domain::sla::RaftType;
+    using Slic3r::Domain::SLA::SupportPoint;
+    using Slic3r::Domain::SLA::SupportPointType;
+    using Slic3r::Domain::Vec3f;
+
+    Slic3r::Test::SlaSlicingFixture fixture;
+    auto model = Slic3r::Test::generate_cubes(2, 2);
+
+    // Four support points on the bottom face (z = 0) of the first cube only. The second one
+    // stays unsupported, so it is the one that used to fail the bed.
+    Slic3r::Domain::ModelObject* obj = model.objects.front();
+    obj->sla_support_points.emplace_back(SupportPoint{Vec3f{5.0f, 5.0f, 0.0f}, 0.2f, SupportPointType::island});
+    obj->sla_support_points.emplace_back(SupportPoint{Vec3f{15.0f, 5.0f, 0.0f}, 0.2f, SupportPointType::island});
+    obj->sla_support_points.emplace_back(SupportPoint{Vec3f{5.0f, 15.0f, 0.0f}, 0.2f, SupportPointType::island});
+    obj->sla_support_points.emplace_back(SupportPoint{Vec3f{15.0f, 15.0f, 0.0f}, 0.2f, SupportPointType::island});
+
+    auto config = Slic3r::Domain::ConfigPackSLA{};
+    config.sla_printer_settings.items.opt("sla_archive_format").set(std::string("goo"));
+    config.sla_printer_settings.items.opt("display_pixels_x").set(1440);
+    config.sla_printer_settings.items.opt("display_pixels_y").set(800);
+    config.sla_printer_settings.items.opt("display_width").set(144.0);
+    config.sla_printer_settings.items.opt("display_height").set(80.0);
+    config.sla_print_settings.items.opt("layer_height").set(0.05);
+    config.sla_material_settings.items.opt("initial_layer_height").set(0.05);
+    config.sla_print_settings.items.opt("supports_enable").set(true);
+    config.sla_print_settings.items.opt("pad_enable").set(true);
+    config.sla_print_settings.items.opt("raft_type").set(RaftType::Full);
+
+    auto sla_result = fixture.slice_sla_model(model, config);
+    REQUIRE(sla_result != nullptr);
+    REQUIRE_FALSE(sla_result->layer_areas.empty());
+
+    // The bed is as tall as the supported model with its 5 mm of elevation: the unsupported one
+    // prints on the plate, it does not lift the whole bed or fail it.
+    CHECK(sla_result->files.data.size() > 450);
+    // The unsupported cube's own 20 x 20 mm bottom face (400 mm2) is in the first layer, so it
+    // stands on the plate: a raft under it would have lifted it away from z = 0 and put the raft
+    // under the four pillars in that layer alone.
+    CHECK(sla_result->layer_areas[0] >= 400.f);
 }
 
 // A model with support points placed on it (type island, not manual_add) gets those points used
