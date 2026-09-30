@@ -14,7 +14,9 @@ into a greyscale picture.
 framebuffer of the size asked for, is read back, flipped and written as an RGB PNG. A render is
 therefore:
 
-- the scene only: no window, no ImGui UI, no sidebar, no overlays, no cursor;
+- the scene only: no window, no ImGui UI, no sidebar, no overlays, no cursor. That is a stated
+  limit of the check, kept in [What a render is not](#what-a-render-is-not) and written into every
+  sidecar as `covers`;
 - a fixed camera: the camera of the view it draws, and not the one the window happens to have.
   Prepare is framed on the bed the way a thumbnail is, the Preview view is looked at from where the
   app is looking at it (M6.2b);
@@ -35,6 +37,42 @@ What a render of the Preview view keeps is the eye, the target, the angles aroun
 the view has, handed over exactly the way the two views hand their cameras to each other when a tab
 is switched. The one thing the size asked for changes is the viewport of the camera, because two
 sizes of the same view are not the same picture.
+
+## What a render is not
+
+A render is the scene and not the window, so what the window draws is outside the check. This is
+the limit the todo M6.2c left to be either built or recorded; it is recorded here, and in the
+`covers` object of every sidecar, so a reference says what it is a reference of:
+
+| in the picture | not in the picture |
+|---|---|
+| the 3D view of the tab: bed and plate, models, supports, pad, shells, the tool marker | the left bar, the sidebar, the top bar, the mode tabs |
+| the tokens of the theme the scene is drawn with | the 2D overlays of a view: the SLA layer image window with its island list, the issue markers, the legend, a pop-up, a dialog |
+| the camera of the view, at the size asked for | the mouse cursor, and the hover and focus state a mouse gives the UI |
+
+Why it is a separate job, and not a flag: the overlays and the sidebars are ImGui, and they are
+drawn by `render_imgui` of the render module into the canvas, while a render draws the scene into a
+framebuffer of its own. Covering them means rendering the canvas itself, and that needs four things
+this render path does not have:
+
+1. a window of a fixed size, so that the layout is the same on every machine;
+2. a framebuffer of the window to read back: a `Render::Framebuffer` is always one the device
+   created with its own attachments, and the window's default framebuffer (OpenGL's 0, owned by wx)
+   has no handle to read through;
+3. an ImGui pass with a known state - no mouse position, no hovered item, no tooltip, no cursor -
+   which today depends on where the pointer is;
+4. the app theme and the scale factor of the machine, since the widgets are drawn with them.
+
+Point 4 alone decides it: a reference of the window would differ between a desktop in light mode
+and one in dark mode, and between a 100 % and a 200 % display, which is exactly the property that
+makes a reference comparable at all. So the window stays out, on purpose, and the check stays on
+the scene.
+
+What would make it possible, in the order it would have to happen: a `--render-window` that sizes
+the main frame and reads its framebuffer back, a scene render that keeps the ImGui pass out of the
+way (or a mode that draws the scene first and the UI into a second, composited framebuffer), and a
+forced theme and scale factor on the command line. That is a todo of its own and is on the list
+below; nothing here depends on it.
 
 ## Rendering
 
@@ -72,6 +110,7 @@ Every render comes with `<file.png>.json`:
   "width": 1280,
   "height": 960,
   "composited_background_token": "SceneBgBottom",
+  "covers": { "view": true, "window": false, "overlays": false, "cursor": false },
   "lightness": {
     "model":             { "token": "SlaModelResin", "rgb": [132, 169, 140], "L": 65.88 },
     "supports":          { "token": "SlaSupport",    "rgb": [202, 210, 197], "L": 83.27 },
@@ -86,6 +125,11 @@ Every render comes with `<file.png>.json`:
 (`preview`). It is in the sidecar so a diff of two sidecars says whether a changed image is a change
 of the view or a change of the scene behind it, and so a reference of a preview render is not
 mistaken for one of the objects list thumbnail of the same print.
+
+`covers` is what the picture is of: the 3D view of the tab and nothing else, the window and its
+overlays left out. It is the limit of [What a render is not](#what-a-render-is-not) in the artefact
+itself, and it is what a diff of two sidecars points at when a reference stops covering the same
+thing it used to.
 
 The L* values are resolved by the app from the theme tokens it drew with, so the numbers describe
 the palette that is in `Theme.cpp` and not a copy of it. The tool never sees a hex value of its
@@ -189,8 +233,11 @@ probe file. A diff that is a whole new picture is not an accident to work around
   a fix.
 - Three fixture scenes and both themes (F3) are still to be chosen and rendered by a person.
 - The render is the scene, not the window: the left bar, the sidebar, the top bar and the preview
-  overlays are not covered by this. A window screenshot would need a fixed window size and a fixed
-  desktop theme, which is a bigger job than this todo.
+  overlays (the SLA layer image window, the issue markers) are not covered by this. That limit is
+  written down in [What a render is not](#what-a-render-is-not) and in the `covers` object of every
+  sidecar, and building it is on the list here: a window render needs a fixed window size, a
+  framebuffer of the window to read back, a known ImGui state and a forced theme and scale factor,
+  which is a bigger job than this todo.
 - Nothing runs the tool in CI yet. That is M0.14 plus a job; the exit codes are there for it.
 - `--render-view preview` renders the Preview tab as itself since M6.2b - its scene, its camera and
   its customizer - so the check covers the 3D view of that tab and not the window around it: the

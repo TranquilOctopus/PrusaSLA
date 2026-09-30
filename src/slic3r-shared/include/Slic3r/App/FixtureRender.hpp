@@ -60,6 +60,29 @@ FixtureViewScene fixture_view_scene(FixtureView view);
 std::string fixture_view_scene_to_string(FixtureViewScene scene);
 
 /**
+ * @brief What a render of a view shows and what it leaves out (roadmap M6.2c).
+ *
+ * A render is the scene and not the window, so the window around the view and the 2D overlays of
+ * the view are not in the picture. The limit is written into every sidecar, so a reference says
+ * what it is a reference of, and a render that grows the window into it one day says so in the diff
+ * of two sidecars.
+ */
+struct FixtureRenderCoverage
+{
+    /// The 3D view of the tab: the scene, the camera of the view and the colours of the tokens.
+    bool view{true};
+    /// The window around the view: the left bar, the sidebar, the top bar and the mode tabs.
+    bool window{false};
+    /// The 2D overlays of a view: the layer image window, the issue markers, the legend, a dialog.
+    bool overlays{false};
+    /// The mouse cursor, which belongs to the window and to the machine.
+    bool cursor{false};
+};
+
+/// The coverage of a render of @p view, which is the same limit for both views today.
+FixtureRenderCoverage fixture_render_coverage(FixtureView view);
+
+/**
  * @brief Puts the camera of a 3D view into @p camera, so a render of the view looks at what the
  * view looks at.
  *

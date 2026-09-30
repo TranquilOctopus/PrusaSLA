@@ -712,7 +712,22 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
     to the renderer) and the sidecar key. The render path itself is GL and has no unit test; nothing was built
     or run here, and M6.2a is still the first end to end run. The M6.2 note above still says the preview draws
     the objects list thumbnail: that line is left as it was written.
-- [ ] **M6.2c** A render is the scene and not the window, so the sidebars and the preview overlays (the layer image window, the issue markers) are outside the check: extend the render path to the window and its overlays, or record the limit in `doc/sla-fork/visual-regression.md` and keep it on the list. · M · needs M6.2
+- [x] **M6.2c** A render is the scene and not the window, so the sidebars and the preview overlays (the layer image window, the issue markers) are outside the check: extend the render path to the window and its overlays, or record the limit in `doc/sla-fork/visual-regression.md` and keep it on the list. · M · needs M6.2
+    Result: the second half of the todo, and the first half is now the list. The limit is recorded in
+    `doc/sla-fork/visual-regression.md` in a new **What a render is not** section: a table of what is in a render and
+    what is not (left bar, sidebar, top bar, mode tabs; the SLA layer image window with its island list, the issue
+    markers, the legend, pop-ups and dialogs; the cursor and the hover state a mouse gives the UI), why it is a
+    separate job and not a flag (the UI is ImGui drawn by `render_imgui` into the canvas, a render draws the scene
+    into a framebuffer of its own, so a window render needs a fixed window size, a framebuffer of the window to
+    read back - a `Render::Framebuffer` is always one the device created - an ImGui pass with a known state, and a
+    forced theme and scale factor, which alone decides it: a window reference would differ between a light and a
+    dark desktop and between two scale factors), and what would have to happen first, in order. The list keeps it.
+    The record is in the artefact too, not only in the text: `FixtureRenderCoverage` and `fixture_render_coverage()`
+    (App/FixtureRender.hpp) put a `covers` object into every sidecar - `view: true`, `window`, `overlays` and
+    `cursor: false` today - so a reference says what it is a reference of and a diff of two sidecars points at a
+    reference that stopped covering the same thing. 24 lines of tests in `FixtureRenderTests.cpp` pin the coverage
+    of both views and the four sidecar keys. Not built and not run here, and nothing was rendered; the window render
+    is not started, it is the list.
 - [ ] **M6.2d** Nothing runs the tool in CI yet: add a job beside M0.14's that renders the fixtures, runs `visual_diff.py` against the committed references and fails on a changed image or on a palette lightness the PLAN 2.1 rule rejects. · M · needs M6.2, M0.14
 - [ ] **M6.4** `[human]` End-to-end walk through the M1.1 journeys on an integrated build, filing new todos for gaps. · M · needs M1.11, M2.7, M3.10
 - [ ] **M6.5** Retune default presets after the M4 changes. · M · needs M4.4, M4.5

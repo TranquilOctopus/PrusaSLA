@@ -184,6 +184,32 @@ TEST_CASE("[FixtureRender] The sidecar says which scene drew the render")
     CHECK(prepare["scene"].get<std::string>() == "plater");
 }
 
+TEST_CASE("[FixtureRender] A render covers the view, and says what it leaves out")
+{
+    // Roadmap M6.2c: the render is the scene and not the window. The limit is named here so a
+    // reference says what it is a reference of, and so the sidebars and the preview overlays are
+    // a stated limit of the check and not a gap in it.
+    for (const FixtureView view : {FixtureView::Prepare, FixtureView::Preview}) {
+        INFO("View: " << fixture_view_to_string(view));
+        const FixtureRenderCoverage coverage = fixture_render_coverage(view);
+        CHECK(coverage.view);
+        CHECK_FALSE(coverage.window);
+        CHECK_FALSE(coverage.overlays);
+        CHECK_FALSE(coverage.cursor);
+    }
+
+    const Theme theme(Theme::Style::Dark);
+    const Domain::Image image = rgba_image(2, 2, std::vector<uint8_t>(2 * 2 * 4, 0));
+    const nlohmann::json sidecar =
+        nlohmann::json::parse(render_sidecar(FixtureView::Preview, image, theme));
+    REQUIRE(sidecar.contains("covers"));
+    REQUIRE(sidecar["covers"].is_object());
+    CHECK(sidecar["covers"]["view"].get<bool>());
+    CHECK_FALSE(sidecar["covers"]["window"].get<bool>());
+    CHECK_FALSE(sidecar["covers"]["overlays"].get<bool>());
+    CHECK_FALSE(sidecar["covers"]["cursor"].get<bool>());
+}
+
 TEST_CASE("[FixtureRender] L* of a colour is the CIE one")
 {
     CHECK(cie_lightness(Domain::ColorRGBA::BLACK()) == Approx(0.0).margin(0.01));

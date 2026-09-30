@@ -45,6 +45,13 @@ std::string fixture_view_scene_to_string(FixtureViewScene scene)
     return scene == FixtureViewScene::Preview ? "preview" : "plater";
 }
 
+FixtureRenderCoverage fixture_render_coverage(FixtureView)
+{
+    // The same limit for both views, which is the point of naming it: the render is offscreen, so
+    // there is no window to be in and no overlay or cursor drawn over it (roadmap M6.2c).
+    return FixtureRenderCoverage();
+}
+
 void set_fixture_view_camera(const Platform::CameraSynchData& data, Scene::Camera& camera)
 {
     // A trackball of its own, because the view keeps the one it is being rotated with: this camera
@@ -165,6 +172,11 @@ std::string render_sidecar(FixtureView view, const Domain::Image& image, const T
     sidecar["width"]                       = image.width();
     sidecar["height"]                      = image.height();
     sidecar["composited_background_token"] = "SceneBgBottom";
+    const FixtureRenderCoverage coverage   = fixture_render_coverage(view);
+    sidecar["covers"]["view"]              = coverage.view;
+    sidecar["covers"]["window"]            = coverage.window;
+    sidecar["covers"]["overlays"]          = coverage.overlays;
+    sidecar["covers"]["cursor"]            = coverage.cursor;
     nlohmann::ordered_json lightness;
     for (const RoleLightness& role : scene_lightness(theme)) {
         lightness[role.role] = nlohmann::ordered_json{
