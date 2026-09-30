@@ -13,6 +13,8 @@
 #include "Slic3r/Biz/ProjectScoped.hpp"
 #include "Slic3r/Biz/Preset/PresetInteractor.hpp"
 
+#include <boost/filesystem/path.hpp>
+
 namespace Slic3r::Biz {
 class ProjectInteractor;
 } // namespace Slic3r::Biz
@@ -27,6 +29,7 @@ namespace Slic3r::App {
 
 class Navigator;
 class MaterialSettingsDialog;
+class ResinImportDialog;
 
 class MaterialSelectionDialog :
     public Yoga::Dialog,
@@ -53,6 +56,16 @@ public:
     void on_reset() override;
 
     MaterialSettingsDialog& material_settings_dialog();
+
+    /**
+     * @brief Open the resin import review dialog for @p path.
+     *
+     * The dialog itself is M3.10a; the entry points that call this (an "Import resin profile" button
+     * in the toolbar of this dialog, and a profile dropped onto the window) are M3.10b.
+     */
+    void open_resin_import(const boost::filesystem::path& path);
+
+    ResinImportDialog& resin_import_dialog();
 
     void on_app_config_changed(const std::string &key) override;
 
@@ -104,6 +117,7 @@ private:
     SelectionRowListView* m_selection_row_list_view      = nullptr;
     Biz::Preset::PresetItemObservableList* m_preset_list = nullptr;
     MaterialSettingsDialog* m_material_settings_dialog   = nullptr;
+    ResinImportDialog* m_resin_import_dialog             = nullptr;
 
     struct ProjectContext
     {

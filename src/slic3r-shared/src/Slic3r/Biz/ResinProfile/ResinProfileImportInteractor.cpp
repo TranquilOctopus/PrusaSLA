@@ -27,6 +27,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace Slic3r::Biz::ResinProfile {
@@ -160,18 +161,30 @@ bool base_matches(const std::string& resin_name, const Domain::Preset::Evaluated
     return vendor && contains_ignore_case(*vendor, resin_name);
 }
 
+/// @brief Whether @p preset is a resin of the printer it is offered for, and one an imported preset
+/// can inherit from. A user or runtime preset would give the new preset no system preset to inherit
+/// from, and the unnamed shared profiles (*common*, *sl1s_fast*, ...) are not a resin of this
+/// printer at all, only the values a resin starts from.
+bool is_system_resin_of_printer(const Domain::Preset::EvaluatedMaterialPreset::Preset& preset)
+{
+    return preset.origin == Domain::Preset::PresetOrigin::System
+        && Domain::Preset::is_public_name(preset.name);
+}
+
 std::optional<BaseMaterial> pick_base_material(
     const Preset::PresetInteractor& presets,
     Domain::SelectionId project_id,
     const Domain::Preset::SelectedPreset& selected,
     size_t slot,
-    const std::string& resin_name
+    const std::string& resin_name,
+    const std::string& wanted_base_id
 )
 {
     const Domain::Preset::EvaluatedMaterialPreset::Preset* first_system = nullptr;
     const Domain::Preset::EvaluatedMaterialPreset::Preset* selected_system = nullptr;
     const Domain::Preset::EvaluatedMaterialPreset::Preset* default_system = nullptr;
     const Domain::Preset::EvaluatedMaterialPreset::Preset* named = nullptr;
+    const Domain::Preset::EvaluatedMaterialPreset::Preset* wanted = nullptr;
 
     const std::string default_material =
         string_value(selected.print.config_box(), "default_material").value_or(std::string{});
@@ -183,12 +196,7 @@ std::optional<BaseMaterial> pick_base_material(
              project_id, selected.hw_config.id, selected.printer.id, selected.print.id, slot))
     {
         const Domain::Preset::EvaluatedMaterialPreset::Preset& preset = entry.first.get();
-        // A user or runtime preset would give the new preset no system preset to inherit from, and
-        // the unnamed shared profiles (*common*, *sl1s_fast*, ...) are not a resin of this printer
-        // at all, only the values a resin starts from.
-        if (preset.origin != Domain::Preset::PresetOrigin::System
-            || !Domain::Preset::is_public_name(preset.name))
-        {
+        if (!is_system_resin_of_printer(preset)) {
             continue;
         }
         if (!first_system)
@@ -197,15 +205,18 @@ std::optional<BaseMaterial> pick_base_material(
             selected_system = &preset;
         if (!named && base_matches(resin_name, preset))
             named = &preset;
+        if (!wanted && preset.id == wanted_base_id)
+            wanted = &preset;
         if (!default_system && !default_material.empty() && preset.name == default_material)
             default_system = &preset;
     }
 
-    // The resin of the same name wins; then the printer's own default resin, which is either the
-    // one its print preset names or the resin the printer has selected, and finally the first
-    // system resin it offers (the list is ordered by name).
+    // The base the caller asked for wins; then the resin of the same name, then the printer's own
+    // default resin, which is either the one its print preset names or the resin the printer has
+    // selected, and finally the first system resin it offers (the list is ordered by name). An
+    // empty wanted_base_id matches no preset, so a caller that does not care gets the default chain.
     for (const Domain::Preset::EvaluatedMaterialPreset::Preset* preset :
-         {named, default_system, selected_system, first_system})
+         {wanted, named, default_system, selected_system, first_system})
     {
         if (preset)
             return BaseMaterial{
@@ -390,7 +401,7 @@ std::string sanitize_preset_name(std::string name)
     return trim_copy(name);
 }
 
-std::string preset_name(const MappingResult& mapping, const boost::filesystem::path& path)
+std::string derived_preset_name(const MappingResult& mapping, const boost::filesystem::path& path)
 {
     std::string name = sanitize_preset_name(mapping.suggested_name);
     if (name.empty())
@@ -418,6 +429,29 @@ std::string unique_preset_name(
 
 } // namespace
 
+std::vector<std::pair<std::string, std::string>>
+system_resin_presets(const Preset::PresetInteractor& presets, Domain::SelectionId project_id, size_t slot)
+{
+    std::vector<std::pair<std::string, std::string>> resins;
+
+    // Only the selected printer is asked about, and only ids and names are returned: a caller keeps
+    // the list while it goes on with other work, which may reload the collections these presets
+    // live in.
+    const Domain::Preset::SelectedPreset& selected = presets.selected_printer_preset();
+    if (selected.technology() != Domain::PrinterTechnology::SLA || slot >= selected.materials.size()) {
+        return resins;
+    }
+
+    for (const auto& entry : presets.get_material_presets(
+             project_id, selected.hw_config.id, selected.printer.id, selected.print.id, slot))
+    {
+        const Domain::Preset::EvaluatedMaterialPreset::Preset& preset = entry.first.get();
+        if (is_system_resin_of_printer(preset))
+            resins.emplace_back(preset.id, preset.name);
+    }
+    return resins;
+}
+
 ResinProfileReaderRegistry ResinProfileImportInteractor::default_registry()
 {
     ResinProfileReaderRegistry registry;
@@ -439,7 +473,9 @@ ResinProfileImportInteractor::ResinProfileImportInteractor(
 ResinImportResult ResinProfileImportInteractor::import_file(
     const boost::filesystem::path& path,
     const ResinImportTarget& target,
-    bool dry_run
+    bool dry_run,
+    const std::string& base_preset_id,
+    const std::string& wanted_preset_name
 )
 {
     ResinImportResult result;
@@ -478,12 +514,18 @@ ResinImportResult ResinProfileImportInteractor::import_file(
         return result;
     }
 
+    // What the file says about itself, for the source summary of the import dialog and for the
+    // report the CLI writes. The format and the resin names are copies: the profile is local.
+    result.source_format = profile->source_format;
+    result.resin_name     = resin_name_hint(*profile);
+    result.resin_vendor   = profile->material.material_vendor.value_or(std::string{});
+
     // The base comes before the mapping: it is the system resin of this printer, and its own
     // settings say how the printer separates layers, which is what picks the mapping table. Both
     // the base and the printer model are read out as copies, because everything below this point
     // mutates the preset collections they live in.
     const std::optional<BaseMaterial> base = pick_base_material(
-        presets, project_id, selected, target.material_slot, resin_name_hint(*profile));
+        presets, project_id, selected, target.material_slot, result.resin_name, base_preset_id);
     if (!base) {
         result.error = "no system resin preset is available for this printer";
         return result;
@@ -492,9 +534,15 @@ ResinImportResult ResinProfileImportInteractor::import_file(
         string_value(selected.printer.config_box(), "printer_model").value_or(std::string{});
 
     result.mapping = map_resin_profile(*profile, printer_class_of(printer_model, base->use_tilt));
-    result.base_preset = base->name;
+    result.base_preset    = base->name;
+    result.base_preset_id = base->id;
+    // A name the caller picked wins over the one the profile suggests, but it is made unique the
+    // same way, so typing a name that is taken still adds a preset instead of replacing one.
+    std::string wanted_name = sanitize_preset_name(wanted_preset_name);
+    if (wanted_name.empty())
+        wanted_name = derived_preset_name(result.mapping, path);
     result.preset_name =
-        unique_preset_name(presets, Domain::Preset::PresetKind::SlaMaterial, preset_name(result.mapping, path));
+        unique_preset_name(presets, Domain::Preset::PresetKind::SlaMaterial, wanted_name);
     if (dry_run) {
         result.ok = true;
         return result;
