@@ -5,6 +5,7 @@
 #include "Slic3r/App/Yoga/Text.hpp"
 #include "Slic3r/App/Yoga/Item.hpp"
 #include "Slic3r/App/Yoga/ToggleButton.hpp"
+#include "Slic3r/App/Yoga/CollapsibleWindow.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
 
 #include <fmt/format.h>
@@ -24,8 +25,20 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     content()->set_padding(20.f);
     content()->set_gap(2.f * gap_size());
 
+    // The point settings live in their own section, which is open when the tool opens, so that
+    // going into supporting an object shows the settings right away (M2.17d4).
+    m_settings_window = content()->emplace_back<CollapsibleWindow>(
+        _u8L("Support point settings"),
+        "SlaSupportPointsSettings"
+    );
+    m_settings_window->set_padding(0.f);
+    m_settings_window->set_collapsed(false);
+    Item* settings = m_settings_window->content();
+    settings->set_padding(0.f);
+    settings->set_gap(2.f * gap_size());
+
     add_row_with_slider(
-        content(),
+        settings,
         &m_density_slider,
         _u8L("Support points density"),
         _u8L("%")
@@ -37,7 +50,7 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     { m_callbacks.density_changed(value); };
 
     add_row_with_slider(
-        content(),
+        settings,
         &m_head_diameter_slider,
         _u8L("Head diameter"),
         _u8L("mm")
@@ -49,12 +62,12 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     m_head_diameter_slider->callbacks().value_changed = [this](double value)
     { m_callbacks.head_diameter_changed(value); };
 
-    m_head_diameter_use_global_checkbox = content()->emplace_back<ToggleButton>(_u8L("Use global head diameter"));
+    m_head_diameter_use_global_checkbox = settings->emplace_back<ToggleButton>(_u8L("Use global head diameter"));
     m_head_diameter_use_global_checkbox->callbacks().checked_changed = [this](bool value)
     { m_callbacks.head_diameter_use_global_changed(value); };
 
     add_row_with_slider(
-        content(),
+        settings,
         &m_pillar_diameter_slider,
         _u8L("Stem diameter"),
         _u8L("mm")
@@ -66,12 +79,12 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     m_pillar_diameter_slider->callbacks().value_changed = [this](double value)
     { m_callbacks.pillar_diameter_changed(value); };
 
-    m_pillar_diameter_use_global_checkbox = content()->emplace_back<ToggleButton>(_u8L("Use global stem diameter"));
+    m_pillar_diameter_use_global_checkbox = settings->emplace_back<ToggleButton>(_u8L("Use global stem diameter"));
     m_pillar_diameter_use_global_checkbox->callbacks().checked_changed = [this](bool value)
     { m_callbacks.pillar_diameter_use_global_changed(value); };
 
     add_row_with_slider(
-        content(),
+        settings,
         &m_base_diameter_slider,
         _u8L("Base diameter"),
         _u8L("mm")
@@ -83,12 +96,12 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     m_base_diameter_slider->callbacks().value_changed = [this](double value)
     { m_callbacks.base_diameter_changed(value); };
 
-    m_base_diameter_use_global_checkbox = content()->emplace_back<ToggleButton>(_u8L("Use global base diameter"));
+    m_base_diameter_use_global_checkbox = settings->emplace_back<ToggleButton>(_u8L("Use global base diameter"));
     m_base_diameter_use_global_checkbox->callbacks().checked_changed = [this](bool value)
     { m_callbacks.base_diameter_use_global_changed(value); };
 
     add_row_with_slider(
-        content(),
+        settings,
         &m_base_height_slider,
         _u8L("Base height"),
         _u8L("mm")
@@ -100,7 +113,7 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     m_base_height_slider->callbacks().value_changed = [this](double value)
     { m_callbacks.base_height_changed(value); };
 
-    m_base_height_use_global_checkbox = content()->emplace_back<ToggleButton>(_u8L("Use global base height"));
+    m_base_height_use_global_checkbox = settings->emplace_back<ToggleButton>(_u8L("Use global base height"));
     m_base_height_use_global_checkbox->callbacks().checked_changed = [this](bool value)
     { m_callbacks.base_height_use_global_changed(value); };
 
@@ -117,9 +130,9 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     m_clipping_plane_slider->callbacks().value_changed = [this](double value)
     { m_callbacks.clipping_plane_changed(value); };
 
-    this->add_separator(this->content());
+    this->add_separator(settings);
 
-    Item* preset_row = content()->emplace_back<Item>();
+    Item* preset_row = settings->emplace_back<Item>();
     preset_row->set_orientation(Orientation::Horizontal);
     preset_row->set_justify_content(YGJustifySpaceBetween);
     preset_row->set_gap(gap_size());
@@ -275,6 +288,11 @@ void SlaSupportPointsDialog::set_active_preset(int index)
     m_preset_light_button->set_checked(index == 0);
     m_preset_medium_button->set_checked(index == 1);
     m_preset_heavy_button->set_checked(index == 2);
+}
+
+void SlaSupportPointsDialog::set_settings_expanded(bool expanded)
+{
+    m_settings_window->set_collapsed(!expanded);
 }
 
 } // namespace Slic3r::App::Plater

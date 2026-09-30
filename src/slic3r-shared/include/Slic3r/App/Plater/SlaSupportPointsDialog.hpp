@@ -7,6 +7,7 @@ class SliderWithInput;
 class LayoutButton;
 class Text;
 class ToggleButton;
+class CollapsibleWindow;
 } // namespace Slic3r::App::Yoga
 
 namespace Slic3r::App::Plater {
@@ -58,7 +59,12 @@ public:
     void set_lock_island_supports(bool locked);
     void set_active_preset(int index);
 
+    /// Whether the section with the point settings is open. The tool opens it, so the settings are
+    /// there when one goes into supporting an object (M2.17d4).
+    void set_settings_expanded(bool expanded);
+
 private:
+    Yoga::CollapsibleWindow* m_settings_window = nullptr;
     Yoga::SliderWithInput* m_density_slider = nullptr;
     Yoga::SliderWithInput* m_head_diameter_slider = nullptr;
     Yoga::SliderWithInput* m_pillar_diameter_slider = nullptr;

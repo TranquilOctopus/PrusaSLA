@@ -1,13 +1,16 @@
 #include "Slic3r/App/Navigator.hpp"
 
 #include "Slic3r/App/Plater/PlaterRenderModule.hpp"
+#include "Slic3r/App/Plater/SlaSupportPointsGizmo.hpp"
 #include "Slic3r/App/Preview/PreviewRenderModule.hpp"
 #include "Slic3r/App/Platform/AbstractRenderCanvas.hpp"
 #include "Slic3r/App/SidebarBed.hpp"
 #include "Slic3r/App/MaterialSelectionDialog.hpp"
 #include "Slic3r/App/AppServices.hpp"
 #include "Slic3r/App/AppConfigInteractor.hpp"
+#include "Slic3r/App/IsSlaActive.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
+#include "Slic3r/Domain/PrinterTechnology.hpp"
 
 #include "Slic3r/Log.hpp"
 
@@ -38,6 +41,9 @@ void Navigator::on_init(
     m_preview_module->set_navigator(this);
     m_canvas           = &canvas;
     m_project_contexts = std::make_unique<ProjectContexts>(*project_interactor);
+
+    // Kept for the services the other modules have no direct access to, like the SLA support tool.
+    m_project_interactor = project_interactor;
 
     project_interactor->add_listener<ISelectedProjectChangedListener>(this);
     AppServices::instance().app_config_interactor().add_listener<IAppConfigChangedListener>(this);
@@ -97,6 +103,46 @@ void Navigator::activate_plater_tool(Scene::ToolType tool)
         return;
     }
     m_plater_module->gizmo_controller().activate_tool(tool);
+}
+
+namespace {
+
+// The support tool of the Prepare view, or nullptr when it is not there yet or the printer is not
+// an SLA one. Reached from the other modules through the navigator, they have no gizmo manager.
+Plater::SlaSupportPointsGizmo* sla_support_points_gizmo(
+    Plater::PlaterRenderModule&   plater_module,
+    const Biz::ProjectInteractor& project_interactor
+)
+{
+    if (!plater_module.is_gizmo_manager_completed() || !is_sla_active(project_interactor)) {
+        return nullptr;
+    }
+    Scene::IToolGizmo* gizmo =
+        plater_module.tool_gizmo(Scene::ToolType::SlaSupportPoints, Domain::PrinterTechnology::SLA);
+    return dynamic_cast<Plater::SlaSupportPointsGizmo*>(gizmo);
+}
+
+} // namespace
+
+bool Navigator::run_sla_auto_support(const std::vector<Domain::ObjectID>& object_ids)
+{
+    if (!has_modules() || !m_project_interactor) {
+        return false;
+    }
+    Plater::SlaSupportPointsGizmo* gizmo = sla_support_points_gizmo(*m_plater_module, *m_project_interactor);
+    if (!gizmo) {
+        return false;
+    }
+    return gizmo->auto_support(object_ids);
+}
+
+bool Navigator::sla_auto_support_running() const
+{
+    if (!has_modules() || !m_project_interactor) {
+        return false;
+    }
+    Plater::SlaSupportPointsGizmo* gizmo = sla_support_points_gizmo(*m_plater_module, *m_project_interactor);
+    return gizmo != nullptr && gizmo->auto_support_running();
 }
 
 void Navigator::on_selected_project_changed(size_t index)
