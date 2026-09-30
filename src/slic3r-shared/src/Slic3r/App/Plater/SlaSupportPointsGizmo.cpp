@@ -1324,7 +1324,10 @@ void SlaSupportPointsGizmo::update_point_visuals()
         double radius = std::max(static_cast<double>(point.head_front_radius), 0.2);
 
         // Color based on point type and state
-        ColorRGBA color = get_point_color(point, highlighted || is_selected);
+        const PointGlyphState glyph_state = highlighted   ? PointGlyphState::Hovered
+                                     : is_selected      ? PointGlyphState::Selected
+                                                        : PointGlyphState::Resting;
+        ColorRGBA color = get_point_color(point, glyph_state);
 
         Render::Material material = Render::Material{}
             .set_shader(m_device.context().shader_manager().shader("gouraud_light"))
@@ -1407,35 +1410,30 @@ void SlaSupportPointsGizmo::clear_point_visuals()
     }
 }
 
-Domain::ColorRGBA SlaSupportPointsGizmo::get_point_color(const Domain::SLA::SupportPoint& point, bool highlighted) const
+Domain::ColorRGBA SlaSupportPointsGizmo::get_point_color(const Domain::SLA::SupportPoint& point, PointGlyphState state) const
 {
     const auto& theme = AppServices::instance().theme();
 
-    ColorRGBA base_color;
+    // A hovered or selected glyph takes the state token instead of its type token, so the five
+    // states stay apart in a grayscale render (M2.9c). An island point under the pointer or in the
+    // selection therefore reads as hovered / selected, not as an island; its cone marker, the
+    // island lock and the amber counts in the dialog carry that.
+    if (state == PointGlyphState::Hovered) {
+        return theme.color(Platform::Color::SlaSupportPointHovered, Platform::ColorGroup::Default);
+    }
+    if (state == PointGlyphState::Selected) {
+        return theme.color(Platform::Color::SlaSupportPointSelected, Platform::ColorGroup::Default);
+    }
+
     switch (point.type) {
     case SupportPointType::manual_add:
-        base_color = theme.color(Platform::Color::SlaSupportPointManual, Platform::ColorGroup::Default);
-        break;
+        return theme.color(Platform::Color::SlaSupportPointManual, Platform::ColorGroup::Default);
     case SupportPointType::island:
-        base_color = theme.color(Platform::Color::SlaIslandWarning, Platform::ColorGroup::Default);
-        break;
+        return theme.color(Platform::Color::SlaIslandWarning, Platform::ColorGroup::Default);
     case SupportPointType::slope:
     default:
-        base_color = theme.color(Platform::Color::SlaSupportPointAuto, Platform::ColorGroup::Default);
-        break;
+        return theme.color(Platform::Color::SlaSupportPointAuto, Platform::ColorGroup::Default);
     }
-
-    if (highlighted) {
-        // Brighten for highlight
-        return ColorRGBA{
-            std::min(base_color.r() * 1.5f, 1.0f),
-            std::min(base_color.g() * 1.5f, 1.0f),
-            std::min(base_color.b() * 1.5f, 1.0f),
-            base_color.a()
-        };
-    }
-
-    return base_color;
 }
 
 // Clipping plane

@@ -70,10 +70,16 @@ ZipReader::~ZipReader()
 }
 
 tl::expected<std::string, std::string> read_zip_entry(mz_zip_archive                 &arch,
-                                                      const mz_zip_archive_file_stat &stat)
+                                                      const mz_zip_archive_file_stat &stat,
+                                                      std::size_t                     max_bytes)
 {
     if (stat.m_uncomp_size == 0)
         return std::string{};
+
+    if (max_bytes > 0 && stat.m_uncomp_size > max_bytes)
+        return tl::make_unexpected(
+            fmt::format("{} is declared {} bytes uncompressed, over the {} bytes that are read from an archive entry.",
+                        stat.m_filename, stat.m_uncomp_size, max_bytes));
 
     std::string buf(size_t(stat.m_uncomp_size), '\0');
     if (!mz_zip_reader_extract_to_mem(&arch, stat.m_file_index, buf.data(), buf.size(), 0))

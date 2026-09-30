@@ -8,6 +8,7 @@
 
 #include "Slic3r/Biz/Algorithms/ExPolygon.hpp"
 #include "libslic3r/SLA/RasterBase.hpp"
+#include "libslic3r/SLA/RasterMemory.hpp"
 #include "libslic3r/ClipperUtils.hpp"
 #include "libslic3r/Point.hpp"
 #include "libslic3r/Polygon.hpp"
@@ -254,6 +255,10 @@ public:
         EncodedRaster encoded_raster = raster->encode(nullptr);
         return std::move(encoded_raster.m_buffer);
     }
+
+    // No pixel buffer: the layer is an SVG text, bounded by its contour count and not by the
+    // display resolution, so there is no raw raster for the rasterize step to budget for.
+    size_t raw_raster_bytes() const override { return 0; }
 };
 } // namespace
 

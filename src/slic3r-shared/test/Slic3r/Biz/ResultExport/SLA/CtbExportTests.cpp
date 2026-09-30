@@ -26,7 +26,7 @@ using Slic3r::Biz::Slicing::SLAResultData;
 using Slic3r::Biz::PrintHost::Sla::SlaArchiveFormatRegistry;
 using Slic3r::Biz::PrintHost::Sla::register_sla_archive_formats;
 using Slic3r::Biz::Slicing::Sla::FileDataType;
-using Slic3r::Test::decode_ctb_layer;
+using Slic3r::Test::Sla::decode_ctb_layer;
 
 static std::vector<uint8_t> read_file_binary(const fs::path& path)
 {

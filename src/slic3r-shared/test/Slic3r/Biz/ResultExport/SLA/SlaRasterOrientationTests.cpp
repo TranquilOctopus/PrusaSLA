@@ -27,9 +27,8 @@ using Slic3r::Biz::PrintHost::Sla::SlaArchiveFormatRegistry;
 using Slic3r::Biz::PrintHost::Sla::register_sla_archive_formats;
 using Slic3r::Biz::Slicing::Sla::FileDataType;
 using Slic3r::Domain::Vec3d;
-using Slic3r::Test::decode_ctb_layer;
-using Slic3r::Test::decode_goo_layer;
-using Slic3r::Test::decode_pw0_layer;
+using Slic3r::Test::Sla::decode_goo_layer;
+using Slic3r::Test::Sla::decode_pw0_layer;
 
 static std::vector<uint8_t> read_file_binary(const fs::path& path)
 {
@@ -117,14 +116,8 @@ static std::vector<uint8_t> slice_and_decode(const std::string& format,
 
     const auto& layer = sla_result->files.data[sla_result->files.data.size() / 2];
     REQUIRE_FALSE(layer.empty());
-    // Each format has its own layer encoding, decoded by SlaLayerDecoders.hpp.
-    std::vector<uint8_t> image;
-    if (format == "goo")
-        image = decode_goo_layer(layer, DISPLAY_PIXELS);
-    else if (format == "ctb")
-        image = decode_ctb_layer(layer, DISPLAY_PIXELS);
-    else
-        image = decode_pw0_layer(layer, DISPLAY_PIXELS);
+    std::vector<uint8_t> image = format == "goo" ? decode_goo_layer(layer, DISPLAY_PIXELS)
+                                                 : decode_pw0_layer(layer, DISPLAY_PIXELS);
     REQUIRE(image.size() == DISPLAY_PIXELS);
     return image;
 }
@@ -158,7 +151,7 @@ static double fill_ratio(const std::vector<uint8_t>& image, size_t row)
 TEST_CASE("SLA raster orientation and mirroring", "[export][sla][orientation]")
 {
     using Orientation = Slic3r::Domain::SLADisplayOrientation;
-    const std::string format = GENERATE(std::string("goo"), std::string("ctb"), std::string("pwmx"));
+    const std::string format = GENERATE(std::string("goo"), std::string("pwmx"));
     const Orientation orientation = GENERATE(Orientation::sladoLandscape, Orientation::sladoPortrait);
     const bool landscape = orientation == Orientation::sladoLandscape;
     CAPTURE(format, landscape);

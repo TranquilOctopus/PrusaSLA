@@ -170,8 +170,18 @@ void Theme::initialize_dark_colors()
         std::make_unique<ImColor>(k_palette_slate900), // outline for active
         nullptr
     };
+    // Glyph states (M2.9c): the two palette entries that no glyph type or the scene uses in this
+    // theme, so hovered and selected stay apart from auto, manual and island in grayscale too.
+    m_colors[Platform::Color::SlaSupportPointHovered]  = ColorEntry{k_palette_teal500};
+    m_colors[Platform::Color::SlaSupportPointSelected] = ColorEntry{k_palette_slate700};
     m_colors[Platform::Color::SlaIslandWarning]   = ColorEntry{k_warning_dark};
-    m_colors[Platform::Color::SlaDrainHole]       = ColorEntry{k_palette_sage100};
+    m_colors[Platform::Color::SlaDrainHole]       = ColorEntry{
+        k_palette_sage100,
+        nullptr,
+        std::make_unique<ImColor>(k_palette_teal500),  // hovered
+        std::make_unique<ImColor>(k_palette_slate700), // active
+        nullptr
+    };
     m_colors[Platform::Color::SlaHollowInterior]  = ColorEntry{k_palette_slate700};
     m_colors[Platform::Color::SlaCupWarning]      = ColorEntry{k_warning_dark};
     // SlaLayerArea: line and fill handled at render time; token maps to line color
@@ -288,8 +298,16 @@ void Theme::initialize_light_colors()
     m_colors[Platform::Color::SlaPad]             = ColorEntry{k_palette_teal500};
     m_colors[Platform::Color::SlaSupportPointAuto] = ColorEntry{k_palette_teal500};
     m_colors[Platform::Color::SlaSupportPointManual] = ColorEntry{k_palette_slate900};
+    m_colors[Platform::Color::SlaSupportPointHovered]  = ColorEntry{k_palette_sage300};
+    m_colors[Platform::Color::SlaSupportPointSelected] = ColorEntry{k_palette_slate700};
     m_colors[Platform::Color::SlaIslandWarning]   = ColorEntry{k_warning_light};
-    m_colors[Platform::Color::SlaDrainHole]       = ColorEntry{k_palette_slate900};
+    m_colors[Platform::Color::SlaDrainHole]       = ColorEntry{
+        k_palette_slate900,
+        nullptr,
+        std::make_unique<ImColor>(k_palette_slate700), // hovered
+        std::make_unique<ImColor>(k_palette_teal500),  // active
+        nullptr
+    };
     m_colors[Platform::Color::SlaHollowInterior]  = ColorEntry{k_palette_sage300};
     m_colors[Platform::Color::SlaCupWarning]      = ColorEntry{k_warning_light};
     // SlaLayerArea: line and fill handled at render time; token maps to line color

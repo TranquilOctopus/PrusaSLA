@@ -342,6 +342,8 @@ set(SLIC3R_SOURCES
     src/libslic3r/SLA/Pad.cpp
     src/libslic3r/SLA/RasterBase.cpp
     src/libslic3r/SLA/RasterBase.hpp
+    src/libslic3r/SLA/RasterMemory.cpp
+    src/libslic3r/SLA/RasterMemory.hpp
     src/libslic3r/SLA/RasterToPolygons.cpp
     src/libslic3r/SLA/RasterToPolygons.hpp
     src/libslic3r/SLA/ReprojectPointsOnMesh.hpp

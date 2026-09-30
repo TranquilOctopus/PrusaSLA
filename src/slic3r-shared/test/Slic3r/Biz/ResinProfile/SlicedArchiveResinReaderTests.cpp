@@ -10,9 +10,13 @@
 #include <boost/filesystem/fstream.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <map>
 #include <optional>
 #include <string>
+#include <vector>
+
+#include "miniz.h"
 
 using namespace Slic3r::Biz::ResinProfile;
 
@@ -88,13 +92,103 @@ void write_text(const fs::path& path, const std::string& contents)
     out << contents;
 }
 
-fs::path write_archive(const fs::path& path, const std::map<std::string, std::string>& entries)
+fs::path write_archive(const fs::path& path,
+                       const std::map<std::string, std::string>& entries,
+                       Slic3r::Biz::PrintHost::Sla::Zipper::e_compression compression
+                           = Slic3r::Biz::PrintHost::Sla::Zipper::FAST_COMPRESSION)
 {
-    Slic3r::Biz::PrintHost::Sla::Zipper zipper{path.string()};
+    Slic3r::Biz::PrintHost::Sla::Zipper zipper{path.string(), compression};
     for (const auto& [name, data] : entries)
         zipper.add_entry(name, data.data(), data.size());
     zipper.finalize();
     return path;
+}
+
+// One entry of a zip that is written out byte by byte, so a test can make the central
+// directory of an entry claim a size the data does not have. That is the shape of a zip
+// bomb, and a writer of ours cannot be asked for one.
+struct RawEntry
+{
+    std::string   name;
+    std::string   data;
+    std::uint32_t declared_uncomp_size = 0; // 0 claims the real size of the data
+    std::uint16_t method                = 0; // 0 is stored, 8 is deflate
+};
+
+void put_u16(std::string& out, std::uint16_t value)
+{
+    out.push_back(static_cast<char>(value & 0xffu));
+    out.push_back(static_cast<char>((value >> 8) & 0xffu));
+}
+
+void put_u32(std::string& out, std::uint32_t value)
+{
+    out.push_back(static_cast<char>(value & 0xffu));
+    out.push_back(static_cast<char>((value >> 8) & 0xffu));
+    out.push_back(static_cast<char>((value >> 16) & 0xffu));
+    out.push_back(static_cast<char>((value >> 24) & 0xffu));
+}
+
+// A zip of stored (or, where the test says so, deflated) entries, built from the three
+// records of the format. Written here rather than through the Zipper so that the sizes in
+// the central directory, which is all a reader of an archive looks at, are the ones the
+// test means.
+std::string raw_zip(const std::vector<RawEntry>& entries)
+{
+    std::string body, central;
+
+    for (const RawEntry& entry : entries) {
+        const std::uint32_t comp_size = static_cast<std::uint32_t>(entry.data.size());
+        const std::uint32_t uncomp_size =
+            entry.declared_uncomp_size != 0 ? entry.declared_uncomp_size : comp_size;
+        const std::uint32_t crc = static_cast<std::uint32_t>(
+            mz_crc32(MZ_CRC32_INIT, reinterpret_cast<const unsigned char*>(entry.data.data()), entry.data.size()));
+        const std::uint32_t local_ofs = static_cast<std::uint32_t>(body.size());
+
+        body += "PK\x03\x04";
+        put_u16(body, 20); // version needed
+        put_u16(body, 0);  // flags
+        put_u16(body, entry.method);
+        put_u16(body, 0); // time
+        put_u16(body, 0); // date
+        put_u32(body, crc);
+        put_u32(body, comp_size);
+        put_u32(body, uncomp_size);
+        put_u16(body, static_cast<std::uint16_t>(entry.name.size()));
+        put_u16(body, 0); // extra
+        body += entry.name;
+        body += entry.data;
+
+        central += "PK\x01\x02";
+        put_u16(central, 20); // version made by
+        put_u16(central, 20); // version needed
+        put_u16(central, 0);  // flags
+        put_u16(central, entry.method);
+        put_u16(central, 0); // time
+        put_u16(central, 0); // date
+        put_u32(central, crc);
+        put_u32(central, comp_size);
+        put_u32(central, uncomp_size);
+        put_u16(central, static_cast<std::uint16_t>(entry.name.size()));
+        put_u16(central, 0); // extra
+        put_u16(central, 0); // comment
+        put_u16(central, 0); // disk
+        put_u16(central, 0); // internal attributes
+        put_u32(central, 0); // external attributes
+        put_u32(central, local_ofs);
+        central += entry.name;
+    }
+
+    std::string out = body + central;
+    out += "PK\x05\x06";
+    put_u16(out, 0); // this disk
+    put_u16(out, 0); // disk with the central directory
+    put_u16(out, static_cast<std::uint16_t>(entries.size()));
+    put_u16(out, static_cast<std::uint16_t>(entries.size()));
+    put_u32(out, static_cast<std::uint32_t>(central.size()));
+    put_u32(out, static_cast<std::uint32_t>(body.size()));
+    put_u16(out, 0); // comment
+    return out;
 }
 
 std::string read_head(const fs::path& path, std::size_t bytes = 4 * 1024)
@@ -270,4 +364,96 @@ TEST_CASE("ResinProfileReaderRegistry - dispatches a .sl1 to the sliced archive 
     const auto chitubox = registry.read_file(cfg);
     REQUIRE(chitubox.has_value());
     REQUIRE(chitubox->source_format == "chitubox-cfg");
+}
+
+TEST_CASE("SlicedArchiveResinReader - a job of many layers is read from its config.ini alone", "[resin_profile][sl1]")
+{
+    LocalDir dir;
+
+    // What a real job is: a small config.ini next to tens of megabytes of layer images. The
+    // padding stands in for the layers and is stored, so the archive on disk is as big as
+    // the one a real print writes, which is the case the registry used to refuse outright.
+    const std::string layers(20 * 1024 * 1024, 'x');
+    const fs::path    path = write_archive(
+        dir.path() / "big.sl1", {{"config.ini", CONFIG_INI}, {"job00000.png", layers}},
+        Slic3r::Biz::PrintHost::Sla::Zipper::NO_COMPRESSION);
+    REQUIRE(fs::file_size(path) > static_cast<std::uintmax_t>(ResinProfileReaderRegistry::MAX_FILE_SIZE));
+
+    // The registry hands a container to the reader that opens it, whatever the file weighs,
+    // and the reader never extracts the layer image.
+    ResinProfileReaderRegistry registry;
+    register_resin_profile_readers(registry);
+    const auto                 result = registry.read_file(path);
+    const std::string          failure = result.has_value() ? "" : result.error();
+    INFO(failure);
+    REQUIRE(result.has_value());
+    REQUIRE(result->source_format == "sliced-archive");
+    REQUIRE(number(result->material.exposure_time_s) == Approx(2.5));
+    REQUIRE(number(result->material.initial_exposure_time_s) == Approx(30.));
+    REQUIRE(result->material.material_name == "Grey Resin");
+}
+
+TEST_CASE("SlicedArchiveResinReader - an ini entry over the cap is refused", "[resin_profile][sl1]")
+{
+    LocalDir dir;
+
+    // One byte over the cap, and all of it in the value of the first key: the ceiling is on
+    // the size of the entry, not on how many keys it holds. The archive itself stays small
+    // on disk, since the entry is compressed, which is the point of checking the size the
+    // central directory declares.
+    std::string huge = "expTime = 2.5\n";
+    huge.append(SlicedArchiveResinReader::MAX_INI_ENTRY_SIZE + 1, 'x');
+    const fs::path path = write_archive(dir.path() / "huge-ini.sl1", {{"config.ini", huge}});
+
+    const SlicedArchiveResinReader reader;
+    const auto                     result = reader.read(path);
+    REQUIRE_FALSE(result.has_value());
+    // The error says which entry, how big it claims to be and what is read, so that the
+    // user can tell this file apart from one that is merely too big to read at all.
+    REQUIRE(result.error().find("config.ini") != std::string::npos);
+    REQUIRE(result.error().find(std::to_string(huge.size())) != std::string::npos);
+    REQUIRE(result.error().find(std::to_string(SlicedArchiveResinReader::MAX_INI_ENTRY_SIZE)) != std::string::npos);
+}
+
+TEST_CASE("SlicedArchiveResinReader - an entry that claims to be huge is refused, not allocated", "[resin_profile][sl1]")
+{
+    LocalDir dir;
+
+    // A zip bomb is an archive that promises far more than it holds. Without the cap the
+    // reader would ask for the size the entry claims, so this archive is written byte by
+    // byte: 15 bytes of ini text, 3.75 GB of promise in the central directory. Deflated,
+    // because a stored entry whose two sizes differ is not a valid record at all.
+    const std::uint32_t promised = 0xf0000000u;
+    const fs::path      path     = dir.path() / "bomb.sl1";
+    write_text(path, raw_zip({{"config.ini", "expTime = 2.5\n", promised, 8}}));
+
+    const SlicedArchiveResinReader reader;
+    const auto                     result = reader.read(path);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error().find("config.ini") != std::string::npos);
+    REQUIRE(result.error().find(std::to_string(promised)) != std::string::npos);
+    REQUIRE(result.error().find(std::to_string(SlicedArchiveResinReader::MAX_INI_ENTRY_SIZE)) != std::string::npos);
+}
+
+TEST_CASE("SlicedArchiveResinReader - an archive with more entries than are scanned is refused", "[resin_profile][sl1]")
+{
+    LocalDir dir;
+
+    // A job has one entry per layer, so a real one stays far below the cap. A zip whose
+    // central directory names hundreds of thousands of entries is not a sliced job, and it
+    // must not keep the reader walking through it.
+    const fs::path path = dir.path() / "many.sl1";
+    {
+        Slic3r::Biz::PrintHost::Sla::Zipper zipper{path.string()};
+        for (unsigned i = 0; i <= SlicedArchiveResinReader::MAX_ENTRIES_SCANNED; ++i)
+            zipper.add_entry("job" + std::to_string(i) + ".png", "x", 1);
+        zipper.add_entry("config.ini", CONFIG_INI.data(), CONFIG_INI.size());
+        zipper.finalize();
+    }
+
+    const SlicedArchiveResinReader reader;
+    const auto                     result = reader.read(path);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error().find("config.ini") == std::string::npos);
+    REQUIRE(result.error().find("entries") != std::string::npos);
 }

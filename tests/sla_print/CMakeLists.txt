@@ -18,6 +18,7 @@ add_executable(${_TEST_NAME}_tests ${_TEST_NAME}_tests_main.cpp
     sla_invalidation_tests.cpp
     sla_rotfinder_tests.cpp
     sla_layer_image_tests.cpp
+    sla_raster_memory_tests.cpp
     sla_layers_to_mesh_tests.cpp
     sla_island_coverage_tests.cpp
     sla_support_tool_tests.cpp

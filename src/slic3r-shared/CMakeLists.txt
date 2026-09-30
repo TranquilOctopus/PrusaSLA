@@ -1044,6 +1044,7 @@ set(SLIC3R_SHARED_FILES
         include/Slic3r/Biz/PrintHost/PrintHostMKS.hpp
         include/Slic3r/Biz/PrintHost/PrintHostJobInfoTag.hpp
         include/Slic3r/Biz/PrintHost/PrintHostJobData.hpp
+        include/Slic3r/Biz/PrintHost/PrintHostFormats.hpp
         src/Slic3r/Biz/PrintHost/PrintHostJobManager.cpp
         src/Slic3r/Biz/PrintHost/PrintHostFactory.cpp
         src/Slic3r/Biz/PrintHost/PrintHostLocal.cpp
@@ -1059,6 +1060,7 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/Biz/PrintHost/PrintHostRepetier.cpp
         src/Slic3r/Biz/PrintHost/PrintHostMKS.cpp
         src/Slic3r/Biz/PrintHost/PrintHostJobData.cpp
+        src/Slic3r/Biz/PrintHost/PrintHostFormats.cpp
 
         include/Slic3r/Biz/Emboss/IFontManager.hpp
         include/Slic3r/Biz/Emboss/Emboss.hpp
@@ -1111,6 +1113,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/Biz/ResinProfile/SlicedArchiveResinReader.cpp
         include/Slic3r/Biz/ResinProfile/ResinProfileMapper.hpp
         src/Slic3r/Biz/ResinProfile/ResinProfileMapper.cpp
+        include/Slic3r/Biz/ResinProfile/ChituboxCfgExport.hpp
+        src/Slic3r/Biz/ResinProfile/ChituboxCfgExport.cpp
         include/Slic3r/Biz/ResinProfile/ResinProfileImportInteractor.hpp
         src/Slic3r/Biz/ResinProfile/ResinProfileImportInteractor.cpp
         include/Slic3r/Biz/ResinProfile/ResinDatasheetForm.hpp
@@ -1709,6 +1713,7 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/Biz/ResinProfile/ChituboxCfgReaderTests.cpp
             test/Slic3r/Biz/ResinProfile/SlicedArchiveResinReaderTests.cpp
             test/Slic3r/Biz/ResinProfile/ResinProfileMapperTests.cpp
+            test/Slic3r/Biz/ResinProfile/ChituboxCfgExportTests.cpp
             test/Slic3r/Biz/ResinProfile/ResinProfileImportTestFixture.hpp
             test/Slic3r/Biz/ResinProfile/ResinProfileImportInteractorTests.cpp
             test/Slic3r/Biz/ResinProfile/ResinImportReportTests.cpp
@@ -1780,7 +1785,12 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/Biz/ResultExport/SLA/CtbExportTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/SlaLayerDecoders.hpp
             test/Slic3r/Biz/ResultExport/SLA/SlaRasterOrientationTests.cpp
+            test/Slic3r/Biz/ResultExport/SLA/SlaRasterMemoryTests.cpp
+            test/Slic3r/Biz/ResultExport/SLA/SlaArchiveOrientationTests.cpp
+            test/Slic3r/Biz/ResultExport/SLA/SlaPm5WorkshopOrientationTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/SlaUnsupportedSliceTests.cpp
+
+            test/Slic3r/Biz/PrintHost/PrintHostFormatsTests.cpp
 
             test/Slic3r/Biz/BundleCacheTests.cpp
 

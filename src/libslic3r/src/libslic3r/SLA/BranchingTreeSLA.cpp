@@ -35,6 +35,10 @@ class BranchingTreeBuilder: public branchingtree::Builder {
     const SupportableMesh  &m_sm;
     const branchingtree::PointCloud &m_cloud;
 
+    // The support point of every leaf node, empty if the tree was built
+    // without them.
+    const std::vector<size_t> &m_leaf_pts;
+
     std::vector<branchingtree::Node> m_pillars; // to put an index over them
 
     // cache succesfull ground connections
@@ -50,6 +54,36 @@ class BranchingTreeBuilder: public branchingtree::Builder {
         double w = WIDENING_SCALE * m_sm.cfg.pillar_widening_factor * j.weight;
 
         return double(j.Rmin) + w;
+    }
+
+    // The support point a leaf node was created from. Only the leaves carry
+    // the per point sizes of the support presets, every other node of the tree
+    // is shared and gets the global config.
+    const Domain::SLA::SupportPoint *leaf_point(const branchingtree::Node &node) const
+    {
+        if (m_leaf_pts.empty())
+            return nullptr;
+
+        int leaf = m_cloud.get_leaf_id(node.id);
+        if (leaf < 0 || size_t(leaf) >= m_leaf_pts.size())
+            return nullptr;
+
+        size_t idx = m_leaf_pts[size_t(leaf)];
+
+        return idx < m_sm.pts->size() ? &m_sm.pts->at(idx) : nullptr;
+    }
+
+    // The radius the pillar of a node keeps on its way to the ground. A support
+    // point with a pillar diameter of its own (the support presets) keeps it, so
+    // a long thin pillar is not widened back to the radius of the node it
+    // continues to, which is the globally configured one, and a fat one is not
+    // narrowed down to it either.
+    double pillar_radius(const branchingtree::Node &node, double to_radius) const
+    {
+        if (const auto *sp = leaf_point(node); sp != nullptr && sp->pillar_diameter > 0.f)
+            return head_back_radius(m_sm, *sp);
+
+        return to_radius;
     }
 
     std::vector<size_t>  m_unroutable_pinheads;
@@ -142,8 +176,9 @@ class BranchingTreeBuilder: public branchingtree::Builder {
 public:
     BranchingTreeBuilder(SupportTreeBuilder          &builder,
                      const SupportableMesh       &sm,
-                     const branchingtree::PointCloud &cloud)
-        : m_builder{builder}, m_sm{sm}, m_cloud{cloud}
+                     const branchingtree::PointCloud &cloud,
+                     const std::vector<size_t>   &leaf_pts)
+        : m_builder{builder}, m_sm{sm}, m_cloud{cloud}, m_leaf_pts{leaf_pts}
     {}
 
     bool add_bridge(const branchingtree::Node &from,
@@ -252,7 +287,8 @@ bool BranchingTreeBuilder::add_ground_bridge(const branchingtree::Node &from,
         Vec3d init_dir = (to.pos - from.pos).cast<double>().normalized();
 
         auto conn = deepsearch_ground_connection(beam_ex_policy , m_sm, j,
-                                                 get_radius(to), init_dir);
+                                                 pillar_radius(from, get_radius(to)),
+                                                 init_dir, leaf_point(from));
 
         // Remember that this node was tested if can go to ground, don't
         // test it with any other destination ground point because
@@ -343,7 +379,8 @@ std::optional<Vec3f> BranchingTreeBuilder::suggest_avoidance(
         ret = get_avoidance(found_it->second, max_bridge_len);
     } else {
         auto conn = deepsearch_ground_connection(
-            beam_ex_policy , m_sm, j, get_radius(dst), sla::DOWN);
+            beam_ex_policy , m_sm, j, pillar_radius(from, get_radius(dst)),
+            sla::DOWN, leaf_point(from));
 
         {
             std::lock_guard lk{m_gnd_connections_mtx};
@@ -375,6 +412,8 @@ void create_branching_tree(SupportTreeBuilder &builder, const SupportableMesh &s
     auto nondup_idx = non_duplicate_suppt_indices(tree, *sm.pts, 0.1);
     std::vector<std::optional<Head>> heads(nondup_idx.size());
     auto leafs = reserve_vector<branchingtree::Node>(nondup_idx.size());
+    std::vector<size_t> leaf_pts;
+    leaf_pts.reserve(nondup_idx.size());
 
     execution::for_each(
         execution::ex_tbb, size_t(0), nondup_idx.size(),
@@ -388,10 +427,13 @@ void create_branching_tree(SupportTreeBuilder &builder, const SupportableMesh &s
     if (builder.ctl().stopcondition())
         return;
 
-    for (auto &h : heads)
-        if (h && h->is_valid()) {
+    for (size_t i = 0; i < heads.size(); ++i)
+        if (auto &h = heads[i]; h && h->is_valid()) {
             leafs.emplace_back(h->junction_point().cast<float>(), h->r_back_mm);
             h->id = long(leafs.size() - 1);
+            // Remember which support point a leaf belongs to, so the ground
+            // connection can read the per point sizes of the support presets.
+            leaf_pts.emplace_back(nondup_idx[i]);
             builder.add_head(h->id, *h);
         }
 
@@ -419,7 +461,7 @@ void create_branching_tree(SupportTreeBuilder &builder, const SupportableMesh &s
     branchingtree::PointCloud nodes{std::move(meshpts), std::move(bedpts),
                                     std::move(leafs), props};
 
-    BranchingTreeBuilder vbuilder{builder, sm, nodes};
+    BranchingTreeBuilder vbuilder{builder, sm, nodes, leaf_pts};
 
     execution::for_each(execution::ex_tbb,
                         size_t(0),

@@ -61,6 +61,7 @@
 #include "libslic3r/SLA/Hollowing.hpp"
 #include "libslic3r/SLA/JobController.hpp"
 #include "libslic3r/SLA/RasterBase.hpp"
+#include "libslic3r/SLA/RasterMemory.hpp"
 #include "libslic3r/SLA/SupportTreeStrategies.hpp"
 #include "libslic3r/SLA/SupportIslands/SampleConfigFactory.hpp"
 #include "libslic3r/SLAPrint.hpp"
@@ -1748,17 +1749,33 @@ void SLAPrint::Steps::rasterize()
     }
 
     FilesData files(layers.size());
-    execution::for_each(execution::ex_tbb, size_t(0), layers.size(),
-    [&layers, &files, &cancel_fn, &status_fn, &rasterizer = *rasterizer_ptr](size_t idx) {
+    // Window the layers instead of rasterizing all of them at once. Every layer in flight holds
+    // one full-resolution raw raster, which is display sized: 59 MB on a 11520 x 5120 screen.
+    // create_file() encodes the layer and drops the raster before it returns, so nothing but the
+    // parallelism multiplied the buffers, and the previous single unbounded parallel_for
+    // (granularity 1, no concurrency cap) made that multiplier the core count. The batch makes
+    // the peak a function of the budget in RasterMemory.hpp instead. See
+    // doc/sla-fork/profiling/raster-memory.md.
+    const size_t batch = raw_raster_batch_size(rasterizer_ptr->raw_raster_bytes(),
+                                               layers.size(),
+                                               execution::max_concurrency(execution::ex_tbb));
+    for (size_t first = 0; first < layers.size(); first += batch) {
         if (cancel_fn())
-            return;
+            break;
 
-        const ExPolygons& slice_polygons = layers[idx].transformed_slices();
-        files[idx] = rasterizer.create_file(slice_polygons);
+        const size_t last = std::min(first + batch, layers.size());
+        execution::for_each(execution::ex_tbb, first, last,
+        [&layers, &files, &cancel_fn, &status_fn, &rasterizer = *rasterizer_ptr](size_t idx) {
+            if (cancel_fn())
+                return;
 
-        // Status indication guarded with the spinlock
-        status_fn();
-    });
+            const ExPolygons& slice_polygons = layers[idx].transformed_slices();
+            files[idx] = rasterizer.create_file(slice_polygons);
+
+            // Status indication guarded with the spinlock
+            status_fn();
+        });
+    }
 
     // Send encoded files to frontend for export files for printer    
     m_print->m_on_sla_result(SLAResult{
