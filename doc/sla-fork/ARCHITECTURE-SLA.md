@@ -382,7 +382,7 @@ Object steps, in order:
 | Enum | Method | What it does |
 |---|---|---|
 | `slaposAssembly` | `mesh_assembly` | CSG-union the parts, make the preview mesh |
-| `slaposHollowing` | `hollow_model` | `sla::generate_interior` and add the interior as a CSG difference |
+| `slaposHollowing` | `hollow_model` | `sla::generate_interior`, `sla::subtract_lattice_from_cavity`, add the interior as a CSG difference |
 | `slaposDrillHoles` | `drill_holes` | drill the drain holes into the CSG, then free the hollowing data |
 | `slaposObjectSlice` | `slice_model` | build the layer grid, `slice_csgmesh_ex`, apply printer corrections, prepare blocker/enforcer volumes |
 | `slaposSupportPoints` | `support_points` | island sampling, permanent points, modifier filtering |
@@ -437,6 +437,12 @@ replaced or only its `export_data->files` extended.
 - Drain holes: `src/slic3r-domain/include/Slic3r/Domain/SLA/DrainHole.hpp` (`DrainHole` with `pos`,
   `normal`, `radius`, `height`, `failed`), stored in `ModelObject::sla_drain_holes`, transformed by
   `SLAPrintObject::transformed_drainhole_points()`
+- Infill lattice in a hollow print: `src/libslic3r/src/libslic3r/SLA/HollowingLattice.{hpp,cpp}` —
+  `HollowingInfillConfig` (read by `make_hollowing_infill_cfg` from `hollowing_infill` and its two
+  knobs), `hollowing_lattice_axes`, `make_hollowing_lattice` (one mesh per strut direction),
+  `subtract_lattice_from_cavity`. The struts are cut *out of the interior* in `hollow_model`, so the
+  single CSG difference of the hollowing step is the cavity without them and the struts come out as
+  solid; the drain holes are cut at the later `slaposDrillHoles` step and open the struts as well
 - UI: `App/Plater/SlaHollowGizmo.{hpp,cpp}` (also holds `Biz::SlaHollowRequest`, the
   `SliceUntilStep` state machine), `App/Plater/SlaHollowDialog.{hpp,cpp}`,
   `App/Plater/SlaDrainHolesEditing.{hpp,cpp}`

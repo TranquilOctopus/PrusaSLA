@@ -62,6 +62,9 @@ std::vector<std::string> get_all_sla_config_keys() {
     keys.push_back("high_viscosity_tilt_time");
     keys.push_back("hollowing_closing_distance");
     keys.push_back("hollowing_enable");
+    keys.push_back("hollowing_infill");
+    keys.push_back("hollowing_infill_spacing");
+    keys.push_back("hollowing_infill_strut");
     keys.push_back("hollowing_min_thickness");
     keys.push_back("hollowing_quality");
     keys.push_back("initial_exposure_time");
@@ -340,6 +343,9 @@ TEST_CASE("SLAInvalidation: table-driven expected steps for representative keys"
         {"faded_layers", steps({propagate(slaposObjectSlice)})},
         {"gamma_correction", all_steps()},
         {"hollowing_enable", steps({propagate(slaposHollowing)})},
+        {"hollowing_infill", steps({propagate(slaposHollowing)})},
+        {"hollowing_infill_spacing", steps({propagate(slaposHollowing)})},
+        {"hollowing_infill_strut", steps({propagate(slaposHollowing)})},
         {"initial_layer_height", all_steps()},
         {"layer_height", steps({propagate(slaposObjectSlice)})},
         {"material_colour", steps({})},

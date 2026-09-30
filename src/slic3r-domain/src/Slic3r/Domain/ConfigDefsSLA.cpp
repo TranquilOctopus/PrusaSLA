@@ -1068,6 +1068,54 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->max = 10;
     def->init_fn = init_with(2.);
 
+    def = defs.add("hollowing_infill", typeid(EnumWrapper));
+    def->location = Print;
+    def->overrides_in = Locations{ Object };
+    def->label = L("Infill");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Hollowing_Hollowing;
+    def->category = ConfigItemDef::Category::Print_Hollowing;
+    def->gui_type = ConfigItemDef::GUIType::combobox;
+    def->tooltip = L("Leave a lattice of struts standing inside the cavity of a hollow print. A "
+                     "hollow print with a thin wall can deform, and the struts stiffen it without "
+                     "giving up the resin the hollowing saves. None is the plain cavity.");
+    def->init_fn = init_with(
+        sla::HollowingInfillType::None,
+        {{int(sla::HollowingInfillType::None), "none", L("None")},
+         {int(sla::HollowingInfillType::Grid), "grid", L("Grid")},
+         {int(sla::HollowingInfillType::Cubic), "cubic", L("Cubic")}}
+    );
+
+    def = defs.add("hollowing_infill_spacing", typeid(double));
+    def->location = Print;
+    def->overrides_in = Locations{ Object };
+    def->label = L("Infill spacing");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Hollowing_Hollowing;
+    def->category = ConfigItemDef::Category::Print_Hollowing;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Distance between the axes of two neighbouring struts of the infill lattice. "
+                     "A larger spacing is a lighter print, a smaller one is a stiffer print that "
+                     "uses more resin.");
+    def->units = {L("mm")};
+    def->min = 0.5;
+    def->max = 30;
+    def->init_fn = init_with(3.);
+
+    def = defs.add("hollowing_infill_strut", typeid(double));
+    def->location = Print;
+    def->overrides_in = Locations{ Object };
+    def->label = L("Infill strut");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Hollowing_Hollowing;
+    def->category = ConfigItemDef::Category::Print_Hollowing;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Side of a square strut of the infill lattice. It is the thinnest wall the "
+                     "print gets inside the cavity, so it should not be thinner than a wall the "
+                     "printer can print. It is never made wider than the infill spacing, so two "
+                     "neighbouring struts always keep a gap between them.");
+    def->units = {L("mm")};
+    def->min = 0.1;
+    def->max = 10;
+    def->init_fn = init_with(0.5);
+
     def = defs.add("material_print_speed", typeid(EnumWrapper));
     def->location = Material;
     def->label = L("Print speed");

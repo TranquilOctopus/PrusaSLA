@@ -140,6 +140,31 @@ std::optional<Domain::SLA::RaftPadValues> raft_values(const SLAPrintObjectConfig
 
 } // namespace
 
+// The lattice left standing inside the cavity of a hollow print, as the hollowing infill keys ask
+// for it. A print saved before the keys existed has no lattice, which is the plain cavity.
+sla::HollowingInfillConfig make_hollowing_infill_cfg(const SLAPrintObjectConfigView &c)
+{
+    sla::HollowingInfillConfig cfg;
+
+    if (c.values().count("hollowing_infill") == 0)
+        return cfg;
+
+    switch (c.get<Domain::sla::HollowingInfillType>("hollowing_infill")) {
+    case Domain::sla::HollowingInfillType::None:
+    case Domain::sla::HollowingInfillType::Grid:
+    case Domain::sla::HollowingInfillType::Cubic:
+        break;
+    default:
+        return cfg;
+    }
+
+    cfg.type        = c.get<Domain::sla::HollowingInfillType>("hollowing_infill");
+    cfg.spacing_mm = c.get<double>("hollowing_infill_spacing");
+    cfg.strut_mm   = c.get<double>("hollowing_infill_strut");
+
+    return cfg;
+}
+
 // Is a raft (pad) printed? raft_type decides, pad_enable is the legacy fallback.
 bool is_pad_enabled(const SLAPrintObjectConfigView &c)
 {
@@ -702,6 +727,9 @@ const std::map<std::string, std::vector<Step>> invalidated_by{
     {"high_viscosity_tilt_time", steps({})},
     {"hollowing_closing_distance", steps({propagate(slaposHollowing)})},
     {"hollowing_enable", steps({propagate(slaposHollowing)})},
+    {"hollowing_infill", steps({propagate(slaposHollowing)})},
+    {"hollowing_infill_spacing", steps({propagate(slaposHollowing)})},
+    {"hollowing_infill_strut", steps({propagate(slaposHollowing)})},
     {"hollowing_min_thickness", steps({propagate(slaposHollowing)})},
     {"hollowing_quality", steps({propagate(slaposHollowing)})},
     {"initial_exposure_time", steps({propagate(slapsMergeSlicesAndEval)})},
