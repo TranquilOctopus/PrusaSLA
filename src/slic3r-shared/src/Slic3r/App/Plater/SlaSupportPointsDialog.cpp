@@ -341,6 +341,29 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
 
     m_point_count_text = content()->emplace_back<Text>(_u8L("No support points generated yet."));
     m_point_count_text->set_flex_shrink(0);
+
+    // Every slider that writes a value on the points or on the object reports the start and the end
+    // of the edit, so a drag of one of them is a single undo step (M2.6b). The clipping plane is not
+    // among them: it only moves where the scene is cut and never changes the model.
+    report_value_editing({m_density_slider,
+                          m_head_diameter_slider,
+                          m_pillar_diameter_slider,
+                          m_base_diameter_slider,
+                          m_base_height_slider,
+                          m_tip_length_slider,
+                          m_knot_diameter_slider,
+                          m_stem_sides_slider,
+                          m_stem_taper_slider});
+}
+
+void SlaSupportPointsDialog::report_value_editing(std::initializer_list<SliderWithInput*> sliders)
+{
+    for (SliderWithInput* slider : sliders) {
+        slider->callbacks().value_editing_started = [this]()
+        { m_callbacks.value_editing_started(); };
+        slider->callbacks().value_editing_ended = [this]()
+        { m_callbacks.value_editing_ended(); };
+    }
 }
 
 void SlaSupportPointsDialog::set_density(int density)
