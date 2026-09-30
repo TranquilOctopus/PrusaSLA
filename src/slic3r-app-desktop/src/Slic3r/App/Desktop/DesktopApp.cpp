@@ -936,14 +936,6 @@ void DesktopApp::quit_after_fixture_render(bool ok)
     SPDLOG_INFO("The fixture render is done, quitting.");
     // A render that failed has to say so in the exit code, or a script cannot tell it from a crash.
     std::exit(ok ? EXIT_SUCCESS : EXIT_FAILURE);
-    // wxApp::Exit() takes no code, so the code is remembered here and handed back from OnExit.
-    m_fixture_render_exit_code = ok ? 0 : 1;
-    wxApp::GetInstance()->Exit();
-}
-
-int DesktopApp::OnExit()
-{
-    return m_fixture_render_exit_code;
 }
 
 } // namespace Slic3r::App::Desktop
