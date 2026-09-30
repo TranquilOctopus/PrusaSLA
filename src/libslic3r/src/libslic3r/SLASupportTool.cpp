@@ -10,6 +10,7 @@
 #include "libslic3r/TriangleMeshSlicer.hpp"
 #include "admesh/stl.h"
 
+#include <cmath>
 #include <Slic3r/Biz/Algorithms/ModelObject.hpp>
 #include <Slic3r/Biz/Algorithms/TriangleMesh.hpp>
 #include <Slic3r/Biz/Algorithms/BoundingBox.hpp>
@@ -49,6 +50,14 @@ std::vector<float> compute_slice_heights(const Domain::TriangleMesh& mesh,
     auto bb = mesh.bounding_box();
     double zmin = bb.min.z();
     double zmax = bb.max.z();
+
+    // A box that is not a range of coordinates (a vertex is a NaN or an infinity) or a layer height
+    // that is not a step leaves nothing to slice. The loop below never ends on an infinite box and
+    // never advances on an infinite step, so this is where the tool gives up on such a mesh.
+    if (!std::isfinite(zmin) || !std::isfinite(zmax))
+        return {};
+    if (!(layer_height > 0.))
+        return {};
 
     std::vector<float> heights;
     for (double z = zmin + layer_height * 0.5; z < zmax; z += layer_height) {
