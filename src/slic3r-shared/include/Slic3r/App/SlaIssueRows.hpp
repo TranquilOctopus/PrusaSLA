@@ -14,6 +14,7 @@ struct SlaIssueRow
     Biz::Slicing::Sla::SlaIssue::Kind kind = Biz::Slicing::Sla::SlaIssue::Kind::Other;
     size_t layer{0}; //< 0 based layer index, the way the slicer reports it
     std::optional<double> area_mm2;
+    std::string object_name; //< the model the issue was found on, empty when unknown
 };
 
 /// The issues of a sliced build plate, ready to be listed: sorted, capped, and counted.
@@ -54,7 +55,8 @@ SlaIssueRows build_sla_issue_rows(
     size_t max_rows = sla_issue_rows_default_max
 );
 
-/// The text of one row, localized, with the layer number the way the user counts layers.
+/// The text of one row, localized, with the layer number the way the user counts layers. The
+/// model an issue was found on is named in front of the layer, when the slicer could tell.
 std::string sla_issue_row_text(const SlaIssueRow& row);
 
 /**

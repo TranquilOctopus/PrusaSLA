@@ -108,7 +108,9 @@ SlaIssueRows build_sla_issue_rows(const std::vector<SlaIssue>& issues, size_t ma
         } else {
             out.cup_count++;
         }
-        out.rows.push_back(SlaIssueRow{issue.kind, issue.layer, sla_issue_area_mm2(issue.note)});
+        out.rows.push_back(
+            SlaIssueRow{issue.kind, issue.layer, sla_issue_area_mm2(issue.note), issue.object_name}
+        );
     }
     out.total_count = out.rows.size();
 
@@ -143,10 +145,23 @@ SlaIssueRows build_sla_issue_rows(const std::vector<SlaIssue>& issues, size_t ma
 
 std::string sla_issue_row_text(const SlaIssueRow& row)
 {
-    // TRN: One row of the issues list in the SLA sidebar. {0} is the kind of the issue and {1} the
-    // number of the layer it was found on, counted from one as the user counts layers.
-    std::string text =
-        fmt::format(fmt::runtime(Biz::_u8L("{0}, layer {1}")), kind_name(row.kind), row.layer + 1);
+    std::string text;
+    if (row.object_name.empty()) {
+        // TRN: One row of the issues list in the SLA sidebar. {0} is the kind of the issue and {1}
+        // the number of the layer it was found on, counted from one as the user counts layers.
+        text = fmt::
+            format(fmt::runtime(Biz::_u8L("{0}, layer {1}")), kind_name(row.kind), row.layer + 1);
+    } else {
+        // TRN: One row of the issues list in the SLA sidebar, for an issue the slicer could put on
+        // a model. {0} is the kind of the issue, {1} the name of the model it was found on and
+        // {2} the number of the layer, counted from one as the user counts layers.
+        text = fmt::format(
+            fmt::runtime(Biz::_u8L("{0} on {1}, layer {2}")),
+            kind_name(row.kind),
+            row.object_name,
+            row.layer + 1
+        );
+    }
     if (row.area_mm2) {
         // The unit is spelled outside the translatable part, for the same reason the ellipsis is,
         // see ellipsis above.

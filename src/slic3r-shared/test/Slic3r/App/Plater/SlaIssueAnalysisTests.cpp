@@ -123,4 +123,60 @@ TEST_CASE("SlaIssueAnalysis - analyze_sla_issues_for_notification", "[SlaIssueAn
         REQUIRE(result.message.find("2 islands found") != std::string::npos);
         REQUIRE(result.message.find("1 island found") == std::string::npos);
     }
+
+    SECTION("Islands on one model are counted once")
+    {
+        const Slic3r::Domain::ObjectID vase(1);
+        std::vector<SlaIssue> issues = {make_island(10, vase), make_island(20, vase)};
+        SlaIssueAnalysis result      = analyze_sla_issues_for_notification(issues);
+
+        REQUIRE(result.island_count == 2);
+        REQUIRE(result.affected_objects == 1);
+        REQUIRE(
+            result.message
+            == "2 islands found on 1 model, first on layer 10. They can fall off during printing."
+        );
+    }
+
+    SECTION("Islands on several models are counted apart")
+    {
+        std::vector<SlaIssue> issues = {
+            make_island(10, Slic3r::Domain::ObjectID(1)),
+            make_island(12, Slic3r::Domain::ObjectID(2)),
+            make_island(20, Slic3r::Domain::ObjectID(1)),
+        };
+        SlaIssueAnalysis result = analyze_sla_issues_for_notification(issues);
+
+        REQUIRE(result.island_count == 3);
+        REQUIRE(result.affected_objects == 2);
+        REQUIRE(
+            result.message
+            == "3 islands found on 2 models, first on layer 10. They can fall off during printing."
+        );
+    }
+
+    SECTION("A single island on a single model uses singular 'island' and 'model'")
+    {
+        std::vector<SlaIssue> issues = {make_island(100, Slic3r::Domain::ObjectID(1))};
+        SlaIssueAnalysis result      = analyze_sla_issues_for_notification(issues);
+
+        REQUIRE(
+            result.message
+            == "1 island found on 1 model, first on layer 100. They can fall off during printing."
+        );
+    }
+
+    SECTION("An island that could not be put on a model does not count as one")
+    {
+        std::vector<SlaIssue> issues =
+            {make_island(10, Slic3r::Domain::ObjectID(1)), make_island(20)};
+        SlaIssueAnalysis result = analyze_sla_issues_for_notification(issues);
+
+        REQUIRE(result.island_count == 2);
+        REQUIRE(result.affected_objects == 1);
+        REQUIRE(
+            result.message
+            == "2 islands found on 1 model, first on layer 10. They can fall off during printing."
+        );
+    }
 }
