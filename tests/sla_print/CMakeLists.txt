@@ -12,6 +12,7 @@ add_executable(${_TEST_NAME}_tests ${_TEST_NAME}_tests_main.cpp
     sla_zcorrection_tests.cpp
     sla_island_detection_tests.cpp
     sla_cavity_detection_tests.cpp
+    sla_object_resin_use_tests.cpp
     sla_layer_stats_tests.cpp
     sla_raft_preset_tests.cpp
     sla_raft_type_tests.cpp
