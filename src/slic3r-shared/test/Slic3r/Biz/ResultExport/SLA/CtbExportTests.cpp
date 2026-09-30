@@ -538,6 +538,98 @@ TEST_CASE("CTB header round trip", "[export][sla][ctb]")
     REQUIRE(lit < middle.size() / 2);
 }
 
+// The raft interface is the band of layers at the top of the raft that this container gives an
+// exposure of its own. The raft is 2 mm of wall at a layer height of 0.05 mm, so it covers 40
+// layers and an interface of 0.5 mm is the top 10 of them. The default interface thickness is 0,
+// which leaves every layer the exposure it had before, so this writes a different file.
+TEST_CASE("CTB export exposes the raft interface layers with the interface exposure",
+          "[export][sla][ctb][raft]")
+{
+    Slic3r::Test::SlaSlicingFixture fixture;
+
+    auto model = Slic3r::Test::generate_cubes(1, 5);
+    auto config = Slic3r::Domain::ConfigPackSLA{};
+
+    config.sla_printer_settings.items.opt("sla_archive_format").set(std::string("ctb"));
+    config.sla_printer_settings.items.opt("display_pixels_x").set(800);
+    config.sla_printer_settings.items.opt("display_pixels_y").set(450);
+    config.sla_printer_settings.items.opt("display_orientation").set(Slic3r::Domain::SLADisplayOrientation::sladoLandscape);
+    config.sla_printer_settings.items.opt("display_width").set(68.04);
+    config.sla_printer_settings.items.opt("display_height").set(38.04);
+    config.sla_printer_settings.items.opt("gamma_correction").set(1.0);
+    config.sla_print_settings.items.opt("layer_height").set(0.05);
+    config.sla_material_settings.items.opt("initial_layer_height").set(0.05);
+    config.sla_material_settings.items.opt("exposure_time").set(6.0);
+    config.sla_material_settings.items.opt("initial_exposure_time").set(35.0);
+    config.sla_print_settings.items.opt("faded_layers").set(10);
+    config.sla_print_settings.items.opt("supports_enable").set(true);
+    // The layer separation, so the print time below is a number the test can spell out.
+    config.sla_material_settings.items.opt("lift_height").set(7.5);
+    config.sla_material_settings.items.opt("lift_speed").set(1.25);
+    config.sla_material_settings.items.opt("retract_speed").set(2.5);
+    config.sla_material_settings.items.opt("wait_before_lift").set(3.0);
+    config.sla_material_settings.items.opt("wait_after_lift").set(0.4);
+    config.sla_material_settings.items.opt("wait_after_retract").set(0.6);
+    config.sla_material_settings.items.opt("bottom_lift_height").set(9.0);
+    config.sla_material_settings.items.opt("bottom_lift_speed").set(1.75);
+    config.sla_material_settings.items.opt("bottom_retract_speed").set(2.75);
+    config.sla_material_settings.items.opt("bottom_wait_before_lift").set(4.0);
+    config.sla_material_settings.items.opt("bottom_wait_after_lift").set(0.7);
+    config.sla_material_settings.items.opt("bottom_wait_after_retract").set(0.8);
+    // The raft: 2 mm of wall and a flat top, and 0.5 mm of it exposed at 12 s instead of the 6 s
+    // every other layer gets.
+    config.sla_print_settings.items.opt("pad_wall_thickness").set(2.0);
+    config.sla_print_settings.items.opt("pad_wall_height").set(0.0);
+    config.sla_print_settings.items.opt("raft_interface_thickness").set(0.5);
+    config.sla_print_settings.items.opt("raft_interface_exposure").set(12.0);
+
+    auto sla_result = fixture.slice_sla_model(model, config);
+    REQUIRE(sla_result != nullptr);
+
+    Tests::TestTempDir temp_dir;
+    fs::path out_path = temp_dir.path() / "out.ctb";
+
+    register_sla_archive_formats();
+    auto& registry = SlaArchiveFormatRegistry::instance();
+    auto format = registry.find_by_file_data_type(FileDataType::ctb);
+    REQUIRE(format != nullptr);
+    REQUIRE_NOTHROW(format->store(out_path.string(), *sla_result));
+
+    const auto data = read_file_binary(out_path);
+    const std::size_t layer_count = sla_result->files.data.size();
+    CtbFile ctb;
+    REQUIRE_NOTHROW(ctb = parse_ctb(data, layer_count));
+
+    // The burn-in is the fade plus the first layer the engine exposes at the bottom exposure, and
+    // the interface sits well above it, so the 10 layers of the band add to the transition count
+    // without touching the bottom layer count.
+    REQUIRE(ctb.bottom_layers == 11u);
+    REQUIRE(ctb.transition_layers == 20u);
+    REQUIRE(layer_count > 40);
+
+    for (std::size_t i = 0; i < layer_count; ++i) {
+        INFO("layer " << i);
+        // A layer that is both a bottom layer and an interface layer keeps the bottom exposure, so
+        // the band never reaches below the burn-in.
+        std::uint32_t expected_exposure_ms = 6000u;
+        if (i < 11u)
+            expected_exposure_ms = 35000u;
+        else if (i >= 30u && i < 40u)
+            expected_exposure_ms = 12000u;
+        REQUIRE(ctb.layers[i].exposure_ms == expected_exposure_ms);
+    }
+
+    // The print time counts the interface layers at the interface exposure: 11 bottom layers, then
+    // 19 plain ones, the 10 of the band, and the rest of the print.
+    const std::uint32_t bottom_layer_ms    = 35000u + 4000u + 700u + 800u;
+    const std::uint32_t normal_layer_ms    = 6000u + 3000u + 400u + 600u;
+    const std::uint32_t interface_layer_ms = 12000u + 3000u + 400u + 600u;
+    const std::uint64_t expected_print_time_ms = 11u * std::uint64_t(bottom_layer_ms)
+        + 19u * std::uint64_t(normal_layer_ms) + 10u * std::uint64_t(interface_layer_ms)
+        + (std::uint64_t(layer_count) - 40u) * std::uint64_t(normal_layer_ms);
+    REQUIRE(ctb.print_time_s == std::uint32_t((expected_print_time_ms + 500) / 1000));
+}
+
 TEST_CASE("CTB layer RLE decodes a known pattern", "[export][sla][ctb]")
 {
     // The two run types of the encoding, built by hand from Format/CtbSLA.cpp:

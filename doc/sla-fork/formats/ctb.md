@@ -92,11 +92,11 @@ bottom layer count from `sla_bottom_layer_count()` and the transition layers fro
 | 16 | f32 | `bottom_lift_speed` | bottom lift speed, mm/s | unverified |
 | 17 | f32 | the bottom lift distance | bottom retract distance, mm | unverified |
 | 18 | f32 | `bottom_retract_speed` | bottom retract speed, mm/s | unverified |
-| 19 | u32 | `sla_effective_faded_layers()` | transition layer count | unverified |
+| 19 | u32 | `sla_effective_faded_layers()` + the layer count of `sla_raft_interface()`, clamped to the layer count | transition layer count: the layers the printer is told to fade the exposure over, which the raft interface is part of | unverified |
 | 20 | u32 | `bottom_light_pwm`, 0-255 | bottom light PWM | unverified |
 | 21 | u32 | `light_pwm`, 0-255 | light PWM | unverified |
 | 22 | u32 | 0 | advance mode | unverified |
-| 23 | u32 | the sum over the layers of the exposure and the three waits, rounded | print time, s. The lift and retract moves are not added | unverified |
+| 23 | u32 | the sum over the layers of the exposure and the three waits, rounded | print time, s. The lift and retract moves are not added, and the interface layers are spent on the interface exposure | unverified |
 | 24 | f32 | total material volume, ml | the object and support material of the print statistics | unverified |
 | 25 | f32 | total weight, g | volume x the density `bottle_weight` / `bottle_volume` | unverified |
 | 26 | f32 | total price | volume x `bottle_cost` / `bottle_volume` | unverified |
@@ -114,7 +114,7 @@ One 12-word definition per layer, all of them before any layer image, in print o
 | Word | Type | Value written | Field | Mark |
 |---|---|---|---|---|
 | 0 | u32 | the layer height in um: the first layer at `initial_layer_height` when the resin sets one, the rest at the layer height | height of this layer | unverified |
-| 1 | u32 | exposure in ms, the bottom exposure on the bottom layers | exposure of this layer | unverified |
+| 1 | u32 | exposure in ms, the bottom exposure on the bottom layers, the interface exposure on the raft interface layers of `sla_raft_interface()` | exposure of this layer. A layer that is both keeps the bottom exposure, which is why the band never reaches below them | unverified |
 | 2 | u32 | wait before the lift in ms | | unverified |
 | 3 | u32 | wait after the lift in ms | | unverified |
 | 4 | u32 | wait after the retract in ms | | unverified |

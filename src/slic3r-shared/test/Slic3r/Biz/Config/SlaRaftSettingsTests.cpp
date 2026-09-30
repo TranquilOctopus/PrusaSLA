@@ -176,7 +176,7 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         // The formats with one exposure for the whole print cannot apply it, and the setting says so.
         CHECK(def->tooltip.find("no per-layer exposure") != std::string::npos);
         // A layer that is a bottom layer is exposed at the bottom exposure, not the interface one.
-        CHECK(def->tooltip.find("bottom layers is exposed at the bottom exposure") != std::string::npos);
+        CHECK(def->tooltip.find("bottom layer is exposed at the bottom exposure") != std::string::npos);
 
         const ConfigItemDef* exposure = find_def("raft_interface_exposure");
         REQUIRE(exposure != nullptr);

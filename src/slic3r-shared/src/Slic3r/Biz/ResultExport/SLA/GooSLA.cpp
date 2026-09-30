@@ -328,7 +328,7 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     // The raft interface is the band of layers at the top of the raft with an exposure of their
     // own. The format has an exposure per layer, so it can carry one, and no interface leaves
     // every layer the exposure it had before.
-    const Domain::RaftInterface raft_interface = Domain::sla_raft_interface(cfg, layer_count);
+    const Domain::RaftInterface raft_interface = Domain::sla_raft_interface(cfg, int(layer_count));
 
     // Distances are mm and speeds mm/s, the units the settings are defined in.
     header.bottom_lift_distance = get_cfg_value_f_pos(cfg, "bottom_lift_height", 6.0f);

@@ -207,6 +207,12 @@ void store_ctb(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     std::uint32_t bottom_layers = std::uint32_t(std::max(0, Domain::sla_bottom_layer_count(cfg)));
     bottom_layers = std::min(bottom_layers, layer_count);
 
+    // The raft interface is the band of layers at the top of the raft that carries an exposure of
+    // its own. Every layer definition of this container holds an exposure of its own, so it can
+    // carry one, and no interface leaves every layer the exposure it had before.
+    const Domain::RaftInterface raft_interface = Domain::sla_raft_interface(cfg, int(layer_count));
+    const std::uint32_t interface_layers = std::uint32_t(raft_interface.count());
+
     // The waits are seconds, which is the unit of the wait_* settings, and the light-off time is
     // the only delay this container keeps on its own.
     const float light_off_time = 0.5f;
@@ -240,8 +246,9 @@ void store_ctb(const std::string& file_path, const Biz::Slicing::SLAResultData& 
             print_time_ms += scaled(bottom_exposure) + scaled(bottom_before_lift_time)
                 + scaled(bottom_after_lift_time) + scaled(bottom_after_retract_time);
         } else {
-            print_time_ms += scaled(normal_exposure) + scaled(before_lift_time) + scaled(after_lift_time)
-                + scaled(after_retract_time);
+            // The interface layers are spent on the interface exposure instead of the normal one.
+            print_time_ms += scaled(float(raft_interface.layer_exposure_s(i, normal_exposure)))
+                + scaled(before_lift_time) + scaled(after_lift_time) + scaled(after_retract_time);
         }
     }
     const std::uint32_t print_time_s = std::uint32_t((print_time_ms + 500) / 1000);
@@ -293,6 +300,13 @@ void store_ctb(const std::string& file_path, const Biz::Slicing::SLAResultData& 
         write_f32(out, normal_exposure);
         write_f32(out, bottom_exposure);
         write_u32(out, bottom_layers);
+        // The transition (burn-in) count is the one header field that has to know about the
+        // interface, because the printer is told to fade the exposure from the first layer to the
+        // normal one: the interface is another block of layers it has to fade over. Its exact
+        // meaning is still unverified (see ctb.md), so this is the reading that fits both, and the
+        // band is counted the way Domain::sla_raft_interface() counts it, so the two cannot
+        // disagree. Without an interface the field is the transition layer count as before.
+        write_u32(out, std::min(layer_count, transition_layers + interface_layers));
         write_f32(out, light_off_time);
         write_f32(out, before_lift_time);
         write_f32(out, after_lift_time);
@@ -308,7 +322,6 @@ void store_ctb(const std::string& file_path, const Biz::Slicing::SLAResultData& 
         write_f32(out, bottom_lift_speed);
         write_f32(out, bottom_retract_distance);
         write_f32(out, bottom_retract_speed);
-        write_u32(out, transition_layers);
         write_u32(out, bottom_light_pwm);
         write_u32(out, light_pwm);
         write_u32(out, 0); // advance mode
@@ -330,8 +343,14 @@ void store_ctb(const std::string& file_path, const Biz::Slicing::SLAResultData& 
             // starts from that and adds the layer height for every layer after it.
             const float total_height_um = first_layer_height + float(i) * layer_height;
 
+            // The interface layers are exposed like the rest of the print unless the interface
+            // brings an exposure of its own, and are separated like them.
+            const float layer_exposure = bottom
+                ? bottom_exposure
+                : float(raft_interface.layer_exposure_s(i, normal_exposure));
+
             write_u32(out, scaled(height_um));
-            write_u32(out, scaled(bottom ? bottom_exposure : normal_exposure));
+            write_u32(out, scaled(layer_exposure));
             write_u32(out, scaled(bottom ? bottom_before_lift_time : before_lift_time));
             write_u32(out, scaled(bottom ? bottom_after_lift_time : after_lift_time));
             write_u32(out, scaled(bottom ? bottom_after_retract_time : after_retract_time));

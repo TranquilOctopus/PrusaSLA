@@ -303,7 +303,7 @@ static void fill_header_and_misc(anycubicsla_format_header &h,
     // The raft interface is the band of layers at the top of the raft with an exposure of their
     // own. The header counts what the print spends on it, the layer records in store_anycubic()
     // carry it per layer.
-    const Domain::RaftInterface raft_interface = Domain::sla_raft_interface(cfg, layer_count);
+    const Domain::RaftInterface raft_interface = Domain::sla_raft_interface(cfg, int(layer_count));
     h.res_x     = get_cfg_value_i(cfg, "display_pixels_x");
     h.res_y     = get_cfg_value_i(cfg, "display_pixels_y");
 
@@ -343,7 +343,7 @@ static void fill_header_and_misc(anycubicsla_format_header &h,
         (h.bottom_layer_count * h.bottom_exposure_time_s) +
         ((layer_count - h.bottom_layer_count) * h.exposure_time_s) +
         // The interface layers are spent on the interface exposure instead of the normal one.
-        float(raft_interface.print_time_delta_s(h.exposure_time_s)) +
+        raft_interface.print_time_delta_s(h.exposure_time_s) +
         (layer_count * h.lift_distance_mm / h.retract_speed_mms) +
         (layer_count * h.lift_distance_mm / h.lift_speed_mms) +
         (layer_count * h.delay_before_exposure_s)
@@ -401,7 +401,7 @@ void store_anycubic(const std::string& file_path, const Biz::Slicing::SLAResultD
     // The raft interface is the band of layers at the top of the raft with an exposure of their
     // own, and every layer record of this format carries an exposure of its own. No interface
     // leaves every layer the exposure it had before.
-    const Domain::RaftInterface raft_interface = Domain::sla_raft_interface(cfg, layer_count);
+    const Domain::RaftInterface raft_interface = Domain::sla_raft_interface(cfg, int(layer_count));
 
     try {
         std::ofstream out;
@@ -557,7 +557,7 @@ void store_pm5(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     // The raft interface is the band of layers at the top of the raft with an exposure of their
     // own. The LAYERDEF records carry an exposure each, so they can hold one, and no interface
     // leaves every layer the exposure it had before.
-    const Domain::RaftInterface raft_interface = Domain::sla_raft_interface(cfg, layer_count);
+    const Domain::RaftInterface raft_interface = Domain::sla_raft_interface(cfg, int(layer_count));
     // The transition layers are where the exposure fades from the bottom exposure to the normal one.
     std::uint32_t transition_layer_count =
         static_cast<std::uint32_t>(std::max(0, Domain::sla_effective_faded_layers(cfg)));
@@ -593,7 +593,7 @@ void store_pm5(const std::string& file_path, const Biz::Slicing::SLAResultData& 
         (bottom_layer_count * initial_exposure_time_s) +
         ((layer_count - bottom_layer_count) * exposure_time_s) +
         // The interface layers are spent on the interface exposure instead of the normal one.
-        float(raft_interface.print_time_delta_s(exposure_time_s)) +
+        raft_interface.print_time_delta_s(exposure_time_s) +
         (bottom_layer_count * bottom_separation_s) +
         ((layer_count - bottom_layer_count) * separation_s) +
         (layer_count * wait_before_lift_s)
