@@ -44,4 +44,4 @@ These broke MSVC builds more than once; check your diff for them before committi
 - A new pure virtual must be implemented by every subclass, including ones added on other branches; a new source/test file is listed in CMake exactly once.
 - Docs (`ROADMAP.md`, `README.md`) use CRLF: keep it. Never edit inside the README `PROGRESS` markers; run `doc/sla-fork/tools/readme_progress.py`.
 - Coding agents: stay inside your worktree, never `cd` and never write `..` in a path (the agent sandbox rejects it and the job ends); scratch files go in `.agent-scratch/`.
-- The SLA code map is in `doc/sla-fork/ARCHITECTURE-SLA.md` once merged; read it before exploring.
+- Read the SLA code map, `doc/sla-fork/ARCHITECTURE-SLA.md`, before exploring the tree.
