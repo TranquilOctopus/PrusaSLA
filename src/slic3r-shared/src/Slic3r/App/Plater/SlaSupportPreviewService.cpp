@@ -371,8 +371,8 @@ void SlaSupportPreviewService::refresh()
             continue;
         }
 
-        // The mesh is not cloned here: a burst of edits of this object keeps one build (the
-        // debounce of SlaSupportPreviewSchedule), so the clone is taken once the burst is over.
+        // The geometry is not snapshotted here: a burst of edits of this object keeps one build (the
+        // debounce of SlaSupportPreviewSchedule), so the snapshot is taken once the burst is over.
         // Everything below it is cheap enough to take on every edit.
         Pending pending;
         pending.object_id       = object_id;
@@ -479,9 +479,12 @@ void SlaSupportPreviewService::start_due_build(const SlaSupportPreviewSchedule::
     }
 
     Job job;
-    job.request       = request;
-    job.pending       = std::move(snapshot);
-    job.cloned_object = std::unique_ptr<Domain::ModelObject>(Domain::ModelObject::new_clone(*model_object));
+    job.request    = request;
+    job.pending    = std::move(snapshot);
+    // The only thing read out of the model for the worker: one shared pointer and one matrix per
+    // volume. Not a vertex, and no config or facet either, so a 50-100 MB figure does not stall the
+    // UI here (M2.21c); the worker copies what it needs, and only what it needs, on its own thread.
+    job.model_mesh = sla::support_tool_model_mesh(*model_object);
     m_queue.push_back(std::move(job));
 
     start_next_job();
@@ -521,7 +524,7 @@ void SlaSupportPreviewService::start_next_job()
             const Slic3r::sla::SupportToolStop stop = [&stop_token]() { return stop_token.stop_requested(); };
 
             Slic3r::sla::SupportToolTree tree = sla::build_support_tree_for_tool(
-                *worker_job.cloned_object,
+                worker_job.model_mesh,
                 worker_job.pending.instance_matrix,
                 worker_job.pending.points,
                 worker_job.pending.full_config,

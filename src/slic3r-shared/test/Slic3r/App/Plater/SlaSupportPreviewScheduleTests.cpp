@@ -1,18 +1,28 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "Slic3r/App/Plater/SlaSupportPreviewSchedule.hpp"
+#include "Slic3r/Biz/Algorithms/ModelObject.hpp"
+#include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
+#include "Slic3r/Domain/Model.hpp"
 #include "Slic3r/Domain/ObjectID.hpp"
+#include "Slic3r/Domain/Transformation.hpp"
+#include "Slic3r/Domain/TriangleMesh.hpp"
+#include "Slic3r/Domain/Types.hpp"
+#include "libslic3r/SLASupportTool.hpp"
 
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <utility>
 #include <vector>
 
 using Slic3r::App::Plater::ISlaSupportPreviewTimer;
 using Slic3r::App::Plater::SlaSupportPreviewSchedule;
 using Slic3r::Domain::ObjectID;
+using Slic3r::sla::SupportToolModelMesh;
 
 namespace {
 
@@ -91,6 +101,85 @@ struct FakeBuilder
     /// The engine asks the stop from time to time; this is how the schedule reaches it.
     void stop() { stop_requested = true; }
 };
+
+/// How many vertices the main thread had to copy for a build: nothing while the snapshot shares the
+/// meshes of the model, the whole of a part once it holds a copy of one. Counts the buffers, not
+/// the time, so a figure of any size is the same test.
+std::size_t copied_vertices(const SupportToolModelMesh& model_mesh, const Slic3r::Domain::ModelObject& object)
+{
+    std::size_t copied = 0;
+    for (const SupportToolModelMesh::Part& part : model_mesh.parts) {
+        const bool shared = std::any_of(object.volumes.begin(), object.volumes.end(),
+            [&part](const Slic3r::Domain::ModelVolume* vol) {
+                return vol->is_model_part() && vol->mesh_ptr() == part.mesh;
+            });
+        if (!shared) {
+            copied += part.mesh->its.vertices.size();
+        }
+    }
+    return copied;
+}
+
+/// Stands in for what SlaSupportPreviewService does on the main thread when a build starts, and for
+/// the engine call on the worker thread: the service snapshots the geometry of the object (M2.21c)
+/// and hands it to the build, and the builder records how much of the mesh that cost.
+struct SnapshotBuilder
+{
+    struct Started
+    {
+        SlaSupportPreviewSchedule::Request request;
+        const Slic3r::Domain::ModelObject* object;
+        SupportToolModelMesh               model_mesh;
+    };
+
+    std::vector<Started> started;
+    std::size_t          copied{0};
+
+    void start(const SlaSupportPreviewSchedule::Request& request, const Slic3r::Domain::ModelObject& object)
+    {
+        started.push_back({request, &object, Slic3r::sla::support_tool_model_mesh(object)});
+        copied += copied_vertices(started.back().model_mesh, object);
+    }
+};
+
+/// A model with one object holding a box.
+Slic3r::Domain::ModelObject* add_box(Slic3r::Domain::Model& model, double x, double y, double z)
+{
+    Slic3r::Domain::ModelObject* object = model.add_object();
+    Slic3r::Biz::Algorithms::ModelObject::add_volume(
+        object, Slic3r::Biz::Algorithms::TriangleMesh::make_cube(x, y, z)
+    );
+    object->add_instance();
+    return object;
+}
+
+/// A model with one object holding a plate of @p side quads a side, so the test can have a mesh
+/// much bigger than the box without writing one out.
+Slic3r::Domain::ModelObject* add_grid(Slic3r::Domain::Model& model, std::size_t side)
+{
+    std::vector<Slic3r::Domain::Vec3f> vertices;
+    std::vector<Slic3r::Domain::Index3> faces;
+    vertices.reserve((side + 1) * (side + 1));
+    for (std::size_t y = 0; y <= side; ++y) {
+        for (std::size_t x = 0; x <= side; ++x) {
+            vertices.emplace_back(float(x), float(y), 0.f);
+        }
+    }
+    for (std::size_t y = 0; y < side; ++y) {
+        for (std::size_t x = 0; x < side; ++x) {
+            const int i = int(y * (side + 1) + x);
+            faces.push_back({ i, i + 1, i + int(side + 1) });
+            faces.push_back({ i, i + int(side + 1), i + int(side + 1) + 1 });
+        }
+    }
+
+    Slic3r::Domain::ModelObject* object = model.add_object();
+    Slic3r::Biz::Algorithms::ModelObject::add_volume(
+        object, Slic3r::Biz::Algorithms::TriangleMesh::construct(std::move(vertices), std::move(faces))
+    );
+    object->add_instance();
+    return object;
+}
 
 struct Fixture
 {
@@ -283,4 +372,85 @@ TEST_CASE("SlaSupportPreviewSchedule - a debounce of a gone service builds nothi
     REQUIRE(on_the_way);
     on_the_way();
     CHECK(built.empty());
+}
+
+TEST_CASE("SlaSupportPreviewSchedule - a build start shares the model's meshes", "[SlaSupportPreviewSchedule]")
+{
+    // A small model and one whose mesh is of the size the maintainer's figures have: what the main
+    // thread hands to a build must not grow with either of them (M2.21c).
+    Slic3r::Domain::Model       model;
+    Slic3r::Domain::ModelObject* small = add_box(model, 20., 20., 40.);
+    Slic3r::Domain::ModelObject* large = add_grid(model, 300);
+
+    const std::size_t small_vertices = small->volumes.front()->mesh_ptr()->its.vertices.size();
+    const std::size_t large_vertices = large->volumes.front()->mesh_ptr()->its.vertices.size();
+    REQUIRE(large_vertices > 1000 * small_vertices);
+
+    ManualTimer      timer;
+    SnapshotBuilder  builder;
+    SlaSupportPreviewSchedule schedule{timer, [&builder, small, large](const SlaSupportPreviewSchedule::Request& request) {
+        builder.start(request, *small);
+        builder.start(request, *large);
+    }};
+
+    // A burst of edits of both objects, each with a key of its own.
+    schedule.request({ObjectID{7}, 1});
+    schedule.request({ObjectID{7}, 2});
+    schedule.request({ObjectID{7}, 3});
+    schedule.request({ObjectID{7}, 4});
+    schedule.request({ObjectID{8}, 1});
+    schedule.request({ObjectID{8}, 2});
+
+    timer.fire_next();
+    timer.fire_next();
+
+    // One build per object, and the main thread copied no vertex of either mesh to start them: the
+    // snapshot shares the buffers the model holds, the worker copies them on its own thread.
+    REQUIRE(builder.started.size() == 2);
+    CHECK(builder.started[0].request == SlaSupportPreviewSchedule::Request(ObjectID{7}, 4));
+    CHECK(builder.started[1].request == SlaSupportPreviewSchedule::Request(ObjectID{8}, 2));
+    CHECK(builder.copied == 0);
+
+    for (const SnapshotBuilder::Started& started : builder.started) {
+        REQUIRE(started.model_mesh.parts.size() == 1);
+        CHECK(started.model_mesh.parts.front().mesh.get() == started.object->volumes.front()->mesh_ptr().get());
+    }
+    // The small object and the big one were both built, so the zero above is not a mesh that never
+    // reached a build.
+    CHECK(builder.started[0].object == small);
+    CHECK(builder.started[1].object == large);
+}
+
+TEST_CASE("SlaSupportPreviewSchedule - a build start keeps the geometry the model had", "[SlaSupportPreviewSchedule]")
+{
+    Slic3r::Domain::Model       model;
+    Slic3r::Domain::ModelObject* object = add_box(model, 20., 20., 40.);
+
+    ManualTimer      timer;
+    SnapshotBuilder  builder;
+    SlaSupportPreviewSchedule schedule{timer, [&builder, object](const SlaSupportPreviewSchedule::Request& request) {
+        builder.start(request, *object);
+    }};
+
+    schedule.request({ObjectID{7}, 1});
+    timer.fire_next();
+    REQUIRE(builder.started.size() == 1);
+    REQUIRE(builder.started.front().model_mesh.parts.size() == 1);
+
+    const SupportToolModelMesh& model_mesh = builder.started.front().model_mesh;
+
+    // The model goes on changing after the build started: the worker keeps reading the mesh the
+    // snapshot was taken from, which no edit of the main thread can reach.
+    const Slic3r::Domain::BoundingBox3d taken = Slic3r::Domain::bounding_box(model_mesh.parts.front().mesh->its);
+    object->volumes.front()->set_mesh(Slic3r::Biz::Algorithms::TriangleMesh::make_cube(5., 5., 5.));
+    object->volumes.front()->set_offset(Slic3r::Domain::Vec3d(10., 0., 0.));
+
+    CHECK(builder.copied == 0);
+    // Still the box of 20 x 20 x 40 mm the build was asked for, and not the 5 mm cube the model
+    // holds now, and not its new placement either.
+    CHECK(taken.max.x() == 20.);
+    CHECK(taken.max.z() == 40.);
+    CHECK(model_mesh.parts.front().matrix.isApprox(Slic3r::Domain::Transform3d::Identity()));
+    CHECK(object->volumes.front()->mesh_ptr().get() != model_mesh.parts.front().mesh.get());
+    CHECK(Slic3r::Domain::bounding_box(object->volumes.front()->mesh_ptr()->its).max.x() == 5.);
 }

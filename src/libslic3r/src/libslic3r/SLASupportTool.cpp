@@ -27,17 +27,17 @@ namespace {
 
 using Domain::its_merge;
 
-// Build the object's merged mesh (MODEL PART volumes only) transformed by object_to_world.
-Domain::TriangleMesh build_object_mesh(const Domain::ModelObject& object,
+// Build the object's merged mesh (MODEL PART volumes only) transformed by object_to_world. Every
+// vertex is copied here, so it belongs to the thread that owns the build, not to the one that took
+// the snapshot (support_tool_model_mesh()).
+Domain::TriangleMesh build_object_mesh(const SupportToolModelMesh& model_mesh,
                                        const Domain::Transform3d& object_to_world)
 {
     indexed_triangle_set its;
-    for (const Domain::ModelVolume* vol : object.volumes) {
-        if (vol && vol->mesh_ptr() && vol->is_model_part()) {
-            indexed_triangle_set vol_mesh = vol->mesh().its;
-            its_transform(vol_mesh, object_to_world * vol->get_matrix());
-            its_merge(its, vol_mesh);
-        }
+    for (const SupportToolModelMesh::Part& part : model_mesh.parts) {
+        indexed_triangle_set vol_mesh = part.mesh->its;
+        its_transform(vol_mesh, object_to_world * part.matrix);
+        its_merge(its, vol_mesh);
     }
     Domain::TriangleMeshStats stats = Biz::Algorithms::TriangleMesh::calculate_stats(its);
     return Domain::TriangleMesh(std::move(its), std::move(stats));
@@ -72,7 +72,25 @@ SupportToolTree empty_tree() {
 
 } // namespace
 
-SupportToolTree build_support_tree_for_tool(const Domain::ModelObject& object,
+SupportToolModelMesh support_tool_model_mesh(const Domain::ModelObject& object)
+{
+    SupportToolModelMesh snapshot;
+    snapshot.parts.reserve(object.volumes.size());
+    for (const Domain::ModelVolume* vol : object.volumes) {
+        if (vol == nullptr || !vol->is_model_part())
+            continue;
+        // Shared with the model, not copied: this is what keeps the snapshot cheap. The volume
+        // keeps holding its mesh, so the worker sees the geometry of the moment it was taken even
+        // if the model swaps its mesh or its transform right after.
+        std::shared_ptr<const Domain::TriangleMesh> mesh = vol->mesh_ptr();
+        if (!mesh)
+            continue;
+        snapshot.parts.push_back({std::move(mesh), vol->get_matrix()});
+    }
+    return snapshot;
+}
+
+SupportToolTree build_support_tree_for_tool(const SupportToolModelMesh& model_mesh,
     const Domain::Transform3d& object_to_world,
     const Domain::SLA::SupportPoints& points,
     const Domain::FullConfigSLAPtr& full_config,
@@ -91,7 +109,7 @@ SupportToolTree build_support_tree_for_tool(const Domain::ModelObject& object,
         }
 
         // Build merged mesh in world frame
-        Domain::TriangleMesh mesh = build_object_mesh(object, object_to_world);
+        Domain::TriangleMesh mesh = build_object_mesh(model_mesh, object_to_world);
         if (mesh.empty()) return empty_tree();
 
         // Points are in object's mesh frame; transform to world frame
@@ -147,7 +165,21 @@ SupportToolTree build_support_tree_for_tool(const Domain::ModelObject& object,
     }
 }
 
-Domain::SLA::SupportPoints generate_support_points_for_tool(const Domain::ModelObject& object,
+SupportToolTree build_support_tree_for_tool(const Domain::ModelObject& object,
+    const Domain::Transform3d& object_to_world,
+    const Domain::SLA::SupportPoints& points,
+    const Domain::FullConfigSLAPtr& full_config,
+    const Domain::PartialObjectConfigSLAPtr& object_settings,
+    const SupportToolStop& stop)
+{
+    // The object is read here, so this is the entry point for a caller that owns the model and does
+    // not share the main thread with it. A caller whose model may change while the build runs
+    // snapshots it with support_tool_model_mesh() and calls the overload above instead.
+    return build_support_tree_for_tool(support_tool_model_mesh(object), object_to_world, points,
+                                       full_config, object_settings, stop);
+}
+
+Domain::SLA::SupportPoints generate_support_points_for_tool(const SupportToolModelMesh& model_mesh,
     const Domain::Transform3d& object_to_world,
     const Domain::FullConfigSLAPtr& full_config,
     const Domain::PartialObjectConfigSLAPtr& object_settings,
@@ -160,7 +192,7 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const Domain::ModelO
         const SLAPrintObjectConfigView cfg{full_config, object_settings};
 
         // Build merged mesh in world frame
-        Domain::TriangleMesh mesh = build_object_mesh(object, object_to_world);
+        Domain::TriangleMesh mesh = build_object_mesh(model_mesh, object_to_world);
         if (mesh.empty()) return result;
 
         // Compute slice heights
@@ -239,6 +271,16 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const Domain::ModelO
     } catch (...) {
         return {};
     }
+}
+
+Domain::SLA::SupportPoints generate_support_points_for_tool(const Domain::ModelObject& object,
+    const Domain::Transform3d& object_to_world,
+    const Domain::FullConfigSLAPtr& full_config,
+    const Domain::PartialObjectConfigSLAPtr& object_settings,
+    const SupportToolStop& stop)
+{
+    return generate_support_points_for_tool(support_tool_model_mesh(object), object_to_world,
+                                            full_config, object_settings, stop);
 }
 
 double support_tool_elevation(const Domain::FullConfigSLAPtr& full_config,
