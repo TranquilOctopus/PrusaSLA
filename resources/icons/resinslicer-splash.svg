@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ResinSlicer splash screen.
+     Vector source for resources/icons/splashscreen.jpg; doc/sla-fork/tools/render_icons.py
+     rasterises it. See doc/sla-fork/branding.md.
+
+     600x540 is the size and 10:9 aspect of the splashscreen.jpg it replaces. SplashScreen.cpp
+     pastes the image into a canvas 3/2 as wide and paints the text box over the left third, so
+     the scene sits in the middle and the edges stay quiet.
+
+     The scene is bottom-up MSLA: the LCD and the resin are at the bottom, the build plate is
+     across the top of the tank and the part hangs off its underside, still half in the resin.
+
+     No gradients, no filters, no opacity: the file is resampled to arbitrary display scale
+     factors and saved as JPEG, and JPEG chroma subsampling smears soft edges. Only rect,
+     circle and polygon are used, so a reviewer can read it without an SVG renderer. Fork
+     palette only (#CAD2C5 #84A98C #52796F #354F52 #2F3E46), see doc/sla-fork/PLAN.md 2.1. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="540" viewBox="0 0 600 540">
+  <rect x="0" y="0" width="600" height="540" fill="#2F3E46"/>
+
+  <!-- Resin vat: an open tank, walls splaying out towards the viewer. -->
+  <polygon points="160,190 440,190 492,478 108,478" fill="#354F52"/>
+  <polygon points="176,208 424,208 474,462 126,462" fill="#2F3E46"/>
+
+  <!-- Resin, filled to a little over half way up the tank. The top band is the lit surface. -->
+  <polygon points="180,300 420,300 466,456 134,456" fill="#52796F"/>
+  <polygon points="180,300 420,300 424,318 176,318" fill="#84A98C"/>
+
+  <!-- Build plate across the tank. -->
+  <polygon points="182,252 418,252 428,278 172,278" fill="#84A98C"/>
+  <polygon points="172,278 428,278 428,290 172,290" fill="#52796F"/>
+
+  <!-- Part hanging off the underside of the plate, with its raft still in the resin. -->
+  <polygon points="276,290 324,290 334,392 266,392" fill="#CAD2C5"/>
+  <polygon points="308,290 324,290 334,392 314,392" fill="#52796F"/>
+  <polygon points="258,392 342,392 346,408 254,408" fill="#84A98C"/>
+
+  <!-- Resin drop about to fall into the tank. -->
+  <polygon points="300,54 322,86 278,86" fill="#CAD2C5"/>
+  <circle cx="300" cy="94" r="22" fill="#CAD2C5"/>
+</svg>

@@ -293,7 +293,7 @@ void SplashScreen::ConstantText::init(const wxFont& init_font, bool is_editor, i
             ),
             SLIC3R_APP_NAME
         ),
-        Biz::_u8L("Developed by Prusa Research."),
+        Biz::_u8L("PrusaSlicer by Prusa Research."),
         Biz::_u8L("Licensed under GNU AGPLv3.")
     );
     credits = from_u8(credits_str);
