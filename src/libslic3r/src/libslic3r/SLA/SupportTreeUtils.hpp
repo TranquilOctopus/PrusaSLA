@@ -559,10 +559,17 @@ std::optional<Head> calculate_pinhead_placement(Ex                     policy,
         return {};
 
     const Domain::SLA::SupportPoint &sp = sm.pts->at(suppt_idx);
-    Head                head{
+
+    // The length of the tapered tip: the one the point carries, else the
+    // configured default (support_tip_length), which is what the default tree
+    // does with the same two values. Zero there keeps the pinhead width, which
+    // is the width this tree has always built the head with. (M2.27)
+    double tip_length = sp.tip_length > 0.f ? double(sp.tip_length) : sm.cfg.tip_length_mm;
+
+    Head head{
         head_back_radius(sm, sp),
         sp.head_front_radius,
-        0.,
+        tip_length,
         head_penetration(sm, sp),
         Vec3d::Zero(),        // dir
         sp.pos.cast<double>() // displacement
@@ -676,8 +683,13 @@ template<class WFn> constexpr size_t BeamSamplesV = BeamSamples<std::remove_cvre
 enum class GroundRouteCheck { Full, PillarOnly };
 
 // Returns the collision point with mesh if there is a collision or a ground point,
-// given a source point with a direction of a potential avoidance bridge and
-// a bridge length.
+// given a source point with a direction of a potential avoidance bridge
+// and a bridge length.
+// 'base_radius' is the radius of the base the pillar below will stand on, which is
+// the one of the support point the route starts from where it has one (M2.12), so
+// the gap the base needs in zero elevation mode is kept clear of the model too.
+// Left at zero the globally configured base radius is used, which is what the tree
+// built before the per point base diameter existed.
 template<class Ex, class WideningFn,
          class = std::enable_if_t<IsWideningFn<WideningFn>> >
 Vec3d check_ground_route(
@@ -687,7 +699,8 @@ Vec3d check_ground_route(
     const Vec3d           &dir,         // direction of the bridge from the source
     double                bridge_len,   // lenght of the avoidance bridge
     WideningFn            &&wideningfn, // Widening strategy
-    GroundRouteCheck      type = GroundRouteCheck::Full
+    GroundRouteCheck      type = GroundRouteCheck::Full,
+    double                base_radius = 0.
     )
 {
     static const constexpr auto Samples = BeamSamplesV<WideningFn>;
@@ -696,6 +709,7 @@ Vec3d check_ground_route(
 
     const auto sd     = sm.cfg.safety_distance(source.r);
     const auto gndlvl = ground_level(sm);
+    const double base_r_cfg = base_radius > 0. ? base_radius : sm.cfg.base_radius_mm;
 
     // Intersection of the suggested bridge with ground plane. If the bridge
     // spans below ground, stop it at ground level.
@@ -736,7 +750,7 @@ Vec3d check_ground_route(
             // Dealing with zero elevation mode, to not route pillars
             // into the gap between the optional pad and the model
             double gap     = std::sqrt(sm.emesh.squared_distance(gp));
-            double base_r  = std::max(sm.cfg.base_radius_mm, end_radius);
+            double base_r  = std::max(base_r_cfg, end_radius);
             double min_gap = sm.cfg.pillar_base_safety_distance_mm + base_r;
 
             if (gap < min_gap) {
@@ -795,6 +809,11 @@ GroundConnection deepsearch_ground_connection(
     solver.set_loc_criteria(criteria_loc);
     solver.seed(0); // require repeatability
 
+    // The base the pillar below this route will stand on: the one of the support
+    // point the connection starts from, the globally configured one otherwise.
+    // (M2.27, see check_ground_route and base_size)
+    const BaseSize base = base_size(sm, sp);
+
     // functor returns the z height of collision point, given a polar and
     // azimuth angles as bridge direction and bridge length. The route is
     // traced from source, through this bridge and an attached pillar. If there
@@ -806,7 +825,9 @@ GroundConnection deepsearch_ground_connection(
 
         Vec3d n = spheric_to_dir(plr, azm);
 
-        Vec3d hitpt = check_ground_route(policy, sm, source, n, bridge_len, wideningfn);
+        Vec3d hitpt = check_ground_route(policy, sm, source, n, bridge_len,
+                                         wideningfn, GroundRouteCheck::Full,
+                                         base.radius);
 
         return hitpt.z();
     };
@@ -855,7 +876,8 @@ GroundConnection deepsearch_ground_connection(
     while(zlvl > gndlvl && l <= l_max) {
 
         zlvl = check_ground_route(policy, sm, source, n, l, wideningfn,
-                                  GroundRouteCheck::PillarOnly).z();
+                                  GroundRouteCheck::PillarOnly,
+                                  base.radius).z();
 
         if (zlvl <= gndlvl)
             bridge_l = l;
@@ -865,8 +887,6 @@ GroundConnection deepsearch_ground_connection(
 
     Vec3d bridge_end = source.pos + bridge_l * n;
     Vec3d gp{bridge_end.x(), bridge_end.y(), gndlvl};
-
-    const BaseSize base = base_size(sm, sp);
 
     double bridge_r = wideningfn(Ball{source.pos, source.r}, n, bridge_l);
     double down_l = bridge_end.z() - gndlvl;

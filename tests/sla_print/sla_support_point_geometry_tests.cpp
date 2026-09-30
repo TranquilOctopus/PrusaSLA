@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "Slic3r/Biz/Algorithms/AABBMesh.hpp"
+#include "Slic3r/Biz/Algorithms/Execution/ExecutionSeq.hpp"
 #include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
 #include "Slic3r/Domain/TriangleMesh.hpp"
@@ -527,6 +528,122 @@ TEST_CASE("DefaultSupportTree::The tip length is the one of the point, else the 
     Slic3r::sla::SupportableMesh own = make_supportable_mesh(pts);
     own.cfg.tip_length_mm = 0.4;
     CHECK(tip_length_of(own) == Approx(0.6));
+}
+
+TEST_CASE("BranchingSupportTree::The tip length is the one of the point, else the configured one",
+          "[suptreetree]")
+{
+    // The branching tree builds its heads with the same pinhead placement as the
+    // default tree, so it has to read the tip length the same way (M2.27).
+    auto tip_length_of = [](const Slic3r::sla::SupportableMesh &sm) {
+        sla::SupportTreeBuilder builder;
+        sla::create_branching_tree(builder, sm);
+
+        const sla::Head *head = head_at(builder, point_pos);
+        REQUIRE(head != nullptr);
+
+        return head->width_mm;
+    };
+
+    Slic3r::sla::SupportableMesh sm = make_supportable_mesh(SupportPoints{geometry_point()});
+
+    // The pinhead width, the length the tree has always built with.
+    CHECK(tip_length_of(sm) == Approx(sm.cfg.head_width_mm));
+
+    // A configured tip length is the one every point without a tip length of its
+    // own is built with.
+    sm.cfg.tip_length_mm = 0.4;
+    CHECK(tip_length_of(sm) == Approx(0.4));
+
+    // A point of its own keeps it, whatever the default says.
+    SupportPoints pts{geometry_point()};
+    pts[0].tip_length = 0.6f;
+    Slic3r::sla::SupportableMesh own = make_supportable_mesh(pts);
+    own.cfg.tip_length_mm = 0.4;
+    CHECK(tip_length_of(own) == Approx(0.6));
+}
+
+// M2.12: a support point may ask for a base diameter and height of its own. The
+// support presets write them, but every other point carries them too, so both
+// trees have to read them off the point and not only from the global config.
+TEST_CASE("A point's own base diameter reaches the foot of both trees",
+          "[suptreetree]")
+{
+    SupportPoints pts{geometry_point()};
+    pts[0].base_diameter = 3.f;
+    pts[0].base_height   = 0.8f;
+
+    Slic3r::sla::SupportableMesh sm = make_supportable_mesh(pts);
+
+    // A point with no base of its own keeps the configured one.
+    CHECK(sla::base_size(sm, &pts[0]).radius == Approx(1.5));
+    CHECK(sla::base_size(sm, &geometry_point()).radius == Approx(sm.cfg.base_radius_mm));
+
+    sla::SupportTreeBuilder default_builder;
+    sla::create_default_tree(default_builder, sm);
+
+    sla::SupportTreeBuilder branching_builder;
+    sla::create_branching_tree(branching_builder, sm);
+
+    // Both trees stand the pillar on a foot of 3 mm and 0.8 mm, not the 4 mm of
+    // the global config, and the foot is wider than the pillar it belongs to.
+    for (const sla::Pedestal *base : {pedestal_at(default_builder, px),
+                                      pedestal_at(branching_builder, px)}) {
+        REQUIRE(base != nullptr);
+        CHECK(base->r_bottom == Approx(1.5));
+        CHECK(base->height == Approx(0.8));
+        CHECK(base->r_bottom > base->r_top);
+    }
+}
+
+// M2.27: in zero elevation mode the branching tree keeps the room the base needs
+// clear of the model, and the base of a point with a diameter of its own needs
+// more room than the configured one, the way the default tree has always kept it
+// in create_ground_pillar().
+TEST_CASE("The room a base needs is the one of the point's own diameter",
+          "[suptreetree]")
+{
+    using Slic3r::Biz::Algorithms::Execution::ex_seq;
+
+    // A box standing on the plate next to the pillar: far enough that the pillar
+    // passes by, near enough that the foot of the configured base diameter would
+    // reach into it. The elevation is zero, the only mode where the room of the
+    // base is kept at all.
+    indexed_triangle_set box = triangle_mesh::its_make_cube(4., 4., 4.);
+    for (auto &v : box.vertices)
+        v += Vec3f{1.5f, -2.f, -4.f};
+
+    sla::SupportTreeConfig cfg;
+    cfg.object_elevation_mm = 0.;
+
+    sla::SupportableMesh sm{.emesh = Slic3r::AABBMesh(box), .cfg = cfg};
+
+    const double gap = std::sqrt(sm.emesh.squared_distance(Vec3d::Zero()));
+    const sla::Junction j{Vec3d{0., 0., 5.}, cfg.head_back_radius_mm};
+
+    // How high the pillar of a route straight down from the junction has to stop
+    // to leave the base the room it asks for.
+    auto base_stops_at = [&sm, &j](double base_radius) {
+        return sla::check_ground_route(ex_seq, sm, j, sla::DOWN, 0.,
+                                       sla::DefaultWideningModel{sm},
+                                       sla::GroundRouteCheck::PillarOnly,
+                                       base_radius).z();
+    };
+
+    // The box is 1.5 mm from the axis of the pillar, and the configured 4 mm base
+    // does not fit in what is left of it.
+    CHECK(gap == Approx(1.5));
+    CHECK(sm.cfg.pillar_base_safety_distance_mm + sm.cfg.base_radius_mm > gap);
+
+    // Without a base diameter of its own the route is the one of the tree before
+    // the per point base diameter existed: the configured radius decides.
+    CHECK(base_stops_at(0.) ==
+          Approx(cfg.pillar_base_safety_distance_mm + cfg.base_radius_mm - gap));
+
+    // A point with a wider base of its own has to stop that much higher, so the
+    // base it asks for is the one that clears the model.
+    CHECK(base_stops_at(4.) ==
+          Approx(cfg.pillar_base_safety_distance_mm + 4. - gap));
 }
 
 TEST_CASE("BranchingSupportTree::Point geometry reaches the ground pillar",
