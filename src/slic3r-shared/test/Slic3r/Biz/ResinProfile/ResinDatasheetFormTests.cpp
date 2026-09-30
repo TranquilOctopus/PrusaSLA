@@ -50,13 +50,18 @@ ResinDatasheet filled_datasheet()
     return datasheet;
 }
 
-/// @brief The same form with the three optional fields filled in as well.
+/// @brief The same form with the optional fields filled in as well: the delay and the price, and
+/// the layer separation of a printer that lifts the build plate.
 ResinDatasheet full_datasheet()
 {
-    ResinDatasheet datasheet    = filled_datasheet();
-    datasheet.light_off_delay_s = "1";
-    datasheet.price_per_bottle  = "25";
-    datasheet.bottle_volume_ml  = "500";
+    ResinDatasheet datasheet         = filled_datasheet();
+    datasheet.light_off_delay_s      = "1";
+    datasheet.price_per_bottle       = "25";
+    datasheet.bottle_volume_ml       = "500";
+    datasheet.lift_distance_mm       = "6";
+    datasheet.lift_speed_mm_min      = "60";
+    datasheet.retract_speed_mm_min   = "180";
+    datasheet.transition_layer_count = "10";
     return datasheet;
 }
 
@@ -167,6 +172,58 @@ TEST_CASE("validate_datasheet refuses what cannot become a resin setting", "[res
     }
 }
 
+TEST_CASE(
+    "the optional layer separation of a generic MSLA datasheet is accepted",
+    "[resin_datasheet]"
+)
+{
+    SECTION("it may be left out entirely")
+    {
+        ResinDatasheet datasheet = filled_datasheet();
+        CHECK(validate_datasheet(datasheet).empty());
+    }
+
+    SECTION("a lift distance, a lift speed and a retract speed are positive numbers")
+    {
+        const std::vector<NamedField>& fields{
+            {"lift distance", &ResinDatasheet::lift_distance_mm},
+            {"lift speed", &ResinDatasheet::lift_speed_mm_min},
+            {"retract speed", &ResinDatasheet::retract_speed_mm_min},
+        };
+        for (const NamedField& field : fields) {
+            INFO("field " << field.name);
+            ResinDatasheet datasheet = full_datasheet();
+            // A lift of nothing separates no layers, so these have no zero, the way an exposure
+            // has none either.
+            datasheet.*(field.value) = "0";
+            CHECK_FALSE(validate_datasheet(datasheet).empty());
+
+            datasheet.*(field.value) = "-1";
+            CHECK_FALSE(validate_datasheet(datasheet).empty());
+
+            datasheet.*(field.value) = "6 mm/min";
+            CHECK_FALSE(validate_datasheet(datasheet).empty());
+
+            datasheet.*(field.value) = "6";
+            CHECK(validate_datasheet(datasheet).empty());
+        }
+    }
+
+    SECTION("the transition layer count is a count, like the bottom layer count")
+    {
+        ResinDatasheet datasheet         = full_datasheet();
+        datasheet.transition_layer_count = "4.5";
+        CHECK_FALSE(validate_datasheet(datasheet).empty());
+
+        datasheet.transition_layer_count = "0";
+        CHECK_FALSE(validate_datasheet(datasheet).empty());
+
+        // A datasheet that rounds to a whole number is fine: the count is what the number says.
+        datasheet.transition_layer_count = "4.0";
+        CHECK(validate_datasheet(datasheet).empty());
+    }
+}
+
 TEST_CASE("datasheet_to_profile writes the values the mapping table reads", "[resin_datasheet]")
 {
     SECTION("the format says where the values came from")
@@ -195,6 +252,12 @@ TEST_CASE("datasheet_to_profile writes the values the mapping table reads", "[re
         CHECK(profile.raw_values.at("resinPrice") == "50");
         CHECK(profile.raw_values.at("resinUnit") == "/L");
         CHECK(profile.raw_values.at("bottleVolume") == "500");
+        // The layer separation goes in under the keys a foreign .cfg states it with, and the speeds
+        // in the unit that file uses, so the mapper converts them the way it converts a file's.
+        CHECK(profile.raw_values.at("normalLayerLiftHeight") == "6");
+        CHECK(profile.raw_values.at("normalLayerLiftSpeed") == "60");
+        CHECK(profile.raw_values.at("normalDropSpeed") == "180");
+        CHECK(profile.raw_values.at("transitionLayers") == "10");
     }
 
     SECTION("a setting the datasheet does not state is left out, not written as a zero")
@@ -204,6 +267,12 @@ TEST_CASE("datasheet_to_profile writes the values the mapping table reads", "[re
         CHECK(profile.raw_values.count("resinPrice") == 0);
         CHECK(profile.raw_values.count("resinUnit") == 0);
         CHECK(profile.raw_values.count("bottleVolume") == 0);
+        // The lift, the retract and the transition layers are optional as well: a datasheet of a
+        // printer that lifts states them, a datasheet of a resin does not have to.
+        CHECK(profile.raw_values.count("normalLayerLiftHeight") == 0);
+        CHECK(profile.raw_values.count("normalLayerLiftSpeed") == 0);
+        CHECK(profile.raw_values.count("normalDropSpeed") == 0);
+        CHECK(profile.raw_values.count("transitionLayers") == 0);
         // The vendor is optional too, and it is not a printer hint either.
         CHECK(profile.raw_values.count("machineName") == 0);
     }
@@ -247,10 +316,16 @@ TEST_CASE(
     CHECK(result.mapping.material_values.at("initial_exposure_time") == "30");
     CHECK(result.mapping.material_values.at("resin_layer_height") == "0.05");
     CHECK(result.mapping.material_values.at("bottom_layer_count") == "8");
-    CHECK(result.mapping.material_values.count("resin_faded_layers") == 0);
     // The optional ones the material settings have keys for: a light-off delay and a bottle cost.
     CHECK(result.mapping.material_values.at("delay_before_exposure") == "1,1");
     CHECK(result.mapping.material_values.at("bottle_cost") == "25");
+    // The layer separation the datasheet states, mapped through the same keys a .cfg is read with:
+    // a distance in mm is written as it is and a speed in mm/min is converted to the mm/s the
+    // setting holds. The transition layer count is the one both printer classes keep as it is.
+    CHECK(result.mapping.material_values.at("lift_height") == "6");
+    CHECK(result.mapping.material_values.at("lift_speed") == "1");
+    CHECK(result.mapping.material_values.at("retract_speed") == "3");
+    CHECK(result.mapping.material_values.at("resin_faded_layers") == "10");
 
     // Nothing the form states is lost: every key it wrote is a row of the review table.
     for (const std::string& key :
@@ -262,6 +337,10 @@ TEST_CASE(
           "resinPrice",
           "resinUnit",
           "bottleVolume",
+          "normalLayerLiftHeight",
+          "normalLayerLiftSpeed",
+          "normalDropSpeed",
+          "transitionLayers",
           "currProfile"})
     {
         INFO("key " << key);
@@ -310,6 +389,25 @@ TEST_CASE("a datasheet profile saves a user resin preset", "[resin_datasheet][im
     const Domain::ConfigItem* bottle_cost = imported->config_box().items.find("bottle_cost");
     REQUIRE(bottle_cost != nullptr);
     CHECK(bottle_cost->get<double>() == 25.);
+
+    // The layer separation the datasheet stated, mapped through the same keys a .cfg is read
+    // with, so the speeds arrive as mm/s and the counts as counts.
+    const Domain::ConfigItem* lift_height = imported->config_box().items.find("lift_height");
+    REQUIRE(lift_height != nullptr);
+    CHECK(lift_height->get<double>() == 6.);
+
+    const Domain::ConfigItem* lift_speed = imported->config_box().items.find("lift_speed");
+    REQUIRE(lift_speed != nullptr);
+    CHECK(lift_speed->get<double>() == 1.);
+
+    const Domain::ConfigItem* retract_speed = imported->config_box().items.find("retract_speed");
+    REQUIRE(retract_speed != nullptr);
+    CHECK(retract_speed->get<double>() == 3.);
+
+    const Domain::ConfigItem* faded_layers =
+        imported->config_box().items.find("resin_faded_layers");
+    REQUIRE(faded_layers != nullptr);
+    CHECK(faded_layers->get<int>() == 10);
 
     // The note says where the values came from: there is no file, so it names the datasheet and the
     // day it was entered, whose shape is all the test can know.

@@ -78,9 +78,10 @@ public:
     /**
      * @brief Open the resin import review dialog for @p path.
      *
-     * The dialog lives in the bed sidebar of a render module, so this goes to the module that owns
-     * one: the Prepare module, which is where a profile is imported into. Called by the entry
-     * points of M3.10b, the "Import resin profile" button and a profile dropped onto the window.
+     * The dialog lives in the bed sidebar of a render module, so this goes to the module that is
+     * on the screen: both Prepare and Preview have one, so the import does not switch views. Called
+     * by the entry points of M3.10b, the "Import resin profile" button and a profile dropped onto
+     * the window.
      */
     void open_resin_import(const boost::filesystem::path& path);
 

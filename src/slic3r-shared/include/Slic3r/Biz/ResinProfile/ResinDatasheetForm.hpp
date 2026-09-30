@@ -9,12 +9,18 @@ namespace Slic3r::Biz::ResinProfile {
 /**
  * @brief What a resin datasheet states, as typed into the "New resin from datasheet" form (M3.11).
  *
- * A vendor datasheet is a table of numbers, not a file: this is what the user types off it, and the
- * six settings nearly every datasheet gives are here, in the units the datasheets use (mm, seconds,
- * seconds per layer). The three optional ones are only asked for because the SLA material settings
- * have a key for each of them: `delay_before_exposure` for the light-off delay, `bottle_cost` for
- * the price of a bottle. A field left empty is a setting the datasheet does not state, exactly like
- * a key a reader does not find, so the mapper is left to decide what to do about it.
+ * A vendor datasheet is a table of numbers, not a file: this is what the user types off it. The six
+ * settings nearly every datasheet gives are here, in the units the datasheets use (mm, seconds,
+ * seconds per layer). The rest are optional, and are asked for because the SLA material settings
+ * have a key for each of them: the light-off delay, the price and size of a bottle, and the layer
+ * separation of a printer that lifts the build plate - a lift distance, a lift speed and a retract
+ * speed - plus the transition layer count a tilt printer fades the exposure over. A field left
+ * empty is a setting the datasheet does not state, exactly like a key a reader does not find, so
+ * the mapper is left to decide what to do about it.
+ *
+ * The speeds are in mm/min, the unit the .cfg of a foreign slicer states them in and the unit the
+ * datasheets of a generic MSLA printer use, so the mapper converts them the same way it converts
+ * the ones read from a file. The transition layer count is a count of layers, not a measurement.
  *
  * The values are the text of the fields, unvalidated: validation is validate_datasheet(), which is
  * a pure function of what is typed, so a field is never parsed twice by two different rules.
@@ -40,6 +46,15 @@ struct ResinDatasheet
     /// How many ml one bottle holds. Optional; without it a 1 litre bottle is assumed, the same
     /// assumption the mapper makes for a profile that states no bottle size.
     std::string bottle_volume_ml;
+    /// How far the build plate is lifted to separate a layer, in mm. Optional.
+    std::string lift_distance_mm;
+    /// How fast it is lifted, in mm/min. Optional.
+    std::string lift_speed_mm_min;
+    /// How fast it drops back into the resin, in mm/min. Optional.
+    std::string retract_speed_mm_min;
+    /// Over how many layers the exposure is faded, a whole number. Optional; a tilt printer has no
+    /// block of bottom layers and fades instead.
+    std::string transition_layer_count;
 };
 
 /**

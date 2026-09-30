@@ -123,4 +123,35 @@ const std::vector<std::string>& get_resin_profile_extensions();
  */
 bool is_resin_profile_file(const std::string& input_file);
 
+/**
+ * @brief What a drop of files is made of, split by what is done with each part.
+ *
+ * A drop is one gesture and may carry both a foreign resin profile and models, which go to two
+ * different places: the profile to the review dialog, the models to the scene. This is the split,
+ * without the loading, so what a drop of a given set of files ends up doing can be tested.
+ */
+struct DropRouting
+{
+    /// The files the model loader takes: the models of the drop, and its project files.
+    std::vector<boost::filesystem::path> files_to_load;
+    /// @brief The first resin profile of the drop, the one whose review dialog is opened. Empty
+    /// when the drop carries no profile.
+    boost::filesystem::path profile_to_review;
+    /// @brief The profiles after the first one. The review dialog is for a single profile, so
+    /// they are named to the user rather than silently dropped.
+    std::vector<boost::filesystem::path> profiles_left_out;
+};
+
+/**
+ * @brief Split a drop of files into the models to load, the profile to review and the profiles
+ * that are left out.
+ *
+ * Pure: it reads the extension of every file and nothing else, so the routing of a drop is what
+ * the tests check. A file neither is_resin_profile_file() nor is_supported_file() is left out of
+ * every list, exactly as it was before this split.
+ *
+ * @param files The paths of the drop, in the order they were dropped.
+ */
+DropRouting route_dropped_files(const std::vector<boost::filesystem::path>& files);
+
 } // namespace Slic3r::Biz::FileLoadingLogic

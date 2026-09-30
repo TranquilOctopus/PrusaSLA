@@ -1294,4 +1294,25 @@ bool is_resin_profile_file(const std::string& input_file)
     return false;
 }
 
+DropRouting route_dropped_files(const std::vector<boost::filesystem::path>& files)
+{
+    DropRouting routing;
+    routing.files_to_load.reserve(files.size());
+
+    for (const boost::filesystem::path& file : files) {
+        if (is_resin_profile_file(file.string())) {
+            // The review dialog is for one profile at a time, so the first one of the drop is the
+            // one opened and the rest are left out for the user to drop again one by one.
+            if (routing.profile_to_review.empty())
+                routing.profile_to_review = file;
+            else
+                routing.profiles_left_out.push_back(file);
+        } else if (is_supported_file(file.string())) {
+            routing.files_to_load.push_back(file);
+        }
+    }
+
+    return routing;
+}
+
 } // namespace Slic3r::Biz::FileLoadingLogic

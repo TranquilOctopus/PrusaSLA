@@ -17,10 +17,16 @@ namespace Slic3r::App::Desktop {
 /**
  * wxWidgets adapter that receives OS file drop events and routes them to the
  * appropriate ProjectInteractor method:
- *   - resin profile (.cfg, .cfgx, .lyr) → the resin import review dialog
+ *   - resin profile (.cfg, .cfgx, .lyr) → the resin import review dialog, which opens in
+ *     whichever module is on the screen
  *   - single project file (.3mf)       → load_project()
  *   - everything else (model files)   → load_models_to_project()
  * Unsupported file types are silently filtered out.
+ *
+ * A drop that mixes models and resin profiles loads the models as any other drop of models is and
+ * then opens the review dialog of the first profile, so the dialog is the last thing shown. The
+ * profiles after the first one are named in a notification rather than loaded, because the
+ * review dialog is one profile at a time.
  *
  * @param can_accept Predicate called on each drop; returning false ignores the
  *                   drop entirely (e.g. when a non-slicing tab is active).

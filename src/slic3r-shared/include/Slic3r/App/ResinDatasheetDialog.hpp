@@ -18,7 +18,7 @@ class Text;
 } // namespace Yoga
 
 /**
- * @brief The "New resin from datasheet" form of M3.11: the ~6 values a resin datasheet states, typed
+ * @brief The "New resin from datasheet" form of M3.11: the values a resin datasheet states, typed
  * in, and nothing else.
  *
  * A vendor datasheet is a table of numbers, and for a resin whose profile the user does not have
@@ -79,6 +79,10 @@ private:
     Yoga::InputTextField* m_light_off_delay_input{nullptr};
     Yoga::InputTextField* m_price_input{nullptr};
     Yoga::InputTextField* m_bottle_volume_input{nullptr};
+    Yoga::InputTextField* m_lift_distance_input{nullptr};
+    Yoga::InputTextField* m_lift_speed_input{nullptr};
+    Yoga::InputTextField* m_retract_speed_input{nullptr};
+    Yoga::InputTextField* m_transition_layers_input{nullptr};
     Yoga::LayoutButton* m_next_button{nullptr};
 };
 

@@ -81,6 +81,32 @@ const std::vector<FieldRule>& field_rules()
          .required   = false,
          .whole      = false,
          .allow_zero = false},
+        // The layer separation of a printer that lifts the build plate, under the keys the .cfg of
+        // the foreign slicer states them with, so the mapper maps them as it maps a file's.
+        {.key        = "normalLayerLiftHeight",
+         .label      = "Lift distance",
+         .value      = &ResinDatasheet::lift_distance_mm,
+         .required   = false,
+         .whole      = false,
+         .allow_zero = false},
+        {.key        = "normalLayerLiftSpeed",
+         .label      = "Lift speed",
+         .value      = &ResinDatasheet::lift_speed_mm_min,
+         .required   = false,
+         .whole      = false,
+         .allow_zero = false},
+        {.key        = "normalDropSpeed",
+         .label      = "Retract speed",
+         .value      = &ResinDatasheet::retract_speed_mm_min,
+         .required   = false,
+         .whole      = false,
+         .allow_zero = false},
+        {.key        = "transitionLayers",
+         .label      = "Number of transition layers",
+         .value      = &ResinDatasheet::transition_layer_count,
+         .required   = false,
+         .whole      = true,
+         .allow_zero = false},
     };
     return rules;
 }

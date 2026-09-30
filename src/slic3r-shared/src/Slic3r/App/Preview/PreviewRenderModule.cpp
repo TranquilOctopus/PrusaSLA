@@ -496,6 +496,15 @@ void PreviewRenderModule::open_invalid_data_dialog()
     }
 }
 
+void PreviewRenderModule::open_resin_import(const boost::filesystem::path& path)
+{
+    // The review dialog hangs off the material selection dialog of the bed sidebar, which Preview
+    // has of its own since M3.11, so a profile dropped while Preview is shown is reviewed here.
+    if (m_sidebar_bed.get()) {
+        m_sidebar_bed->material_selection_dialog().open_resin_import(path);
+    }
+}
+
 void PreviewRenderModule::set_object_list_collapsed(bool collapsed)
 {
     if (m_object_list.get()) {
