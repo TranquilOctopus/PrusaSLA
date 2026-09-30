@@ -30,3 +30,17 @@ This repository is a fork of PrusaSlicer 3.0 (alpha) that is being turned into a
 - **Style:** follow `doc/CodeStyle.md` and apply `.clang-format` to the lines you change.
 - **Third-party content:** don't commit vendor resin or printer profiles, or models you don't have redistribution rights for. Real samples go in the gitignored `local-samples/`, and test fixtures are written from scratch. Don't bypass encryption in foreign file formats. For the M7 support research dataset, follow the research-only rules in ROADMAP.md M7: files stay in place, never leave this computer, are never opened in agent context, and only aggregate statistics are committed.
 - **Commits:** don't push, force-push or rewrite `master` or `sla/main` unless the person running the session asks.
+- **Never slice from a tool or UI action.** Only the Slice button slices. Supports use `libslic3r/SLASupportTool.hpp` on a worker thread; nothing may call slice/slice_bed/auto-slicing for SLA.
+- **Benchmark and local models:** committed output names models by manifest id only (`bm01`...), never file names or paths; `[.local]` tests are skipped unless `SLA_LOCAL_SAMPLES` is set.
+
+## Traps that cost a build
+These broke MSVC builds more than once; check your diff for them before committing.
+- Qualify `Biz::` / `Domain::` names and include every header you use (a forward declaration does not convert to its base class).
+- `_u8L` drops non-ASCII bytes: keep …, ·, ° and friends outside the translated string.
+- Yoga `Text` has no default constructor (pass the text); `ComboBox` needs an explicit `std::string` name; `_fpx` needs `using Slic3r::App::Yoga::operator""_fpx`.
+- Catch2: no `||`/`&&` or ternaries inside `CHECK`/`REQUIRE`; `Approx` needs `catch_approx.hpp`. Store `e.what()` in a `std::string`, never a `const char*` past the catch block.
+- Eigen: don't mix float/double or a 4x4 `.matrix()` with a 3x3 (`.linear()`).
+- A new pure virtual must be implemented by every subclass, including ones added on other branches; a new source/test file is listed in CMake exactly once.
+- Docs (`ROADMAP.md`, `README.md`) use CRLF: keep it. Never edit inside the README `PROGRESS` markers; run `doc/sla-fork/tools/readme_progress.py`.
+- Coding agents: stay inside your worktree, never `cd` and never write `..` in a path (the agent sandbox rejects it and the job ends); scratch files go in `.agent-scratch/`.
+- The SLA code map is in `doc/sla-fork/ARCHITECTURE-SLA.md` once merged; read it before exploring.
