@@ -12,12 +12,20 @@
 #include "fmt/format.h"
 
 #include <optional>
+#include <string_view>
 
 namespace Slic3r::App::SlaPreExportCheck {
 
 namespace {
 
 constexpr size_t max_listed_names = 5;
+
+/// @brief The UTF-8 bytes of U+2026. It is kept out of every translatable string: the translation
+/// lookup converts a narrow string through the UI locale, which drops the bytes above 0x7F, so an
+/// ellipsis inside a _u8L() string never reaches the output. Spelled as bytes rather than "\u2026"
+/// because this project is not compiled with /utf-8, so a "\u2026" in a narrow literal would be
+/// encoded in the execution code page instead and arrive as a different character.
+constexpr std::string_view ellipsis{"\xE2\x80\xA6"};
 
 std::string format_unsupported_names(const std::vector<std::string>& names)
 {
@@ -33,13 +41,12 @@ std::string format_unsupported_names(const std::vector<std::string>& names)
     }
     if (names.size() > max_listed_names) {
         // TRN: Pre-export checklist line, listing continuation. {0} counts the models left out.
-        // The ellipsis is the raw UTF-8 bytes: this project is not compiled with /utf-8, so a "\u2026"
-        // would be encoded in the execution code page instead and arrive as a different character.
-        // The literal is split after the last escape, so a hex digit following it cannot be swallowed.
-        line += fmt::format(
-            fmt::runtime(Biz::_u8L(", \xE2\x80\xA6" " and {0} more")),
-            names.size() - max_listed_names
-        );
+        // The comma and the ellipsis around it are not translated, see ellipsis above.
+        line += ", ";
+        line += ellipsis;
+        line += " ";
+        line +=
+            fmt::format(fmt::runtime(Biz::_u8L("and {0} more")), names.size() - max_listed_names);
     }
     return line;
 }

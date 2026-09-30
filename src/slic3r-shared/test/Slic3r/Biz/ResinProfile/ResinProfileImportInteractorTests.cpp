@@ -69,6 +69,39 @@ std::string chitubox_cfg(std::string_view profile_name, std::string_view bottom_
 
 struct ResinImportFixture
 {
+    /// @brief The scratch tree the test writes into, plus the data dir pointing at it. Declared as
+    /// the first member on purpose, so it is destroyed last: the preset bundle the interactor owns
+    /// points into this folder and into this data dir, so the folder may only be removed and the
+    /// previous data dir restored once the interactor itself is gone. Doing either of them in the
+    /// fixture's destructor body tears the interactor down over a deleted preset tree.
+    struct ScratchDir
+    {
+        fs::path path;
+        std::string previous_data_dir;
+
+        explicit ScratchDir(fs::path p) : path(std::move(p))
+        {
+            previous_data_dir = Slic3r::data_dir();
+            // The preset bundle cache is written under the data dir, so keep it inside the scratch.
+            Slic3r::set_data_dir(path.string());
+        }
+
+        ~ScratchDir()
+        {
+            Slic3r::set_data_dir(previous_data_dir);
+            // The non-throwing overload on purpose: a throwing remove_all() out of a destructor
+            // would terminate the whole test run instead of failing one test.
+            boost::system::error_code ec;
+            fs::remove_all(path, ec);
+        }
+
+        ScratchDir(const ScratchDir&)            = delete;
+        ScratchDir& operator=(const ScratchDir&) = delete;
+    };
+
+    Preset::IO::BundlePaths bundle_paths;
+    ScratchDir scratch{Tests::get_datadir() / "resin_import_scratch"};
+
     Domain::Workbench workbench;
     App::Platform::StdMainThreadDispatcher dispatcher;
     Tests::AppInstanceMessageHandlerScope app_instance_message_handler_scope{dispatcher};
@@ -76,35 +109,26 @@ struct ResinImportFixture
     MockThumbnailImageGenerator thumbnail_image_generator;
     Biz::ProjectInteractor project_interactor{workbench, dispatcher, thumbnail_image_generator};
 
-    /// Everything the test writes, inside the test tree and removed again.
-    fs::path scratch;
-    std::string previous_data_dir;
-    Preset::IO::BundlePaths bundle_paths;
-
     ResinImportFixture()
     {
         boost::nowide::nowide_filesystem();
 
-        scratch = Tests::get_datadir() / "resin_import_scratch";
-        fs::remove_all(scratch);
-        fs::create_directories(scratch / "local");
-        fs::create_directories(scratch / "user");
-        fs::create_directories(scratch / "config");
+        boost::system::error_code ec;
+        fs::remove_all(scratch.path, ec);
+        fs::create_directories(scratch.path / "local");
+        fs::create_directories(scratch.path / "user");
+        fs::create_directories(scratch.path / "config");
 
         bundle_paths = Preset::IO::BundlePaths{
-            .app_bundle_path = fs::path{TEST_APP_PRESETS_DIR}.string(),
-            .local_bundle_path = (scratch / "local").string(),
+            .app_bundle_path       = fs::path{TEST_APP_PRESETS_DIR}.string(),
+            .local_bundle_path     = (scratch.path / "local").string(),
             .populate_local_bundle = false,
-            .user_bundle_path = (scratch / "user").string(),
-            .user_config_path = (scratch / "config").string(),
+            .user_bundle_path      = (scratch.path / "user").string(),
+            .user_config_path      = (scratch.path / "config").string(),
         };
 
         std::unique_ptr<SecretStoreDummy> store_dummy = std::make_unique<SecretStoreDummy>();
         Platform::PlatformServices::instance().set_secret_store(std::move(store_dummy));
-
-        // The preset bundle cache is written under the data dir, so keep it inside the scratch.
-        previous_data_dir = Slic3r::data_dir();
-        Slic3r::set_data_dir(scratch.string());
 
         project_interactor.preset_interactor().set_use_hw_config_short_name(false);
         project_interactor.preset_interactor().load_preset_bundle(bundle_paths);
@@ -114,8 +138,13 @@ struct ResinImportFixture
 
     ~ResinImportFixture()
     {
-        Slic3r::set_data_dir(previous_data_dir);
-        fs::remove_all(scratch);
+        // Closing the dispatcher is a destructor body job and nothing else: a destructor body runs
+        // before the members are destroyed, so this is the last moment at which the interactor and
+        // the preset bundle are still alive, and close() runs the queued main-thread work, which
+        // several interactors assert must not be left pending. It has to happen while the scratch
+        // tree and the data dir still say what they say, because that work resolves paths through
+        // them. Removing the tree and restoring the data dir is the ScratchDir member's job, which
+        // runs after every other member is gone.
         dispatcher.close();
     }
 
@@ -148,7 +177,7 @@ struct ResinImportFixture
     /// @brief Write a profile into the test's own scratch dir, not a system temp dir.
     fs::path write_profile(const std::string& file_name, const std::string& contents)
     {
-        const fs::path path = scratch / "profiles" / file_name;
+        const fs::path path = scratch.path / "profiles" / file_name;
         fs::create_directories(path.parent_path());
         boost::nowide::ofstream file(path, std::ios::binary | std::ios::trunc);
         file << contents;
@@ -288,7 +317,7 @@ TEST_CASE("ResinProfileImportInteractor writes nothing on a dry run", "[resin_pr
 TEST_CASE("ResinProfileImportInteractor imports a folder, one result per file", "[resin_profile][import]")
 {
     ResinImportFixture fx;
-    const fs::path folder = fx.scratch / "profiles";
+    const fs::path folder = fx.scratch.path / "profiles";
     fx.write_profile("a_grey.cfg", chitubox_cfg("Grey resin", "8"));
     fx.write_profile("b_broken.cfg", "this file is not a resin profile at all\n");
 
