@@ -26,7 +26,6 @@ void SlaSupportPointsEditing::add_point(const Domain::Vec3d& mesh_pos)
 {
     Domain::SLA::SupportPoint new_point;
     new_point.pos = mesh_pos.cast<float>();
-    new_point.head_front_radius = static_cast<float>(head_diameter_mm / 2.0);
     if (!pillar_diameter_use_global) {
         new_point.pillar_diameter = static_cast<float>(pillar_diameter_mm);
     }
@@ -36,9 +35,12 @@ void SlaSupportPointsEditing::add_point(const Domain::Vec3d& mesh_pos)
     if (!base_height_use_global) {
         new_point.base_height = static_cast<float>(base_height_mm);
     }
-    // A new point takes the tip shape, knot, stem cross-section and stem taper of the settings
-    // (M2.16c), the same way it takes the head and the pillar sizes above.
+    // A new point takes the tip shape, tip length, knot, stem cross-section and stem taper of the
+    // settings (M2.16c, M2.24), the same way it takes the pillar sizes above.
     apply_support_geometry(new_point, support_geometry);
+    // And the tip diameter of the settings, which is the head diameter of the tool: the configured
+    // one, or the tip of the preset that was chosen (M2.24).
+    apply_support_geometry(new_point, support_geometry, SupportGeometryField::TipDiameter);
     new_point.type = Domain::SLA::SupportPointType::manual_add;
     points.push_back(new_point);
 }
@@ -137,16 +139,6 @@ void SlaSupportPointsEditing::delete_selected_points()
 
     if (any_deleted) {
         selected_point_indices.clear();
-    }
-}
-
-void SlaSupportPointsEditing::apply_head_diameter_to_selected()
-{
-    const float new_radius = static_cast<float>(head_diameter_mm / 2.0);
-    for (size_t idx : selected_point_indices) {
-        if (idx < points.size()) {
-            points[idx].head_front_radius = new_radius;
-        }
     }
 }
 

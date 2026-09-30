@@ -1,8 +1,10 @@
-// M2.16c: the per-point support geometry. The tip shape, the knot ball between tip and stem, the
-// stem cross-section and the stem taper are stored on every support point (SLA::SupportPoint, M2.13
-// and M2.16); this todo adds the four Supports & raft settings a new point starts from and the
-// support tool controls that write them on the points that are selected. No mesh builder reads them
-// yet (M2.16b), so nothing here is about the geometry that comes out.
+// M2.16c, M2.24: the per-point support geometry. The tip diameter, the tip shape, the tip length,
+// the knot ball between tip and stem, the stem cross-section and the stem taper are stored on every
+// support point (SLA::SupportPoint, M2.13 and M2.16); this covers the Supports & raft settings a
+// new point starts from and the support tool controls that write them on the points that are
+// selected. M2.24 adds the tip diameter, which used to be reachable only through the head diameter
+// control, and the tip length, which had no setting and no control at all. No mesh builder is
+// involved here.
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 
@@ -67,10 +69,11 @@ TEST_CASE("The per-point support geometry settings sit in the head and the pilla
     REQUIRE(head_front != nullptr);
     REQUIRE(pillar != nullptr);
 
-    // The tip shape and the knot belong next to the pinhead sizes, the stem cross-section and the
-    // taper next to the pillar diameter, so the "Supports & raft" page keeps the tip and the stem
-    // apart the way the rest of the settings do.
-    for (const std::string& key : {"support_tip_shape", "support_knot_diameter"}) {
+    // The tip diameter, the tip shape, the tip length and the knot belong next to the pinhead sizes,
+    // the stem cross-section and the taper next to the pillar diameter, so the "Supports & raft"
+    // page keeps the tip and the stem apart the way the rest of the settings do.
+    for (const std::string& key :
+         {"support_tip_shape", "support_knot_diameter", "support_tip_length"}) {
         INFO("key " << key);
         const ConfigItemDef* def = find_def(key);
         REQUIRE(def != nullptr);
@@ -97,9 +100,11 @@ TEST_CASE("The per-point support geometry settings sit in the head and the pilla
 
 TEST_CASE("The per-point support geometry defaults are the geometry of today", "[Config][SLA][Supports]")
 {
-    // Default, no knot, a round stem of one diameter: what the support tree has always built, so a
-    // print preset that never sets the four keys keeps today's supports.
+    // The configured tip diameter, Default, a tip length derived from the pinhead width, no knot and
+    // a round stem of one diameter: what the support tree has always built, so a print preset that
+    // never sets the keys keeps today's supports.
     CHECK(find_def("support_tip_shape")->init_fn().get<SupportTipShape>() == SupportTipShape::Default);
+    CHECK(find_def("support_tip_length")->init_fn().get<double>() == Approx(0.));
     CHECK(find_def("support_knot_diameter")->init_fn().get<double>() == Approx(0.));
     CHECK(find_def("support_stem_sides")->init_fn().get<int>() == 0);
     CHECK(find_def("support_stem_taper")->init_fn().get<double>() == Approx(0.));
@@ -108,24 +113,33 @@ TEST_CASE("The per-point support geometry defaults are the geometry of today", "
 TEST_CASE("A support point carries the support geometry it is given", "[SlaSupportGeometry]")
 {
     SlaSupportGeometry geometry;
+    geometry.tip_diameter_mm  = 1.2;
     geometry.tip_shape        = SupportPoint::TipShape::Cone;
+    geometry.tip_length_mm    = 0.8;
     geometry.knot_diameter_mm = 1.6;
     geometry.stem_sides       = 6;
     geometry.stem_taper       = 0.25;
 
     SupportPoint point = make_point();
     apply_support_geometry(point, geometry);
+    // The all-fields write leaves the head radius alone: the generator fills it from the tree type,
+    // and a point placed by hand takes the tip diameter of the tool (M2.24).
+    apply_support_geometry(point, geometry, SupportGeometryField::TipDiameter);
 
+    // The tool works in diameters, the point stores the radii of the tip and of the knot.
+    CHECK(point.head_front_radius == Approx(0.6f));
     CHECK(point.tip_shape == SupportPoint::TipShape::Cone);
-    // The tool works in diameters, the point stores the radius of the knot.
+    CHECK(point.tip_length == Approx(0.8f));
     CHECK(point.knot_radius == Approx(0.8f));
     CHECK(point.stem_sides == 6);
     CHECK(point.stem_taper == Approx(0.25f));
 
     // What the point carries is what the tool reads back.
     const SlaSupportGeometry read_back = support_geometry_of(point);
-    CHECK(read_back.knot_diameter_mm == Approx(1.6));
+    CHECK(read_back.tip_diameter_mm == Approx(1.2));
     CHECK(read_back.tip_shape == geometry.tip_shape);
+    CHECK(read_back.tip_length_mm == Approx(geometry.tip_length_mm));
+    CHECK(read_back.knot_diameter_mm == Approx(1.6));
     CHECK(read_back.stem_sides == geometry.stem_sides);
     CHECK(read_back.stem_taper == Approx(geometry.stem_taper));
 }
@@ -162,6 +176,25 @@ TEST_CASE("The support geometry of a selection is only shown when the points agr
         REQUIRE(shared.has_value());
         CHECK(shared->stem_sides == 6);
     }
+
+    SECTION("a tip diameter of its own is a disagreement too")
+    {
+        // The tip diameter is the head diameter control of the tool, and two points of a different
+        // size leave it blank rather than showing a diameter only some of them have (M2.24).
+        SupportPoints sized{make_point(), make_point()};
+        sized[1].head_front_radius = 0.5f;
+        CHECK_FALSE(selection_support_geometry(sized, {0, 1}).has_value());
+        const std::optional<SlaSupportGeometry> one = selection_support_geometry(sized, {1});
+        REQUIRE(one.has_value());
+        CHECK(one->tip_diameter_mm == Approx(1.0));
+    }
+
+    SECTION("a tip length of its own is a disagreement too")
+    {
+        SupportPoints lengths{make_point(), make_point()};
+        lengths[1].tip_length = 1.4f;
+        CHECK_FALSE(selection_support_geometry(lengths, {0, 1}).has_value());
+    }
 }
 
 TEST_CASE("The support geometry goes on the selected points only", "[SlaSupportGeometry]")
@@ -174,19 +207,27 @@ TEST_CASE("The support geometry goes on the selected points only", "[SlaSupportG
     editor.select_point(2, true);
 
     // The point that is not selected, with a geometry of its own, has to keep it.
-    editor.points[1].tip_shape   = SupportPoint::TipShape::Cone;
-    editor.points[1].stem_sides  = 4;
-    editor.points[1].knot_radius = 0.5f;
-    editor.points[1].stem_taper  = 0.5f;
+    editor.points[1].head_front_radius = 0.5f;
+    editor.points[1].tip_shape         = SupportPoint::TipShape::Cone;
+    editor.points[1].tip_length        = 1.4f;
+    editor.points[1].stem_sides        = 4;
+    editor.points[1].knot_radius       = 0.5f;
+    editor.points[1].stem_taper        = 0.5f;
 
+    editor.support_geometry.tip_diameter_mm  = 1.2;
     editor.support_geometry.tip_shape        = SupportPoint::TipShape::Ball;
+    editor.support_geometry.tip_length_mm    = 0.6;
     editor.support_geometry.knot_diameter_mm = 2.0;
     editor.support_geometry.stem_sides       = 6;
     editor.support_geometry.stem_taper       = 0.25;
 
     for (const auto& [field, is_set] : std::vector<std::pair<SupportGeometryField, std::function<bool(const SupportPoint&)>>>{
+             {SupportGeometryField::TipDiameter,
+              [](const SupportPoint& p) { return p.head_front_radius == Approx(0.6f); }},
              {SupportGeometryField::TipShape,
               [](const SupportPoint& p) { return p.tip_shape == SupportPoint::TipShape::Ball; }},
+             {SupportGeometryField::TipLength,
+              [](const SupportPoint& p) { return p.tip_length == Approx(0.6f); }},
              {SupportGeometryField::KnotDiameter,
               [](const SupportPoint& p) { return p.knot_radius == Approx(1.0f); }},
              {SupportGeometryField::StemSides,
@@ -201,23 +242,29 @@ TEST_CASE("The support geometry goes on the selected points only", "[SlaSupportG
         }
     }
 
+    CHECK(editor.points[1].head_front_radius == Approx(0.5f));
     CHECK(editor.points[1].tip_shape == SupportPoint::TipShape::Cone);
+    CHECK(editor.points[1].tip_length == Approx(1.4f));
     CHECK(editor.points[1].knot_radius == Approx(0.5f));
     CHECK(editor.points[1].stem_sides == 4);
     CHECK(editor.points[1].stem_taper == Approx(0.5f));
 }
 
-TEST_CASE("One support geometry field at a time leaves the other three alone", "[SlaSupportGeometry]")
+TEST_CASE("One support geometry field at a time leaves the other five alone", "[SlaSupportGeometry]")
 {
     SlaSupportPointsEditing editor;
     editor.points.push_back(make_point());
-    editor.points[0].tip_shape   = SupportPoint::TipShape::Cone;
-    editor.points[0].stem_sides  = 4;
-    editor.points[0].knot_radius = 0.5f;
-    editor.points[0].stem_taper  = 0.5f;
+    editor.points[0].head_front_radius = 0.5f;
+    editor.points[0].tip_shape         = SupportPoint::TipShape::Cone;
+    editor.points[0].tip_length        = 1.4f;
+    editor.points[0].stem_sides        = 4;
+    editor.points[0].knot_radius       = 0.5f;
+    editor.points[0].stem_taper        = 0.5f;
     editor.select_point(0);
 
+    editor.support_geometry.tip_diameter_mm  = 1.2;
     editor.support_geometry.tip_shape        = SupportPoint::TipShape::Ball;
+    editor.support_geometry.tip_length_mm    = 0.6;
     editor.support_geometry.knot_diameter_mm = 2.0;
     editor.support_geometry.stem_sides       = 6;
     editor.support_geometry.stem_taper       = 0.25;
@@ -225,6 +272,8 @@ TEST_CASE("One support geometry field at a time leaves the other three alone", "
     editor.apply_support_geometry_to_selected(SupportGeometryField::TipShape);
 
     CHECK(editor.points[0].tip_shape == SupportPoint::TipShape::Ball);
+    CHECK(editor.points[0].head_front_radius == Approx(0.5f));
+    CHECK(editor.points[0].tip_length == Approx(1.4f));
     CHECK(editor.points[0].knot_radius == Approx(0.5f));
     CHECK(editor.points[0].stem_sides == 4);
     CHECK(editor.points[0].stem_taper == Approx(0.5f));
@@ -233,7 +282,9 @@ TEST_CASE("One support geometry field at a time leaves the other three alone", "
 TEST_CASE("A point placed by hand takes the support geometry of the settings", "[SlaSupportGeometry]")
 {
     SlaSupportPointsEditing editor;
+    editor.support_geometry.tip_diameter_mm  = 1.2;
     editor.support_geometry.tip_shape        = SupportPoint::TipShape::Cone;
+    editor.support_geometry.tip_length_mm    = 0.6;
     editor.support_geometry.knot_diameter_mm = 1.0;
     editor.support_geometry.stem_sides       = 4;
     editor.support_geometry.stem_taper       = 0.5;
@@ -241,10 +292,26 @@ TEST_CASE("A point placed by hand takes the support geometry of the settings", "
     editor.add_point(Slic3r::Domain::Vec3d{1., 2., 3.});
 
     REQUIRE(editor.points.size() == 1);
+    CHECK(editor.points[0].head_front_radius == Approx(0.6f));
     CHECK(editor.points[0].tip_shape == SupportPoint::TipShape::Cone);
+    CHECK(editor.points[0].tip_length == Approx(0.6f));
     CHECK(editor.points[0].knot_radius == Approx(0.5f));
     CHECK(editor.points[0].stem_sides == 4);
     CHECK(editor.points[0].stem_taper == Approx(0.5f));
+}
+
+TEST_CASE("A point placed by hand takes the tip diameter of the tool", "[SlaSupportGeometry]")
+{
+    // The head diameter control is the tip diameter field of the support geometry (M2.24), so a
+    // point placed after a preset takes the tip of that preset.
+    SlaSupportPointsEditing editor;
+    editor.add_point(Slic3r::Domain::Vec3d{0., 0., 0.});
+    editor.support_geometry.tip_diameter_mm = 0.2;
+    editor.add_point(Slic3r::Domain::Vec3d{1., 0., 0.});
+
+    REQUIRE(editor.points.size() == 2);
+    CHECK(editor.points[0].head_front_radius == Approx(0.2f));
+    CHECK(editor.points[1].head_front_radius == Approx(0.1f));
 }
 
 TEST_CASE("The three tip shapes map both ways", "[SlaSupportGeometry]")
@@ -267,18 +334,23 @@ TEST_CASE("A change of the per-point support geometry refreshes the live preview
 {
     const std::uint64_t base = hash_support_points(SupportPoints{make_point()});
 
-    SupportPoint tip      = make_point();
-    tip.tip_shape         = SupportPoint::TipShape::Cone;
-    SupportPoint knot     = make_point();
-    knot.knot_radius      = 0.5f;
-    SupportPoint sides    = make_point();
-    sides.stem_sides      = 6;
-    SupportPoint taper    = make_point();
-    taper.stem_taper      = 0.5f;
-    const std::array<SupportPoint, 4> changed{tip, knot, sides, taper};
+    SupportPoint tip_dia     = make_point();
+    tip_dia.head_front_radius = 0.5f;
+    SupportPoint tip         = make_point();
+    tip.tip_shape            = SupportPoint::TipShape::Cone;
+    SupportPoint tip_len     = make_point();
+    tip_len.tip_length       = 1.4f;
+    SupportPoint knot        = make_point();
+    knot.knot_radius         = 0.5f;
+    SupportPoint sides       = make_point();
+    sides.stem_sides         = 6;
+    SupportPoint taper       = make_point();
+    taper.stem_taper         = 0.5f;
+    const std::array<SupportPoint, 6> changed{tip_dia, tip, tip_len, knot, sides, taper};
 
-    // The tree of a point whose tip shape, knot, cross-section or taper changed is another tree, so
-    // the key of the preview has to change with it (M2.16b builds the geometry, this job the key).
+    // The tree of a point whose tip diameter, tip shape, tip length, knot, cross-section or taper
+    // changed is another tree, so the key of the preview has to change with it (M2.16b builds the
+    // geometry, M2.13 and M2.16c write the values, this job the key).
     for (const SupportPoint& point : changed) {
         INFO("point changed");
         CHECK(hash_support_points(SupportPoints{point}) != base);

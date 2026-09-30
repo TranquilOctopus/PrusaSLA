@@ -15,6 +15,7 @@ using Slic3r::Domain::Vec3d;
 using Slic3r::Domain::Vec2d;
 using Slic3r::Domain::Vec4d;
 using Slic3r::App::Plater::SlaSupportPointsEditing;
+using Slic3r::App::Plater::SupportGeometryField;
 
 namespace {
 
@@ -166,7 +167,7 @@ TEST_CASE("SlaSupportPointsEditing - pure editing logic", "[SlaSupportPointsGizm
     SECTION("Add point creates manual_add point with correct head radius")
     {
         SlaSupportPointsEditing editor;
-        editor.head_diameter_mm = 0.6;
+        editor.support_geometry.tip_diameter_mm = 0.6;
 
         editor.add_point(Vec3d{10.0, 20.0, 5.0});
 
@@ -261,10 +262,10 @@ TEST_CASE("SlaSupportPointsEditing - pure editing logic", "[SlaSupportPointsGizm
     SECTION("Head diameter affects new points only")
     {
         SlaSupportPointsEditing editor;
-        editor.head_diameter_mm = 0.4;
+        editor.support_geometry.tip_diameter_mm = 0.4;
         editor.add_point(Vec3d{0, 0, 0});
 
-        editor.head_diameter_mm = 1.0;
+        editor.support_geometry.tip_diameter_mm = 1.0;
         editor.add_point(Vec3d{1, 1, 1});
 
         REQUIRE(editor.points[0].head_front_radius == 0.2f);
@@ -274,7 +275,7 @@ TEST_CASE("SlaSupportPointsEditing - pure editing logic", "[SlaSupportPointsGizm
     SECTION("Multiple edits sequence: add, move, remove")
     {
         SlaSupportPointsEditing editor;
-        editor.head_diameter_mm = 0.5;
+        editor.support_geometry.tip_diameter_mm = 0.5;
 
         editor.add_point(Vec3d{0, 0, 0});
         editor.add_point(Vec3d{10, 10, 10});
@@ -420,15 +421,15 @@ TEST_CASE("SlaSupportPointsEditing - selection logic", "[SlaSupportPointsGizmo][
     SECTION("Apply head diameter to selected updates only selected points")
     {
         SlaSupportPointsEditing editor;
-        editor.head_diameter_mm = 0.4;
+        editor.support_geometry.tip_diameter_mm = 0.4;
         editor.points.push_back({Vec3f{10.0f, 20.0f, 5.0f}, 0.2f, SupportPointType::manual_add});
         editor.points.push_back({Vec3f{15.0f, 25.0f, 6.0f}, 0.3f, SupportPointType::island});
         editor.points.push_back({Vec3f{5.0f, 30.0f, 4.0f}, 0.4f, SupportPointType::slope});
 
         editor.select_point(0);
         editor.select_point(2, true);
-        editor.head_diameter_mm = 1.0;
-        editor.apply_head_diameter_to_selected();
+        editor.support_geometry.tip_diameter_mm = 1.0;
+        editor.apply_support_geometry_to_selected(SupportGeometryField::TipDiameter);
 
         REQUIRE(editor.points[0].head_front_radius == 0.5f); // updated
         REQUIRE(editor.points[1].head_front_radius == 0.3f); // not selected, unchanged

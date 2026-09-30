@@ -477,7 +477,11 @@ void DefaultSupportTree::add_pinheads()
         Vec3d hp = m_points.row(fidx);
 
         const Domain::SLA::SupportPoint &sp = m_sm.pts->at(fidx);
-        double lmin = sp.tip_length > 0.f ? double(sp.tip_length) : m_sm.cfg.head_width_mm;
+        // The length of the tapered tip: the one the point carries, else the configured default
+        // (support_tip_length), else the pinhead width, which is what the tree has always built.
+        double lmin = sp.tip_length > 0.f ? double(sp.tip_length) : m_sm.cfg.tip_length_mm;
+        if (lmin <= 0.)
+            lmin = m_sm.cfg.head_width_mm;
         double lmax = lmin;
         double pen = head_penetration(m_sm, sp);
 
