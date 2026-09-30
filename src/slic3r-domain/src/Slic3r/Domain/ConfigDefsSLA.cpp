@@ -1448,6 +1448,44 @@ void sla_config_init_fn(ConfigDefinitions& defs)
              {int(sla::PillarConnectionMode::dynamic), "dynamic", L("Dynamic")}}
         );
 
+        def = defs.add(prefix.first + "support_brace_enable", typeid(bool));
+        def->label = prefix.second;
+        def->location = Print;
+        def->overrides_in = Locations{ Object };
+        def->row_group = L("Bracing");
+        def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
+        def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
+        def->gui_type = ConfigItemDef::GUIType::checkbox;
+        def->tooltip = L("Link neighbouring pillars to each other with braces. With bracing off no pillar may lean on another one, so every pillar has to reach the print plate on its own, which a tall pillar may not be able to do.");
+        def->init_fn = init_with(true);
+
+        def = defs.add(prefix.first + "support_brace_diameter", typeid(double));
+        def->label = prefix.second;
+        def->location = Print;
+        def->overrides_in = Locations{ Object };
+        def->row_group = L("Brace diameter");
+        def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
+        def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
+        def->gui_type = ConfigItemDef::GUIType::textfield;
+        def->tooltip = L("Diameter in mm of the braces that link two neighbouring pillars. Zero means a brace is as thick as the pillar it hangs on.");
+        def->units = {L("mm")};
+        def->min = 0;
+        def->max = 15;
+        def->init_fn = init_with(0.);
+
+        def = defs.add(prefix.first + "support_brace_start_height", typeid(double));
+        def->label = prefix.second;
+        def->location = Print;
+        def->overrides_in = Locations{ Object };
+        def->row_group = L("Brace start height");
+        def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
+        def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
+        def->gui_type = ConfigItemDef::GUIType::textfield;
+        def->tooltip = L("Height in mm above the print plate from which the pillars may be braced. Zero lets the braces start as low as the pillar bases allow, a larger value leaves the bottom of the pillars unbraced.");
+        def->units = {L("mm")};
+        def->min = 0;
+        def->init_fn = init_with(0.);
+
         def = defs.add(prefix.first + "support_buildplate_only", typeid(bool));
         def->label = prefix.second;
         def->location = Print;

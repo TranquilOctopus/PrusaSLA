@@ -186,6 +186,10 @@ AABBMesh::hit_result DefaultSupportTree::bridge_mesh_intersect(
 bool DefaultSupportTree::interconnect(const Pillar &pillar,
                                      const Pillar &nextpillar)
 {
+    // Bracing off: the pillars may not be linked to each other at all.
+    if (!m_sm.cfg.brace_enable)
+        return false;
+
     // We need to get the starting point of the zig-zag pattern. We have to
     // be aware that the two head junctions are at different heights. We
     // may start from the lowest junction and call it a day but this
@@ -199,7 +203,7 @@ bool DefaultSupportTree::interconnect(const Pillar &pillar,
     Vec3d eupper = pillar.endpoint();
     Vec3d elower = nextpillar.endpoint();
 
-    double zmin = ground_level(m_sm) + m_sm.cfg.base_height_mm;
+    double zmin = brace_start_z(m_sm);
     eupper.z() = std::max(eupper.z(), zmin);
     elower.z() = std::max(elower.z(), zmin);
 
@@ -248,11 +252,14 @@ bool DefaultSupportTree::interconnect(const Pillar &pillar,
        // results in a cross connection between the pillars.
     Vec3d sj = supper, ej = slower; sj.z() = startz; ej.z() = sj.z() + zstep;
 
+       // A brace may be thinner than the pillar it hangs on (support_brace_diameter).
+    const double brace_r = brace_radius(m_sm.cfg, pillar.r_start);
+
        // TODO: This is a workaround to not have a faulty last bridge
     while(ej.z() >= eupper.z() /*endz*/) {
-        if(bridge_mesh_distance(sj, dirv(sj, ej), pillar.r_start) >= bridge_distance)
+        if(bridge_mesh_distance(sj, dirv(sj, ej), brace_r) >= bridge_distance)
         {
-            m_builder.add_crossbridge(sj, ej, pillar.r_start);
+            m_builder.add_crossbridge(sj, ej, brace_r);
             was_connected = true;
         }
 
@@ -262,9 +269,9 @@ bool DefaultSupportTree::interconnect(const Pillar &pillar,
             Vec3d ejback(sj.x(), sj.y(), ej.z());
             if (sjback.z() <= slower.z() && ejback.z() >= eupper.z() &&
                 bridge_mesh_distance(sjback, dirv(sjback, ejback),
-                                     pillar.r_start) >= bridge_distance) {
+                                     brace_r) >= bridge_distance) {
                 // need to check collision for the cross stick
-                m_builder.add_crossbridge(sjback, ejback, pillar.r_start);
+                m_builder.add_crossbridge(sjback, ejback, brace_r);
                 was_connected = true;
             }
         }
@@ -279,6 +286,11 @@ bool DefaultSupportTree::interconnect(const Pillar &pillar,
 bool DefaultSupportTree::connect_to_nearpillar(const Head &head,
                                                   long        nearpillar_id)
 {
+    // Bracing off: a pinhead may not lean on a neighbouring pillar either, it has to
+    // reach the ground or the model body on its own.
+    if (!m_sm.cfg.brace_enable)
+        return false;
+
     auto nearpillar = [this, nearpillar_id]() -> const Pillar& {
         return m_builder.pillar(nearpillar_id);
     };
