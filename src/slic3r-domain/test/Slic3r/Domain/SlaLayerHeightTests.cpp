@@ -4,6 +4,9 @@
 #include "Slic3r/Domain/FullConfigSLA.hpp"
 #include "Slic3r/Domain/SlaLayerHeight.hpp"
 
+#include <memory>
+#include <string>
+
 using Slic3r::Domain::ConfigPackSLA;
 using Slic3r::Domain::ConfigView;
 using Slic3r::Domain::FullConfigSLA;
