@@ -88,6 +88,31 @@ std::optional<std::string> read_text(ForeignResinProfile &profile, std::span<con
     return std::nullopt;
 }
 
+/// The name of an entry as it is compared: lower case, because an archive written on
+/// Windows spells the extension in upper case.
+std::string entry_name(const mz_zip_archive_file_stat &stat)
+{
+    std::string name{stat.m_filename};
+    boost::algorithm::to_lower(name);
+    return name;
+}
+
+/// Whether this is one of the two metadata files. Every other entry of a sliced job is a
+/// layer image, and a layer image is never extracted here, however many there are.
+bool is_settings_entry(const std::string &lname)
+{
+    return lname == CONFIG_INI || lname == PROFILE_INI;
+}
+
+/// Whether the path is named like a sliced archive of a Prusa machine. The extension is
+/// the user's choice, and a .3mf or a .cfgx is a zip as well, so the archive reader of that
+/// format has to be the one to get the file.
+bool is_sliced_archive_extension(const boost::filesystem::path &path)
+{
+    const std::string ext = boost::algorithm::to_lower_copy(path.extension().string());
+    return ext == ".sl1" || ext == ".sl1s";
+}
+
 } // anonymous namespace
 
 bool SlicedArchiveResinReader::sniff(const std::string &head) const
@@ -100,6 +125,19 @@ bool SlicedArchiveResinReader::sniff(const std::string &head) const
     return boost::algorithm::icontains(head, CONFIG_INI);
 }
 
+bool SlicedArchiveResinReader::sniff_path(const boost::filesystem::path &path) const
+{
+    if (!is_sliced_archive_extension(path))
+        return false;
+
+    // Opening a zip is cheap: the reader looks for the end of central directory record at
+    // the end of the file and reads that index alone, so a file of a few hundred megabytes
+    // costs the same as a small one here. What the index says about the file is left to
+    // read(), which can name the entry that is missing.
+    ZipReader zip{path.string()};
+    return zip.ok();
+}
+
 tl::expected<ForeignResinProfile, std::string> SlicedArchiveResinReader::read(const boost::filesystem::path &path) const
 {
     ZipReader zip{path.string()};
@@ -107,23 +145,30 @@ tl::expected<ForeignResinProfile, std::string> SlicedArchiveResinReader::read(co
         return tl::make_unexpected(
             fmt::format("{} cannot be opened as a sliced archive (.sl1 or .sl1s).", path.string()));
 
+    const mz_uint num_entries = mz_zip_reader_get_num_files(&zip.archive());
+    if (num_entries > MAX_ENTRIES_SCANNED)
+        return tl::make_unexpected(
+            fmt::format("{} holds {} entries, more than the {} this reader looks through.", path.string(),
+                        num_entries, MAX_ENTRIES_SCANNED));
+
     ArchiveIniMap config_ini, profile_ini;
     bool          has_config = false, has_profile = false;
 
-    const mz_uint num_entries = mz_zip_reader_get_num_files(&zip.archive());
     for (mz_uint i = 0; i < num_entries; ++i) {
         mz_zip_archive_file_stat stat;
         if (!mz_zip_reader_file_stat(&zip.archive(), i, &stat))
             continue;
 
-        std::string lname{stat.m_filename};
-        boost::algorithm::to_lower(lname);
-        if (lname != CONFIG_INI && lname != PROFILE_INI)
+        const std::string lname = entry_name(stat);
+        if (!is_settings_entry(lname))
             continue;
 
-        auto text = read_zip_entry(zip.archive(), stat);
+        // The size is the one the central directory declares, and it is checked before the
+        // entry is extracted, so an entry that claims to expand to gigabytes is refused
+        // instead of allocated.
+        auto text = read_zip_entry(zip.archive(), stat, MAX_INI_ENTRY_SIZE);
         if (!text)
-            return tl::make_unexpected(text.error());
+            return tl::make_unexpected(fmt::format("{}: {}", path.string(), text.error()));
 
         ArchiveIniMap &ini  = lname == CONFIG_INI ? config_ini : profile_ini;
         bool          &seen = lname == CONFIG_INI ? has_config : has_profile;

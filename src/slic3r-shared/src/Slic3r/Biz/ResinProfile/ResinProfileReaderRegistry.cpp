@@ -25,6 +25,19 @@ tl::expected<ForeignResinProfile, std::string> ResinProfileReaderRegistry::read_
     if (ec) {
         return tl::make_unexpected(std::string("Cannot get file size: ") + ec.message());
     }
+
+    // A reader of a container is asked first, on the path alone. It opens the container and
+    // extracts only the entries it needs, so the size of the file behind it is none of its
+    // business: a sliced .sl1 of a few hundred megabytes is read like a small one, because
+    // nothing but its config.ini is ever in memory. What it extracts, it caps itself.
+    for (const auto& reader : m_readers) {
+        if (reader->reads_container_lazily() && reader->sniff_path(path)) {
+            return reader->read(path);
+        }
+    }
+
+    // Everything else is a plain text file that is read as a whole, and 8 MB is plenty for
+    // the settings of a resin.
     if (file_size > static_cast<boost::uintmax_t>(MAX_FILE_SIZE)) {
         return tl::make_unexpected("File too large (max 8 MB)");
     }
