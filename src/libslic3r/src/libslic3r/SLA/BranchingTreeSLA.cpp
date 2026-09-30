@@ -46,14 +46,11 @@ class BranchingTreeBuilder: public branchingtree::Builder {
     mutable execution::SpinningMutex<execution::ExecutionTBB>  m_gnd_connections_mtx;
 
     // Scaling of the input value 'widening_factor:<0, 1>' to produce resonable
-    // widening behaviour
-    static constexpr double WIDENING_SCALE = 0.05;
-
+    // widening behaviour, and the cap on how much fatter than the head it
+    // carries a branch may get, are both in branch_radius().
     double get_radius(const branchingtree::Node &j) const
     {
-        double w = WIDENING_SCALE * m_sm.cfg.pillar_widening_factor * j.weight;
-
-        return double(j.Rmin) + w;
+        return branch_radius(m_sm.cfg, double(j.Rmin), double(j.weight));
     }
 
     // The support point a leaf node was created from. Only the leaves carry

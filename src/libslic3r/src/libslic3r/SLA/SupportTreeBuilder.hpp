@@ -496,6 +496,12 @@ public:
     inline const std::vector<Head>   &heads() const { return m_heads; }
     inline const std::vector<Bridge> &bridges() const { return m_bridges; }
     inline const std::vector<Bridge> &crossbridges() const { return m_crossbridges; }
+    // The branches of the branching tree, which are cones: the radius at the
+    // start and at the end of it. A test that has to look at the radii of the
+    // branches (M4.5a) reads them from here, the builder itself is what the tree
+    // is built with.
+    inline const std::vector<DiffBridge> &diffbridges() const { return m_diffbridges; }
+    inline const std::vector<Junction>   &junctions() const { return m_junctions; }
     inline const std::vector<Pedestal> &pedestals() const { return m_pedestals; }
     // The places where a pillar was anchored on the model body instead of the plate, which is
     // what a support point marked with the per point switch of M2.26 asks for.

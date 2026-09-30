@@ -1759,6 +1759,29 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->max = 1;
         def->init_fn = init_with(0.5);
 
+        // Only the branching tree grows its branches with the weight of the
+        // subtree they carry, so the cap on that growth is its alone.
+        if (prefix.first == "branching") {
+            def = defs.add(prefix.first + "support_pillar_radius_cap", typeid(double));
+            def->label = prefix.second;
+            def->location = Print;
+            def->overrides_in = Locations{ Object };
+            def->row_group = L("Pillar radius cap");
+            def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
+            def->category = ConfigItemDef::Category::Hidden;
+            def->gui_type = ConfigItemDef::GUIType::textfield;
+            def->tooltip =
+                L("Limit how much fatter than the head it carries a branch may get, as a "
+                  "multiple of the radius of that head. A branch grows with the length of "
+                  "the longest chain of branches merged into it, so without a limit a trunk "
+                  "is as fat as the whole subtree it holds up. One keeps every branch at "
+                  "the radius of its head and is the tightest there is, zero means no "
+                  "limit, which is what the tree has always built.");
+            def->min = 0;
+            def->max = 20;
+            def->init_fn = init_with(0.);
+        }
+
         def = defs.add(prefix.first + "support_base_diameter", typeid(double));
         def->label = prefix.second;
         def->location = Print;

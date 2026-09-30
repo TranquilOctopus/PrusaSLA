@@ -41,6 +41,7 @@ std::vector<std::string> get_all_sla_config_keys() {
     keys.push_back("branchingsupport_object_elevation");
     keys.push_back("branchingsupport_pillar_connection_mode");
     keys.push_back("branchingsupport_pillar_diameter");
+    keys.push_back("branchingsupport_pillar_radius_cap");
     keys.push_back("branchingsupport_pillar_widening_factor");
     keys.push_back("branchingsupport_small_pillar_diameter_percent");
     keys.push_back("delay_after_exposure");
@@ -299,6 +300,7 @@ TEST_CASE("SLAInvalidation: branching support keys the engine reads are defined"
         "branchingsupport_object_elevation",
         "branchingsupport_pillar_connection_mode",
         "branchingsupport_pillar_diameter",
+        "branchingsupport_pillar_radius_cap",
         "branchingsupport_pillar_widening_factor",
         "branchingsupport_small_pillar_diameter_percent",
     };
@@ -331,6 +333,7 @@ TEST_CASE("SLAInvalidation: table-driven expected steps for representative keys"
         {"branchingsupport_base_diameter", steps({propagate(slaposSupportTree)})},
         {"branchingsupport_base_shape", steps({propagate(slaposSupportTree)})},
         {"branchingsupport_object_elevation", steps({propagate(slaposObjectSlice)})},
+        {"branchingsupport_pillar_radius_cap", steps({propagate(slaposSupportTree)})},
         {"display_width", steps({propagate(slapsMergeSlicesAndEval)})},
         {"elefant_foot_compensation", all_steps()},
         {"exposure_time", steps({propagate(slapsMergeSlicesAndEval)})},
