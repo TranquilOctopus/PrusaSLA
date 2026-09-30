@@ -43,9 +43,9 @@ struct BoxModel
 // cast to double below, so the transform is widened here: Eigen does not mix scalar types.
 Slic3r::Transform3d rotation_transform(const Slic3r::Vec2d& rotation)
 {
-    const Slic3r::Matrix3d m =
-        Slic3r::sla::rotation_angles_to_transform(rotation).matrix().cast<double>();
-    return Slic3r::Transform3d{m};
+    Slic3r::Transform3d t = Slic3r::Transform3d::Identity();
+    t.linear() = Slic3r::sla::rotation_angles_to_transform(rotation).linear().cast<double>();
+    return t;
 }
 
 // Height of the object's mesh after rotating it by the given X/Y angles.
