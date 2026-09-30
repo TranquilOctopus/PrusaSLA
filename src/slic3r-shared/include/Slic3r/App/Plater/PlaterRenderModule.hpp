@@ -185,6 +185,10 @@ public:
 
     Scene::IGizmoController& gizmo_controller();
 
+    /// The bed sidebar, which owns the material selection dialog and with it the resin import
+    /// review dialog. The navigator reaches them through here.
+    SidebarBed& sidebar_bed();
+
     /**
      * @name Implementation of Scene::ISharedModelGeometryProvider public interface
      * @{

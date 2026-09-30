@@ -13,6 +13,8 @@
 #include "Slic3r/App/PrinterSearchFunction.hpp"
 #include "Slic3r/App/ResinImportDialog.hpp"
 #include "Slic3r/App/IsSlaActive.hpp"
+#include "Slic3r/App/IDialogManager.hpp"
+#include "Slic3r/App/Wildcards.hpp"
 
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/Biz/Preset/PresetInteractor.hpp"
@@ -47,6 +49,10 @@ const MaterialSelectionDialog::ProjectContext& MaterialSelectionDialog::context(
 void MaterialSelectionDialog::update_type_filter_visibility()
 {
     bool sla_active = is_sla_active(m_project_interactor);
+
+    // A resin profile is written into a resin preset, so the button that imports one is only of use
+    // where the selected printer takes a resin.
+    m_import_resin_profile_button->set_visible(sla_active);
 
     // Show/hide the appropriate button set (excluding shared "All")
     for (auto* btn : m_fff_type_filter_buttons) {
@@ -293,6 +299,18 @@ m_material_filter->set_filter_fn(
 
     m_material_searcher->set_source_model(m_material_filter.get());
 
+    content()->emplace_back<Separator>(Orientation::Horizontal);
+
+    // How a resin profile comes in from a file rather than from the drop: the picker hands the
+    // file to the review dialog, which is the only place the mapping is decided. The ellipsis is
+    // outside the translated string, the way the rest of the app writes a button that opens
+    // something.
+    m_import_resin_profile_button =
+        content()->emplace_back<LayoutButton>(_u8L("Import resin profile") + "...");
+    m_import_resin_profile_button->set_width_percent(100.f);
+    m_import_resin_profile_button->set_visible(false);
+    m_import_resin_profile_button->callbacks().action = [this]() { pick_resin_profile(); };
+
     // Material Settings Dialog setup
     m_material_settings_dialog->attach_to_item(content_item(), Position::Left);
     m_resin_import_dialog->attach_to_item(content_item(), Position::Left);
@@ -403,6 +421,35 @@ void MaterialSelectionDialog::open_resin_import(const boost::filesystem::path& p
 ResinImportDialog& MaterialSelectionDialog::resin_import_dialog()
 {
     return *m_resin_import_dialog;
+}
+
+void MaterialSelectionDialog::pick_resin_profile()
+{
+    // The review dialog is the one to be opened, so this dialog has to be the opened one when the
+    // file comes back from the picker.
+    m_navigator.set_opened_dialog(this);
+
+    IDialogManager::FileCallback callback =
+        [this](bool success, const std::vector<boost::filesystem::path>& file_paths)
+    {
+        // One profile at a time: the picker is opened for a single file, so the first one is the
+        // one to review.
+        if (success && !file_paths.empty()) {
+            open_resin_import(file_paths.front());
+        }
+    };
+
+    AppServices::instance().dialog_manager().show_file_dialog(
+        FileDialogType::Open,
+        _u8L("Import resin profile"),
+        m_project_interactor.project_dir(
+            m_project_interactor.selected_project_id(),
+            AppServices::instance().app_config().get<std::string>("last_used_directory")
+        ),
+        "",
+        Wildcards::generate_wildcards(Wildcards::TypeFlag::ResinProfile),
+        callback
+    );
 }
 
 void MaterialSelectionDialog::on_app_config_changed(const std::string& key)

@@ -104,4 +104,23 @@ bool is_project_file(const std::string& input_file);
  */
 bool is_supported_file(const std::string& input_file);
 
+/**
+ * Returns the file extensions of a foreign resin profile (Chitubox .cfg/.cfgx, Lychee .lyr).
+ *
+ * Extensions are lowercase and dot-prefixed, the same shape as get_import_extensions(). A profile
+ * is not a model: a file with one of these extensions goes to the resin import review dialog and
+ * not to the scene.
+ */
+const std::vector<std::string>& get_resin_profile_extensions();
+
+/**
+ * Checks if the given file is a foreign resin profile rather than something the model loader reads.
+ * Delegates to get_resin_profile_extensions().
+ * The check is case-insensitive.
+ *
+ * @param input_file The name of the file to check.
+ * @return True if the input_file carries a resin profile extension, false otherwise.
+ */
+bool is_resin_profile_file(const std::string& input_file);
+
 } // namespace Slic3r::Biz::FileLoadingLogic
