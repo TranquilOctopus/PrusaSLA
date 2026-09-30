@@ -2,10 +2,12 @@
 #include <fmt/ranges.h>
 #include "Slic3r/Biz/Preset/PresetCollectionEvaluator.hpp"
 #include "Slic3r/Biz/Preset/ValueMapBuilder.hpp"
+#include "Slic3r/Domain/SLA/RaftPreset.hpp"
 #include "Slic3r/Uuid.hpp"
 #include "Slic3r/TypeInfo.hpp"
 #include "Slic3r/Log.hpp"
 
+#include <optional>
 #include <ranges>
 
 
@@ -309,7 +311,10 @@ ConfigType config_values(
     for (const auto& [k, v] : values) {
         const auto q = config.find(k);
         if (q.item == nullptr) {
-            SPDLOG_ERROR("Invalid key {} for {}", k, type_name(config));
+            // A preset of another version of the app names settings this one does not have. It
+            // still loads, with everything else in it, so this is what it is rather than a fault:
+            // a warning says which names were dropped.
+            SPDLOG_WARN("Preset value for unknown key {} of {} ignored", k, type_name(config));
             continue;
         }
 
@@ -378,6 +383,47 @@ void update_printer_preset_from_hw_config(
     it.item->set(hw_config.legacy_printer_model.value_or(hw_config.printer_id));
 }
 
+// The value a preset of that age holds for one of the two checkboxes raft_type replaced. A preset
+// file of that era spells a checkbox as a number ("1.0"), so a number counts as a checkbox too.
+std::optional<bool> legacy_pad_flag_of(const EvalPresetValueMap& values, const std::string& key)
+{
+    const auto it = values.find(key);
+    if (it == values.end())
+        return std::nullopt;
+
+    if (const bool* flag = std::get_if<bool>(&it->second))
+        return *flag;
+    if (const double* number = std::get_if<double>(&it->second))
+        return *number != 0.;
+    if (const int* number = std::get_if<int>(&it->second))
+        return *number != 0;
+
+    return std::nullopt;
+}
+
+// An SLA print preset written before raft_type decided the raft with the two checkboxes raft_type
+// replaced. Both are still defined, so such a preset loads and the raft it asked for is in it, but
+// raft_type would read as its own default: a preset that asked for a raft around the object would
+// silently print a full plate one, and one that asked for no raft at all would print a raft. The
+// type those two checkboxes meant is filled in here, once per evaluated preset. A preset that names
+// raft_type keeps it, and one that names neither of the checkboxes keeps the default, which is the
+// raft of that day.
+void migrate_legacy_raft_type(EvalPresetValueMap& values)
+{
+    const std::optional<bool> pad_enable         = legacy_pad_flag_of(values, "pad_enable");
+    const std::optional<bool> pad_around_object = legacy_pad_flag_of(values, "pad_around_object");
+    if (!pad_enable && !pad_around_object)
+        return;
+
+    values.emplace(
+        "raft_type",
+        Domain::SLA::raft_type_name(
+            Domain::SLA::raft_type_of_legacy_pad(
+                pad_enable.value_or(true), pad_around_object.value_or(false)
+            )
+        )
+    );
+}
 
 } // namespace
 
@@ -412,6 +458,17 @@ Domain::Preset::EvaluatedPreset<FdmConfigType, SlaConfigType> PresetEvaluator::p
         conditions.erase(std::ranges::begin(to_remove), std::ranges::end(to_remove));
     }
 
+    // An SLA print preset from before raft_type is migrated into one, so that the raft it was
+    // saved with is the raft it prints. The copy is only made for those presets.
+    std::optional<EvalPresetValueMap> migrated_values;
+    if (hw_config.technology == Domain::PrinterTechnology::SLA
+        && kind == Domain::Preset::PresetKind::SlaPrint)
+    {
+        migrated_values = context.values;
+        migrate_legacy_raft_type(*migrated_values);
+    }
+    const EvalPresetValueMap& values = migrated_values ? *migrated_values : context.values;
+
     return {
         .kind       = kind,
         .origin     = context.origin,
@@ -419,7 +476,7 @@ Domain::Preset::EvaluatedPreset<FdmConfigType, SlaConfigType> PresetEvaluator::p
         .root_id    = context.root_id,
         .id         = context.id.empty() ? generate_uuid() : context.id,
         .name       = context.name,
-        .values     = config_values<FdmConfigType, SlaConfigType>(hw_config, context.values),
+        .values     = config_values<FdmConfigType, SlaConfigType>(hw_config, values),
         .features   = context.features,
         .conditions = conditions,
         .last_node_location = context.last_node_location

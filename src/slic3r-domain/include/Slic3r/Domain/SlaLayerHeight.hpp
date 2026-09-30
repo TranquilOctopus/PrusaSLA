@@ -29,6 +29,15 @@ int sla_effective_faded_layers(const ConfigView& cfg);
 /// @return The burn-in layer count, never negative.
 int sla_bottom_layer_count(const ConfigView& cfg);
 
+/// Height the first layer is sliced at: the resin's own initial_layer_height when it states one,
+/// otherwise the effective layer height. A preset or project that carries no initial_layer_height
+/// at all, or one that carries it as zero, is sliced like every other layer: a resin preset
+/// written before the setting moved from the print preset carries neither.
+/// @param cfg A finalized config view. Options missing from the view count as 0, so the first
+///             layer falls back to the effective layer height of whatever the view does have.
+/// @return The first layer height in mm.
+double sla_effective_initial_layer_height(const ConfigView& cfg);
+
 /// The band of layers the raft interface is printed as: the skin between the raft and the object,
 /// with a thickness of its own and, where the file format has room for one, an exposure of its own.
 struct RaftInterface

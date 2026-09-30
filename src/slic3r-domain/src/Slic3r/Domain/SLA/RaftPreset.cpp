@@ -1,5 +1,7 @@
 #include "Slic3r/Domain/SLA/RaftPreset.hpp"
 
+#include "Slic3r/Domain/ConfigBoxesSLA.hpp"
+
 #include <algorithm>
 #include <map>
 #include <utility>
@@ -157,6 +159,23 @@ std::vector<std::string> visible_settings_for(sla::RaftType type, sla::RaftInfil
 }
 
 } // namespace
+
+sla::RaftType raft_type_of_legacy_pad(bool pad_enable, bool pad_around_object)
+{
+    if (!pad_enable)
+        return sla::RaftType::None;
+    return pad_around_object ? sla::RaftType::AroundObject : sla::RaftType::Full;
+}
+
+std::string raft_type_name(sla::RaftType type)
+{
+    // The names belong to the option, so they are read off it instead of being written out here:
+    // a preset that is migrated with one of these names is parsed by the same table.
+    SLAPrintSettings settings;
+    ConfigItem& item = settings.items.opt("raft_type");
+    item.set(type);
+    return std::string{item.get<EnumWrapper>().get_string()};
+}
 
 bool is_raft_setting(const std::string& key)
 {

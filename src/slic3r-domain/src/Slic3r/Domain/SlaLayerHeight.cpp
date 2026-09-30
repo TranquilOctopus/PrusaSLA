@@ -61,6 +61,14 @@ int sla_bottom_layer_count(const ConfigView& cfg)
     return sla_effective_faded_layers(cfg) + 1;
 }
 
+double sla_effective_initial_layer_height(const ConfigView& cfg)
+{
+    // Zero means "no first layer of its own", which is what a resin preset written before the
+    // setting moved from the print preset says by leaving it out.
+    const double initial_layer_height{lenient_double(cfg, "initial_layer_height")};
+    return initial_layer_height > 0. ? initial_layer_height : sla_effective_layer_height(cfg);
+}
+
 RaftInterface raft_interface_band(double raft_height_mm,
                                   double interface_thickness_mm,
                                   double layer_height_mm)

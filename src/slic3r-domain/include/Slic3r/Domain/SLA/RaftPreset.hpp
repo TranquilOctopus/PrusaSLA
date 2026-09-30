@@ -65,6 +65,18 @@ RaftPadValues raft_preset_to_pad_values(
     double floor_thickness_mm
 );
 
+/// The raft type a print preset from before raft_type asked for, read off the two checkboxes
+/// raft_type replaced. They are the raft of that day: no raft when the "use raft" box is off, a
+/// raft over the whole build plate when it is on and the "around the object" box is off, and one
+/// that only the object sits on when both are on. There was no skate raft then, so the pair cannot
+/// name one.
+sla::RaftType raft_type_of_legacy_pad(bool pad_enable, bool pad_around_object);
+
+/// The name raft_type is stored under, the one a preset file carries and a config box reads back
+/// ("none", "full", "around_object", "skate"). It is read from the raft_type definition, so the
+/// name a migration writes into an old preset is the name the option itself parses.
+std::string raft_type_name(sla::RaftType type);
+
 /// The raft settings the given raft type actually reads, in the order they should be shown:
 /// raft_type itself first, then the knobs that are not already decided by the raft type.
 /// raft_type is always in the list. A knob the raft type ignores (Skate replaces the expansion
