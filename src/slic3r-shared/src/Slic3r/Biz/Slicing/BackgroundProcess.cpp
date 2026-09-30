@@ -98,6 +98,7 @@ BackgroundProcess::BackgroundProcess(
     const Domain::SlicingId id
 ) :
     m_hw_config_id{preset_metadata.hw_config.id},
+    m_technology{preset_metadata.hw_config.technology},
     m_print{init_print(preset_metadata.hw_config.technology, callbacks, id)},
     m_on_status{[call = std::reference_wrapper(callbacks), id](const StatusUpdate status) {
         call.get().on_status(status, id);
@@ -124,6 +125,7 @@ BackgroundProcess::BackgroundProcess(
     const Domain::SlicingId id
 )
     : m_hw_config_id{preset_metadata.hw_config.id}
+    , m_technology{preset_metadata.hw_config.technology}
     , m_print{std::move(print)}
     , m_on_status{[call = std::reference_wrapper(callbacks), id](const StatusUpdate status) {call.get().on_status(status, id); }}
     , m_get_status{[call = std::reference_wrapper(callbacks), id]() { return call.get().get_status(id); }}
@@ -299,6 +301,11 @@ void BackgroundProcess::stop()
 
 std::string BackgroundProcess::get_hw_printer_id() const {
     return m_hw_config_id;
+}
+
+Domain::PrinterTechnology BackgroundProcess::technology() const
+{
+    return m_technology;
 }
 
 void BackgroundProcess::queue_action(const std::function<void()>& action)

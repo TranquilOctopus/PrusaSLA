@@ -168,6 +168,8 @@ private:
     // Any members accessed by the threads must be destroyed after
     // the threads!
     std::optional<Domain::SlicingId> m_autoslicing_id;
+    // Whether the "auto slicing skipped" debug line was already logged for m_autoslicing_id.
+    bool m_autoslicing_skipped_logged{false};
     mutable std::mutex m_status_mutex;
     std::map<Domain::SlicingId, StatusCode> m_statuses;
 

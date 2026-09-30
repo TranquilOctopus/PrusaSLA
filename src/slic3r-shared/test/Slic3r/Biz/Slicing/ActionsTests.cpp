@@ -1,8 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
 
+#include <algorithm>
 #include <boost/filesystem/operations.hpp>
 
+#include "Slic3r/Biz/Slicing/AutoSlicing.hpp"
 #include "Slic3r/Biz/Slicing/SlicingInteractor.hpp"
 #include "Slic3r/Biz/Slicing/TestUtils.hpp"
 #include "Slic3r/Biz/Slicing/GCodeUtils.hpp"
@@ -29,6 +31,95 @@ using Slic3r::Domain::ModelInstanceList;
 using Slic3r::Test::is_gcode_sane;
 using Slic3r::Biz::Slicing::IFDMResultListener;
 
+namespace {
+
+bool any_slice_started(const StatusEvents& events, const SlicingId id)
+{
+    return std::ranges::any_of(events, [id](const StatusEvent& event) {
+        return event.slicing_id == id
+            && (event.status_code == StatusCode::Running
+                || event.status_code == StatusCode::Finished);
+    });
+}
+
+bool finished(const StatusEvents& events)
+{
+    return events.back().status_code == StatusCode::Finished;
+}
+
+} // namespace
+
+TEST_CASE("Auto slicing is allowed for FFF only", "[slicing][slicing-interactor]") {
+    using Slic3r::Biz::Slicing::is_auto_slicing_allowed;
+    using Slic3r::Domain::PrinterTechnology;
+
+    CHECK(is_auto_slicing_allowed(PrinterTechnology::FFF, true));
+    CHECK_FALSE(is_auto_slicing_allowed(PrinterTechnology::FFF, false));
+    CHECK_FALSE(is_auto_slicing_allowed(PrinterTechnology::SLA, true));
+    CHECK_FALSE(is_auto_slicing_allowed(PrinterTechnology::SLA, false));
+}
+
+TEST_CASE_METHOD(
+    SlicingFixture,
+    "Auto slicing slices an FFF bed",
+    "[slicing][slicing-interactor]"
+)
+{
+    using namespace std::chrono_literals;
+    using Slic3r::Domain::PrinterTechnology;
+
+    ModelOnBed model_on_bed{get_cubes_model(1, 5, PrinterTechnology::FFF)};
+    const SlicingId id{0, model_on_bed.bed_instance.id().id};
+    slicing.update_process(
+        model_on_bed.model,
+        model_on_bed.project_metadata,
+        model_on_bed.preset_metadata,
+        model_on_bed.config,
+        model_on_bed.bed_instance
+    );
+    REQUIRE(slicing.get_status(id) == StatusCode::Modified);
+
+    slicing.enable_auto_slicing(id);
+
+    REQUIRE(wait_for_status(dispatcher, status_listener, 15s, [&](const StatusEvents& events) {
+        return finished(events);
+    }));
+}
+
+TEST_CASE_METHOD(
+    SlicingFixture,
+    "Auto slicing never slices an SLA bed",
+    "[slicing][slicing-interactor]"
+)
+{
+    using namespace std::chrono_literals;
+    using Slic3r::Domain::PrinterTechnology;
+
+    ModelOnBed model_on_bed{get_cubes_model(1, 5, PrinterTechnology::SLA)};
+    const SlicingId id{0, model_on_bed.bed_instance.id().id};
+    slicing.update_process(
+        model_on_bed.model,
+        model_on_bed.project_metadata,
+        model_on_bed.preset_metadata,
+        model_on_bed.config,
+        model_on_bed.bed_instance
+    );
+    REQUIRE(slicing.get_status(id) == StatusCode::Modified);
+
+    slicing.enable_auto_slicing(id);
+
+    // The bed is modified and the auto slicing is requested, but nothing may start.
+    CHECK_FALSE(wait_for_status(dispatcher, status_listener, 2s, [&](const StatusEvents& events) {
+        return any_slice_started(events, id);
+    }));
+    CHECK(slicing.get_status(id) == StatusCode::Modified);
+
+    // Only an explicit request slices it.
+    slicing.slice_bed(id);
+    REQUIRE(wait_for_status(dispatcher, status_listener, 15s, [&](const StatusEvents& events) {
+        return finished(events);
+    }));
+}
 
 TEST_CASE_METHOD(SlicingFixture, "Update stops slicing", "[slicing][slicing-interactor]") {
     using namespace std::chrono_literals;

@@ -349,14 +349,50 @@ void PreviewRenderModule::on_selected_bed_instances_changed(
 
     m_object_list->update_sliced_info();
 
-    m_sidebar_auto_reslice->update_visibility();
-    if (m_active && m_sidebar_auto_reslice->is_enabled()) {
-        m_project_interactor.slicing_interactor().enable_auto_slicing(
-            m_project_interactor.selected_bed_slicing_id()
-        );
-    }
+    update_auto_slicing();
 
     request_render();
+}
+
+void PreviewRenderModule::update_auto_slicing()
+{
+    if (m_sidebar_auto_reslice.get() == nullptr) {
+        return;
+    }
+
+    m_sidebar_auto_reslice->update_visibility();
+    Biz::Slicing::SlicingInteractor& slicing_interactor{
+        m_project_interactor.slicing_interactor()
+    };
+    if (m_active && m_sidebar_auto_reslice->is_enabled()) {
+        slicing_interactor.enable_auto_slicing(m_project_interactor.selected_bed_slicing_id());
+    } else {
+        slicing_interactor.disable_auto_slicing();
+    }
+}
+
+void PreviewRenderModule::on_selected_config_container_changed(
+    Domain::SelectionId project_id,
+    Domain::SelectionId /*container_id*/
+)
+{
+    if (project_id == m_project_interactor.selected_project_id()) {
+        update_auto_slicing();
+    }
+}
+
+void PreviewRenderModule::on_preset_selection_changed(
+    Domain::SelectionId project_id,
+    Domain::SelectionId /*config_container_id*/,
+    Biz::Preset::PresetItemType type
+)
+{
+    // Only the printer preset can change the technology, and with it the auto slicing.
+    if (project_id == m_project_interactor.selected_project_id()
+        && type == Biz::Preset::PresetItemType::PrinterPreset)
+    {
+        update_auto_slicing();
+    }
 }
 
 void PreviewRenderModule::on_status_cache_status_code_changed(const Domain::SlicingId id)
@@ -394,6 +430,9 @@ void PreviewRenderModule::on_selected_project_changed(size_t project_id)
     } else if (m_viewer == &m_sla_viewer && !bed_selection.empty()) {
         update_sla_viewer_data(m_project_interactor.selected_bed_slicing_id());
     }
+
+    // The loaded project may bring another printer technology with it.
+    update_auto_slicing();
 }
 
 void PreviewRenderModule::on_bed_instance_updated(Domain::SelectionId project_id, const Domain::BedRefs& instances)
@@ -484,6 +523,10 @@ void PreviewRenderModule::on_init(
     m_project_interactor.sla_object_cache().add_listener<Biz::ISLAObjectCacheChangedListener>(this);
     m_project_interactor.status_cache().add_listener<Biz::IStatusCacheChangedListener>(this);
     m_project_interactor.add_listener<Biz::ISelectedProjectChangedListener>(this);
+    m_project_interactor.add_listener<Biz::ISelectedConfigContainerChangedListener>(this);
+    m_project_interactor.preset_interactor().add_listener<Biz::Preset::IPresetChangedListener>(
+        this
+    );
     m_project_interactor.scene_interactor().add_listener<ISceneBedInstanceChangedListener>(this);
 
     m_project_interactor.status_cache().add_listener<Biz::IStatusCacheChangedListener>(
@@ -534,12 +577,7 @@ void PreviewRenderModule::on_activated()
     update_viewer();
     update_scene_aabb();
 
-    m_sidebar_auto_reslice->update_visibility();
-    if (m_sidebar_auto_reslice->is_enabled()) {
-        m_project_interactor.slicing_interactor().enable_auto_slicing(
-            m_project_interactor.selected_bed_slicing_id()
-        );
-    }
+    update_auto_slicing();
 
     m_layout->load_column_sizes();
 }

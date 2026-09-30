@@ -9,6 +9,7 @@
 #include "Slic3r/Domain/ProjectMetadata.hpp"
 #include "Slic3r/Domain/GCodeMetadata.hpp"
 #include "Slic3r/Domain/Model.hpp"
+#include "Slic3r/Domain/PrinterTechnology.hpp"
 #include "Slic3r/Domain/SlicingId.hpp"
 
 #include <jthread/JThread.hpp>
@@ -77,8 +78,13 @@ public:
 
     std::string get_hw_printer_id() const;
 
+    // The technology of the printer preset this process was created for. It cannot change without
+    // the process being recreated, because it is part of the hw printer config.
+    Domain::PrinterTechnology technology() const;
+
 private:
     std::string m_hw_config_id;
+    const Domain::PrinterTechnology m_technology;
     std::unique_ptr<Biz::Slicing::IPrint> m_print;
     std::function<void(StatusUpdate)> m_on_status;
     std::function<void(std::exception_ptr)> m_on_exception;
