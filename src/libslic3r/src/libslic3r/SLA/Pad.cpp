@@ -371,7 +371,10 @@ ExPolygon offset_contour_only(const ExPolygon &poly, coord_t delta, Args...args)
 
     ExPolygons tmp2 = diff_ex(tmp, holes);
 
-    if (tmp2.empty()) return {};
+    // An offset that splits the part is not an outline of that part any more. Taking one of the
+    // pieces would leave the wall and the face built from this single polygon with a hole in
+    // them, so the part is dropped instead: the caller either keeps the sharp edge or skips it.
+    if (tmp2.size() != 1) return {};
 
     return std::move(tmp2.front());
 }
@@ -756,6 +759,12 @@ void pad_blueprint(const indexed_triangle_set &mesh,
     auto tmp = reserve_vector<ExPolygon>(count);
     for(ExPolygons& o : out)
         for(ExPolygon& e : o) {
+            // A slicing plane that only grazes the mesh - the bottom of a ball standing on the
+            // plate is one - leaves a contour with no area in it or none at all, and the
+            // simplifier reads the first point of the contour.
+            if (e.contour.points.size() < 3)
+                continue;
+
             auto&& exss = Algorithms::ExPolygon::simplify(e, scaled<double>(0.1));
             for(ExPolygon& ep : exss) tmp.emplace_back(std::move(ep));
         }
