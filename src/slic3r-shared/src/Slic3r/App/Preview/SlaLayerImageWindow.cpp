@@ -653,7 +653,8 @@ void SlaLayerImageWindow::rebuild_island_list()
                     issue.layer,
                     issue.position.x(),
                     issue.position.y(),
-                    sla_issue_area_mm2(issue.note)
+                    sla_issue_area_mm2(issue.note),
+                    issue.object_name
                 }
             );
         }
@@ -703,7 +704,18 @@ void SlaLayerImageWindow::rebuild_island_list()
 std::string SlaLayerImageWindow::island_row_text(const Island& island) const
 {
     // The window shows 1 based layer numbers, so the list does the same.
-    std::string text = fmt::format(fmt::runtime(_u8L("Layer {0}")), island.layer + 1);
+    std::string text;
+    if (island.object_name.empty()) {
+        // TRN: One row of the island list in the layer image window. {0} is the number of the
+        // layer, counted from one as the user counts layers.
+        text = fmt::format(fmt::runtime(_u8L("Layer {0}")), island.layer + 1);
+    } else {
+        // TRN: One row of the island list in the layer image window, for an island the slicer
+        // could put on a model. {0} is the name of the model, {1} the number of the layer,
+        // counted from one as the user counts layers.
+        text = fmt::
+            format(fmt::runtime(_u8L("{0} - Layer {1}")), island.object_name, island.layer + 1);
+    }
     if (island.area_mm2)
         text += fmt::format(fmt::runtime(_u8L(" · {0:.1f} mm²")), *island.area_mm2);
     text += fmt::format(fmt::runtime(_u8L(" at ({0:.1f}, {1:.1f})")), island.x_mm, island.y_mm);

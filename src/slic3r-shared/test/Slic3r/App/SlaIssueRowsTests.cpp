@@ -42,6 +42,16 @@ SlaIssue make_cup(size_t layer, double area = 0.)
     return make_issue(SlaIssue::Kind::Cup, layer, "cup, " + std::to_string(area) + " mm2");
 }
 
+SlaIssue make_island_on(size_t layer, const std::string& object_name, double area = 0.)
+{
+    SlaIssue issue    = area <= 0. ?
+           make_issue(SlaIssue::Kind::Island, layer) :
+           make_issue(SlaIssue::Kind::Island, layer, "island, " + std::to_string(area) + " mm2");
+    issue.object_id   = Slic3r::Domain::ObjectID(4);
+    issue.object_name = object_name;
+    return issue;
+}
+
 } // namespace
 
 TEST_CASE("SlaIssueRows - no issues means no list", "[SlaIssueRows]")
@@ -205,4 +215,30 @@ TEST_CASE("SlaIssueRows - the row text names the kind, the layer and the area", 
             == "Issue, layer 4  1.0 mm\xC2\xB2"
         );
     }
+    SECTION("an island the slicer could put on a model")
+    {
+        CHECK(
+            sla_issue_row_text(SlaIssueRow{SlaIssue::Kind::Island, 217, 4.2, "vase"})
+            == "Island on vase, layer 218  4.2 mm\xC2\xB2"
+        );
+    }
+    SECTION("a cup on a model without an area")
+    {
+        CHECK(
+            sla_issue_row_text(SlaIssueRow{SlaIssue::Kind::Cup, 0, std::nullopt, "cube"})
+            == "Cup on cube, layer 1"
+        );
+    }
+}
+
+TEST_CASE("SlaIssueRows - the rows keep the model an issue was found on", "[SlaIssueRows]")
+{
+    // The slicer names the model of an island (M4.8g), the list shows it in front of the layer.
+    const SlaIssueRows rows =
+        build_sla_issue_rows({make_island(5, 1.5), make_island_on(217, "vase", 4.2)});
+
+    REQUIRE(rows.rows.size() == 2);
+    CHECK(rows.rows[0].object_name.empty());
+    CHECK(rows.rows[1].object_name == "vase");
+    CHECK(sla_issue_row_text(rows.rows[1]) == "Island on vase, layer 218  4.2 mm\xC2\xB2");
 }
