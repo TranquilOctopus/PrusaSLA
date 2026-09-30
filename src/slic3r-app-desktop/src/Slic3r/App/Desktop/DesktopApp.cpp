@@ -799,6 +799,11 @@ constexpr int fixture_render_timeout_ms = 300000;
 /// (the SLA result, the scene nodes of the supports) is in the scene before it is rendered.
 constexpr int fixture_render_settle_ms = 250;
 
+/// How many times a render is retried while a view has nothing in its scene yet. A view is filled
+/// on the main thread after the slice has reported itself done, so an empty render is as likely to
+/// be a scene that is not there yet as a view that cannot be drawn at all.
+constexpr int fixture_render_attempts_max = 20;
+
 } // namespace
 
 // Renders the fixture view of --render-to as soon as the slice of the fixture is done, then quits.
@@ -876,8 +881,16 @@ void DesktopApp::do_fixture_render()
 
     Platform::WX::WXRenderCanvas& canvas = m_main_frame->get_render_canvas();
     // The render has a framebuffer of its own, but the device that draws into it belongs to the
-    // canvas, so its context has to be current. A canvas frame is the cheapest way to get there.
+    // canvas, so its context has to be current. A canvas frame is the cheapest way to get there,
+    // and it is the frame that swaps in the module the view is on, camera and all.
     canvas.render();
+
+    // A render of the Preview view draws that view and not the bed of the Prepare tab, so the
+    // view has to be the one the render is asked for (roadmap M6.2b).
+    if (m_preview_module != nullptr) {
+        App::IFixtureViewSource* view_source = m_preview_module->fixture_view_source();
+        m_thumbnail_image_generator->set_fixture_view_source(view_source);
+    }
 
     const Domain::Images images = m_thumbnail_image_generator->render_view(
         m_fixture_render_project_id,
@@ -886,6 +899,16 @@ void DesktopApp::do_fixture_render()
         m_fixture_render_view
     );
     if (images.empty()) {
+        if (++m_fixture_render_attempts < fixture_render_attempts_max) {
+            SPDLOG_INFO(
+                "The {} view of the fixture has nothing to draw yet, waiting ({}/{}).",
+                App::fixture_view_to_string(m_fixture_render_view),
+                m_fixture_render_attempts,
+                fixture_render_attempts_max
+            );
+            m_fixture_render_timer->StartOnce(fixture_render_settle_ms);
+            return;
+        }
         SPDLOG_ERROR("The {} view of the fixture rendered nothing.", App::fixture_view_to_string(m_fixture_render_view));
         quit_after_fixture_render(false);
         return;

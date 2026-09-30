@@ -14,11 +14,22 @@ namespace Slic3r::App {
 
 class Theme;
 
+namespace Platform {
+struct CameraSynchData;
+} // namespace Platform
+
+namespace Scene {
+class Camera;
+class ISceneRenderCustomizer;
+class Scene;
+} // namespace Scene
+
 /**
  * @brief Which view of the plater a fixture render shows (roadmap M6.2, PLAN G3).
  *
- * Prepare is the bed with the models on it, Preview is the sliced print. Both are rendered
- * offscreen through the thumbnail path, so a render is the scene without the window around it.
+ * Prepare is the bed with the models on it, Preview is the Preview view of the print, with the
+ * scene and the camera of that view (M6.2b). Both are rendered offscreen, so a render is a view
+ * without the window around it.
  */
 enum class FixtureView
 {
@@ -29,6 +40,70 @@ enum class FixtureView
 /// The name of a view on the command line, and the one that goes into a sidecar.
 std::optional<FixtureView> fixture_view_from_string(std::string_view name);
 std::string fixture_view_to_string(FixtureView view);
+
+/**
+ * @brief Which scene a view of a fixture render draws (roadmap M6.2b).
+ *
+ * Prepare draws the bed of the Prepare tab. Preview draws the Preview view itself: its own scene,
+ * with its own camera, and not the plater scene the objects list thumbnails draw, which is what
+ * made a change in that view invisible to the check.
+ */
+enum class FixtureViewScene
+{
+    Plater,
+    Preview,
+};
+
+FixtureViewScene fixture_view_scene(FixtureView view);
+
+/// The name of a scene, the one that goes into a sidecar.
+std::string fixture_view_scene_to_string(FixtureViewScene scene);
+
+/**
+ * @brief Puts the camera of a 3D view into @p camera, so a render of the view looks at what the
+ * view looks at.
+ *
+ * The very handover the views do between each other when a tab is switched (CameraHelper's
+ * synchronize_camera), and not a camera of the render path's own: the distance to the target, the
+ * angles around it and the zoom of the view are what a change in the view has to show up in.
+ *
+ * The viewport is left alone on purpose. The renderer gives the camera the viewport of the size it
+ * renders, which is the one thing a render has to differ in, or two sizes of the same view are not
+ * comparable.
+ */
+void set_fixture_view_camera(const Platform::CameraSynchData& data, Scene::Camera& camera);
+
+/**
+ * @brief What a fixture render needs from a 3D view (roadmap M6.2b).
+ *
+ * A view that can be rendered offscreen as itself: its scene, the customizer it draws that scene
+ * through and its camera. The Prepare view is a project scene of the workbench and needs none of
+ * this, which is why the Preview view, which has a scene of its own, is asked for it.
+ */
+class IFixtureViewSource
+{
+public:
+    virtual ~IFixtureViewSource() = default;
+
+    /// The scene the view draws, which is what a render of the view puts in the framebuffer.
+    [[nodiscard]] virtual const Scene::Scene& fixture_render_scene() const = 0;
+
+    /// The customizer the view draws that scene through, so a render draws the same passes.
+    /// Not const, because the scene render drives the customizer while it draws.
+    [[nodiscard]] virtual Scene::ISceneRenderCustomizer& fixture_render_customizer() = 0;
+
+    /// The camera of the view, as the data the views hand over to each other on a tab switch.
+    [[nodiscard]] virtual Platform::CameraSynchData fixture_render_camera() const = 0;
+
+    /**
+     * @brief Whether the view has the print of a slice in its scene, which is what it is for.
+     *
+     * The bed is in the scene from the moment the view is, so a bed on its own is a picture of
+     * nothing: a render of a view that has no print yet would be a reference of an empty bed and
+     * would quietly accept a slice that never made it into the view.
+     */
+    [[nodiscard]] virtual bool fixture_render_has_print() const = 0;
+};
 
 /**
  * @brief A "WIDTHxHEIGHT" string, the way --render-size takes a size.

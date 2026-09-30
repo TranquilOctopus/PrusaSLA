@@ -34,7 +34,17 @@ class ThumbnailRenderer
 public:
     explicit ThumbnailRenderer(Render::Device& device) : m_device(device) {}
 
-    [[nodiscard]] Domain::Images generate_thumbnails(const ThumbnailRendererParams& params, Scene::Camera& camera);
+    /**
+     * @param camera the camera to render with; the renderer gives it the viewport of every size.
+     * @param customizer the customizer of the view being rendered, or nullptr for the minimal one.
+     * A fixture render of a view passes the customizer of that view (roadmap M6.2b), so it draws
+     * the same passes the view draws.
+     */
+    [[nodiscard]] Domain::Images generate_thumbnails(
+        const ThumbnailRendererParams& params,
+        Scene::Camera& camera,
+        Scene::ISceneRenderCustomizer* customizer = nullptr
+    );
     [[nodiscard]] Domain::Images generate_bed_thumbnails(
         const ThumbnailRendererParams& params,
         const Domain::Project& project,

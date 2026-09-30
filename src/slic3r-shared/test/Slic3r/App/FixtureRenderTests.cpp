@@ -4,11 +4,14 @@
 #include <nlohmann/json.hpp>
 
 #include <Slic3r/App/FixtureRender.hpp>
+#include <Slic3r/App/Platform/CameraSynchData.hpp>
+#include <Slic3r/App/Scene/Camera.hpp>
 #include <Slic3r/App/Theme.hpp>
 #include <Slic3r/App/ThemeTypes.hpp>
 #include <Slic3r/Domain/Color.hpp>
 #include <Slic3r/Domain/Image.hpp>
 #include <Slic3r/Domain/PixelFormat.hpp>
+#include <Slic3r/Domain/Types.hpp>
 
 #include <cmath>
 #include <map>
@@ -54,6 +57,20 @@ Domain::Image rgba_image(int width, int height, const std::vector<uint8_t>& pixe
     return Domain::Image(Domain::PixelFormat::RGBA8, width, height, std::vector<uint8_t>(pixels));
 }
 
+/// The camera data a view hands over when a tab is switched, moved away from every default.
+Platform::CameraSynchData view_camera_data(double distance, double zoom)
+{
+    Platform::CameraSynchData data;
+    data.type     = uint8_t(Scene::CameraProjectionType::Perspective);
+    data.target   = Domain::Vec3d{100.0, 50.0, 10.0};
+    data.pivot    = data.target;
+    data.distance = distance;
+    data.azimuth  = 0.5;
+    data.zenith   = 1.0;
+    data.zoom     = zoom;
+    return data;
+}
+
 } // namespace
 
 TEST_CASE("[FixtureRender] A view name is parsed, and only a known one is")
@@ -92,6 +109,79 @@ TEST_CASE("[FixtureRender] A render size is parsed, and only a usable one is")
     CHECK_FALSE(parse_render_size("12a0x960").has_value());
     CHECK_FALSE(parse_render_size("-1280x960").has_value());
     CHECK_FALSE(parse_render_size("1280x960 ").has_value());
+}
+
+TEST_CASE("[FixtureRender] A view names the scene it draws, and the preview is the view itself")
+{
+    // Roadmap M6.2b: a render of the preview view draws that view, with its own scene and its own
+    // camera, and not the bed of the Prepare tab the objects list thumbnails draw. The scene a
+    // view draws is named in the sidecar of a render, so a reference says what made it.
+    CHECK(fixture_view_scene(FixtureView::Prepare) == FixtureViewScene::Plater);
+    CHECK(fixture_view_scene(FixtureView::Preview) == FixtureViewScene::Preview);
+
+    CHECK(fixture_view_scene_to_string(FixtureViewScene::Plater) == "plater");
+    CHECK(fixture_view_scene_to_string(FixtureViewScene::Preview) == "preview");
+}
+
+TEST_CASE("[FixtureRender] A render of a view is drawn with the camera of that view")
+{
+    const Platform::CameraSynchData data = view_camera_data(250.0, 1.75);
+
+    Scene::Camera camera;
+    camera.set_viewport(Render::Rect{0, 0, 1280, 960});
+    set_fixture_view_camera(data, camera);
+
+    // The zoom and the projection of the view, and the eye of the view at the distance it keeps
+    // from what it looks at. A camera framed by the render path would have none of these, which is
+    // what made a change in the view invisible to the check.
+    CHECK(camera.zoom() == Approx(data.zoom));
+    CHECK(camera.cam_projection().type() == Scene::CameraProjectionType::Perspective);
+    CHECK((camera.position() - data.target).norm() == Approx(data.distance).margin(1e-6));
+    CHECK(camera.forward().isApprox((data.target - camera.position()).normalized()));
+
+    // The viewport is the renderer's business, and nothing here reframes the camera onto a box.
+    CHECK(camera.viewport().width == 1280);
+    CHECK(camera.viewport().height == 960);
+
+    // The data of the view is read and not written, and a second view gets a second camera: the
+    // render follows the view it is asked for, it is not one fixed camera of the render path.
+    const Platform::CameraSynchData other = view_camera_data(80.0, 1.1);
+    Scene::Camera closer;
+    closer.set_viewport(Render::Rect{0, 0, 1280, 960});
+    set_fixture_view_camera(other, closer);
+    CHECK(closer.zoom() == Approx(other.zoom));
+    CHECK((closer.position() - other.target).norm() == Approx(other.distance).margin(1e-6));
+    CHECK_FALSE(closer.position().isApprox(camera.position()));
+    CHECK(camera.zoom() == Approx(data.zoom));
+
+    // A view that is orthographic is rendered orthographic, as the view is.
+    Platform::CameraSynchData ortho = view_camera_data(250.0, 0.05);
+    ortho.type                      = uint8_t(Scene::CameraProjectionType::Orthographic);
+    Scene::Camera ortho_camera;
+    ortho_camera.set_viewport(Render::Rect{0, 0, 1280, 960});
+    set_fixture_view_camera(ortho, ortho_camera);
+    CHECK(ortho_camera.cam_projection().type() == Scene::CameraProjectionType::Orthographic);
+    CHECK(ortho_camera.zoom() == Approx(ortho.zoom));
+    CHECK((ortho_camera.position() - ortho.target).norm() == Approx(ortho.distance).margin(1e-6));
+}
+
+TEST_CASE("[FixtureRender] The sidecar says which scene drew the render")
+{
+    const Theme theme(Theme::Style::Dark);
+    const Domain::Image image = rgba_image(2, 2, std::vector<uint8_t>(2 * 2 * 4, 0));
+
+    const nlohmann::json preview =
+        nlohmann::json::parse(render_sidecar(FixtureView::Preview, image, theme));
+    REQUIRE(preview.contains("view"));
+    REQUIRE(preview.contains("scene"));
+    CHECK(preview["view"].get<std::string>() == "preview");
+    CHECK(preview["scene"].get<std::string>() == "preview");
+
+    const nlohmann::json prepare =
+        nlohmann::json::parse(render_sidecar(FixtureView::Prepare, image, theme));
+    REQUIRE(prepare.contains("scene"));
+    CHECK(prepare["view"].get<std::string>() == "prepare");
+    CHECK(prepare["scene"].get<std::string>() == "plater");
 }
 
 TEST_CASE("[FixtureRender] L* of a colour is the CIE one")

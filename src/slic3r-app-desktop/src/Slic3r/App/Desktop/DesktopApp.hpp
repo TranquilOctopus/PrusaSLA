@@ -111,6 +111,7 @@ private:
     Domain::Size m_fixture_render_size;
     Domain::SlicingId m_fixture_render_slicing_id{};
     Domain::SelectionId m_fixture_render_project_id{Domain::INVALID_ID};
+    int m_fixture_render_attempts{0};
 
     void start_fixture_render(Domain::SelectionId project_id, Domain::SlicingId slicing_id);
     void do_fixture_render();

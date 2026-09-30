@@ -601,10 +601,7 @@ void PreviewRenderModule::on_deactivated()
 
     // update the camera synch data only if the preview was already synchronized with the plater
     if (m_scene_presenter->camera_synch_data().has_value()) {
-        Platform::CameraSynchData data;
-        m_scene_presenter->scene().camera().update_synch_data(data);
-        m_scene_presenter->scene().camera_trackball().update_synch_data(data);
-        m_scene_presenter->set_camera_synch_data(data);
+        m_scene_presenter->set_camera_synch_data(m_scene_presenter->current_camera_synch_data());
     }
 
     m_layout->save_column_sizes();

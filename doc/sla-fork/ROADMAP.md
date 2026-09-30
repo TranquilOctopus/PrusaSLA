@@ -694,7 +694,24 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
   - [x] **M6.3b** Merge the two `doc/sla-fork/ci.md` texts into one document. Two jobs wrote the file on parallel branches (M0.14 and M6.3) and the merge stacked them, so it ended up with two H1s and repeated sections. · S · needs M6.3, M0.14
     Result: docs only, no workflow and no code changed, and nothing was run. `doc/sla-fork/ci.md` is now one document with one H1: an overview (both workflows are manual only, no `push` and no `schedule`, neither has ever been executed on a runner), `sla-ci.yml` (what a run does, the by-hand and `run-ci` label triggers, the cost, the timeouts, the `layer_hash` gate and the six steps that were never verified), the upstream rehearsal (local use of `upstream_rehearsal.py`, what one run does, the report, the exit codes, the report builder tests and the manual workflow), and a short note that the upstream workflows in `.github/workflows` (`build_windows`, `build_osx`, `build_flatpak` and `clang_format` on every push, `static_analysis` nightly) stay untouched for mergeability, so Actions on this fork should be disabled or restricted to the two workflows. Every fact of both texts is kept; what went is the duplication and two sentences the merge had made stale (the rehearsal is no longer described as waiting for an M0.14 workflow file, and `Not covered` no longer says the rehearsal has no job).
 - [ ] **M6.2a** `[human]` The visual regression has never been run end to end: build the app, choose the three fixture scenes and both themes, render them with `--render-to`, commit the reference PNGs and the L* probe files, and write the outcome into `doc/sla-fork/visual-regression.md`. · S · needs M6.2
-- [ ] **M6.2b** `--render-view preview` draws the sliced print the way the objects list thumbnails do, not the Preview tab with its own camera, so a change in that view is invisible to the check: render the Preview view itself. · M · needs M6.2
+- [x] **M6.2b** `--render-view preview` draws the sliced print the way the objects list thumbnails do, not the Preview tab with its own camera, so a change in that view is invisible to the check: render the Preview view itself. · M · needs M6.2
+    Result: `--render-view preview` renders the Preview tab itself. The new `App::IFixtureViewSource`
+    (App/FixtureRender.hpp) is what a render needs from a view, and `PreviewScenePresenter` implements it: its own
+    scene, its own `PreviewSceneRenderCustomizer` and its camera as the `CameraSynchData` the two views hand
+    each other on a tab switch (`current_camera_synch_data()`, which `on_deactivated` uses now too). The app
+    hands the source to `ThumbnailImageGenerator::set_fixture_view_source`, the render goes through
+    `generate_thumbnails` with the view's customizer and a camera built by `set_fixture_view_camera()` - the
+    same `synchronize_camera` the modules use, so the eye, the target, the angles and the zoom of the view are
+    what a change in the view has to show up in, and the viewport of the size asked for is the only thing a
+    render changes. The gcode-thumbnail path is out of the render: a preview render draws the Preview scene and
+    not the plater one. The sidecar grew a `scene` key ("plater" / "preview") and a view with no print in its
+    scene is not rendered: `fixture_render_has_print()` skips the bed, and `do_fixture_render` asks a view again
+    instead of writing a reference of an empty bed. 91 lines of tests in `FixtureRenderTests.cpp`: the view to
+    scene mapping, the camera handover (zoom, projection, the eye at the distance of the target, the forward
+    axis, a second view giving a second camera, an orthographic view rendered orthographic, the viewport left
+    to the renderer) and the sidecar key. The render path itself is GL and has no unit test; nothing was built
+    or run here, and M6.2a is still the first end to end run. The M6.2 note above still says the preview draws
+    the objects list thumbnail: that line is left as it was written.
 - [ ] **M6.2c** A render is the scene and not the window, so the sidebars and the preview overlays (the layer image window, the issue markers) are outside the check: extend the render path to the window and its overlays, or record the limit in `doc/sla-fork/visual-regression.md` and keep it on the list. · M · needs M6.2
 - [ ] **M6.2d** Nothing runs the tool in CI yet: add a job beside M0.14's that renders the fixtures, runs `visual_diff.py` against the committed references and fails on a changed image or on a palette lightness the PLAN 2.1 rule rejects. · M · needs M6.2, M0.14
 - [ ] **M6.4** `[human]` End-to-end walk through the M1.1 journeys on an integrated build, filing new todos for gaps. · M · needs M1.11, M2.7, M3.10

@@ -15,17 +15,26 @@ framebuffer of the size asked for, is read back, flipped and written as an RGB P
 therefore:
 
 - the scene only: no window, no ImGui UI, no sidebar, no overlays, no cursor;
-- a fixed camera: the one the thumbnail customizer sets (perspective, framed on the bed), not the
-  one the window happens to have;
+- a fixed camera: the camera of the view it draws, and not the one the window happens to have.
+  Prepare is framed on the bed the way a thumbnail is, the Preview view is looked at from where the
+  app is looking at it (M6.2b);
 - an exact size, so a reference is comparable at all: a screenshot of the window depends on the
   window size, the monitor and the theme of the desktop, a render depends on none of them.
 
 It is *not* a screenshot of the running app. What it does show is what the fork draws: the bed and
 the plate, the models, the SLA supports and the pad, in the colours of the theme tokens.
 
-`--render-view prepare` draws the bed (the Prepare tab), `--render-view preview` draws the sliced
-print. Both wait for the slice of the fixture to finish first, because that is when the supports
-and the pad exist.
+`--render-view prepare` draws the bed (the Prepare tab), `--render-view preview` draws the Preview
+tab itself: its own scene, its own camera and its own customizer, and not the print the way the
+objects list thumbnails draw it, which is what made a change in that view invisible to the check.
+Both wait for the slice of the fixture to finish first, because that is when the supports and the pad
+exist, and a view that has no print in its scene yet is asked again rather than rendered as an
+empty bed.
+
+What a render of the Preview view keeps is the eye, the target, the angles around them and the zoom
+the view has, handed over exactly the way the two views hand their cameras to each other when a tab
+is switched. The one thing the size asked for changes is the viewport of the camera, because two
+sizes of the same view are not the same picture.
 
 ## Rendering
 
@@ -40,7 +49,7 @@ Build the app (see [BUILD.md](BUILD.md)), then:
 |---|---|
 | `--sla-fixture <file.3mf>` | loads the fixture and slices it (M0.11b, unchanged) |
 | `--render-to <file.png>` | renders one view offscreen to this PNG, writes `<file.png>.json` next to it and quits |
-| `--render-view prepare\|preview` | which view; defaults to `prepare` |
+| `--render-view prepare\|preview` | which view; defaults to `prepare`. `preview` is the Preview tab as itself |
 | `--render-size WIDTHxHEIGHT` | size of the image, 1..8192 per side; defaults to `1280x960` |
 
 The app quits when the render is written, with exit code 0. A render that could not be made (no
@@ -59,6 +68,7 @@ Every render comes with `<file.png>.json`:
 {
   "tool": "M6.2 visual regression render",
   "view": "prepare",
+  "scene": "plater",
   "width": 1280,
   "height": 960,
   "composited_background_token": "SceneBgBottom",
@@ -71,6 +81,11 @@ Every render comes with `<file.png>.json`:
   }
 }
 ```
+
+`scene` is what drew the picture: the bed of the Prepare tab (`plater`) or the Preview view
+(`preview`). It is in the sidecar so a diff of two sidecars says whether a changed image is a change
+of the view or a change of the scene behind it, and so a reference of a preview render is not
+mistaken for one of the objects list thumbnail of the same print.
 
 The L* values are resolved by the app from the theme tokens it drew with, so the numbers describe
 the palette that is in `Theme.cpp` and not a copy of it. The tool never sees a hex value of its
@@ -177,5 +192,6 @@ probe file. A diff that is a whole new picture is not an accident to work around
   overlays are not covered by this. A window screenshot would need a fixed window size and a fixed
   desktop theme, which is a bigger job than this todo.
 - Nothing runs the tool in CI yet. That is M0.14 plus a job; the exit codes are there for it.
-- `--render-view preview` renders the sliced print through the plater scene, the way the objects
-  list thumbnails do, not the app's Preview tab with its own camera and overlays.
+- `--render-view preview` renders the Preview tab as itself since M6.2b - its scene, its camera and
+  its customizer - so the check covers the 3D view of that tab and not the window around it: the
+  sidebars, the top bar and the preview overlays are still outside it, which is M6.2c.

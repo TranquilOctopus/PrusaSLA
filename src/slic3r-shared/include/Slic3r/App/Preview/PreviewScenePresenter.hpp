@@ -3,6 +3,7 @@
 #include "Slic3r/Domain/Workbench.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/Biz/ISelectedProjectChangedListener.hpp"
+#include "Slic3r/App/FixtureRender.hpp"
 #include "Slic3r/App/Scene/ISceneProvider.hpp"
 #include "Slic3r/App/Scene/ScenePresenterProjectContext.hpp"
 #include "Slic3r/Domain/SelectionId.hpp"
@@ -22,7 +23,8 @@ class PreviewScenePresenter : public Biz::ISelectedProjectChangedListener,
                               public PreviewSceneRenderCustomizer,
                               public Scene::ISceneProvider,
                               public Scene::ICameraUpdateListener,
-                              public Scene::ISceneChangedListener
+                              public Scene::ISceneChangedListener,
+                              public App::IFixtureViewSource
 {
 public:
     using ProjectContexts = std::unordered_map<Domain::SelectionId, Scene::ScenePresenterProjectContext>;
@@ -88,6 +90,22 @@ public:
 
     const std::optional<Platform::CameraSynchData>& camera_synch_data() const { return project_context().camera_synch_data(); }
     void set_camera_synch_data(const Platform::CameraSynchData& data) { project_context().set_camera_synch_data(data); }
+
+    /// The camera of the view as it stands now, the data the views hand over on a tab switch.
+    Platform::CameraSynchData current_camera_synch_data() const;
+
+    /**
+     * @name Implementation of App::IFixtureViewSource public interface (roadmap M6.2b)
+     *
+     * The Preview view rendered as itself: its own scene, its own customizer and its own camera,
+     * and not the scene of the bed a thumbnail draws.
+     * @{
+     */
+    const Scene::Scene& fixture_render_scene() const override { return scene(); }
+    Scene::ISceneRenderCustomizer& fixture_render_customizer() override { return *this; }
+    Platform::CameraSynchData fixture_render_camera() const override { return current_camera_synch_data(); }
+    bool fixture_render_has_print() const override;
+    /**@}*/
 
     void set_model_geometry_provider(std::shared_ptr<Scene::ModelGeometryProvider> provider)
     {
