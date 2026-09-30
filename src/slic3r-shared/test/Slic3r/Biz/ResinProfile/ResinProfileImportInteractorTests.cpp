@@ -229,7 +229,7 @@ TEST_CASE(
 
     // The printer's own resins are offered, every one of them with an id the import takes back.
     CHECK(resins.size() >= 2);
-    const auto offers = [&resins](const std::string& name) {
+    const auto offers = [&resins](std::string_view name) {
         return std::ranges::any_of(resins, [&name](const std::pair<std::string, std::string>& resin) {
             return resin.second == name;
         });
