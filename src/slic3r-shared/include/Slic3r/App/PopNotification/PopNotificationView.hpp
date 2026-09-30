@@ -75,6 +75,7 @@ private:
     void layout_type_text_progress();
     void layout_type_header_text_progress();
     void layout_type_header_progress();
+    void layout_type_header_progress_buttons();
 
     void update_text(const std::string& text);
     void update_header(const std::string& text);

@@ -89,6 +89,17 @@ struct PopNotificationLayoutHeaderProgress
     Render::Icon icon{Render::Icon::None};
 };
 
+// A running job with a progress bar that can be stopped: the bar says how far it is, the button
+// asks it to stop. Appended last, because the view compares layout variants by their position in
+// the variant and only rebuilds when that position changes.
+struct PopNotificationLayoutHeaderProgressButtons
+{
+    std::string header;
+    int progress;
+    std::vector<PopNotificationButtonData> buttons;
+    Render::Icon icon{Render::Icon::None};
+};
+
 using PopNotificationLayout = std::variant<
     PopNotificationLayoutText,
     PopNotificationLayoutHeaderText,
@@ -100,6 +111,7 @@ using PopNotificationLayout = std::variant<
     PopNotificationLayoutHeaderTextButtons,
     PopNotificationLayoutTextProgress,
     PopNotificationLayoutHeaderTextProgress,
-    PopNotificationLayoutHeaderProgress>;
+    PopNotificationLayoutHeaderProgress,
+    PopNotificationLayoutHeaderProgressButtons>;
 
 } // namespace Slic3r::App::PopNotification

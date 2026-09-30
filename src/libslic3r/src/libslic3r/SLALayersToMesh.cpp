@@ -86,7 +86,8 @@ namespace Slic3r::sla {
 
 Domain::TriangleMesh layers_to_mesh(const std::vector<GrayLayerImage> &layers,
                                     const LayersToMeshParams &       params,
-                                    std::function<bool()>            stop)
+                                    std::function<bool()>            stop,
+                                    std::function<void(double)>      progress)
 {
     if (layers.empty() || params.pixel_width_mm <= 0. || params.pixel_height_mm <= 0.)
         return {};
@@ -107,7 +108,10 @@ Domain::TriangleMesh layers_to_mesh(const std::vector<GrayLayerImage> &layers,
     std::vector<ExPolygons> slices;
     slices.reserve(layers.size());
 
-    for (const GrayLayerImage &layer : layers) {
+    for (size_t layer_index = 0; layer_index < layers.size(); ++layer_index) {
+        const GrayLayerImage &layer = layers[layer_index];
+        if (progress)
+            progress(double(layer_index) / double(layers.size()));
         if (stop && stop())
             return {};
 
@@ -138,6 +142,9 @@ Domain::TriangleMesh layers_to_mesh(const std::vector<GrayLayerImage> &layers,
 
     if (slices.empty())
         return {};
+
+    if (progress)
+        progress(1.);
 
     return Biz::Algorithms::TriangleMesh::construct(
         slices_to_mesh(slices, 0., params.layer_height_mm, params.first_layer_height_mm));

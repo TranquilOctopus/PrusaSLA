@@ -504,6 +504,16 @@ public:
     void load_models_to_project(std::vector<boost::filesystem::path> paths);
 
     /**
+     * @brief Read a set of SLA archives as a job with progress and cancel, and put what comes back
+     * on the build plate.
+     *
+     * Separate from load_models_to_project() because only the read is off the main thread: the
+     * scene, the undo step and the arrangement all happen in the job's result, on the main thread
+     * again. A cancelled job puts nothing on the plate.
+     */
+    void import_sla_archives_to_project(const std::vector<boost::filesystem::path>& paths);
+
+    /**
      * @brief Callback from AppInstanceMessageHandler.
      */
     void on_open_models(std::vector<boost::filesystem::path> paths) override

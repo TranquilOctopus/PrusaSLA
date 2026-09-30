@@ -32,6 +32,10 @@ using Slic3r::Biz::parse_archive_ini;
 using Slic3r::Biz::read_zip_entry;
 using Slic3r::Biz::ZipReader;
 
+// The share of the reported progress the decoding of the layer images takes: inflating and
+// decoding a few thousand pngs is the bulk of the time, tracing them into a mesh the rest.
+constexpr double k_decode_share = 2. / 3.;
+
 bool ends_with(const std::string &str, const std::string &suffix)
 {
     return str.size() >= suffix.size() &&
@@ -73,7 +77,8 @@ tl::expected<sla::GrayLayerImage, std::string> decode_layer(const std::string &p
 } // namespace
 
 tl::expected<Sl1ImportResult, std::string>
-import_sl1_archive(const boost::filesystem::path &path, std::function<bool()> stop)
+import_sl1_archive(const boost::filesystem::path &path, std::function<bool()> stop,
+                   std::function<void(double)> progress)
 {
     ZipReader zip{path.string()};
     if (!zip.ok())
@@ -188,6 +193,8 @@ import_sl1_archive(const boost::filesystem::path &path, std::function<bool()> st
     std::vector<sla::GrayLayerImage> decoded;
     decoded.reserve(layers.size());
     for (const auto &[name, index] : layers) {
+        if (progress)
+            progress(decoded.size() * k_decode_share / double(layers.size()));
         if (stop && stop())
             return Sl1ImportResult{};
 
@@ -207,7 +214,13 @@ import_sl1_archive(const boost::filesystem::path &path, std::function<bool()> st
         decoded.push_back(std::move(*layer));
     }
 
-    result.mesh = sla::layers_to_mesh(decoded, params, stop);
+    result.mesh = sla::layers_to_mesh(decoded, params, stop, [progress](double share) {
+        if (progress)
+            progress(k_decode_share + (1. - k_decode_share) * share);
+    });
+
+    if (progress)
+        progress(1.);
 
     return result;
 }

@@ -3,7 +3,9 @@
 #include "Slic3r/Domain/ElementRef.hpp"
 #include "Slic3r/Domain/Project.hpp"
 #include "Slic3r/Domain/Model.hpp"
+#include "Slic3r/Domain/TriangleMesh.hpp"
 
+#include <functional>
 #include <string>
 #include <vector>
 #include <boost/filesystem/path.hpp>
@@ -14,6 +16,14 @@ class IMessageDialogProvider;
 class ProjectInteractor;
 namespace Scene { class SceneInteractor; }
 } // namespace Slic3r::Biz
+
+namespace Slic3r::Biz::Platform::JobManager {
+class ProgressTracker;
+} // namespace Slic3r::Biz::Platform::JobManager
+
+namespace Slic3r::Biz::JThread {
+class StopToken;
+} // namespace Slic3r::Biz::JThread
 
 namespace Slic3r::Domain::Preset {
 struct Bundle;
@@ -153,5 +163,94 @@ struct DropRouting
  * @param files The paths of the drop, in the order they were dropped.
  */
 DropRouting route_dropped_files(const std::vector<boost::filesystem::path>& files);
+
+/**
+ * @brief Whether a path is one of the sliced-print archives the import reads as a job
+ * (.sl1 and .sl1s).
+ *
+ * Case-insensitive, suffix only, the same test the import path makes. An archive is not a model
+ * file format: it is read off the main thread and carries the print settings of the print it was
+ * written for, so the import path splits on this.
+ */
+bool is_sla_archive_file(const std::string& input_file);
+
+/**
+ * @brief One archive as it came back from the reader on the worker thread.
+ *
+ * The mesh is moved onto the build plate on the main thread, so the worker keeps nothing but
+ * plain data. @ref error is empty on success; then the mesh is not empty either.
+ */
+struct SlaArchiveImport
+{
+    boost::filesystem::path path;
+    std::string             file_name;
+    Domain::TriangleMesh    mesh;  ///< empty when the read was cancelled
+    std::string             error; ///< empty on success
+};
+
+/**
+ * @brief What reading one archive gives back.
+ *
+ * A cancelled read is neither an error nor a mesh: @ref cancelled is set and nothing else is,
+ * which is what keeps a cancelled archive from reaching the build plate.
+ */
+struct SlaArchiveReadResult
+{
+    Domain::TriangleMesh mesh;
+    std::string          error; ///< empty unless @ref cancelled, then why the read failed
+    bool                 cancelled{false};
+};
+
+/**
+ * @brief How one archive is read off the main thread.
+ *
+ * Replaceable so a test can drive the progress and the cancel of read_sla_archives() without
+ * building a 200 MB archive; the production path leaves it empty and gets default_sla_archive_read().
+ */
+using SlaArchiveRead = std::function<SlaArchiveReadResult(const boost::filesystem::path &path,
+                                                          const std::function<bool()> &stop,
+                                                          const std::function<void(double)> &progress)>;
+
+/// The reader read_sla_archives() uses when the caller names none: import_sl1_archive().
+SlaArchiveRead default_sla_archive_read();
+
+/**
+ * @brief Read a list of archives, reporting the progress and honouring the stop.
+ *
+ * The body of the import job with the threads taken out, so what the tests check is what the job
+ * runs. @p stop is asked before each archive and the reader is given it as well, so a cancel lands
+ * within one layer image rather than at the end of the archive. @p progress is called with the
+ * share of the archives done, from 0 to 1, and never decreases.
+ *
+ * An empty result means nothing was read: the caller cancelled, or stop was already true. A
+ * cancelled archive contributes no entry at all, which is how a cancelled import adds nothing.
+ *
+ * @param paths The archives to read. A file that is not an archive is an error entry.
+ * @param read The reader to use; default_sla_archive_read() when empty.
+ */
+std::vector<SlaArchiveImport> read_sla_archives(
+    const std::vector<boost::filesystem::path>& paths,
+    const std::function<bool()>&              stop,
+    const std::function<void(double)>&        progress,
+    SlaArchiveRead                             read = {});
+
+/**
+ * @brief read_sla_archives() as the JobManager wants a job function: a stop token and a progress
+ * tracker. This is the function the import job is created with.
+ */
+std::vector<SlaArchiveImport> import_sla_archives_local(
+    Biz::JThread::StopToken stop_token,
+    Biz::Platform::JobManager::ProgressTracker progress,
+    const std::vector<boost::filesystem::path>& paths,
+    SlaArchiveRead read = {});
+
+/**
+ * @brief Put one archive mesh on the build plate, as import_files_and_add_to_scene() does for a
+ * mesh file. Separate from the read because only the main thread may touch the scene.
+ */
+Domain::ElementRefs add_sla_archive_to_scene(Domain::TriangleMesh&& mesh,
+                                             const boost::filesystem::path& file_path,
+                                             Scene::SceneInteractor& scene_interactor,
+                                             const Domain::Vec2d& bed_center);
 
 } // namespace Slic3r::Biz::FileLoadingLogic

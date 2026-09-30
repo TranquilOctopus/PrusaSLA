@@ -342,15 +342,17 @@ Applied apply(
 const std::vector<Rule>& mapping_table()
 {
     static const std::vector<Rule> table{
-        // Chitubox normalExposureTime -> exposure_time
-        {.sources     = {"normalExposureTime"},
+        // Exposure. expTime is the spelling of an SL1 archive, which store_sl1 writes straight
+        // off exposure_time, so it is seconds too and needs no conversion.
+        {.sources     = {"normalExposureTime", "expTime"},
          .tilt        = {Transform::Copy, "exposure_time", MappingStatus::Exact, UNIT_SECONDS},
          .generic     = {Transform::Copy, "exposure_time", MappingStatus::Exact, UNIT_SECONDS},
          .source_unit = UNIT_SECONDS,
          .note        = "Both in seconds, no conversion."},
 
-        // Bottom exposure, under either spelling.
-        {.sources = {"bottomLayerExposureTime", "bottomLayExposureTime"},
+        // Bottom exposure, under either spelling. expTimeFirst is what an SL1 archive calls it,
+        // in seconds as well, which store_sl1 writes straight off initial_exposure_time.
+        {.sources = {"bottomLayerExposureTime", "bottomLayExposureTime", "expTimeFirst"},
          .tilt    = {Transform::Copy, "initial_exposure_time", MappingStatus::Exact, UNIT_SECONDS},
          .generic = {Transform::Copy, "initial_exposure_time", MappingStatus::Exact, UNIT_SECONDS},
          .source_unit = UNIT_SECONDS,
@@ -360,7 +362,8 @@ const std::vector<Rule>& mapping_table()
         // setting: the print preset's faded_layers only applies when the resin has none.
         {
             .sources =
-                {"transitionLayers", "transitionLayerCount", "fadedLayers", "fadedLayerCount"},
+                {"transitionLayers", "transitionLayerCount", "fadedLayers", "fadedLayerCount",
+                 "numFade"},
             .tilt    = {Transform::CopyInt, "resin_faded_layers", MappingStatus::Exact},
             .generic = {Transform::CopyInt, "resin_faded_layers", MappingStatus::Exact},
             .note =
@@ -577,6 +580,22 @@ const std::vector<Rule>& mapping_table()
          .tilt    = {Transform::None, "", MappingStatus::NotApplicable},
          .generic = {Transform::None, "", MappingStatus::NotApplicable},
          .note    = "Foreign G-code is never imported, it belongs to the machine profile."},
+
+        // The bookkeeping an SL1 archive carries in its config.ini: what the job was, how long it
+        // was estimated to take, which machine and slicer wrote it, and the counts that describe
+        // the print rather than set it up. Reported so the review does not read as a wall of
+        // unknown keys, never written.
+        {
+            .sources =
+                {"jobDir", "action", "printerModel", "printerVariant", "expUserProfile",
+                 "usedMaterial", "numSlow", "numFast", "hollow", "printTime",
+                 "fileCreationTimestamp", "prusaSlicerVersion", "usedMaterialName"},
+            .tilt    = {Transform::None, "", MappingStatus::NotApplicable},
+            .generic = {Transform::None, "", MappingStatus::NotApplicable},
+            .note =
+                "A statistic or a job record of the archive the print came from; a resin preset is "
+                "not where the history of one print belongs."
+        },
         {.prefixes = {"displayCorrect", "buildAreaOffset"},
          .tilt     = {Transform::None, "", MappingStatus::NotApplicable},
          .generic  = {Transform::None, "", MappingStatus::NotApplicable},
