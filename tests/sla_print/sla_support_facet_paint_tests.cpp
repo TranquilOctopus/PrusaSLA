@@ -151,10 +151,10 @@ LayerSupportPoints generate_points(const Slic3r::Domain::TriangleMesh &mesh,
 Slic3r::sla::SupportFacetPaint blocking_everywhere(size_t layer_count)
 {
     const Slic3r::ExPolygon region{Slic3r::Polygon{
-        Slic3r::Point{Slic3r::coord_t(scale_(-100.)), Slic3r::coord_t(scale_(-100.))},
-        Slic3r::Point{Slic3r::coord_t(scale_(100.)), Slic3r::coord_t(scale_(-100.))},
-        Slic3r::Point{Slic3r::coord_t(scale_(100.)), Slic3r::coord_t(scale_(100.))},
-        Slic3r::Point{Slic3r::coord_t(scale_(-100.)), Slic3r::coord_t(scale_(100.))}}};
+        Slic3r::Point{Slic3r::Domain::coord_t(scale_(-100.)), Slic3r::Domain::coord_t(scale_(-100.))},
+        Slic3r::Point{Slic3r::Domain::coord_t(scale_(100.)), Slic3r::Domain::coord_t(scale_(-100.))},
+        Slic3r::Point{Slic3r::Domain::coord_t(scale_(100.)), Slic3r::Domain::coord_t(scale_(100.))},
+        Slic3r::Point{Slic3r::Domain::coord_t(scale_(-100.)), Slic3r::Domain::coord_t(scale_(100.))}}};
 
     Slic3r::sla::SupportFacetPaint paint;
     paint.layers.resize(layer_count);
@@ -352,7 +352,7 @@ TEST_CASE("An island keeps its support point inside a blocked region", "[Support
             const size_t layer_id = static_cast<size_t>(std::distance(heights.begin(), height));
 
             const Slic3r::Point where{
-                Slic3r::coord_t(scale_(island.pos.x())), Slic3r::coord_t(scale_(island.pos.y()))};
+                Slic3r::Domain::coord_t(scale_(island.pos.x())), Slic3r::Domain::coord_t(scale_(island.pos.y()))};
             if (paint.is_blocked(layer_id, where))
                 ++inside_blocked_region;
         }

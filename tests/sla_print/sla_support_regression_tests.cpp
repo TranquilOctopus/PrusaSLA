@@ -67,7 +67,7 @@ using Slic3r::Domain::Vec2d;
 using Slic3r::Domain::Vec3d;
 using Slic3r::Domain::SLA::SupportPoint;
 using Slic3r::Domain::SLA::SupportPoints;
-using Slic3r::sla::IslandHit;
+using Slic3r::SLA::IslandHit;
 
 // What the tests slice at. The default of the layer_height key is 0.3 mm, an FFF leftover, and the
 // benchmark harness and the local island coverage test of M4.3c both slice at 0.05.
@@ -229,8 +229,9 @@ Coverage analyse(const MeshModel& model, const SlaConfig& config)
     if (out.heights.empty())
         return out;
 
-    const ExPolygons layers = Slic3r::slice_mesh_ex(mesh.its, out.heights, slicing_params(config));
-    out.islands = Slic3r::sla::detect_islands(layers, Slic3r::sla::min_island_area_mm2);
+    const std::vector<ExPolygons> layers =
+        Slic3r::slice_mesh_ex(mesh.its, out.heights, slicing_params(config));
+    out.islands = Slic3r::SLA::detect_islands(layers, Slic3r::SLA::min_island_area_mm2);
     for (size_t i = 0; i < out.islands.size(); ++i) {
         const IslandHit& island = out.islands[i];
         if (island.layer_index >= out.heights.size())
@@ -299,7 +300,7 @@ MovedPoints run_generator(const TriangleMesh& mesh, const SlaConfig& config)
 
     // One layer height, the same allowed move the tool passes.
     const double allowed_move = double(heights[1] - heights[0]) + std::numeric_limits<float>::epsilon();
-    const Slic3r::Biz::Algorithms::AABBMesh emesh{mesh};
+    const Slic3r::AABBMesh emesh{mesh};
     out.moved = Slic3r::sla::move_on_mesh_surface(out.generated, emesh, allowed_move);
     return out;
 }
@@ -348,7 +349,7 @@ std::vector<Vec2d> box_outline(double x0, double y0, double x1, double y1, doubl
     for (double y = y0; y < y1; y += step)
         edge.push_back(Vec2d(x1, y));
     for (double x = x1; x > x0; x -= step)
-        edge.push_back(Vec2d(x, y));
+        edge.push_back(Vec2d(x, y1));
     for (double y = y1; y > y0; y -= step)
         edge.push_back(Vec2d(x0, y));
     return edge;

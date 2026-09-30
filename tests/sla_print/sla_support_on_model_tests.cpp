@@ -213,7 +213,7 @@ TEST_CASE("A point that may not end on the model gets no support where the plate
         CHECK(builder.pillars().size() == 1);
         REQUIRE(builder.anchors().size() == 1);
         // The anchor is on the floor of the pocket, well below the point.
-        CHECK(builder.anchors().front().pos.z() < pocket_point.z - 10.);
+        CHECK(builder.anchors().front().pos.z() < pocket_point.z() - 10.);
         CHECK_FALSE(reaches_the_plate(builder));
     }
 
@@ -262,7 +262,7 @@ TEST_CASE("A point that may end on the model is anchored on an object that may n
         REQUIRE(head != nullptr);
         CHECK(builder.pillars().size() == 1);
         REQUIRE(builder.anchors().size() == 1);
-        CHECK(builder.anchors().front().pos.z() < pocket_point.z - 10.);
+        CHECK(builder.anchors().front().pos.z() < pocket_point.z() - 10.);
 
         // The tree of a point that allows the model anchor is the tree the same point gets on an
         // object whose supports may end on the model anyway, down to the mesh of it.

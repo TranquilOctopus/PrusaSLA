@@ -577,7 +577,8 @@ TEST_CASE("A point's own base diameter reaches the foot of both trees",
 
     // A point with no base of its own keeps the configured one.
     CHECK(sla::base_size(sm, &pts[0]).radius == Approx(1.5));
-    CHECK(sla::base_size(sm, &geometry_point()).radius == Approx(sm.cfg.base_radius_mm));
+    const SupportPoint plain = geometry_point();
+    CHECK(sla::base_size(sm, &plain).radius == Approx(sm.cfg.base_radius_mm));
 
     sla::SupportTreeBuilder default_builder;
     sla::create_default_tree(default_builder, sm);

@@ -935,7 +935,7 @@ void DesktopApp::quit_after_fixture_render(bool ok)
     }
     SPDLOG_INFO("The fixture render is done, quitting.");
     // A render that failed has to say so in the exit code, or a script cannot tell it from a crash.
-    wxApp::GetInstance()->Exit(ok ? 0 : 1);
+    std::exit(ok ? EXIT_SUCCESS : EXIT_FAILURE);
 }
 
 } // namespace Slic3r::App::Desktop

@@ -20,7 +20,7 @@ TEST_CASE("RaftPreset: None disables pad", "[SLA][RaftPreset]")
         1.0,   // object_gap_mm
         0.0,   // edge_taper_mm
         {},    // infill
-        0.0,   // floor_thickness_mm
+        0.0    // floor_thickness_mm
     );
 
     CHECK(vals.pad_enable == false);
@@ -44,7 +44,7 @@ TEST_CASE("RaftPreset: Full enables plate-wide pad", "[SLA][RaftPreset]")
         1.0,   // object_gap_mm
         0.0,   // edge_taper_mm
         {},    // infill
-        0.0,   // floor_thickness_mm
+        0.0    // floor_thickness_mm
     );
 
     CHECK(vals.pad_enable == true);
@@ -67,7 +67,7 @@ TEST_CASE("RaftPreset: AroundObject sets pad_around_object flag", "[SLA][RaftPre
         1.0,   // object_gap_mm
         0.0,   // edge_taper_mm
         {},    // infill
-        0.0,   // floor_thickness_mm
+        0.0    // floor_thickness_mm
     );
 
     CHECK(vals.pad_enable == true);
@@ -90,7 +90,7 @@ TEST_CASE("RaftPreset: Skate differs from AroundObject in brim and slope", "[SLA
         1.0,   // object_gap_mm
         0.0,   // edge_taper_mm
         {},    // infill
-        0.0,   // floor_thickness_mm
+        0.0    // floor_thickness_mm
     );
 
     RaftPadValues vals_skate = raft_preset_to_pad_values(
@@ -102,7 +102,7 @@ TEST_CASE("RaftPreset: Skate differs from AroundObject in brim and slope", "[SLA
         1.0,   // object_gap_mm
         0.0,   // edge_taper_mm
         {},    // infill
-        0.0,   // floor_thickness_mm
+        0.0    // floor_thickness_mm
     );
 
     CHECK(vals_skate.pad_enable == true);
@@ -131,7 +131,7 @@ TEST_CASE("RaftPreset: Shared knobs pass through unchanged for Full", "[SLA][Raf
         1.5,   // object_gap_mm
         0.0,   // edge_taper_mm
         {},    // infill
-        0.0,   // floor_thickness_mm
+        0.0    // floor_thickness_mm
     );
 
     CHECK(vals.pad_wall_height_mm == Approx(3.5));
@@ -152,7 +152,7 @@ TEST_CASE("RaftPreset: Shared knobs pass through unchanged for AroundObject", "[
         1.5,   // object_gap_mm
         0.0,   // edge_taper_mm
         {},    // infill
-        0.0,   // floor_thickness_mm
+        0.0    // floor_thickness_mm
     );
 
     CHECK(vals.pad_wall_height_mm == Approx(3.5));
@@ -173,7 +173,7 @@ TEST_CASE("RaftPreset: Shared knobs pass through for Skate (except brim/slope)",
         1.5,   // object_gap_mm
         0.0,   // edge_taper_mm
         {},    // infill
-        0.0,   // floor_thickness_mm
+        0.0    // floor_thickness_mm
     );
 
     CHECK(vals.pad_wall_height_mm == Approx(3.5));
@@ -203,7 +203,7 @@ TEST_CASE("RaftPreset: the edge taper is a shared knob, no type replaces it", "[
             1.0,   // object_gap_mm
             1.2,   // edge_taper_mm
             {},    // infill
-            0.0,   // floor_thickness_mm
+            0.0    // floor_thickness_mm
         );
 
         CHECK(vals.raft_edge_taper_mm == Approx(1.2));
