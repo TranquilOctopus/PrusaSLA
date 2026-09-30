@@ -36,12 +36,15 @@ namespace {
 namespace Preset = Slic3r::Biz::Preset;
 
 /// @brief The system resin preset an imported preset inherits from.
+/// Everything here is a copy: a reference into the preset collections would not survive the save that
+/// follows, because saving a user preset reloads the vendor bundle and that replaces every evaluated
+/// preset in it, so a second import would read freed memory.
 struct BaseMaterial
 {
     std::string id;
     std::string name;
-    /// The values of the base preset, which say how the printer separates layers.
-    const Domain::ConfigBox* box{nullptr};
+    /// Whether the base preset says the machine tilts, empty when it says nothing about it.
+    std::optional<std::vector<bool>> use_tilt;
 };
 
 std::string trim_copy(std::string_view text)
@@ -128,22 +131,23 @@ std::string resin_name_hint(const ForeignResinProfile& profile)
     return profile.printer_hint.value_or(std::string{});
 }
 
-TargetPrinterClass printer_class_of(const Domain::ConfigBox& printer, const Domain::ConfigBox& material)
+TargetPrinterClass printer_class_of(
+    const std::string& printer_model,
+    const std::optional<std::vector<bool>>& base_use_tilt
+)
 {
     // A resin preset says the machine lifts the build plate by turning use_tilt off. Leaving it on
     // says nothing, because on is also the config default, so the printer model decides: only the
     // SL1 and SL1S tilt. (printer_class_from_config() cannot tell those two apart, a config view
     // always carries use_tilt, default included.)
-    if (const std::optional<std::vector<bool>> tilt = bool_vector_value(material, "use_tilt"); tilt
-        && std::ranges::none_of(*tilt, [](bool uses_tilt) { return uses_tilt; }))
+    if (base_use_tilt && std::ranges::none_of(*base_use_tilt, [](bool uses_tilt) { return uses_tilt; }))
     {
         return TargetPrinterClass::GenericMsla;
     }
 
-    const std::string model = string_value(printer, "printer_model").value_or(std::string{});
-    if (model.empty())
+    if (printer_model.empty())
         return TargetPrinterClass::Tilt; // this fork is built around the SL1
-    return contains_ignore_case(model, "SL1") ? TargetPrinterClass::Tilt : TargetPrinterClass::GenericMsla;
+    return contains_ignore_case(printer_model, "SL1") ? TargetPrinterClass::Tilt : TargetPrinterClass::GenericMsla;
 }
 
 bool base_matches(const std::string& resin_name, const Domain::Preset::EvaluatedMaterialPreset::Preset& preset)
@@ -204,7 +208,8 @@ std::optional<BaseMaterial> pick_base_material(
          {named, default_system, selected_system, first_system})
     {
         if (preset)
-            return BaseMaterial{preset->id, preset->name, &preset->config_box()};
+            return BaseMaterial{
+                preset->id, preset->name, bool_vector_value(preset->config_box(), "use_tilt")};
     }
     return std::nullopt;
 }
@@ -396,6 +401,8 @@ std::string preset_name(const MappingResult& mapping, const boost::filesystem::p
 /// @brief A name no other preset of that kind carries: the wanted one, or the wanted one with the
 /// first free " (2)", " (3)", ... appended. Saving under a name that is taken would replace that
 /// preset instead of adding one.
+/// The NameValidator keeps its own copy of the names, so the answer is already a value by the time
+/// this returns and the save that follows cannot invalidate it.
 std::string unique_preset_name(
     const Preset::PresetInteractor& presets,
     Domain::Preset::PresetKind kind,
@@ -472,15 +479,19 @@ ResinImportResult ResinProfileImportInteractor::import_file(
     }
 
     // The base comes before the mapping: it is the system resin of this printer, and its own
-    // settings say how the printer separates layers, which is what picks the mapping table.
+    // settings say how the printer separates layers, which is what picks the mapping table. Both
+    // the base and the printer model are read out as copies, because everything below this point
+    // mutates the preset collections they live in.
     const std::optional<BaseMaterial> base = pick_base_material(
         presets, project_id, selected, target.material_slot, resin_name_hint(*profile));
     if (!base) {
         result.error = "no system resin preset is available for this printer";
         return result;
     }
+    const std::string printer_model =
+        string_value(selected.printer.config_box(), "printer_model").value_or(std::string{});
 
-    result.mapping = map_resin_profile(*profile, printer_class_of(selected.printer.config_box(), *base->box));
+    result.mapping = map_resin_profile(*profile, printer_class_of(printer_model, base->use_tilt));
     result.base_preset = base->name;
     result.preset_name =
         unique_preset_name(presets, Domain::Preset::PresetKind::SlaMaterial, preset_name(result.mapping, path));
@@ -489,6 +500,10 @@ ResinImportResult ResinProfileImportInteractor::import_file(
         return result;
     }
 
+    // Everything the rest of the import needs is a copy by now (the base id, the values to write,
+    // the name to save under), so the mutations below cannot leave this function reading a preset
+    // that the save has already replaced. In particular the save reloads the vendor bundle, which
+    // is what a second import of the same file runs into.
     // Inherit from the base: select it, write the mapped values on top of it, then save the
     // container's material preset as a new user preset, which is what the material settings dialog
     // does. A failure past this point leaves the container showing the base preset.

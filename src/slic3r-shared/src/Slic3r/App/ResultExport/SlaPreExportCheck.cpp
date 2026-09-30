@@ -33,9 +33,11 @@ std::string format_unsupported_names(const std::vector<std::string>& names)
     }
     if (names.size() > max_listed_names) {
         // TRN: Pre-export checklist line, listing continuation. {0} counts the models left out.
-        // The ellipsis is escaped so the string does not depend on the source code page.
+        // The ellipsis is the raw UTF-8 bytes: this project is not compiled with /utf-8, so a "\u2026"
+        // would be encoded in the execution code page instead and arrive as a different character.
+        // The literal is split after the last escape, so a hex digit following it cannot be swallowed.
         line += fmt::format(
-            fmt::runtime(Biz::_u8L(", \u2026 and {0} more")),
+            fmt::runtime(Biz::_u8L(", \xE2\x80\xA6" " and {0} more")),
             names.size() - max_listed_names
         );
     }
