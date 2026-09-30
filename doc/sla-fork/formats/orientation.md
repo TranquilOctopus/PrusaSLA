@@ -105,3 +105,50 @@ Notes:
 - `.sl1svg` does not use `display_pixels_x`/`y` at all but `sla_output_precision` for its
   viewBox, so its image is much larger than the display's pixel grid; the corner is the same,
   because the transform is the same.
+
+## Against a real Photon Workshop file
+
+The rows above are derived from the code, so they can only be as right as the code is. The check
+against a real file is `SlaPm5WorkshopOrientationTests.cpp`, which is hidden and local because it
+needs the maintainer's own sample, and nothing of that sample is copied into the repository or into
+test data:
+
+```
+set SLA_LOCAL_SAMPLES=<repo>\local-samples
+build-default\src\slic3r-shared\Release\slic3r-shared-tests.exe "[.local]"
+```
+
+The test skips itself unless that variable is set. What it does, in order:
+
+1. It reads `anycubic-photon-mono-m5/01_5.pm5` as the container [pm5.md](pm5.md) describes it: the
+   address table in the file mark, the HEADER resolution, and one LAYERDEF entry per layer, whose
+   +20 offset is the thickness of that layer. The layer images stay on disk; only the ones being
+   compared are pulled in, and decoded with the PW0 decoder in `SlaLayerDecoders.hpp`.
+2. It loads the `5.stl` the reference is a slice of, slices it with the `photon_mono_m5` printer
+   preset of the shipped `community-sla` bundle, and writes the result with the `.pm5` writer. The
+   bundle is loaded and the printer selected through the preset interactor, so the mirroring the
+   test runs is the one the profile inherits (M5.4c) rather than one the test sets up itself. That
+   file is read back with the same reader, and its display has to be the same pixel grid as the
+   reference's.
+3. Three layers are picked at about 25%, 50% and 75% of the height and matched across the two
+   files by the height of their middle rather than by their index, so a difference in how the two
+   slicers count their layers does not matter. Each layer becomes a binary mask, where a grey value
+   of half the light or more counts as lit, the rule the other decoder users here follow.
+4. The two masks are lined up on their centroids, because the two slicers put the model wherever
+   they like on the plate, and the intersection over union is reported under identity, a mirror in
+   X, a mirror in Y and a turn of 180 degrees. Identity has to be the best of the four; when another
+   transform wins, the test names it.
+
+**Not run yet, so there are no numbers here.** Slicing `5.stl` at the M5's 12K display with
+supports and a pad on takes minutes, and the maintainer runs it. What a result means:
+
+| Best match | Reading |
+|---|---|
+| identity | our `display_mirror_x: true` agrees with Photon Workshop for this printer, so the row for `photon_mono_m5` above is what the display expects |
+| mirror_x | Photon Workshop does not mirror in X, so `display_mirror_x` should be off in the Photon Mono M5 profile |
+| mirror_y | the two disagree about the y axis instead, which points at `display_orientation` or at `display_mirror_y` |
+| rotate_180 | both axes are flipped, which is a transposed image, the bug the portrait presets caused |
+
+A low IoU under all four is not an answer about mirroring: it means the two slicers produced
+different cross sections (the model was placed or scaled differently), and the comparison says
+nothing about the mirroring.
