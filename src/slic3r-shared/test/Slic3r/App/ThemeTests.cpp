@@ -6,6 +6,7 @@
 #include <cmath>
 #include <iterator>
 
+using namespace Slic3r;
 using namespace Slic3r::App;
 
 // ColorRGBA stores floats in [0, 1]; compare as rounded 8-bit channels.

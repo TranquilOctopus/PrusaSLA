@@ -33,6 +33,7 @@ using Slic3r::Domain::ConfigView;
 using Slic3r::Domain::FullConfigSLA;
 using Slic3r::Domain::PrinterTechnology;
 using Slic3r::Domain::SelectionId;
+using Catch::Approx;
 
 namespace {
 
