@@ -117,6 +117,35 @@ std::string gen_wildcards(
     return {};
 }
 
+// The layers were encoded for the printer's format when slicing, so a file under another format's
+// extension would be one no printer can read. Says why and offers to choose again.
+void warn_sla_format_mismatch(
+    const std::string& archive_format,
+    const std::string& chosen_ext,
+    const std::function<void()>& on_choose_again,
+    const std::function<void()>& on_cancel
+)
+{
+    AppServices::instance().dialog_manager().show_yesno_dialog(
+        Biz::_u8L("Different file type"),
+        fmt::format(
+            fmt::runtime(Biz::_u8L("This build plate was sliced for the printer's {} format, so it can't be saved as {}. "
+                                   "To get a {} file, select a printer that uses it and slice again.\n\n"
+                                   "Choose another file name?")),
+            Biz::PrintHost::Sla::sla_default_export_extension(archive_format),
+            chosen_ext,
+            chosen_ext
+        ),
+        [on_choose_again, on_cancel](bool yes) {
+            if (yes) {
+                on_choose_again();
+            } else {
+                on_cancel();
+            }
+        }
+    );
+}
+
 }
 
 ExportNameData get_export_name_data(const Biz::ProjectInteractor& project_interactor)
@@ -276,23 +305,13 @@ void show_export_modal_dialog(
                 // under another format's extension would produce a file no printer can read.
                 const std::string chosen_ext = file_paths.front().extension().string();
                 if (is_sla && !Biz::PrintHost::Sla::sla_extension_matches_format(chosen_ext, archive_format)) {
-                    AppServices::instance().dialog_manager().show_yesno_dialog(
-                        Biz::_u8L("Different file type"),
-                        fmt::format(
-                            fmt::runtime(Biz::_u8L("This build plate was sliced for the printer's {} format, so it can't be saved as {}. "
-                                                   "To get a {} file, select a printer that uses it and slice again.\n\n"
-                                                   "Choose another file name?")),
-                            Biz::PrintHost::Sla::sla_default_export_extension(archive_format),
-                            chosen_ext,
-                            chosen_ext
-                        ),
-                        [pi_raw, default_path_at_removable, callback, wildcards_overide](bool yes) {
-                            if (yes) {
-                                show_export_modal_dialog(*pi_raw, default_path_at_removable, callback, wildcards_overide);
-                            } else {
-                                callback(false, {});
-                            }
-                        }
+                    warn_sla_format_mismatch(
+                        archive_format,
+                        chosen_ext,
+                        [pi_raw, default_path_at_removable, callback, wildcards_overide]() {
+                            show_export_modal_dialog(*pi_raw, default_path_at_removable, callback, wildcards_overide);
+                        },
+                        [callback]() { callback(false, {}); }
                     );
                     return;
                 }
@@ -339,15 +358,33 @@ void show_upload_modal_dialog(
 
     std::string filename = name_data.filename;
 
+    const std::string archive_format = sla_archive_format(project_interactor);
+    const bool is_sla                 = name_data.technology == Technology::Sla;
+
     Biz::Platform::PlatformServices::instance().main_thread_dispatcher().dispatch_on_main_thread(
-        [pi_raw = &project_interactor, filename, post_actions, callback, bgcode_allowed]()
+        [pi_raw = &project_interactor, filename, post_actions, callback, bgcode_allowed, archive_format, is_sla]()
         {
-            auto wrapped_callback = [post_actions, callback, bgcode_allowed, pi_raw](
+            auto wrapped_callback = [post_actions, callback, bgcode_allowed, pi_raw, archive_format, is_sla](
                 const std::string& input_filename,
                 Biz::PrintHost::PrintHostAfterUploadAction action
             ) {
                 if (input_filename.empty()) {
                     callback(input_filename, action);
+                    return;
+                }
+
+                // The same rule as when saving to a file: the plate is encoded for the printer's
+                // format, so another format's extension would be a file no printer can read.
+                const std::string chosen_ext = boost::filesystem::path(input_filename).extension().string();
+                if (is_sla && !Biz::PrintHost::Sla::sla_extension_matches_format(chosen_ext, archive_format)) {
+                    warn_sla_format_mismatch(
+                        archive_format,
+                        chosen_ext,
+                        [pi_raw, post_actions, callback]() {
+                            show_upload_modal_dialog(*pi_raw, post_actions, callback);
+                        },
+                        [callback, action]() { callback(std::string{}, action); }
+                    );
                     return;
                 }
 
@@ -383,7 +420,7 @@ void show_upload_modal_dialog(
             }
 
             AppServices::instance().dialog_manager().show_input_dialog_with_buttons(
-                Biz::_u8L("Send G-Code to printer host"),
+                is_sla ? Biz::_u8L("Send print file to printer host") : Biz::_u8L("Send G-Code to printer host"),
                 Biz::_u8L("Upload to printer host with the following filename:"),
                 filename,
                 buttons
