@@ -5,6 +5,7 @@
 #include "Slic3r/Biz/Algorithms/Execution/ExecutionTBB.hpp"
 #include "Slic3r/Biz/Algorithms/Optimize/BruteforceOptimizer.hpp"
 #include <libslic3r/Geometry.hpp>
+#include <libslic3r/SLA/OrientCrossSection.hpp>
 #include <limits>
 #include <thread>
 #include <algorithm>
@@ -309,22 +310,8 @@ struct RotfinderBoilerplate {
     unsigned max_tries;
     const RotOptimizeParams &params;
 
-    // Assemble the mesh with the correct transformation to be used in rotation
-    // optimization.
-    static TriangleMesh get_mesh_to_rotate(const Domain::ModelObject &mo)
-    {
-        TriangleMesh mesh = mo.raw_mesh();
-
-        Domain::ModelInstance *mi = mo.instances[0];
-        const Domain::Transformation trafo = mi->get_transformation();
-        Transform3d trafo_instance = trafo.get_scaling_factor_matrix() * trafo.get_mirror_matrix();
-        mesh.transform(trafo_instance);
-
-        return mesh;
-    }
-
-    RotfinderBoilerplate(const Domain::ModelObject &mo, const RotOptimizeParams &p)
-        : mesh{get_mesh_to_rotate(mo)}
+    RotfinderBoilerplate(TriangleMesh mesh_to_search, const RotOptimizeParams &p)
+        : mesh{std::move(mesh_to_search)}
         , max_tries(p.accuracy() * MAX_TRIES)
         , params{p}
     {}
@@ -342,10 +329,55 @@ struct RotfinderBoilerplate {
     bool stopcond() { return ! params.statuscb()(-1); }
 };
 
+// Assemble the mesh with the correct transformation to be used in rotation optimization: the mesh
+// of the object with the scaling and mirroring of its first instance applied and no rotation. The
+// vertices stay in millimetres, which is what the rest of the engine reads them as.
+TriangleMesh mesh_to_rotate(const Domain::ModelObject &mo)
+{
+    TriangleMesh mesh = mo.raw_mesh();
+
+    Domain::ModelInstance *mi = mo.instances[0];
+    const Domain::Transformation trafo = mi->get_transformation();
+    Transform3d trafo_instance = trafo.get_scaling_factor_matrix() * trafo.get_mirror_matrix();
+    mesh.transform(trafo_instance);
+
+    return mesh;
+}
+
 Vec2d find_best_misalignment_rotation(const Domain::ModelObject &mo,
                                       const RotOptimizeParams   &params)
 {
-    RotfinderBoilerplate<1000> bp{mo, params};
+    return find_best_misalignment_rotation(mesh_to_rotate(mo), params);
+}
+
+Vec2d find_least_supports_rotation(const Domain::ModelObject &mo,
+                                   const RotOptimizeParams   &params)
+{
+    return find_least_supports_rotation(mesh_to_rotate(mo), params);
+}
+
+Vec2d find_min_z_height_rotation(const Domain::ModelObject &mo,
+                                 const RotOptimizeParams   &params)
+{
+    return find_min_z_height_rotation(mesh_to_rotate(mo), params);
+}
+
+Vec2d find_least_peel_rotation(const Domain::ModelObject &mo,
+                               const RotOptimizeParams   &params)
+{
+    return find_least_peel_rotation(mesh_to_rotate(mo), params);
+}
+
+Vec2d find_no_cups_rotation(const Domain::ModelObject &mo,
+                            const RotOptimizeParams   &params)
+{
+    return find_no_cups_rotation(mesh_to_rotate(mo), params);
+}
+
+Vec2d find_best_misalignment_rotation(const TriangleMesh &mesh,
+                                      const RotOptimizeParams &params)
+{
+    RotfinderBoilerplate<1000> bp{TriangleMesh{mesh}, params};
 
     // Preparing the optimizer.
     size_t gridsize = std::sqrt(bp.max_tries);
@@ -371,10 +403,10 @@ Vec2d find_best_misalignment_rotation(const Domain::ModelObject &mo,
     return {result.optimum[0], result.optimum[1]};
 }
 
-Vec2d find_least_supports_rotation(const Domain::ModelObject &mo,
-                                   const RotOptimizeParams   &params)
+Vec2d find_least_supports_rotation(const TriangleMesh &mesh,
+                                   const RotOptimizeParams &params)
 {
-    RotfinderBoilerplate<1000> bp{mo, params};
+    RotfinderBoilerplate<1000> bp{TriangleMesh{mesh}, params};
 
     // The object rests on the build plate, so only the poses laying a convex hull face flat on
     // the plate have to be checked. This is a much smaller set than the whole XY plane, and every
@@ -415,10 +447,10 @@ inline BoundingBoxf3 bounding_box_with_tr(const indexed_triangle_set &its,
     return {bmin.cast<double>(), bmax.cast<double>()};
 }
 
-Vec2d find_min_z_height_rotation(const Domain::ModelObject &mo,
-                                 const RotOptimizeParams   &params)
+Vec2d find_min_z_height_rotation(const TriangleMesh &mesh,
+                                 const RotOptimizeParams &params)
 {
-    RotfinderBoilerplate<1000> bp{mo, params};
+    RotfinderBoilerplate<1000> bp{TriangleMesh{mesh}, params};
 
     TriangleMesh chull = tm::convex_hull_3d(bp.mesh);
     auto inputs = reserve_vector<XYRotation>(chull.its.indices.size());
@@ -457,6 +489,61 @@ Vec2d find_min_z_height_rotation(const Domain::ModelObject &mo,
     });
 
     return {rot[0], rot[1]};
+}
+
+namespace {
+
+// The two PLAN B7 goals that need the sliced cross sections rather than a walk over the triangles:
+// score the poses that lay a convex hull face flat on the plate by their coarse slices and take the
+// cheapest one. The weights of SLA/OrientCrossSection.hpp say what counts.
+Vec2d find_cross_section_rotation(const TriangleMesh &mesh,
+                                  const RotOptimizeParams &params,
+                                  const CrossSectionWeights &weights)
+{
+    RotfinderBoilerplate<1000> bp{TriangleMesh{mesh}, params};
+
+    // Slicing costs orders of magnitude more than the triangle walks of the other goals, so only
+    // the biggest poses are sliced at all. The object rests on the plate, so these are the poses
+    // that lay a convex hull face flat on it, as in find_least_supports_rotation() above.
+    const std::vector<XYRotation> inputs =
+        get_chull_rotations(bp.mesh, cross_section_pose_limit);
+    if (inputs.empty()) {
+        return Vec2d::Zero();
+    }
+
+    bp.max_tries = inputs.size();
+
+    auto objfn = [&bp, &weights](const XYRotation &rot) {
+        bp.statusfn();
+        return score_cross_sections(bp.mesh, to_transform3f(rot), weights).score;
+    };
+
+    XYRotation rot = find_min_score<2>(
+        objfn, inputs.cbegin(), inputs.cend(), [&bp] { return bp.stopcond(); }
+    );
+
+    return {rot[0], rot[1]};
+}
+
+} // namespace
+
+Vec2d find_least_peel_rotation(const TriangleMesh &mesh,
+                               const RotOptimizeParams &params)
+{
+    // Nothing but the peak cross section, which is the peel force the print has to get through.
+    return find_cross_section_rotation(mesh, params, CrossSectionWeights{.peak_area = 1.});
+}
+
+Vec2d find_no_cups_rotation(const TriangleMesh &mesh,
+                            const RotOptimizeParams &params)
+{
+    // The cup openings dominate, because a cup sealing against the film adds its suction term to
+    // every peel it is open for, while the peak area is paid once. The peak area is not dropped
+    // completely: with a weight of 0.05 it costs 5 mm2 of peak area to save 1 mm2 of cup opening,
+    // so a pose with a cup is only taken over a big enough saving in peak area, and among the poses
+    // that have no cup at all the one that peels easiest is still the one that is picked.
+    return find_cross_section_rotation(
+        mesh, params, CrossSectionWeights{.peak_area = 0.05, .cup_opening = 1.});
 }
 
 }} // namespace Slic3r::sla

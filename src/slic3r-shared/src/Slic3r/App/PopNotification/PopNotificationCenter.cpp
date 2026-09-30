@@ -116,6 +116,16 @@ const JobNotificationSpec* find_job_spec(const std::string& job_key)
             // Reading a 200 MB archive can take a while, and stopping it leaves the plate as it
             // was, so the bar comes with a button that asks the job to stop.
             .cancelable = true
+        },
+        JobNotificationSpec{
+            .key_prefix = "sla_auto_orient",
+            // TRN Header of a notification while the SLA auto orientation searches for a rotation.
+            .started_header = L("Auto orienting..."),
+            // TRN Header of a finished SLA auto orientation notification.
+            .finished_header = L("Auto orient finished"),
+            // TRN Header of a failed SLA auto orientation notification.
+            .failed_header = L("Auto orient failed"),
+            .icon = Render::Icon::Rotate
         }
     };
 

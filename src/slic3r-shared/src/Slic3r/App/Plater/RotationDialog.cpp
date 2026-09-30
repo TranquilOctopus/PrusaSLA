@@ -2,17 +2,26 @@
 #include "Slic3r/App/Plater/PlaceOnBedButton.hpp"
 #include "Slic3r/App/Yoga/Text.hpp"
 #include "Slic3r/App/Yoga/RadioButton.hpp"
+#include "Slic3r/App/Yoga/ProgressBar.hpp"
 #include "Slic3r/App/Plater/TripleInput.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
 #include "Slic3r/App/Plater/PlaterGizmosHelper.hpp"
 #include "Slic3r/Math.hpp"
 #include "Slic3r/App/IsSlaActive.hpp"
+#include "Slic3r/Biz/Platform/PlatformServices.hpp"
 #include "Slic3r/Biz/Scene/SceneInteractor.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
 #include "Slic3r/Domain/Project.hpp"
 #include "libslic3r/SLAAutoOrient.hpp"
 #include "Slic3r/Assert.hpp"
+#include "Slic3r/LegacyFormat.hpp"
 #include <Eigen/Geometry>
+
+#include <atomic>
+#include <exception>
+#include <utility>
+
+#include <fmt/format.h>
 
 using namespace Slic3r::App::Yoga;
 
@@ -37,6 +46,56 @@ Slic3r::sla::AutoOrientGoal& auto_orient_goal()
     return goal;
 }
 
+// One auto orientation search per project, so a second press replaces the first one and the job
+// manager cancels the jobs of a project that is closed. The name is also the prefix the pop
+// notification of the search is registered under.
+std::string auto_orient_job_name(Domain::SelectionId project_id)
+{
+    return fmt::format("sla_auto_orient {}", project_id);
+}
+
+// What the search answers with. A search that was cancelled before it found a pose, or one that
+// found nothing to rotate, has no rotation to apply.
+struct AutoOrientResult
+{
+    Domain::Vec2d rotation{Domain::Vec2d::Zero()};
+    bool has_rotation{false};
+};
+
+// The search itself, on a worker thread. The mesh is a copy taken out of the model on the UI
+// thread, so nothing here reaches into the project while the user works on it.
+//
+// The engine asks the status callback for every pose it scores, and it scores them in parallel, so
+// the percentages can arrive out of order. The progress tracker only ever moves forward, so the
+// high water mark is kept here: a percentage that is behind the last one is dropped rather than
+// sent back, which the tracker would not accept.
+AutoOrientResult run_auto_orient(
+    Biz::JThread::StopToken stop_token,
+    Biz::Platform::JobManager::ProgressTracker progress,
+    Slic3r::Domain::TriangleMesh mesh,
+    Slic3r::sla::AutoOrientGoal goal
+)
+{
+    AutoOrientResult result;
+
+    std::atomic_int reported{-1};
+    const Slic3r::sla::AutoOrientStatus status{[&](int percent) {
+        if (percent >= 0) {
+            int last = reported.load();
+            while (percent > last && !reported.compare_exchange_weak(last, percent)) {
+            }
+            if (percent > last)
+                progress.set(Domain::Percentage{double(percent)});
+        }
+        return !stop_token.stop_requested();
+    }};
+
+    result.rotation     = Slic3r::sla::auto_orient(mesh, goal, status);
+    result.has_rotation = !stop_token.stop_requested();
+
+    return result;
+}
+
 } // namespace
 
 RotationDialog::RotationDialog(
@@ -52,6 +111,8 @@ RotationDialog::RotationDialog(
     m_project_interactor.add_listener<Biz::ISelectedProjectChangedListener>(this);
     m_project_interactor.scene_interactor()
         .add_listener<Biz::Scene::ISceneSelectionChangedListener>(this);
+    Biz::Platform::PlatformServices::instance().job_manager().add_listener<
+        Biz::Platform::JobManager::IJobManagerStatusChangedListener>(this);
 
     content()->set_padding({20_fpx, 20_fpx});
     content()->set_orientation(Yoga::Orientation::Vertical);
@@ -98,8 +159,16 @@ RotationDialog::RotationDialog(
     m_auto_orient_button = rotation_section->emplace_back<Yoga::LayoutButton>(_u8L("Auto orient"));
     m_auto_orient_button->callbacks().action = [this]() { on_auto_orient(); };
 
+    m_auto_orient_progress = rotation_section->emplace_back<Yoga::ProgressBar>();
+    m_auto_orient_progress->set_show_overlay(true);
+    m_auto_orient_progress->set_min_height(3_fpx);
+    m_auto_orient_progress->set_flex_shrink(0.f);
+    m_auto_orient_progress->set_visible(false);
+
     m_auto_orient_goal_row = rotation_section->emplace_back<Yoga::Item>();
     m_auto_orient_goal_row->set_orientation(Orientation::Horizontal);
+    // The four goals do not always fit on one line.
+    m_auto_orient_goal_row->set_flex_wrap(YGWrapWrap);
     m_auto_orient_goal_row->set_gap(10_fpx);
     m_lowest_height_button =
         m_auto_orient_goal_row->emplace_back<Yoga::RadioButton>(_u8L("Lowest height"));
@@ -107,6 +176,11 @@ RotationDialog::RotationDialog(
     m_fewest_supports_button =
         m_auto_orient_goal_row->emplace_back<Yoga::RadioButton>(_u8L("Fewest supports"));
     m_auto_orient_goal_buttons.insert_button(m_fewest_supports_button);
+    m_least_peel_button =
+        m_auto_orient_goal_row->emplace_back<Yoga::RadioButton>(_u8L("Least peel"));
+    m_auto_orient_goal_buttons.insert_button(m_least_peel_button);
+    m_no_cups_button = m_auto_orient_goal_row->emplace_back<Yoga::RadioButton>(_u8L("No cups"));
+    m_auto_orient_goal_buttons.insert_button(m_no_cups_button);
     reload_auto_orient_goal();
     m_auto_orient_goal_buttons.callbacks().checked_changed = [this](Yoga::AbstractButton*, Yoga::AbstractButton*)
     {
@@ -114,6 +188,10 @@ RotationDialog::RotationDialog(
             auto_orient_goal() = Slic3r::sla::AutoOrientGoal::MinHeight;
         } else if (m_fewest_supports_button->checked()) {
             auto_orient_goal() = Slic3r::sla::AutoOrientGoal::LeastSupports;
+        } else if (m_least_peel_button->checked()) {
+            auto_orient_goal() = Slic3r::sla::AutoOrientGoal::LeastPeel;
+        } else if (m_no_cups_button->checked()) {
+            auto_orient_goal() = Slic3r::sla::AutoOrientGoal::NoCups;
         }
     };
 
@@ -127,10 +205,22 @@ RotationDialog::RotationDialog(
 
 RotationDialog::~RotationDialog()
 {
+    // The search applies its result through this window, so a search that is still running has to
+    // be gone before the window is. cancel_job() waits for the worker thread, which asks whether to
+    // go on between the poses it scores.
+    if (!m_auto_orient_job_name.empty()) {
+        Biz::Platform::PlatformServices::instance().job_manager().cancel_job(
+            m_auto_orient_job_name
+        );
+        m_auto_orient_job_name.clear();
+    }
+
     m_scene_provider.remove_listener<App::Plater::ISelectionExtentsChangedListener>(this);
     m_project_interactor.remove_listener<Biz::ISelectedProjectChangedListener>(this);
     m_project_interactor.scene_interactor()
         .remove_listener<Biz::Scene::ISceneSelectionChangedListener>(this);
+    Biz::Platform::PlatformServices::instance().job_manager().remove_listener<
+        Biz::Platform::JobManager::IJobManagerStatusChangedListener>(this);
 }
 
 void RotationDialog::on_scene_selection_bounding_box_changed(
@@ -202,11 +292,71 @@ void RotationDialog::update_auto_orient_button_visibility()
 
 void RotationDialog::reload_auto_orient_goal()
 {
-    if (auto_orient_goal() == Slic3r::sla::AutoOrientGoal::MinHeight) {
+    switch (auto_orient_goal()) {
+    case Slic3r::sla::AutoOrientGoal::MinHeight:
         m_lowest_height_button->set_checked(true);
-    } else {
+        break;
+    case Slic3r::sla::AutoOrientGoal::LeastPeel:
+        m_least_peel_button->set_checked(true);
+        break;
+    case Slic3r::sla::AutoOrientGoal::NoCups:
+        m_no_cups_button->set_checked(true);
+        break;
+    case Slic3r::sla::AutoOrientGoal::LeastSupports:
         m_fewest_supports_button->set_checked(true);
+        break;
     }
+}
+
+void RotationDialog::on_job_manager_status_changed(
+    const Biz::Platform::JobManager::JobManagerStatus& status
+)
+{
+    if (m_auto_orient_job_name.empty())
+        return;
+
+    const auto it{status.find(m_auto_orient_job_name)};
+    if (it == status.end() || it->second.status != Domain::JobStatus::Started) {
+        // The search is gone from the manager, which is what happens once it is finished and when
+        // its project was closed: either way the panel goes back to what it shows normally.
+        m_auto_orient_job_name.clear();
+        reload_auto_orient_status();
+        return;
+    }
+
+    m_auto_orient_progress_percent = it->second.percent ? int(it->second.percent->value) : 0;
+    reload_auto_orient_status();
+}
+
+void RotationDialog::reload_auto_orient_status()
+{
+    const bool running{!m_auto_orient_job_name.empty()};
+
+    m_auto_orient_progress->set_visible(running);
+    if (!running) {
+        m_auto_orient_progress_percent = 0;
+        m_auto_orient_button->set_label(_u8L("Auto orient"));
+        m_auto_orient_button->callbacks().action = [this]() { on_auto_orient(); };
+        return;
+    }
+
+    m_auto_orient_button->set_label(_u8L("Cancel"));
+    m_auto_orient_button->callbacks().action = [this]() { on_cancel_auto_orient(); };
+    m_auto_orient_progress->set_progress(
+        m_auto_orient_progress_percent,
+        Slic3r::format(_u8L("Auto orient %1%/100"), m_auto_orient_progress_percent)
+    );
+}
+
+void RotationDialog::on_cancel_auto_orient()
+{
+    if (m_auto_orient_job_name.empty())
+        return;
+
+    // Ask the search to stop between the poses it scores; it applies nothing when it stops.
+    Biz::Platform::PlatformServices::instance().job_manager().request_job_stop(
+        m_auto_orient_job_name
+    );
 }
 
 void RotationDialog::on_auto_orient()
@@ -215,10 +365,6 @@ void RotationDialog::on_auto_orient()
     using Domain::ElementRef;
     using Domain::ModelInstance;
     using Domain::ModelObject;
-    using Domain::SquareMatrix4d;
-    using Domain::SquareMatrix3d;
-    using Domain::Vec3d;
-    using Eigen::AngleAxisd;
 
     if (!App::is_sla_active(m_project_interactor)) {
         return;
@@ -254,8 +400,70 @@ void RotationDialog::on_auto_orient()
         return;
     }
 
-    // Get the target rotation from the engine
-    const Domain::Vec2d target_rot_sla{Slic3r::sla::auto_orient(*object, auto_orient_goal())};
+    // The mesh the engine searches is taken out of the model here, on the UI thread, so that the
+    // worker thread has a copy of its own and nothing to read while the user works on the project.
+    const Domain::TriangleMesh mesh{Slic3r::sla::auto_orient_mesh(*object)};
+    if (mesh.its.vertices.empty()) {
+        return;
+    }
+
+    m_auto_orient_job_name = auto_orient_job_name(project_id);
+    const std::string job_name{m_auto_orient_job_name};
+    m_auto_orient_progress_percent = 0;
+    Biz::Platform::PlatformServices::instance().job_manager()
+        .create_job(job_name, run_auto_orient, std::move(mesh), auto_orient_goal())
+        .set_project_id(project_id)
+        .on_result([this, job_name, element](AutoOrientResult result)
+                   {
+                       if (m_auto_orient_job_name != job_name)
+                           return; // a newer search took over while this one was finishing
+                       if (result.has_rotation) {
+                           apply_auto_orient_rotation(result.rotation, element);
+                       }
+                       m_auto_orient_job_name.clear();
+                       reload_auto_orient_status();
+                   })
+        .on_exception([this, job_name](const std::exception_ptr&)
+                      {
+                          if (m_auto_orient_job_name != job_name)
+                              return;
+                          m_auto_orient_job_name.clear();
+                          reload_auto_orient_status();
+                      })
+        .start();
+
+    reload_auto_orient_status();
+}
+
+void RotationDialog::apply_auto_orient_rotation(
+    const Domain::Vec2d& target_rot_sla, const Domain::ElementRef& element
+)
+{
+    using namespace Biz::Scene;
+    using Domain::ModelInstance;
+    using Domain::SquareMatrix3d;
+    using Domain::SquareMatrix4d;
+    using Domain::Vec3d;
+    using Eigen::AngleAxisd;
+
+    Biz::Scene::SceneInteractor& scene_interactor{m_project_interactor.scene_interactor()};
+
+    // The search ran on a worker thread, so the selection may have moved on while it did. The
+    // rotation belongs to the element the search was started for, and to nothing else.
+    const ObjectSelection& selection{scene_interactor.object_selection()};
+    if (selection.elements.size() != 1 || selection.elements.front() != element) {
+        return;
+    }
+
+    const ModelInstance* instance{
+        m_project_interactor.workbench()
+            .project(m_project_interactor.selected_project_id())
+            .find_instance_by_id(element.object_id, element.instance_id)
+    };
+    if (!instance) {
+        return;
+    }
+
     const double rot_x{target_rot_sla.x()};
     const double rot_y{target_rot_sla.y()};
 
