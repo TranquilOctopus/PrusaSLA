@@ -127,12 +127,14 @@ The report is one object with a `results` array, one entry per file that was tri
 included:
 
 ```json
-{"results":[{"file":"grey.cfg","ok":true,"error":"","preset_name":"Grey resin","base_preset":"Generic Fast Resin","mapping":[{"key":"normalExposureTime","target_key":"exposure_time","value":"2.5","status":"Exact","note":"Both in seconds, no conversion."}]}]}
+{"results":[{"file":"grey.cfg","ok":true,"error":"","preset_name":"Grey resin","base_preset":"Generic Fast Resin","mapping":[{"key":"normalExposureTime","target_key":"exposure_time","source_value":"2.5","value":"2.5","status":"Exact","note":"Both in seconds, no conversion."}]}]}
 ```
 
 Each `mapping` row is one key of the file: the key as it appeared (`key`), the resin setting it
-becomes (`target_key`, empty when nothing is written), the value written to it (`value`, empty when
-none is), the `status` and the `note` that says why.
+becomes (`target_key`, empty when nothing is written), the value the file had (`source_value`), the
+value written to it (`value`, empty when none is), the `status` and the `note` that says why. A
+converted value is therefore readable on its own: `150` as the file had it next to the `2.5` that
+goes into the preset.
 
 ## New resin from datasheet
 
@@ -177,10 +179,12 @@ The review dialog opens on a dry run, so everything below is what the import *wo
   and the other illegal characters become `_`) and makes it unique, so importing the same profile
   twice gives you *Grey resin* and *Grey resin (2)* and never overwrites the first one.
 - **The table** has the three columns *From the file*, *Into the resin profile* and *Status*. One
-  row per key of the file: the key as the file wrote it, then what it becomes as
-  `exposure_time = 2.5`, then a badge. A key that writes nothing has an empty second column and is
-  dimmed. Under each row is the note that explains the status, which is what makes an
-  approximation auditable rather than a surprise.
+  row per key of the file: the key as the file wrote it with the value it had
+  (`normalExposureTime = 2.5 s`), then what it becomes as `exposure_time = 2.5 s`, then a badge. A
+  key that writes nothing has an empty second column and is dimmed, and its value is still on the
+  left. Under each row is the note that explains the status, which is what makes an approximation
+  auditable rather than a surprise; the note is one line long, elided, and hovering it shows all of
+  it.
 - **The count line** under the table counts the rows of every kind, for instance
   `12 Exact  ·  3 Converted  ·  2 Approximated  ·  40 Not applicable  ·  8 Unknown`. Kinds with no
   rows are left out.
@@ -291,10 +295,15 @@ not use yet, so they arrive as *Unknown* rather than silently:
 
 ## Known limits
 
-- A row shows the value that is written, not the value the file had. A converted row reads
-  `lift_speed = 1.66667`, and the 100 mm/min the file states is not shown in the table.
+- A row reads `normalLayerLiftSpeed = 150 mm/min` on the left and `lift_speed = 2.5 mm/s` on the
+  right, so a converted value is readable without opening the note. What a row cannot show is the
+  unit of a value whose unit is not settled yet (the speeds above) and of a key that is not a
+  quantity at all, such as a layer count or a profile name: those are shown as plain numbers.
+- The note under a row is a sentence or two, and the table shows it on one line, elided. Hovering
+  the line shows all of it.
 - A `.cfg` names no vendor, so the vendor is empty in the source line. The resin name comes from the
-  profile name key, `currProfile`, and it is that name the base material is matched against.
+  profile name key, `currProfile`, and it is that name the base material is matched against. No
+  vendor or brand key of the `.cfg` format is known yet, so nothing is guessed at one.
 - There is no printer picker in the review dialog. Pick the printer in the sidebar first; the
   import goes into the selected one or it does not happen.
 - A single file is capped at 8 MB and a folder import at 1000 files.

@@ -58,6 +58,19 @@ constexpr double ASSUMED_BOTTLE_VOLUME_ML = 1000.;
 constexpr std::string_view SPEED_UNIT_CAVEAT =
     "Converted from mm/min to mm/s, the source unit is not verified yet (M3.1/M3.2). ";
 
+// The units of the mapping table. A row shows the value of the file next to the value that is
+// written, each with its unit, so a converted value can be read without opening the note. The
+// spellings are the ones ConfigDefsSLA.cpp gives the same quantity; they are not translated, because
+// a report and a table must read the same in every language. A key that is not a quantity carries
+// none, and so does a key whose unit M3.1/M3.2 have not settled: a unit that is not known is not
+// written down.
+constexpr const char* UNIT_SECONDS    = "s";
+constexpr const char* UNIT_MM         = "mm";
+constexpr const char* UNIT_MM_PER_MIN = "mm/min";
+constexpr const char* UNIT_MM_PER_SEC = "mm/s";
+constexpr const char* UNIT_G_PER_ML   = "g/ml";
+constexpr const char* UNIT_ML         = "ml";
+
 std::string trim(const std::string& text)
 {
     return boost::trim_copy(text);
@@ -147,6 +160,8 @@ struct Target
     Transform transform{Transform::None};
     std::string key;
     MappingStatus status{MappingStatus::NotApplicable};
+    /// The unit the written value is in, empty when the key is not written or is not a quantity.
+    std::string unit;
 };
 
 /// One row of the mapping table of doc/sla-fork/ROADMAP.md.
@@ -158,6 +173,8 @@ struct Rule
     std::vector<std::string> prefixes;
     Target tilt;
     Target generic;
+    /// The unit the source value is in, empty when it is not a quantity or not settled yet.
+    std::string source_unit;
     std::string note;
 };
 
@@ -287,16 +304,18 @@ const std::vector<Rule>& mapping_table()
 {
     static const std::vector<Rule> table{
         // Chitubox normalExposureTime -> exposure_time
-        {.sources = {"normalExposureTime"},
-         .tilt    = {Transform::Copy, "exposure_time", MappingStatus::Exact},
-         .generic = {Transform::Copy, "exposure_time", MappingStatus::Exact},
-         .note    = "Both in seconds, no conversion."},
+        {.sources     = {"normalExposureTime"},
+         .tilt        = {Transform::Copy, "exposure_time", MappingStatus::Exact, UNIT_SECONDS},
+         .generic     = {Transform::Copy, "exposure_time", MappingStatus::Exact, UNIT_SECONDS},
+         .source_unit = UNIT_SECONDS,
+         .note        = "Both in seconds, no conversion."},
 
         // Bottom exposure, under either spelling.
         {.sources = {"bottomLayerExposureTime", "bottomLayExposureTime"},
-         .tilt    = {Transform::Copy, "initial_exposure_time", MappingStatus::Exact},
-         .generic = {Transform::Copy, "initial_exposure_time", MappingStatus::Exact},
-         .note    = "Both in seconds, no conversion."},
+         .tilt    = {Transform::Copy, "initial_exposure_time", MappingStatus::Exact, UNIT_SECONDS},
+         .generic = {Transform::Copy, "initial_exposure_time", MappingStatus::Exact, UNIT_SECONDS},
+         .source_unit = UNIT_SECONDS,
+         .note        = "Both in seconds, no conversion."},
 
         // A transition layer count is the same thing on both printer classes, and it is a resin
         // setting: the print preset's faded_layers only applies when the resin has none.
@@ -321,17 +340,19 @@ const std::vector<Rule>& mapping_table()
 
         // Layer height is a resin setting since M0.4, so no preset variant is needed.
         {
-            .sources = {"layerHeight"},
-            .tilt    = {Transform::Copy, "resin_layer_height", MappingStatus::Exact},
-            .generic = {Transform::Copy, "resin_layer_height", MappingStatus::Exact},
+            .sources     = {"layerHeight"},
+            .tilt        = {Transform::Copy, "resin_layer_height", MappingStatus::Exact, UNIT_MM},
+            .generic     = {Transform::Copy, "resin_layer_height", MappingStatus::Exact, UNIT_MM},
+            .source_unit = UNIT_MM,
             .note =
                 "Layer height is a resin setting; 0 would mean \"use the print preset's layer height\"."
         },
 
-        {.sources = {"resinDensity"},
-         .tilt    = {Transform::Copy, "material_density", MappingStatus::Exact},
-         .generic = {Transform::Copy, "material_density", MappingStatus::Exact},
-         .note    = "Both in g/ml, no conversion."},
+        {.sources     = {"resinDensity"},
+         .tilt        = {Transform::Copy, "material_density", MappingStatus::Exact, UNIT_G_PER_ML},
+         .generic     = {Transform::Copy, "material_density", MappingStatus::Exact, UNIT_G_PER_ML},
+         .source_unit = UNIT_G_PER_ML,
+         .note        = "Both in g/ml, no conversion."},
 
         {.sources = {"resinPrice"},
          .tilt    = {Transform::BottleCost, "bottle_cost", MappingStatus::Converted},
@@ -345,78 +366,124 @@ const std::vector<Rule>& mapping_table()
          .note =
              "Read together with resinPrice: a per-litre price becomes a bottle cost, any other unit does not."},
 
-        {.sources = {"bottleVolume", "bottle_volume"},
-         .tilt    = {Transform::None, "", MappingStatus::Converted},
-         .generic = {Transform::None, "", MappingStatus::Converted},
+        {.sources     = {"bottleVolume", "bottle_volume"},
+         .tilt        = {Transform::None, "", MappingStatus::Converted},
+         .generic     = {Transform::None, "", MappingStatus::Converted},
+         .source_unit = UNIT_ML,
          .note =
              "The bottle size resinPrice is turned into a bottle cost with; without it a 1 litre bottle is assumed."},
 
         {.sources = {"lightOffTime", "bottomLightOffTime"},
          .tilt =
-             {Transform::ExposureDelayPair, "delay_before_exposure", MappingStatus::Approximated},
+             {Transform::ExposureDelayPair,
+              "delay_before_exposure",
+              MappingStatus::Approximated,
+              UNIT_SECONDS},
          .generic =
-             {Transform::ExposureDelayPair, "delay_before_exposure", MappingStatus::Approximated},
+             {Transform::ExposureDelayPair,
+              "delay_before_exposure",
+              MappingStatus::Approximated,
+              UNIT_SECONDS},
+         .source_unit = UNIT_SECONDS,
          .note =
              "The light-off time is written as a delay before exposure, the same below and above the area fill. The meaning is not verified yet (M3.1/M3.2)."},
 
         {.sources = {"resetTimeBeforeLift"},
          .tilt =
-             {Transform::ExposureDelayPair, "delay_after_exposure", MappingStatus::Approximated},
-         .generic = {Transform::Copy, "wait_before_lift", MappingStatus::Exact},
+             {Transform::ExposureDelayPair,
+              "delay_after_exposure",
+              MappingStatus::Approximated,
+              UNIT_SECONDS},
+         .generic     = {Transform::Copy, "wait_before_lift", MappingStatus::Exact, UNIT_SECONDS},
+         .source_unit = UNIT_SECONDS,
          .note =
              "A tilt printer has no wait before a lift, so the time becomes a delay after the exposure, the same below and above the area fill."},
 
-        {.sources = {"resetTimeAfterLift"},
-         .tilt    = {Transform::None, "", MappingStatus::NotApplicable},
-         .generic = {Transform::Copy, "wait_after_lift", MappingStatus::Exact},
-         .note    = "A tilt printer separates layers by tilting and has no wait after a lift."},
+        {.sources     = {"resetTimeAfterLift"},
+         .tilt        = {Transform::None, "", MappingStatus::NotApplicable},
+         .generic     = {Transform::Copy, "wait_after_lift", MappingStatus::Exact, UNIT_SECONDS},
+         .source_unit = UNIT_SECONDS,
+         .note        = "A tilt printer separates layers by tilting and has no wait after a lift."},
 
         // Layer separation by lift: heights first, then the speeds, all only on generic MSLA
         // printers. The short key spellings are the ones M3.4's two-stage lift fixture uses.
-        {.sources = {"normalLayerLiftHeight", "liftHeight"},
-         .tilt    = {Transform::None, "", MappingStatus::NotApplicable},
-         .generic = {Transform::Copy, "lift_height", MappingStatus::Exact},
-         .note    = "A tilt printer separates layers by tilting, so it has no lift height."},
-        {.sources = {"normalLayerLiftHeight2", "liftHeight2"},
-         .tilt    = {Transform::None, "", MappingStatus::NotApplicable},
-         .generic = {Transform::Copy, "lift_height_2", MappingStatus::Exact},
-         .note    = "Second stage of the two-stage lift, above the area fill threshold."},
-        {.sources = {"bottomLayerLiftHeight", "bottomLiftHeight"},
-         .tilt    = {Transform::None, "", MappingStatus::NotApplicable},
-         .generic = {Transform::Copy, "bottom_lift_height", MappingStatus::Exact},
-         .note    = "Lift height for the bottom layers."},
-        {.sources = {"bottomLayerLiftHeight2", "bottomLiftHeight2"},
-         .tilt    = {Transform::None, "", MappingStatus::NotApplicable},
-         .generic = {Transform::Copy, "bottom_lift_height_2", MappingStatus::Exact},
-         .note    = "Second stage of the two-stage lift on the bottom layers."},
+        {.sources     = {"normalLayerLiftHeight", "liftHeight"},
+         .tilt        = {Transform::None, "", MappingStatus::NotApplicable},
+         .generic     = {Transform::Copy, "lift_height", MappingStatus::Exact, UNIT_MM},
+         .source_unit = UNIT_MM,
+         .note        = "A tilt printer separates layers by tilting, so it has no lift height."},
+        {.sources     = {"normalLayerLiftHeight2", "liftHeight2"},
+         .tilt        = {Transform::None, "", MappingStatus::NotApplicable},
+         .generic     = {Transform::Copy, "lift_height_2", MappingStatus::Exact, UNIT_MM},
+         .source_unit = UNIT_MM,
+         .note        = "Second stage of the two-stage lift, above the area fill threshold."},
+        {.sources     = {"bottomLayerLiftHeight", "bottomLiftHeight"},
+         .tilt        = {Transform::None, "", MappingStatus::NotApplicable},
+         .generic     = {Transform::Copy, "bottom_lift_height", MappingStatus::Exact, UNIT_MM},
+         .source_unit = UNIT_MM,
+         .note        = "Lift height for the bottom layers."},
+        {.sources     = {"bottomLayerLiftHeight2", "bottomLiftHeight2"},
+         .tilt        = {Transform::None, "", MappingStatus::NotApplicable},
+         .generic     = {Transform::Copy, "bottom_lift_height_2", MappingStatus::Exact, UNIT_MM},
+         .source_unit = UNIT_MM,
+         .note        = "Second stage of the two-stage lift on the bottom layers."},
 
         {.sources = {"normalLayerLiftSpeed", "liftSpeed"},
          .tilt    = {Transform::None, "", MappingStatus::NotApplicable},
-         .generic = {Transform::MmPerMinToMmPerSec, "lift_speed", MappingStatus::Converted},
-         .note    = std::string(SPEED_UNIT_CAVEAT) + "A tilt printer has no lift speed."},
+         .generic =
+             {Transform::MmPerMinToMmPerSec,
+              "lift_speed",
+              MappingStatus::Converted,
+              UNIT_MM_PER_SEC},
+         .source_unit = UNIT_MM_PER_MIN,
+         .note        = std::string(SPEED_UNIT_CAVEAT) + "A tilt printer has no lift speed."},
         {.sources = {"normalLayerLiftSpeed2", "liftSpeed2"},
          .tilt    = {Transform::None, "", MappingStatus::NotApplicable},
-         .generic = {Transform::MmPerMinToMmPerSec, "lift_speed_2", MappingStatus::Converted},
-         .note    = std::string(SPEED_UNIT_CAVEAT)
+         .generic =
+             {Transform::MmPerMinToMmPerSec,
+              "lift_speed_2",
+              MappingStatus::Converted,
+              UNIT_MM_PER_SEC},
+         .source_unit = UNIT_MM_PER_MIN,
+         .note        = std::string(SPEED_UNIT_CAVEAT)
              + "Second stage of the two-stage lift, above the area fill threshold."},
         {.sources = {"bottomLayerLiftSpeed", "bottomLiftSpeed"},
          .tilt    = {Transform::None, "", MappingStatus::NotApplicable},
-         .generic = {Transform::MmPerMinToMmPerSec, "bottom_lift_speed", MappingStatus::Converted},
-         .note    = std::string(SPEED_UNIT_CAVEAT) + "Lift speed for the bottom layers."},
+         .generic =
+             {Transform::MmPerMinToMmPerSec,
+              "bottom_lift_speed",
+              MappingStatus::Converted,
+              UNIT_MM_PER_SEC},
+         .source_unit = UNIT_MM_PER_MIN,
+         .note        = std::string(SPEED_UNIT_CAVEAT) + "Lift speed for the bottom layers."},
         {.sources = {"bottomLayerLiftSpeed2", "bottomLiftSpeed2"},
          .tilt    = {Transform::None, "", MappingStatus::NotApplicable},
          .generic =
-             {Transform::MmPerMinToMmPerSec, "bottom_lift_speed_2", MappingStatus::Converted},
-         .note = std::string(SPEED_UNIT_CAVEAT)
+             {Transform::MmPerMinToMmPerSec,
+              "bottom_lift_speed_2",
+              MappingStatus::Converted,
+              UNIT_MM_PER_SEC},
+         .source_unit = UNIT_MM_PER_MIN,
+         .note        = std::string(SPEED_UNIT_CAVEAT)
              + "Second stage of the two-stage lift on the bottom layers."},
         {.sources = {"normalDropSpeed"},
          .tilt    = {Transform::None, "", MappingStatus::NotApplicable},
-         .generic = {Transform::MmPerMinToMmPerSec, "retract_speed", MappingStatus::Converted},
-         .note    = std::string(SPEED_UNIT_CAVEAT) + "The drop speed is the retract speed."},
+         .generic =
+             {Transform::MmPerMinToMmPerSec,
+              "retract_speed",
+              MappingStatus::Converted,
+              UNIT_MM_PER_SEC},
+         .source_unit = UNIT_MM_PER_MIN,
+         .note        = std::string(SPEED_UNIT_CAVEAT) + "The drop speed is the retract speed."},
         {.sources = {"normalDropSpeed2"},
          .tilt    = {Transform::None, "", MappingStatus::NotApplicable},
-         .generic = {Transform::MmPerMinToMmPerSec, "retract_speed_2", MappingStatus::Converted},
-         .note    = std::string(SPEED_UNIT_CAVEAT)
+         .generic =
+             {Transform::MmPerMinToMmPerSec,
+              "retract_speed_2",
+              MappingStatus::Converted,
+              UNIT_MM_PER_SEC},
+         .source_unit = UNIT_MM_PER_MIN,
+         .note        = std::string(SPEED_UNIT_CAVEAT)
              + "Second stage of the two-stage drop, above the area fill threshold."},
 
         {.sources = {"normalLightIntensityPWM"},
@@ -509,11 +576,13 @@ map_resin_profile(const ForeignResinProfile& profile, TargetPrinterClass printer
                     + ") is in the file"
                     + (wrote ? " and was used instead." : "; see that row.");
                 result.report.push_back(
-                    {.source_key = key,
-                     .target_key = {},
-                     .value      = {},
-                     .status     = MappingStatus::NotApplicable,
-                     .note       = note}
+                    {.source_key   = key,
+                     .source_value = value,
+                     .source_unit  = rule.source_unit,
+                     .target_key   = {},
+                     .value        = {},
+                     .status       = MappingStatus::NotApplicable,
+                     .note         = note}
                 );
                 continue;
             }
@@ -524,11 +593,13 @@ map_resin_profile(const ForeignResinProfile& profile, TargetPrinterClass printer
 
             if (!applied.value || target.key.empty()) {
                 result.report.push_back(
-                    {.source_key = key,
-                     .target_key = {},
-                     .value      = {},
-                     .status     = target.status,
-                     .note       = applied.note}
+                    {.source_key   = key,
+                     .source_value = value,
+                     .source_unit  = rule.source_unit,
+                     .target_key   = {},
+                     .value        = {},
+                     .status       = target.status,
+                     .note         = applied.note}
                 );
                 continue;
             }
@@ -536,11 +607,13 @@ map_resin_profile(const ForeignResinProfile& profile, TargetPrinterClass printer
                 // Two rules want the same material key (the transition layer count and the bottom
                 // layer count on a tilt printer, for example). The first one keeps it.
                 result.report.push_back(
-                    {.source_key = key,
-                     .target_key = {},
-                     .value      = {},
-                     .status     = target.status,
-                     .note       = applied.note
+                    {.source_key   = key,
+                     .source_value = value,
+                     .source_unit  = rule.source_unit,
+                     .target_key   = {},
+                     .value        = {},
+                     .status       = target.status,
+                     .note         = applied.note
                          + " "
                          + target.key
                          + " already carries another value, this one was not written."}
@@ -550,11 +623,14 @@ map_resin_profile(const ForeignResinProfile& profile, TargetPrinterClass printer
             result.material_values[target.key] = *applied.value;
             wrote                              = true;
             result.report.push_back(
-                {.source_key = key,
-                 .target_key = target.key,
-                 .value      = *applied.value,
-                 .status     = target.status,
-                 .note       = applied.note}
+                {.source_key   = key,
+                 .source_value = value,
+                 .source_unit  = rule.source_unit,
+                 .target_key   = target.key,
+                 .value        = *applied.value,
+                 .target_unit  = target.unit,
+                 .status       = target.status,
+                 .note         = applied.note}
             );
         }
     }
@@ -563,14 +639,15 @@ map_resin_profile(const ForeignResinProfile& profile, TargetPrinterClass printer
     for (const auto& [key, value] : profile.raw_values) {
         if (reported.count(key))
             continue;
+        // The value is a field of the row of its own, so the note does not have to repeat it: a key
+        // the table does not know carries no unit either, and none is guessed here.
         result.report.push_back(
-            {.source_key = key,
-             .target_key = {},
-             .value      = {},
-             .status     = MappingStatus::Unknown,
-             .note       = "Not a PrusaSLA resin setting; kept in the report only. The value was \""
-                 + value
-                 + "\"."}
+            {.source_key   = key,
+             .source_value = value,
+             .target_key   = {},
+             .value        = {},
+             .status       = MappingStatus::Unknown,
+             .note         = "Not a PrusaSLA resin setting; kept in the report only."}
         );
     }
 
