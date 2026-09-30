@@ -1,31 +1,137 @@
 # ResinSlicer: an SLA-focused fork of PrusaSlicer
 
-This repository is a fork of PrusaSlicer 3.0 (alpha) that is being turned into a slicer for resin
-(MSLA) printers: support point editing, hollowing and drain holes, resin profile import, and export
-to Elegoo and Anycubic archive formats. It is an independent project and is not affiliated with or
-endorsed by Prusa Research.
+ResinSlicer is a fork of PrusaSlicer 3.0 (alpha) being turned into a slicer for resin (MSLA) printers: support point
+editing, hollowing with drain holes, resin profile import, and export to the archive formats of several printer
+makers. It is for anyone with an MSLA resin printer, not only for Prusa machines. It is an independent project and is
+not affiliated with or endorsed by Prusa Research.
 
-Work happens on the `sla/*` branches, with `sla/main` as the integration branch; `master` tracks
-upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.md) and
-[`AGENTS.md`](AGENTS.md).
+Work happens on the `sla/*` branches, with `sla/main` as the integration branch; `master` tracks upstream. The plan
+and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.md) and [`AGENTS.md`](AGENTS.md).
 
-**User guide:** [`doc/sla-fork/user-guide/getting-started.md`](doc/sla-fork/user-guide/getting-started.md) · [`doc/sla-fork/user-guide/switching-from-chitubox-and-lychee.md`](doc/sla-fork/user-guide/switching-from-chitubox-and-lychee.md)
+**User guide:** [`doc/sla-fork/user-guide/getting-started.md`](doc/sla-fork/user-guide/getting-started.md) ·
+[`doc/sla-fork/user-guide/switching-from-chitubox-and-lychee.md`](doc/sla-fork/user-guide/switching-from-chitubox-and-lychee.md)
+
+## What works today
+
+Everything below is merged on `sla/main`; the open todos are in the progress table below.
+
+### Prepare
+
+- **Supports, by hand.** The *SLA Support Points* tool puts points on the lifted model: click to add, Ctrl-click to
+  remove, drag to move, head diameter per point. *Light*, *Medium* and *Heavy* size new points, and the tree stays on
+  the model.
+- **Auto support.** For the selected models or for all of them, writing the points into the models so you can still
+  edit them. In Prepare and from the Preview sidebar.
+- **Bracing.** Pillars lean on each other by default; its diameter and start height are in *Supports & raft*.
+- **Rafts.** Type None, Full plate, Around object or Skate, each a bundle of the shared knobs, plus an edge taper that
+  leaves a lip for a spatula, and grid or honeycomb infill with its cell size, wall and skin.
+- **Hollowing.** Wall thickness, accuracy and closing distance, with drain holes you add, move and resize.
+- **Orientation.** *Auto orient* lays a model on its largest face, or in the pose needing the fewest supports.
+- **Nothing slices itself.** Only **Slice** slices: the support tool never runs a slice, and auto-reslicing is off.
+
+### Preview
+
+- **Layer image window.** Every layer as the printer's screen shows it, with previous/next, the layer number and Z,
+  and a 1:1 pixel zoom opened by clicking the image.
+- **Islands.** A panel lists the current layer's islands with area and position, a *Go* button per row, Previous/Next
+  island and rings on the image; a notification gives the count after slicing.
+- **Area and peel force.** Two charts over the per-layer area and the peel-force estimate, marked at the current
+  layer. Peel force is area times a placeholder constant, so only relative values mean anything yet.
+- **Height band.** Two sliders clip the print to a Z range with capped cut faces, over models, support trees and
+  rafts.
+
+### Resin profiles
+
+- **Print settings.** One sidebar button with a summary line, opening a two-tab dialog: **Resin** (exposure, layer
+  height, bottom and transition layers) and **Supports & raft** (presets, raft, geometry).
+- **The resin owns the layer height** and the transition-layer count, with a fall-back to the print preset, so older
+  presets and projects still load.
+- **Import a Chitubox `.cfg`** from *Import resin profile* or by dropping the file on the window, and every key gets a
+  badge: Exact, Converted, Approximated, Not applicable or Unknown.
+- **Import from a sliced `.sl1`/`.sl1s` archive**, read lazily so a large file imports too.
+- **New resin from datasheet:** the six numbers a resin sheet states, validated, then reviewed and saved.
+- **Command line.** `--import-resin-profile` with `--dry-run` and a JSON `--report`, and `--export-resin-profile` to
+  write a `.cfg` back out.
+
+### Export
+
+- **Formats.** Every registered archive writer, the printer's own format first: `.sl1`/`.sl1s` and `.sl1svg` (Prusa),
+  `.goo` (Elegoo), `.pwmo`, `.pwmx`, `.pwms` (Photon), `.pm5` (M5) and `.ctb` (experimental).
+- **Destinations.** Local drive, removable drive (with **Eject** on the finished-export notification) and upload to
+  PrusaLink or Prusa Connect, which read the SL1 format.
+- **A checklist first.** Nothing exports from an unfinished slice; a plate with unsupported models or islands gets
+  *Check before printing* before the save dialog.
+
+## Supported printers
+
+The community bundle in [`resources/presets/community-sla/`](resources/presets/community-sla/) ships six profiles; the
+Prusa SLA profiles ship in [`resources/presets/prusa-research-sla/`](resources/presets/prusa-research-sla/).
+
+| Printer | Resolution | Export format |
+|---|---|---|
+| Anycubic Photon Mono M5 | 11520 x 5120 (12K) | `.pm5` |
+| Anycubic Photon Mono M5s | 11520 x 5120 (12K) | `.pm5s`, no writer yet |
+| Anycubic Photon Mono M7 Pro | 13320 x 5120 (14K) | `.pm7`, no writer yet |
+| Elegoo Saturn 4 Ultra 12K | 11520 x 5120 (12K) | `.goo` |
+| Elegoo Saturn 4 Ultra 16K | 15120 x 6230 (16K) | `.goo` |
+| Elegoo Mars 5 Ultra | 8520 x 4320 (9K) | `.goo` |
+| Original Prusa SL1 | 2560 x 1440 | `.sl1` |
+| Original Prusa SL1S SPEED | 2560 x 1620 | `.sl1s` |
+
+**No format has been verified on a real printer:** none has read a file from this fork. The specifications come from
+vendor pages. Print the [orientation test piece](doc/sla-fork/orientation-test.md) once per printer and fix the
+profile if the F comes out mirrored.
+
+## Known limitations
+
+- **Chitubox `.cfgx` and Lychee `.lyr` / `.lyp` are not read.** The picker accepts them, but no reader exists: they
+  were never inspected against a real file, and this fork will not break an encryption. Use a sliced archive.
+- **`.ctb` is experimental.** The unencrypted v3 container round-trips through its own reader, but no sample and no
+  printer has read one, so the layer-definition units are a guess. The encrypted v4/v5 container is not touched.
+- **`.pm5` is unverified, and `.pm5s` and `.pm7` have no writer.** The `.pm5` layout was written from one Photon
+  Workshop file; the field-by-field comparison and the mirroring check are waiting on a build, and nothing has been
+  printed.
+- **The hollowing wall thickness fix is unverified.** The offset was read in voxels and compared against millimetres,
+  so the wall came out set by the quality and closing distance. The fix and its tests are written but not built.
+- **No suction-cup detection.** Islands are reported, a trapped-resin cup is not, and no drain hole is suggested yet.
+  An island is not attributed to a model, because the layers are merged first.
+- **One model colour for SLA.** A resin tint and translucency were declined; models draw in one theme colour.
+- **No release yet.** No packaged build or known-issues list (M6.7) and no CI or visual regression suite. This is a
+  working tree, not a release, and the UI above has not been walked end to end in a built app: M6.4 is open.
+
+## Building
+
+Build the dependencies once, then the app: [`doc/sla-fork/BUILD.md`](doc/sla-fork/BUILD.md) has the prefix path, the
+configure and build commands, the test binaries, the debug flags and the upstream sync procedure.
+
+## Contributing
+
+[`AGENTS.md`](AGENTS.md) has the rules, the layering and the workflow for a change;
+[`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md) is the plan, with every todo and its result note. One todo, one
+branch, one commit, the box ticked in the same commit.
+
+## Screenshots
+
+<!-- TODO screenshot: Prepare, support tool open on a lifted model with the tree on it -->
+<!-- TODO screenshot: Print settings dialog, Supports & raft tab with the Raft group -->
+<!-- TODO screenshot: Preview layer image window with the 1:1 zoom and the island list -->
+<!-- TODO screenshot: Resin import review dialog with the mapping badges -->
 
 <!-- PROGRESS:START (generated by doc/sla-fork/tools/readme_progress.py; edit ROADMAP.md instead) -->
 
 ## Progress
 
-**169 of 216 todos done (78%)** · updated 2026-09-30 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**176 of 223 todos done (79%)** · updated 2026-09-30 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
 | M0: Foundation | 13/15 | `██████████░░` 87% |
 | M1: Look, feel and SLA-first shell | 38/40 | `███████████░` 95% |
-| M2: SLA editing tools (porting the legacy gizmos) | 54/60 | `███████████░` 90% |
-| M3: Resin profile import (Chitubox, Lychee and others) | 13/17 | `█████████░░░` 76% |
-| M4: Engine quality (measure first; every PR includes before/after metrics) | 10/20 | `██████░░░░░░` 50% |
-| M5: Formats and inspection | 31/35 | `███████████░` 89% |
-| M6: Quality gates and release | 5/12 | `█████░░░░░░░` 42% |
+| M2: SLA editing tools (porting the legacy gizmos) | 55/62 | `███████████░` 89% |
+| M3: Resin profile import (Chitubox, Lychee and others) | 15/19 | `█████████░░░` 79% |
+| M4: Engine quality (measure first; every PR includes before/after metrics) | 12/22 | `███████░░░░░` 55% |
+| M5: Formats and inspection | 32/35 | `███████████░` 91% |
+| M6: Quality gates and release | 6/13 | `██████░░░░░░` 46% |
 | M7: Excellent auto-supports *(parked)* | 5/17 | `████░░░░░░░░` 29% |
 
 ### Waiting on you
@@ -50,13 +156,14 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 </details>
 
-<details><summary>M2: SLA editing tools (porting the legacy gizmos) — 6 open</summary>
+<details><summary>M2: SLA editing tools (porting the legacy gizmos) — 7 open</summary>
 
 - [ ] **M2.9** Plater SLA visuals: resin tint, support and pad materials, and overlay styling (PLAN F3).
   - [ ] **M2.9b** Resin tint and translucency: the model follows the material's `material_colour` (PLAN 2.1 rule 4) and a tra…
   - [ ] **M2.9c** Overlay styling: support point glyphs, island markers and the clipping-cap (hollow and drain hole) previews…
 - [ ] **M2.14b** Raft shapes the pad generator cannot make today: grid or honeycomb infill, a tapered skate profile, and a s…
   - [ ] **M2.14b2** Grid or honeycomb infill in the raft: the raft is a solid slab today, Lychee and Chitubox can fill it with…
+  - [ ] **M2.14b2b** The infill knobs follow the pattern: `raft_infill_spacing`, `raft_infill_wall` and `raft_infill_skin` chang…
   - [ ] **M2.14b3** A separate raft interface layer: the skin between the raft and the object, printable with its own exposure…
 
 </details>
@@ -85,9 +192,8 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 </details>
 
-<details><summary>M5: Formats and inspection — 4 open</summary>
+<details><summary>M5: Formats and inspection — 3 open</summary>
 
-- [ ] **M5.3.ctb** Chitubox `.ctb` writer for older Elegoo machines, and possibly the Anycubic Photon Mono M5 (see the M5.3.pw…
 - [ ] **M5.3.pw-b** Anycubic newer formats (`.pm5`, `.pm5s`, `.pm7`) — **`.pm5` first: it is the format the maintainer's Photon…
 - [ ] **M5.3.samples** Provide one sliced sample archive per target printer (from Chitubox/Lychee/Photon Workshop) and list the pr… *(needs you)*
   - [ ] **M5.4d** Check the orientation of the `.pm5` we write for the Photon Mono M5 against a real Photon Workshop file, si…
