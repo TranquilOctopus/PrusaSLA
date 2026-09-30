@@ -15,66 +15,61 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 ## Progress
 
-**145 of 203 todos done (71%)** · updated 2026-09-30 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**162 of 216 todos done (75%)** · updated 2026-09-30 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
-| M0: Foundation | 12/15 | `██████████░░` 80% |
-| M1: Look, feel and SLA-first shell | 34/40 | `██████████░░` 85% |
-| M2: SLA editing tools (porting the legacy gizmos) | 44/50 | `███████████░` 88% |
-| M3: Resin profile import (Chitubox, Lychee and others) | 10/17 | `███████░░░░░` 59% |
+| M0: Foundation | 13/15 | `██████████░░` 87% |
+| M1: Look, feel and SLA-first shell | 35/40 | `██████████░░` 88% |
+| M2: SLA editing tools (porting the legacy gizmos) | 53/60 | `███████████░` 88% |
+| M3: Resin profile import (Chitubox, Lychee and others) | 13/17 | `█████████░░░` 76% |
 | M4: Engine quality (measure first; every PR includes before/after metrics) | 9/20 | `█████░░░░░░░` 45% |
-| M5: Formats and inspection | 26/32 | `██████████░░` 81% |
+| M5: Formats and inspection | 29/35 | `██████████░░` 83% |
 | M6: Quality gates and release | 5/12 | `█████░░░░░░░` 42% |
 | M7: Excellent auto-supports *(parked)* | 5/17 | `████░░░░░░░░` 29% |
 
 ### Waiting on you
 
-- **M0.12** Choose 10–20 benchmark models. Use only models whose licenses allow redistribution, or store them outside t…
 - **M3.1** Put a few real `.cfg`, `.cfgx`, `.lyr` and `.lyp` files in `local-samples/`, exported from your own Chitubo…
 - **M5.3.samples** Provide one sliced sample archive per target printer (from Chitubox/Lychee/Photon Workshop) and list the pr…
 
 ### Open todos
 
-<details><summary>M0: Foundation — 3 open</summary>
+<details><summary>M0: Foundation — 2 open</summary>
 
-- [ ] **M0.12** Choose 10–20 benchmark models. Use only models whose licenses allow redistribution, or store them outside t… *(needs you)*
 - [ ] **M0.13** Benchmark harness that writes a metrics JSON (PLAN A6).
 - [ ] **M0.14** CI workflow: build, both test binaries, and a comment with the metrics diff (PLAN G1).
 
 </details>
 
-<details><summary>M1: Look, feel and SLA-first shell — 6 open</summary>
+<details><summary>M1: Look, feel and SLA-first shell — 5 open</summary>
 
 - [ ] **M1.1b** Runtime screen audit with an SLA printer selected, following the R1–R10 checklist in `ux/journeys.md`. Reco…
 - [ ] **M1.8** SLA path in the welcome dialog, plus SLA hints and notifications. Also fix the “Export gcode to a file” too…
 - [ ] **M1.11** SLA sidebar summary (PLAN F5).
-  - [ ] **M1.11b** The W4 issues list (islands, cups) with jump-to-layer links into the layer view.
 - [ ] **M1.12** Branding artwork: replace `resources/icons/splashscreen.jpg` and the `PrusaSlicer.*` app icons (ico, icns,…
 - [ ] **M1.13** User test feedback, 2026-09-23 (first hands-on session with the app).
 
 </details>
 
-<details><summary>M2: SLA editing tools (porting the legacy gizmos) — 6 open</summary>
+<details><summary>M2: SLA editing tools (porting the legacy gizmos) — 7 open</summary>
 
 - [ ] **M2.9** Plater SLA visuals: resin tint, support and pad materials, and overlay styling (PLAN F3).
+  - [ ] **M2.9b** Resin tint and translucency: the model follows the material's `material_colour` (PLAN 2.1 rule 4) and a tra…
+  - [ ] **M2.9c** Overlay styling: support point glyphs, island markers and the clipping-cap (hollow and drain hole) previews…
 - [ ] **M2.14b** Raft shapes the pad generator cannot make today: grid or honeycomb infill, a tapered skate profile, and a s…
-- [ ] **M2.15** Bracing and cross-bracing controls beyond `support_pillar_connection_mode`, if M2.11 marks them missing.
+  - [ ] **M2.14b2** Grid or honeycomb infill in the raft: the raft is a solid slab today, Lychee and Chitubox can fill it with…
+  - [ ] **M2.14b3** A separate raft interface layer: the skin between the raft and the object, printable with its own exposure…
 - [ ] **M2.17** Supports are an explicit step before slicing, never done by the slicer. The workflow (decided 2026-09-22):…
-  - [ ] **M2.17d** Supports are done in Preview (user feedback 2026-09-23). Entering Preview must not slice and must not auto-…
-- [ ] **M2.18** Manual supports from presets (user, 2026-09-23): pick Light, Medium or Heavy in the support tool and every…
 
 </details>
 
-<details><summary>M3: Resin profile import (Chitubox, Lychee and others) — 7 open</summary>
+<details><summary>M3: Resin profile import (Chitubox, Lychee and others) — 4 open</summary>
 
 - [ ] **M3.1** Put a few real `.cfg`, `.cfgx`, `.lyr` and `.lyp` files in `local-samples/`, exported from your own Chitubo… *(needs you)*
 - [ ] **M3.2** Add `local-samples/` to `.gitignore`. Document the observed structure of each sample format in `doc/sla-for…
-- [ ] **M3.11** Quick-entry form "New resin from datasheet": the ~6 datasheet fields, run through the same mapper and revie…
 - [ ] **M3.12** `ChituboxCfgxReader`, if M3.2 marked it feasible; otherwise close this todo with a link to the M3.2 finding.
 - [ ] **M3.13** `LycheeLyrReader` (and `.lyp` printer hints), if M3.2 marked it feasible; otherwise close it with a link to…
-- [ ] **M3.14** User documentation: `doc/sla-fork/user-guide/switching-from-chitubox-and-lychee.md`, with screenshots and a…
-- [ ] **M3.15** *(optional)* Export back to Chitubox `.cfg` for people going the other way, using the same mapping in reverse.
 
 </details>
 
@@ -101,7 +96,7 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 - [ ] **M5.3.pw-b** Anycubic newer formats (`.pm5`, `.pm5s`, `.pm7`) — **`.pm5` first: it is the format the maintainer's Photon…
 - [ ] **M5.3.samples** Provide one sliced sample archive per target printer (from Chitubox/Lychee/Photon Workshop) and list the pr… *(needs you)*
 - [ ] **M5.4** Display mirroring and orientation test pattern for every format (PLAN C3).
-- [ ] **M5.5** Upload SLA archives to print hosts and removable drives (PLAN C4).
+  - [ ] **M5.4d** Check the orientation of the `.pm5` we write for the Photon Mono M5 against a real Photon Workshop file, si…
 
 </details>
 
