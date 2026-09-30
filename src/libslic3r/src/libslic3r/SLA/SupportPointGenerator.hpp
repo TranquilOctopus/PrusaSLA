@@ -36,6 +36,13 @@ struct SupportPointGeneratorConfig{
     */
     float head_diameter = 0.4f; // [in mm]
 
+    /**
+    @brief Minimal distance of two overhang support points created by the generator
+    The distance is measured in the layer, so points above each other are not kept apart.
+    Zero (the default) does not limit the distance. Island points are never filtered out.
+    */
+    double minimal_point_distance = 0.; // [in mm]
+
     // maximal distance to nearest support point(define radiuses per layer)
     // x axis .. mean distance on layer(XY)
     // y axis .. mean difference of height(Z)

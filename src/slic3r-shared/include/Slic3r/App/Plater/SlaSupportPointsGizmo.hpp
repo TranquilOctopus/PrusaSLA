@@ -181,6 +181,7 @@ private:
     void apply_pillar_diameter_to_selected();
     void apply_base_diameter_to_selected();
     void apply_base_height_to_selected();
+    void apply_preset_mini();
     void apply_preset_light();
     void apply_preset_medium();
     void apply_preset_heavy();

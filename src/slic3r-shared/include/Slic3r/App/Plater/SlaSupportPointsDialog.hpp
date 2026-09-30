@@ -34,6 +34,7 @@ public:
         std::function<void(double)> clipping_plane_changed = [](double) {};
         std::function<void(bool)> lock_island_supports_changed = [](bool) {};
         std::function<void()> clipping_plane_reset = []() {};
+        std::function<void()> preset_mini = []() {};
         std::function<void()> preset_light = []() {};
         std::function<void()> preset_medium = []() {};
         std::function<void()> preset_heavy = []() {};
@@ -80,6 +81,7 @@ private:
     Yoga::LayoutButton* m_discard_button = nullptr;
     Yoga::LayoutButton* m_clipping_plane_reset_button = nullptr;
     Yoga::ToggleButton* m_lock_island_supports_checkbox = nullptr;
+    Yoga::LayoutButton* m_preset_mini_button = nullptr;
     Yoga::LayoutButton* m_preset_light_button = nullptr;
     Yoga::LayoutButton* m_preset_medium_button = nullptr;
     Yoga::LayoutButton* m_preset_heavy_button = nullptr;

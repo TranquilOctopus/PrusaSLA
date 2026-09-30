@@ -66,13 +66,17 @@ std::vector<Key> resin_keys()
 }
 
 /// The raft and support values, in the order they are shown in the "Supports & raft" tab. The
-/// support presets are labelled only "Light", "Medium" and "Heavy", so their row is prefixed with
-/// the dimension.
+/// support presets are labelled only "Mini", "Light", "Medium" and "Heavy", so their row is
+/// prefixed with the dimension. The last two rows place the support points.
 std::vector<Key> supports_keys()
 {
     return {
         {"raft_type"},
         {"support_object_elevation"},
+        {"support_preset_mini_head_diameter", "", true},
+        {"support_preset_mini_pillar_diameter", "", true},
+        {"support_preset_mini_base_diameter", "", true},
+        {"support_preset_mini_base_height", "", true},
         {"support_preset_light_head_diameter", "", true},
         {"support_preset_light_pillar_diameter", "", true},
         {"support_preset_light_base_diameter", "", true},
@@ -85,6 +89,8 @@ std::vector<Key> supports_keys()
         {"support_preset_heavy_pillar_diameter", "", true},
         {"support_preset_heavy_base_diameter", "", true},
         {"support_preset_heavy_base_height", "", true},
+        {"support_points_minimal_distance"},
+        {"support_points_overhang_angle"},
     };
 }
 

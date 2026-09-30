@@ -137,6 +137,11 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     preset_row->set_justify_content(YGJustifySpaceBetween);
     preset_row->set_gap(gap_size());
 
+    m_preset_mini_button = preset_row->emplace_back<LayoutButton>(_u8L("Mini"));
+    m_preset_mini_button->set_checkable(true);
+    m_preset_mini_button->callbacks().action = [this]()
+    { m_callbacks.preset_mini(); };
+
     m_preset_light_button = preset_row->emplace_back<LayoutButton>(_u8L("Light"));
     m_preset_light_button->set_checkable(true);
     m_preset_light_button->callbacks().action = [this]()
@@ -285,9 +290,10 @@ void SlaSupportPointsDialog::set_base_height_use_global(bool use_global)
 
 void SlaSupportPointsDialog::set_active_preset(int index)
 {
-    m_preset_light_button->set_checked(index == 0);
-    m_preset_medium_button->set_checked(index == 1);
-    m_preset_heavy_button->set_checked(index == 2);
+    m_preset_mini_button->set_checked(index == 0);
+    m_preset_light_button->set_checked(index == 1);
+    m_preset_medium_button->set_checked(index == 2);
+    m_preset_heavy_button->set_checked(index == 3);
 }
 
 void SlaSupportPointsDialog::set_settings_expanded(bool expanded)

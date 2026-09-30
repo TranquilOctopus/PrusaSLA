@@ -641,10 +641,11 @@ void SLAPrint::Steps::prepare_for_generate_supports(SLAPrintObject &po) {
     std::vector<ExPolygons> slices = po.get_model_slices(); // copy
     const std::vector<float> &heights = po.m_model_height_levels;
 #ifdef USE_ISLAND_GUI_FOR_SETTINGS
-    const PrepareSupportConfig &prepare_cfg = SampleConfigFactory::get_sample_config(po.config().support_head_front_diameter).prepare_config; // use configuration edited by GUI
+    PrepareSupportConfig prepare_cfg = SampleConfigFactory::get_sample_config(po.config().support_head_front_diameter).prepare_config; // use configuration edited by GUI
 #else // USE_ISLAND_GUI_FOR_SETTINGS
-    const PrepareSupportConfig prepare_cfg; // use Default values of the configuration
+    PrepareSupportConfig prepare_cfg; // use Default values of the configuration
 #endif // USE_ISLAND_GUI_FOR_SETTINGS
+    prepare_cfg.overhang_angle_threshold = po.config().get<double>("support_points_overhang_angle");
     ThrowOnCancel cancel = [this]() { throw_if_canceled(); };
 
     // scaling for the sub operations

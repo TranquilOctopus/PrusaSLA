@@ -25,6 +25,7 @@ add_executable(${_TEST_NAME}_tests ${_TEST_NAME}_tests_main.cpp
     sla_local_island_coverage_tests.cpp
     sla_support_tool_tests.cpp
     sla_support_preset_tests.cpp
+    sla_support_placement_tests.cpp
     sla_benchmark_tests.cpp
     sla_support_brace_tests.cpp
     sla_hollowing_tests.cpp
