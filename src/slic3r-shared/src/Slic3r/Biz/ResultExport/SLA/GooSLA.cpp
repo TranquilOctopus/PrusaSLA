@@ -255,7 +255,6 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     uint32_t layer_count = static_cast<uint32_t>(data.files.data.size());
 
     goo_header_info header = {};
-    std::vector<uint8_t> layer_images;
 
     std::string version_str = "V3.0";
     std::memcpy(header.version, version_str.data(), std::min<size_t>(4, version_str.size()));
@@ -460,8 +459,6 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
 
         size_t image_data_start = out.tellp();
 
-        layer_images.reserve(layer_count * 32768);
-
         for (uint32_t i = 0; i < layer_count; ++i) {
             goo_layer_def layer_def = {};
 
@@ -524,9 +521,8 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
             out.write(layer_def.delimiter, 2);
             write_be_int32(out, layer_def.data_size);
 
-            const char* img_start = reinterpret_cast<const char*>(data.files.data[i].data());
-            const char* img_end = img_start + data.files.data[i].size();
-            out.write(img_start, data.files.data[i].size());
+            out.write(reinterpret_cast<const char*>(data.files.data[i].data()),
+                      static_cast<std::streamsize>(data.files.data[i].size()));
 
             out.write(GOO_DELIMITER, 2);
         }
