@@ -18,13 +18,19 @@ Everything below is merged on `sla/main`; the open todos are in the progress tab
 ### Prepare
 
 - **Supports, by hand.** The *SLA Support Points* tool puts points on the lifted model: click to add, Ctrl-click to
-  remove, drag to move, head diameter per point. *Light*, *Medium* and *Heavy* size new points, and the tree stays on
-  the model.
+  remove, drag to move, head diameter per point. *Mini*, *Light*, *Medium* and *Heavy* size new points, and the tree
+  stays on the model.
+- **Point geometry.** Tip shape (Default, Cone or Ball), knot, stem sides, stem taper and the shape of the foot are
+  per point and are built into the tree; *Supports & raft* sets what a new point starts from.
 - **Auto support.** For the selected models or for all of them, writing the points into the models so you can still
-  edit them. In Prepare and from the Preview sidebar.
-- **Bracing.** Pillars lean on each other by default; its diameter and start height are in *Supports & raft*.
+  edit them. In Prepare and from the Preview sidebar, which also says when every model has its points.
+- **Placement rules.** A minimal distance between generated points and an overhang angle above which no point is
+  placed, both off by default; the points that catch an island are never filtered.
+- **Bracing.** Pillars lean on each other by default; its diameter and start height are in *Supports & raft*, and the
+  foot is a cone, a cylinder or a flat disc.
 - **Rafts.** Type None, Full plate, Around object or Skate, each a bundle of the shared knobs, plus an edge taper that
-  leaves a lip for a spatula, and grid or honeycomb infill with its cell size, wall and skin.
+  leaves a lip for a spatula, a floor thickness of its own, grid or honeycomb infill with its cell size, wall and skin
+  (shown only with a pattern), and an interface band at the top of the raft with its own exposure.
 - **Hollowing.** Wall thickness, accuracy and closing distance, with drain holes you add, move and resize.
 - **Orientation.** *Auto orient* lays a model on its largest face, or in the pose needing the fewest supports.
 - **Nothing slices itself.** Only **Slice** slices: the support tool never runs a slice, and auto-reslicing is off.
@@ -33,10 +39,14 @@ Everything below is merged on `sla/main`; the open todos are in the progress tab
 
 - **Layer image window.** Every layer as the printer's screen shows it, with previous/next, the layer number and Z,
   and a 1:1 pixel zoom opened by clicking the image.
-- **Islands.** A panel lists the current layer's islands with area and position, a *Go* button per row, Previous/Next
-  island and rings on the image; a notification gives the count after slicing.
+- **Islands.** A panel lists the current layer's islands with the model they sit on, their area and position, a *Go*
+  button per row, Previous/Next island and rings on the image; a notification gives the count and how many models were
+  hit after slicing.
+- **Cups and trapped resin.** Both are detected on the sliced layers and listed with the model in the Prepare sidebar.
+  No drain hole is suggested for a trapped cavity yet.
 - **Area and peel force.** Two charts over the per-layer area and the peel-force estimate, marked at the current
-  layer. Peel force is area times a placeholder constant, so only relative values mean anything yet.
+  layer. Peel force is a model of cured area, boundary length and the suction of the cups open on that layer, with
+  coefficients for the vat film, so the chart names the film and the layers over a limit are flagged.
 - **Height band.** Two sliders clip the print to a Z range with capped cut faces, over models, support trees and
   rafts.
 
@@ -47,9 +57,12 @@ Everything below is merged on `sla/main`; the open todos are in the progress tab
 - **The resin owns the layer height** and the transition-layer count, with a fall-back to the print preset, so older
   presets and projects still load.
 - **Import a Chitubox `.cfg`** from *Import resin profile* or by dropping the file on the window, and every key gets a
-  badge: Exact, Converted, Approximated, Not applicable or Unknown.
+  badge: Exact, Converted, Approximated, Not applicable or Unknown. The table shows the value the file had on one side
+  of the row and the value written on the other, so a converted value is readable without the note.
 - **Import from a sliced `.sl1`/`.sl1s` archive**, read lazily so a large file imports too.
-- **New resin from datasheet:** the six numbers a resin sheet states, validated, then reviewed and saved.
+- **New resin from datasheet:** the numbers a resin sheet states — exposure, layer height, bottom layers and the delay,
+  plus the lift distance, the lift and drop speeds and the transition-layer count a generic MSLA sheet may give —
+  validated, then reviewed and saved.
 - **Command line.** `--import-resin-profile` with `--dry-run` and a JSON `--report`, and `--export-resin-profile` to
   write a `.cfg` back out.
 
@@ -57,8 +70,11 @@ Everything below is merged on `sla/main`; the open todos are in the progress tab
 
 - **Formats.** Every registered archive writer, the printer's own format first: `.sl1`/`.sl1s` and `.sl1svg` (Prusa),
   `.goo` (Elegoo), `.pwmo`, `.pwmx`, `.pwms` (Photon), `.pm5` (M5) and `.ctb` (experimental).
-- **Destinations.** Local drive, removable drive (with **Eject** on the finished-export notification) and upload to
-  PrusaLink or Prusa Connect, which read the SL1 format.
+- **Destinations.** Local drive, removable drive (with **Eject** on the finished-export notification) and upload to a
+  print host. A host only gets the file when it can read the plate's format: PrusaLink and Prusa Connect take the SL1
+  format, the FFF servers take G-code, and anything else is refused by name instead of being uploaded.
+- **Anti-aliasing follows the gamma.** *Printer gamma correction* of 0 rasterizes hard black and white, and the header
+  fields of `.pwmx`, `.goo` and `.ctb` then say no anti-aliasing; the default of 1 keeps the 8-bit grey image.
 - **A checklist first.** Nothing exports from an unfinished slice; a plate with unsupported models or islands gets
   *Check before printing* before the save dialog.
 
@@ -93,8 +109,8 @@ profile if the F comes out mirrored.
   printed.
 - **The hollowing wall thickness fix is unverified.** The offset was read in voxels and compared against millimetres,
   so the wall came out set by the quality and closing distance. The fix and its tests are written but not built.
-- **No suction-cup detection.** Islands are reported, a trapped-resin cup is not, and no drain hole is suggested yet.
-  An island is not attributed to a model, because the layers are merged first.
+- **No drain hole suggestions.** Islands, suction cups and trapped resin are found on the sliced layers and listed with
+  the model they belong to, and nothing suggests where to put a drain hole for a trapped cavity.
 - **One model colour for SLA.** A resin tint and translucency were declined; models draw in one theme colour.
 - **No release yet.** No packaged build or known-issues list (M6.7) and no CI or visual regression suite. This is a
   working tree, not a release, and the UI above has not been walked end to end in a built app: M6.4 is open.
@@ -121,17 +137,17 @@ branch, one commit, the box ticked in the same commit.
 
 ## Progress
 
-**179 of 226 todos done (79%)** · updated 2026-09-30 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**194 of 236 todos done (82%)** · updated 2026-09-30 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
 | M0: Foundation | 13/15 | `██████████░░` 87% |
 | M1: Look, feel and SLA-first shell | 40/42 | `███████████░` 95% |
-| M2: SLA editing tools (porting the legacy gizmos) | 56/63 | `███████████░` 89% |
-| M3: Resin profile import (Chitubox, Lychee and others) | 15/19 | `█████████░░░` 79% |
-| M4: Engine quality (measure first; every PR includes before/after metrics) | 12/22 | `███████░░░░░` 55% |
+| M2: SLA editing tools (porting the legacy gizmos) | 63/67 | `███████████░` 94% |
+| M3: Resin profile import (Chitubox, Lychee and others) | 16/20 | `██████████░░` 80% |
+| M4: Engine quality (measure first; every PR includes before/after metrics) | 18/27 | `████████░░░░` 67% |
 | M5: Formats and inspection | 32/35 | `███████████░` 91% |
-| M6: Quality gates and release | 6/13 | `██████░░░░░░` 46% |
+| M6: Quality gates and release | 7/13 | `██████░░░░░░` 54% |
 | M7: Excellent auto-supports *(parked)* | 5/17 | `████░░░░░░░░` 29% |
 
 ### Waiting on you
@@ -156,15 +172,12 @@ branch, one commit, the box ticked in the same commit.
 
 </details>
 
-<details><summary>M2: SLA editing tools (porting the legacy gizmos) — 7 open</summary>
+<details><summary>M2: SLA editing tools (porting the legacy gizmos) — 4 open</summary>
 
 - [ ] **M2.9** Plater SLA visuals: resin tint, support and pad materials, and overlay styling (PLAN F3).
   - [ ] **M2.9b** Resin tint and translucency: the model follows the material's `material_colour` (PLAN 2.1 rule 4) and a tra…
   - [ ] **M2.9c** Overlay styling: support point glyphs, island markers and the clipping-cap (hollow and drain hole) previews…
 - [ ] **M2.14b** Raft shapes the pad generator cannot make today: grid or honeycomb infill, a tapered skate profile, and a s…
-  - [ ] **M2.14b2** Grid or honeycomb infill in the raft: the raft is a solid slab today, Lychee and Chitubox can fill it with…
-  - [ ] **M2.14b2b** The infill knobs follow the pattern: `raft_infill_spacing`, `raft_infill_wall` and `raft_infill_skin` chang…
-  - [ ] **M2.14b3** A separate raft interface layer: the skin between the raft and the object, printable with its own exposure…
 
 </details>
 
@@ -177,7 +190,7 @@ branch, one commit, the box ticked in the same commit.
 
 </details>
 
-<details><summary>M4: Engine quality (measure first; every PR includes before/after metrics) — 10 open</summary>
+<details><summary>M4: Engine quality (measure first; every PR includes before/after metrics) — 9 open</summary>
 
 - [ ] **M4.1** Tracy profiling run over the benchmark set. Write a hotspot report in `doc/sla-fork/profiling/`. No code ch…
 - [ ] **M4.2** Re-rank M4.3–M4.10 based on the M4.1 report. *(needs you)*
@@ -188,7 +201,6 @@ branch, one commit, the box ticked in the same commit.
 - [ ] **M4.7** Hollowing performance and wall thickness tolerance test (PLAN B5).
 - [ ] **M4.8** Trapped-resin and suction-cup detection, with drain hole suggestions (PLAN B5b).
 - [ ] **M4.14** Peak memory when slicing for 12K and 16K displays (Photon Mono M5: 11520 × 5120, about 59 megapixels per la…
-- [ ] **M4.13** Z-correction and anti-aliasing review. Layer hash changes must be intentional and documented (PLAN B8).
 
 </details>
 
@@ -200,9 +212,8 @@ branch, one commit, the box ticked in the same commit.
 
 </details>
 
-<details><summary>M6: Quality gates and release — 7 open</summary>
+<details><summary>M6: Quality gates and release — 6 open</summary>
 
-- [ ] **M6.1** Robustness mesh set with no crashes or hangs (PLAN G2).
 - [ ] **M6.2** Visual regression renders, including the grayscale lightness check (PLAN G3).
 - [ ] **M6.3** Nightly upstream merge rehearsal with a conflict report (PLAN G4).
 - [ ] **M6.4** End-to-end walk through the M1.1 journeys on an integrated build, filing new todos for gaps. *(needs you)*

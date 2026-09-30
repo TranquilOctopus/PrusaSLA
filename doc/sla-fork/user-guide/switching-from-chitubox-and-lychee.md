@@ -62,7 +62,7 @@ name.
   The plan is to say so in the format notes under `doc/sla-fork/formats/` and point you at the two
   routes that do work: the sliced-archive fallback above, and the datasheet form below.
 
-## The three ways in
+## The three ways in, and the way back out
 
 ### 1. The Import resin profile button
 
@@ -85,13 +85,14 @@ there cannot be mistaken for a model.
 ### 2. Drag and drop
 
 Drop a `.cfg`, `.cfgx` or `.lyr` anywhere on the ResinSlicer window. The first profile of the drop
-opens in the review dialog, and anything else in the same drop is written to the log rather than
-loaded, because the dialog reviews one profile at a time and is modal. That includes a model file
-in the same drop: it is logged as not loaded, so load it in a second drop.
+opens in the review dialog; the model files in the same drop are loaded, and the dialog is the last
+thing the drop leaves on the screen, so a model and a profile can be handed over together. Profiles
+the drop held besides that one are counted in a warning notification, *3 more resin profiles were not
+imported: drop them one at a time*, because the dialog reviews one profile at a time and is modal.
 
-The dialog opens in **Prepare**, so dropping while **Preview** is shown switches to Prepare. A
-dropped `.sl1` or `.sl1s` is still loaded as a project, not as a resin profile; the only way into
-the review dialog for a sliced archive is the button above.
+The dialog opens in the view that is on the screen, so dropping a profile while **Preview** is shown
+reviews it there. A dropped `.sl1` or `.sl1s` is still loaded as a project, not as a resin profile;
+the only way into the review dialog for a sliced archive is the button above.
 
 ![TODO screenshot: a .cfg file being dragged onto the window, with the review dialog open on it]()
 
@@ -138,11 +139,35 @@ value written to it (`value`, empty when none is), the `status` and the `note` t
 converted value is therefore readable on its own: `150` as the file had it next to the `2.5` that
 goes into the preset.
 
+### Writing a profile back out
+
+For people going the other way, the same mapping runs in reverse and writes a `.cfg` you can open in
+Chitubox. It is a command-line action only; there is no button in the app yet:
+
+```powershell
+# The resin of the selected printer, written out as a Chitubox .cfg.
+.\prusa-slicer-launcher.exe --export-resin-profile "Grey resin" --printer-profile "Anycubic Photon Mono M5" --output grey.cfg
+```
+
+- `--export-resin-profile` takes the preset name (or its id) and looks it up among the resins of the
+  **selected printer**, so `--printer-profile` decides which presets can be exported at all.
+- `--output` names the file, and the command fails without it.
+- Which of the two mapping tables it uses follows the printer model and the preset's `use_tilt`, the
+  same way the import picks its table, so a preset that goes out and comes back is mapped the same
+  way both times. Speeds are converted back to mm/min, and a `[below, above]` area-fill pair is
+  written as the single value Chitubox has, with the other named in the console.
+- A setting the `.cfg` format has no key for — the bottle cost, the vendor, `use_tilt`, the lift keys
+  on a tilt printer — is not written and is named in the console instead, so nothing is dropped
+  quietly. A value of zero is not written either, because zero means the setting is unused.
+- What the file is not: it is a resin profile, not a print profile. A real `.cfg` also carries the
+  machine's G-code, its model and its build volume, and none of that is a resin setting, so open it
+  in Chitubox as a resin rather than as a print.
+
 ## New resin from datasheet
 
 When there is no profile file at all, the datasheet form is the way in: a vendor datasheet is a
-table of numbers, not a file. The form asks for the resin name and vendor, then the four values
-almost every datasheet gives:
+table of numbers, not a file. The form asks for the resin name and vendor, then the values below:
+the four almost every datasheet gives are marked *yes*, the rest are optional.
 
 | Field | Required | Rule |
 |---|---|---|
@@ -155,6 +180,16 @@ almost every datasheet gives:
 | Light-off delay (s) | no | a number of zero or more; empty means the datasheet does not state it |
 | Price of a bottle | no | a number of zero or more |
 | Bottle volume (ml) | no | a number greater than zero; without it a 1 litre bottle is assumed |
+| Lift distance (mm) | no | a number greater than zero; the lift height of a printer that separates layers by lifting |
+| Lift speed (mm/min) | no | a number greater than zero; converted to the mm/s the settings hold |
+| Retract speed (mm/min) | no | a number greater than zero; the speed the plate drops back down at |
+| Number of transition layers | no | a whole number greater than zero; the layers the exposure is faded over |
+
+The last four are what a generic MSLA datasheet may also give, and like the other optional fields an
+empty one means the datasheet does not state it. Speeds are asked in mm/min, the unit the datasheets
+and the imported profiles both state them in, and the mapper converts them like it converts a
+`.cfg`. A printer that separates layers by tilting has no lift, so those rows arrive as *Not
+applicable* and a transition layer count instead.
 
 **Next** checks the fields and hands them to the same review dialog, where **Save** or
 **Save & select** finishes the job. A value the datasheet does not state is left out of the profile
@@ -308,6 +343,8 @@ not use yet, so they arrive as *Unknown* rather than silently:
   vendor or brand key of the `.cfg` format is known yet, so nothing is guessed at one.
 - There is no printer picker in the review dialog. Pick the printer in the sidebar first; the
   import goes into the selected one or it does not happen.
+- There is no button for writing a profile back out; that is the `--export-resin-profile` command
+  line above, and it carries only what the `.cfg` format has keys for.
 - A single text profile (`.cfg`) is capped at 8 MB and a folder import at 1000 files. A sliced
   archive (`.sl1`, `.sl1s`) has no cap on the file: only its two ini entries are read.
 - The table shows at most 500 rows, so a `.cfg` with a very long machine section is cut off there.
@@ -316,6 +353,5 @@ not use yet, so they arrive as *Unknown* rather than silently:
 
 - [Getting started](getting-started.md), for the rest of the workflow: printer, resin and supports,
   slicing, and export.
-- `doc/sla-fork/ROADMAP.md`, milestone M3, for what is still to do: the `.cfgx` and `.lyr` readers
-  and writing back to a Chitubox profile.
+- `doc/sla-fork/ROADMAP.md`, milestone M3, for what is still to do: the `.cfgx` and `.lyr` readers.
 - `doc/sla-fork/formats/`, for the notes on foreign file formats.
