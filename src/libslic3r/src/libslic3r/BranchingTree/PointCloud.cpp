@@ -1,8 +1,12 @@
 #include "PointCloud.hpp"
 
-#include <igl/random_points_on_mesh.h> // IWYU pragma: keep
-#include <array>
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <limits>
+#include <random>
+#include <vector>
 
 #include "Slic3r/Biz/Algorithms/Tesselate.hpp"
 #include "libslic3r/SLA/SupportTreeUtils.hpp"
@@ -13,6 +17,58 @@
 namespace Slic3r { namespace branchingtree {
 
 using Domain::Index3;
+
+namespace {
+
+// FNV-1a over the bytes it is fed. The bytes of the numbers are hashed, never a
+// whole struct, so the seed of the sampler depends on nothing but the numbers.
+uint64_t fnv1a(uint64_t seed, const void *data, size_t len)
+{
+    const auto *bytes = static_cast<const unsigned char *>(data);
+
+    for (size_t i = 0; i < len; ++i) {
+        seed ^= bytes[i];
+        seed *= 1099511628211ull;
+    }
+
+    return seed;
+}
+
+// What the sampler of a mesh draws from: a hash of the mesh itself, of the radius
+// the points are drawn at and of what is being sampled, so that the same input
+// always draws the same points and two different inputs never draw the same ones.
+uint64_t sampling_seed(const indexed_triangle_set &its, double radius, uint64_t of)
+{
+    uint64_t seed = 14695981039346656037ull;
+
+    seed = fnv1a(seed, &of, sizeof(of));
+    seed = fnv1a(seed, &radius, sizeof(radius));
+    seed = fnv1a(seed, its.vertices.data(), its.vertices.size() * sizeof(Vec3f));
+    seed = fnv1a(seed, its.indices.data(), its.indices.size() * sizeof(Index3));
+
+    return seed;
+}
+
+// The generator of the sampler. It used to be std::rand, through Eigen, which is
+// what made the tree of two runs of the same model two different trees. An
+// mt19937_64 gives the same sequence for a seed on every platform the slicer is
+// built on, and the number below is arithmetic rather than a uniform
+// distribution, whose output the standard does not fix.
+class Sampler
+{
+    std::mt19937_64 m_gen;
+
+public:
+    explicit Sampler(uint64_t seed) : m_gen{seed} {}
+
+    // A number in [0, 1).
+    double next()
+    {
+        return double(m_gen() >> 11) * 0x1p-53;
+    }
+};
+
+} // namespace
 
 std::optional<Vec3f> find_merge_pt(const Vec3f &A, const Vec3f &B, float max_slope)
 {
@@ -35,34 +91,47 @@ void to_eigen_mesh(const indexed_triangle_set &its,
         V.row(i) = its.vertices[i].cast<double>();
 }
 
+// The places the tree merges branches between: the surface of the model and the
+// bed, at the sampling radius of the properties. Turk's method, as libigl drew
+// it: a triangle is picked with the probability of its share of the surface, then
+// a point is picked uniformly inside that triangle. Drawn from the generator of
+// sampling_seed() rather than from the one of the whole process, so the points
+// are a function of the mesh and the radius alone.
 std::vector<Node> sample_mesh(const indexed_triangle_set &its, double radius)
 {
     std::vector<Node> ret;
 
+    // The share of the surface every triangle is worth, accumulated, so that one
+    // upper bound per draw picks the triangle a point falls into.
+    std::vector<double> cum;
+    cum.reserve(its.indices.size());
+
     double surface_area = 0.;
     for (const Index3 &face : its.indices) {
-        std::array<Vec3f, 3> tri = {its.vertices[face[0]],
-                                    its.vertices[face[1]],
-                                    its.vertices[face[2]]};
+        const Vec3f U = its.vertices[face[1]] - its.vertices[face[0]];
+        const Vec3f V = its.vertices[face[2]] - its.vertices[face[0]];
 
-        auto U = tri[1] - tri[0], V = tri[2] - tri[0];
-        surface_area += 0.5 * U.cross(V).norm();
+        surface_area += 0.5 * double(U.cross(V).norm());
+        cum.push_back(surface_area);
     }
+
+    if (!(surface_area > 0.) || !(radius > 0.))
+        return ret;
 
     int N = surface_area / (PI * radius * radius);
 
-    Eigen::MatrixXd B;
-    Eigen::MatrixXi FI;
-    Eigen::MatrixXd V;
-    Eigen::MatrixXi F;
-    to_eigen_mesh(its, V, F);
-    igl::random_points_on_mesh(N, V, F, B, FI);
+    for (double &c : cum)
+        c /= surface_area;
+
+    Sampler rng{sampling_seed(its, radius, 1)};
 
     ret.reserve(size_t(N));
-    for (int i = 0; i < FI.size(); i++) {
-        int face_id = FI(i);
+    for (int i = 0; i < N; ++i) {
+        const double r = rng.next();
 
-        if (face_id < 0 || face_id >= int(its.indices.size()))
+        size_t face_id = size_t(std::upper_bound(cum.begin(), cum.end(), r) - cum.begin());
+
+        if (face_id >= its.indices.size())
             continue;
 
         Index3 face = its.indices[face_id];
@@ -72,9 +141,16 @@ std::vector<Node> sample_mesh(const indexed_triangle_set &its, double radius)
             face[2] >= int(its.vertices.size()))
             continue;
 
-        Vec3f c = B.row(i)(0) * its.vertices[face[0]] +
-                  B.row(i)(1) * its.vertices[face[1]] +
-                  B.row(i)(2) * its.vertices[face[2]];
+        // The barycentric coordinates of a point uniformly inside a triangle: the
+        // square root of a number in [0, 1) is distributed over the square of it
+        // the same way as the number itself, so the root and what is left of one
+        // are two coordinates of a uniform point and one minus the root the third.
+        const double s = rng.next(), t = rng.next();
+        const double sqt = std::sqrt(t);
+
+        Vec3f c = float(1. - sqt) * its.vertices[face[0]]
+            + float((1. - s) * sqt) * its.vertices[face[1]]
+            + float(s * sqt) * its.vertices[face[2]];
 
         ret.emplace_back(c);
     }

@@ -18,12 +18,10 @@
 // things: the resin they are made of, how many heads keep a branch, and whether
 // any branch came out thinner than the head it serves.
 //
-// The tree is not the same from one run to the next: the points of the bed it
-// merges branches between are drawn from std::rand, and the ground searches of
-// the leaves run on several threads over one NLopt random generator. The seed is
-// therefore set before every build, which at least gives both builds the same
-// candidates to choose from, and what can still move is reported with INFO
-// instead of being compared to the last digit.
+// The tree is reproducible since M4.5c, which seeded the sampler of the points it
+// merges branches between from the model and seeded every NLopt search per call,
+// so both builds of a fixture are given the same candidates to choose from and
+// the numbers below are of one tree rather than of two that happen to look alike.
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -343,10 +341,6 @@ TreeStats build_tree_of(const Fixture                  &fx,
                         Slic3r::sla::SupportTreeBuilder &builder)
 {
     const Slic3r::sla::SupportableMesh sm = make_supportable_mesh(fx, cap);
-
-    // The points the tree merges branches between are drawn from the global
-    // generator, so both builds of a fixture see the same candidates.
-    std::srand(42);
 
     Slic3r::sla::create_branching_tree(builder, sm);
 
