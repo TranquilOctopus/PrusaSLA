@@ -804,6 +804,13 @@ void PresetInteractor::save_user_preset_internal(
                 fill_materials_presets(selected_preset, false, inner_bag);
                 break;
             }
+
+            // The fill calls above only re-point the sources the saved kind feeds, and the material
+            // save does not touch the printer or the print/tool list at all. reload_vendor_presets
+            // has freed the config boxes those cached all the same, so re-point what is left now
+            // that the selection is final - before this returns, so a main thread task posted
+            // earlier by the import cannot run into the freed ones.
+            refresh_cached_original_config_boxes();
         }, "save_user_preset_internal"
     );
 }
@@ -815,6 +822,93 @@ void PresetInteractor::reload_vendor_presets(const std::string& vendor_id)
     update_vendor_presets(mut, preset_bundle, vendor_id);
     Domain::Preset::VendorBundle& vendor_bundle = preset_bundle.vendor_bundles.at(vendor_id);
     vendor_bundle.preset_names = IO::collect_names(vendor_bundle.presets);
+}
+
+void PresetInteractor::refresh_cached_original_config_boxes()
+{
+    // Every lookup below is the non asserting one and every source is skipped when it cannot be
+    // resolved: the boxes the interactors still hold are freed, so replacing them by nothing is
+    // recoverable, while asserting on a preset that is not (or not yet) in the bundle is not.
+    if (m_selected_project_id == Domain::INVALID_ID) {
+        return;
+    }
+    const auto project_ctx_it = m_project_contexts.find(m_selected_project_id);
+    if (project_ctx_it == m_project_contexts.end()
+        || project_ctx_it->second.selected_config_container_id == Domain::INVALID_ID)
+    {
+        return;
+    }
+    const Domain::SelectionId config_container_id =
+        project_ctx_it->second.selected_config_container_id;
+
+    Domain::Project* project = m_workbench.find_project_by_id(m_selected_project_id);
+    Domain::ConfigContainer* cc =
+        project != nullptr ? project->find_config_container(config_container_id) : nullptr;
+    if (cc == nullptr) {
+        return;
+    }
+    Domain::Preset::SelectedPreset& selected_preset = cc->mutable_selected_preset();
+
+    const auto [original_printer_preset, printer_is_runtime] = get_printer_preset_unsafe(
+        m_selected_project_id,
+        selected_preset.hw_config.id,
+        selected_preset.printer.id
+    );
+    if (original_printer_preset != nullptr) {
+        m_printer_cbi_accessor.set_config_box(
+            &selected_preset.printer.config_box(),
+            &original_printer_preset->config_box()
+        );
+    }
+
+    // The print and the tools are one source for the print/tool interactor, so they are re-pointed
+    // together: handing the list a partial tool set would break the tool index it addresses them by.
+    bool print_and_tools_resolve =
+        get_print_preset_unsafe(
+            m_selected_project_id,
+            selected_preset.hw_config.id,
+            selected_preset.printer.id,
+            selected_preset.print.id
+        )
+            .first
+        != nullptr;
+    for (size_t i = 0, n = selected_preset.tools.size(); print_and_tools_resolve && i < n; ++i) {
+        print_and_tools_resolve =
+            get_tool_print_preset_unsafe(
+                m_selected_project_id,
+                selected_preset.hw_config.id,
+                selected_preset.printer.id,
+                selected_preset.print.id,
+                i,
+                selected_preset.tools[i].id
+            )
+                .first
+            != nullptr;
+    }
+    if (print_and_tools_resolve) {
+        // The ids resolve now, so this may look them up again with the asserting getters.
+        update_print_tool_cbi(selected_preset, config_container_id);
+    }
+
+    // The per kind fill calls re-point the material boxes, except after a tool print save, which
+    // re-evaluates the whole vendor without touching them.
+    bool materials_resolve = true;
+    for (size_t i = 0, n = selected_preset.materials.size(); materials_resolve && i < n; ++i) {
+        materials_resolve =
+            get_material_preset_unsafe(
+                m_selected_project_id,
+                selected_preset.hw_config.id,
+                selected_preset.printer.id,
+                selected_preset.print.id,
+                i,
+                selected_preset.materials[i].id
+            )
+                .first
+            != nullptr;
+    }
+    if (materials_resolve) {
+        fill_selected_material_cbis(selected_preset, true);
+    }
 }
 
 const PresetInteractorConfigContainerContext& PresetInteractor::config_container_context(

@@ -979,6 +979,19 @@ private:
         Domain::SelectionId config_container_id
     );
 
+    /**
+     * @brief Re-points the config boxes the printer and print/tool interactors cache at the presets
+     * of the bundle as it is right now.
+     *
+     * The interactors keep raw pointers into Bundle::evaluated_presets, and reloading a vendor
+     * replaces that map wholesale, which frees those boxes. Anything reading them afterwards - a
+     * main thread task posted before the reload, a settings dialog, a dirty check - would read
+     * freed memory, so the save path re-resolves them from the reloaded bundle once the selection
+     * is final. Whatever cannot be resolved is left untouched: the interactors are refilled by the
+     * next selection change anyway, and a preset that cannot be found must not become an assert.
+     */
+    void refresh_cached_original_config_boxes();
+
     void duplicate_hw_config_if_needed_and_update(Domain::Preset::HwPrinterConfig& hw_config, ListenerInvokeLaterBag& bag);
 
     void invoke_slicing_input_changed();
