@@ -18,6 +18,7 @@ SlaSupportGeometry support_geometry_of(const SupportPoint& point)
     geometry.knot_diameter_mm = 2. * static_cast<double>(point.knot_radius);
     geometry.stem_sides       = point.stem_sides;
     geometry.stem_taper       = point.stem_taper;
+    geometry.base_shape       = point.base_shape;
     return geometry;
 }
 
@@ -47,6 +48,9 @@ void apply_support_geometry(
     case SupportGeometryField::StemTaper:
         point.stem_taper = static_cast<float>(geometry.stem_taper);
         break;
+    case SupportGeometryField::BaseShape:
+        point.base_shape = geometry.base_shape;
+        break;
     }
 }
 
@@ -60,7 +64,8 @@ void apply_support_geometry(SupportPoint& point, const SlaSupportGeometry& geome
           SupportGeometryField::TipLength,
           SupportGeometryField::KnotDiameter,
           SupportGeometryField::StemSides,
-          SupportGeometryField::StemTaper}) {
+          SupportGeometryField::StemTaper,
+          SupportGeometryField::BaseShape}) {
         apply_support_geometry(point, geometry, field);
     }
 }
@@ -108,6 +113,21 @@ Domain::sla::SupportTipShape config_support_tip_shape_of(SupportPoint::TipShape 
     case SupportPoint::TipShape::Default:
     default:
         return Domain::sla::SupportTipShape::Default;
+    }
+}
+
+SupportPoint::BaseShape support_base_shape_of(Domain::sla::SupportBaseShape shape)
+{
+    // The key has no Default: it is the shape every point gets unless it asks for one, so every
+    // value of it names a real foot (M2.23).
+    switch (shape) {
+    case Domain::sla::SupportBaseShape::Cylinder:
+        return SupportPoint::BaseShape::Cylinder;
+    case Domain::sla::SupportBaseShape::Flat:
+        return SupportPoint::BaseShape::Flat;
+    case Domain::sla::SupportBaseShape::Cone:
+    default:
+        return SupportPoint::BaseShape::Cone;
     }
 }
 

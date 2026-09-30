@@ -79,6 +79,12 @@ struct SupportPoint
     // Radius of a ball at the tip-to-stem joint. 0 = no knot.
     float knot_radius = 0.f; // [in mm]
 
+    // Whether the pillar of this point may end on the model surface instead of
+    // reaching the build plate. Inherit leaves the decision to the object's
+    // "supports must not end on the model" (support_buildplate_only), which is
+    // what every point did before the switch existed (M2.26).
+    enum class OnModel : uint8_t { Inherit, Allow, Forbid };
+    OnModel on_model = OnModel::Inherit;
 
     bool is_island() const { return type == SupportPointType::island; }
 

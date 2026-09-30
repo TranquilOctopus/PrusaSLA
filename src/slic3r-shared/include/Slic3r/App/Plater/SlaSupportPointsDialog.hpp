@@ -2,6 +2,7 @@
 
 #include "Slic3r/App/Plater/GizmoWindow.hpp"
 #include "Slic3r/App/Plater/SlaSupportGeometry.hpp"
+#include "Slic3r/App/Plater/SlaSupportOnModel.hpp"
 
 #include <optional>
 
@@ -37,6 +38,9 @@ public:
         std::function<void(double)> knot_diameter_changed = [](double) {};
         std::function<void(double)> stem_sides_changed = [](double) {};
         std::function<void(double)> stem_taper_changed = [](double) {};
+        std::function<void(Domain::SLA::SupportPoint::BaseShape)> base_shape_changed = [](
+            Domain::SLA::SupportPoint::BaseShape) {};
+        std::function<void(SupportOnModel)> on_model_changed = [](SupportOnModel) {};
         std::function<void(bool)> head_diameter_use_global_changed = [](bool) {};
         std::function<void(bool)> pillar_diameter_use_global_changed = [](bool) {};
         std::function<void(bool)> base_diameter_use_global_changed = [](bool) {};
@@ -67,12 +71,18 @@ public:
     void set_base_diameter_use_global(bool use_global);
     void set_base_height_use_global(bool use_global);
 
-/// Shows the tip shape, tip length, knot, stem cross-section and stem taper of the selected points
-/// (M2.16c, M2.24). An empty @p geometry means nothing is selected or the points disagree on one of
-/// the values: the fields are then left empty instead of showing a value only some of the points
-/// have. @p has_selection tells the two apart for the tip diameter, which is the head diameter
-/// control as well: with nothing selected it keeps showing the diameter a new point takes.
-void set_support_geometry(const std::optional<SlaSupportGeometry>& geometry, bool has_selection);
+    /// Shows the tip shape, tip length, knot, stem cross-section, stem taper and foot shape of the
+    /// selected points (M2.16c, M2.24, M2.23b). An empty @p geometry means nothing is selected or
+    /// the points disagree on one of the values: the fields are then left empty instead of showing a
+    /// value only some of the points have. @p has_selection tells the two apart for the tip
+    /// diameter, which is the head diameter control as well: with nothing selected it keeps showing
+    /// the diameter a new point takes.
+    void set_support_geometry(const std::optional<SlaSupportGeometry>& geometry, bool has_selection);
+
+    /// Shows the per-point "may this support end on the model" switch of the selected points
+    /// (M2.26). An empty @p on_model means nothing is selected or the selected points disagree:
+    /// the control is then left empty instead of showing a state only some of the points have.
+    void set_support_on_model(const std::optional<SupportOnModel>& on_model);
 
     void set_clipping_plane_position(double pos);
     void set_lock_island_supports(bool locked);
@@ -101,6 +111,12 @@ private:
     Yoga::SliderWithInput* m_knot_diameter_slider = nullptr;
     Yoga::SliderWithInput* m_stem_sides_slider = nullptr;
     Yoga::SliderWithInput* m_stem_taper_slider = nullptr;
+    // The per-point "may this support end on the model" switch (M2.26), in the same section as
+    // the per-point geometry above.
+    Yoga::ComboBox* m_on_model_combo = nullptr;
+    // The shape of the foot of the selected points (M2.23b), next to the switch above. Default
+    // keeps the shape support_base_shape configures.
+    Yoga::ComboBox* m_base_shape_combo = nullptr;
     Yoga::LayoutButton* m_generate_button = nullptr;
     Yoga::LayoutButton* m_auto_support_all_button = nullptr;
     Yoga::LayoutButton* m_apply_button = nullptr;

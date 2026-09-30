@@ -108,9 +108,13 @@ bool DefaultSupportTree::execute(SupportTreeBuilder    &builder,
     Steps pc = BEGIN;
 
     if(sm.cfg.ground_facing_only) {
-        program[ROUTING_NONGROUND] = []() {
-            SPDLOG_INFO("Skipping model-facing supports as requested.");
-        };
+        // Points that allow a model anchor of their own (M2.26) still need this
+        // step, so it is only skipped when no point of the object asked for one.
+        if (!any_may_rest_on_model(sm)) {
+            program[ROUTING_NONGROUND] = []() {
+                SPDLOG_INFO("Skipping model-facing supports as requested.");
+            };
+        }
     }
 
        // Let's define a simple automaton that will run our program.
@@ -595,7 +599,11 @@ void DefaultSupportTree::classify()
         auto hit = bridge_mesh_intersect(headjp, DOWN, r);
 
         if(std::isinf(hit.distance())) ground_head_indices.emplace_back(i);
-        else if(m_sm.cfg.ground_facing_only)  head.invalidate();
+        // A point that may not end on the model (M2.26) is not dropped here but routed
+        // to the plate like any other model facing head; only an object whose supports
+        // must not end on the model at all loses the head as it always did.
+        else if(m_sm.cfg.ground_facing_only && !may_rest_on_model(m_sm, point_at(i)))
+            head.invalidate();
         else m_iheads_onmodel.emplace_back(i);
 
         m_head_to_ground_scans[i] = hit;
@@ -824,6 +832,16 @@ void DefaultSupportTree::routing_to_model()
             // Cannot connect to nearby pillar. We will try to search for
             // a route to the ground.
             if (connect_to_ground(head)) { return; }
+
+            // A point that must not end on the model (M2.26) is dropped here, the
+            // same fallback an object whose supports may not end on the model
+            // gives: no plate route, no support from this point.
+            if (!may_rest_on_model(m_sm, point_at(idx))) {
+                SPDLOG_WARN("Failed to route model facing support point which may not end "
+                            "on the model. ID: {}", idx);
+                head.invalidate();
+                return;
+            }
 
             // No route to the ground, so connect to the model body as a last resort
             if (connect_to_model_body(head)) { return; }

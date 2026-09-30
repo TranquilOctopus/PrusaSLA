@@ -1196,9 +1196,14 @@ constexpr std::string_view TIP_SHAPE         = "ts";        // tip shape
 constexpr std::string_view STEM_SIDES        = "ss";        // stem sides
 constexpr std::string_view STEM_TAPER        = "st";        // stem taper
 constexpr std::string_view KNOT_RADIUS       = "kr";        // knot radius
-NamesType NAMES{{POSITION, HEAD_FRONT_RADIUS, IS_NEW_ISLAND, PILLAR_DIAMETER, BASE_DIAMETER, BASE_HEIGHT, BASE_SHAPE, TYPE, TIP_LENGTH, CONTACT_DEPTH, TIP_SHAPE, STEM_SIDES, STEM_TAPER, KNOT_RADIUS}};
+constexpr std::string_view ON_MODEL          = "om";        // may the pillar end on the model
+NamesType NAMES{{POSITION, HEAD_FRONT_RADIUS, IS_NEW_ISLAND, PILLAR_DIAMETER, BASE_DIAMETER, BASE_HEIGHT, BASE_SHAPE, TYPE, TIP_LENGTH, CONTACT_DEPTH, TIP_SHAPE, STEM_SIDES, STEM_TAPER, KNOT_RADIUS, ON_MODEL}};
 
 static constexpr std::array<std::string_view, 3> TIP_SHAPE_NAMES = {"default", "cone", "ball"};
+// The three states of the per point "may rest on the model" switch (M2.26), in the order of
+// Domain::SLA::SupportPoint::OnModel. A project written before the switch has no "om", which
+// reads back as Inherit, i.e. what such a point did anyway.
+static constexpr std::array<std::string_view, 3> ON_MODEL_NAMES = {"inherit", "allow", "forbid"};
 
 // Indexed by SupportPoint::BaseShape. The Default value is never written, it only keeps the
 // names of the three real shapes at the indices the point uses.
@@ -1234,6 +1239,8 @@ json to_json(const Domain::SLA::SupportPoints &points) {
             p_json[STEM_TAPER] = p.stem_taper;
         if (p.knot_radius > 0.f)
             p_json[KNOT_RADIUS] = p.knot_radius;
+        if (p.on_model != Domain::SLA::SupportPoint::OnModel::Inherit)
+            p_json[ON_MODEL] = ON_MODEL_NAMES[static_cast<size_t>(p.on_model)];
         r.push_back(std::move(p_json));
     }
     return r;
@@ -1282,6 +1289,15 @@ void load(const json &pts_json, Domain::SLA::SupportPoints &pts, Read3mfIssues& 
         from_json(pt_json, STEM_SIDES,        pt.stem_sides,        collected_issues, RT::project_sla_support_point_stem_sides_issue);
         from_json(pt_json, STEM_TAPER,        pt.stem_taper,        collected_issues, RT::project_sla_support_point_radius_issue);
         from_json(pt_json, KNOT_RADIUS,       pt.knot_radius,       collected_issues, RT::project_sla_support_point_radius_issue);
+        std::string on_model_str;
+        if (from_json(pt_json, ON_MODEL, on_model_str, collected_issues, RT::project_sla_support_point_on_model_issue)) {
+            for (size_t i = 0; i < ON_MODEL_NAMES.size(); ++i) {
+                if (on_model_str == ON_MODEL_NAMES[i]) {
+                    pt.on_model = static_cast<Domain::SLA::SupportPoint::OnModel>(i);
+                    break;
+                }
+            }
+        }
         if (is_island)
             pt.type = Domain::SLA::SupportPointType::island;
         else if (type_int != static_cast<json::number_integer_t>(Domain::SLA::SupportPointType::manual_add))

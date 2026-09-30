@@ -253,6 +253,30 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
             this->apply_support_geometry_to_selected(SupportGeometryField::StemTaper);
         }
     };
+    // The per-point "may this support end on the model" switch (M2.26). Like the geometry above it
+    // is a value of its own, written on the points that are selected.
+    m_dialog->callbacks().on_model_changed = [this](SupportOnModel on_model)
+    {
+        if (m_syncing_dialog) {
+            return;
+        }
+        if (m_edit_state.has_value()) {
+            this->apply_support_on_model_to_selected(on_model);
+        }
+    };
+    // The shape of the foot of the selected points (M2.23b), a value of its own like the rest of the
+    // per-point geometry: the foot of a point is a cone, a cylinder or a flat disc, and the tree is
+    // built again for the ones that changed.
+    m_dialog->callbacks().base_shape_changed = [this](Domain::SLA::SupportPoint::BaseShape shape)
+    {
+        if (m_syncing_dialog) {
+            return;
+        }
+        if (m_edit_state.has_value()) {
+            m_edit_state->editing.support_geometry.base_shape = shape;
+            this->apply_support_geometry_to_selected(SupportGeometryField::BaseShape);
+        }
+    };
     m_dialog->callbacks().preset_light = [this]() { this->apply_preset_light(); };
     m_dialog->callbacks().preset_medium = [this]() { this->apply_preset_medium(); };
     m_dialog->callbacks().preset_heavy = [this]() { this->apply_preset_heavy(); };
@@ -1642,11 +1666,27 @@ void SlaSupportPointsGizmo::apply_support_geometry_to_selected(SupportGeometryFi
     commit_edited_points_live();
 }
 
+void SlaSupportPointsGizmo::apply_support_on_model_to_selected(SupportOnModel on_model)
+{
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+    take_undo_snapshot();
+    m_edit_state->editing.apply_support_on_model_to_selected(on_model);
+    // The points now carry the new state, so the control keeps showing it.
+    update_selected_support_geometry();
+    update_point_visuals();
+    // The tree the preview shows is built from the points, so a change of where a pillar ends
+    // has to reach the model like any other edit of a point (M2.26).
+    commit_edited_points_live();
+}
+
 void SlaSupportPointsGizmo::update_selected_support_geometry()
 {
     DialogSyncGuard guard(*this);
     if (!m_edit_state.has_value()) {
         m_dialog->set_support_geometry(std::nullopt, false);
+        m_dialog->set_support_on_model(std::nullopt);
         return;
     }
     // The dialog needs to tell "nothing is selected" from "the points disagree": the tip diameter is
@@ -1654,6 +1694,9 @@ void SlaSupportPointsGizmo::update_selected_support_geometry()
     // no selection to show.
     m_dialog->set_support_geometry(m_edit_state->editing.selected_support_geometry(),
                                    !m_edit_state->editing.selected_point_indices.empty());
+    // The "may rest on the model" switch has a value of its own, so it is shown for a selection
+    // that agrees on it even when the selection shows no geometry at all (M2.26).
+    m_dialog->set_support_on_model(m_edit_state->editing.selected_support_on_model());
 }
 
 SlaSupportGeometry SlaSupportPointsGizmo::support_geometry_defaults(const Domain::ModelObject* model_object) const
@@ -1684,6 +1727,11 @@ SlaSupportGeometry SlaSupportPointsGizmo::support_geometry_defaults(const Domain
     }
     if (auto result = settings.find("support_stem_taper"); result.item != nullptr) {
         geometry.stem_taper = result.item->get<double>();
+    }
+    // The foot of a new point is the shape support_base_shape asks for (M2.23b), so a point placed
+    // by hand gets the foot the user configured rather than the cone of before.
+    if (auto result = settings.find("support_base_shape"); result.item != nullptr) {
+        geometry.base_shape = support_base_shape_of(result.item->get<Domain::sla::SupportBaseShape>());
     }
 
     return geometry;

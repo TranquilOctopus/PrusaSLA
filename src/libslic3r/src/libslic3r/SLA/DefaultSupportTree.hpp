@@ -166,6 +166,15 @@ class DefaultSupportTree {
         return bridge_mesh_intersect(std::forward<Args>(args)...).distance();
     }
 
+    // The support point a head belongs to. The heads are created in the order of the
+    // points and keep the index of the one they were made from, so a head can read
+    // the per point values of its point, e.g. the "may rest on the model" switch of
+    // M2.26. Null for an index that is not a point.
+    const Domain::SLA::SupportPoint *point_at(unsigned head_id) const
+    {
+        return head_id < m_sm.pts->size() ? &m_sm.pts->at(head_id) : nullptr;
+    }
+
     // Helper function for interconnecting two pillars with zig-zag bridges.
     bool interconnect(const Pillar& pillar, const Pillar& nextpillar);
 

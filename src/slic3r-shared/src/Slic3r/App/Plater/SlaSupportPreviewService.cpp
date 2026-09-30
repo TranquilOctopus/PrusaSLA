@@ -72,6 +72,9 @@ std::uint64_t hash_support_points(const Domain::SLA::SupportPoints& points)
         mix_float(point.knot_radius);
         mix(static_cast<std::uint64_t>(point.stem_sides));
         mix_float(point.stem_taper);
+        // A point that may or may not end on the model (M2.26) gets a pillar to the
+        // plate or a model anchor, so it is another tree as well.
+        mix(static_cast<std::uint64_t>(point.on_model));
     }
     return seed;
 }

@@ -1,10 +1,11 @@
-// M2.16c, M2.24: the per-point support geometry. The tip diameter, the tip shape, the tip length,
-// the knot ball between tip and stem, the stem cross-section and the stem taper are stored on every
-// support point (SLA::SupportPoint, M2.13 and M2.16); this covers the Supports & raft settings a
-// new point starts from and the support tool controls that write them on the points that are
-// selected. M2.24 adds the tip diameter, which used to be reachable only through the head diameter
-// control, and the tip length, which had no setting and no control at all. No mesh builder is
-// involved here.
+// M2.16c, M2.24, M2.23b: the per-point support geometry. The tip diameter, the tip shape, the tip
+// length, the knot ball between tip and stem, the stem cross-section, the stem taper and the shape of
+// the foot are stored on every support point (SLA::SupportPoint, M2.13, M2.16 and M2.23); this
+// covers the Supports & raft settings a new point starts from and the support tool controls that
+// write them on the points that are selected. M2.24 adds the tip diameter, which used to be
+// reachable only through the head diameter control, and the tip length, which had no setting and
+// no control at all. M2.23b adds the foot shape, which M2.23 stored without a control. No mesh
+// builder is involved here.
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 
@@ -31,11 +32,13 @@ using Slic3r::App::Plater::apply_support_geometry;
 using Slic3r::App::Plater::config_support_tip_shape_of;
 using Slic3r::App::Plater::hash_support_points;
 using Slic3r::App::Plater::selection_support_geometry;
+using Slic3r::App::Plater::support_base_shape_of;
 using Slic3r::App::Plater::support_geometry_of;
 using Slic3r::App::Plater::support_tip_shape_of;
 using Slic3r::Domain::ConfigItemDef;
 using Slic3r::Domain::SLA::SupportPoint;
 using Slic3r::Domain::SLA::SupportPoints;
+using Slic3r::Domain::sla::SupportBaseShape;
 using Slic3r::Domain::sla::SupportTipShape;
 
 namespace {
@@ -46,6 +49,15 @@ SupportPoint make_point()
     point.pos               = Slic3r::Domain::Vec3f{0.f, 0.f, 10.f};
     point.head_front_radius = 0.2f;
     point.type              = Slic3r::Domain::SLA::SupportPointType::manual_add;
+    return point;
+}
+
+// A point that asks for a foot of its own, which the "Foot shape" control of the support tool
+// writes on a selection (M2.23b).
+SupportPoint make_point_with_foot(SupportPoint::BaseShape shape)
+{
+    SupportPoint point = make_point();
+    point.base_shape   = shape;
     return point;
 }
 
@@ -119,6 +131,7 @@ TEST_CASE("A support point carries the support geometry it is given", "[SlaSuppo
     geometry.knot_diameter_mm = 1.6;
     geometry.stem_sides       = 6;
     geometry.stem_taper       = 0.25;
+    geometry.base_shape       = SupportPoint::BaseShape::Flat;
 
     SupportPoint point = make_point();
     apply_support_geometry(point, geometry);
@@ -133,6 +146,7 @@ TEST_CASE("A support point carries the support geometry it is given", "[SlaSuppo
     CHECK(point.knot_radius == Approx(0.8f));
     CHECK(point.stem_sides == 6);
     CHECK(point.stem_taper == Approx(0.25f));
+    CHECK(point.base_shape == SupportPoint::BaseShape::Flat);
 
     // What the point carries is what the tool reads back.
     const SlaSupportGeometry read_back = support_geometry_of(point);
@@ -142,6 +156,7 @@ TEST_CASE("A support point carries the support geometry it is given", "[SlaSuppo
     CHECK(read_back.knot_diameter_mm == Approx(1.6));
     CHECK(read_back.stem_sides == geometry.stem_sides);
     CHECK(read_back.stem_taper == Approx(geometry.stem_taper));
+    CHECK(read_back.base_shape == geometry.base_shape);
 }
 
 TEST_CASE("The support geometry of a selection is only shown when the points agree", "[SlaSupportGeometry]")
@@ -195,6 +210,27 @@ TEST_CASE("The support geometry of a selection is only shown when the points agr
         lengths[1].tip_length = 1.4f;
         CHECK_FALSE(selection_support_geometry(lengths, {0, 1}).has_value());
     }
+
+    SECTION("a foot shape of its own is a disagreement too")
+    {
+        // The foot shape is one of the per-point geometry fields (M2.23b), so points that ask for
+        // different feet leave the whole set blank, exactly like the other fields.
+        SupportPoints feet{make_point(), make_point()};
+        feet[1].base_shape = SupportPoint::BaseShape::Cylinder;
+        CHECK_FALSE(selection_support_geometry(feet, {0, 1}).has_value());
+        const std::optional<SlaSupportGeometry> one = selection_support_geometry(feet, {1});
+        REQUIRE(one.has_value());
+        CHECK(one->base_shape == SupportPoint::BaseShape::Cylinder);
+    }
+
+    SECTION("points that agree on the foot shape show it")
+    {
+        SupportPoints feet{make_point_with_foot(SupportPoint::BaseShape::Flat),
+                            make_point_with_foot(SupportPoint::BaseShape::Flat)};
+        const std::optional<SlaSupportGeometry> shared = selection_support_geometry(feet, {0, 1});
+        REQUIRE(shared.has_value());
+        CHECK(shared->base_shape == SupportPoint::BaseShape::Flat);
+    }
 }
 
 TEST_CASE("The support geometry goes on the selected points only", "[SlaSupportGeometry]")
@@ -213,6 +249,7 @@ TEST_CASE("The support geometry goes on the selected points only", "[SlaSupportG
     editor.points[1].stem_sides        = 4;
     editor.points[1].knot_radius       = 0.5f;
     editor.points[1].stem_taper        = 0.5f;
+    editor.points[1].base_shape        = SupportPoint::BaseShape::Default;
 
     editor.support_geometry.tip_diameter_mm  = 1.2;
     editor.support_geometry.tip_shape        = SupportPoint::TipShape::Ball;
@@ -220,6 +257,7 @@ TEST_CASE("The support geometry goes on the selected points only", "[SlaSupportG
     editor.support_geometry.knot_diameter_mm = 2.0;
     editor.support_geometry.stem_sides       = 6;
     editor.support_geometry.stem_taper       = 0.25;
+    editor.support_geometry.base_shape       = SupportPoint::BaseShape::Cylinder;
 
     for (const auto& [field, is_set] : std::vector<std::pair<SupportGeometryField, std::function<bool(const SupportPoint&)>>>{
              {SupportGeometryField::TipDiameter,
@@ -234,6 +272,8 @@ TEST_CASE("The support geometry goes on the selected points only", "[SlaSupportG
               [](const SupportPoint& p) { return p.stem_sides == 6; }},
              {SupportGeometryField::StemTaper,
               [](const SupportPoint& p) { return p.stem_taper == Approx(0.25f); }},
+             {SupportGeometryField::BaseShape,
+              [](const SupportPoint& p) { return p.base_shape == SupportPoint::BaseShape::Cylinder; }},
          }) {
         INFO("field " << static_cast<int>(field));
         editor.apply_support_geometry_to_selected(field);
@@ -248,9 +288,10 @@ TEST_CASE("The support geometry goes on the selected points only", "[SlaSupportG
     CHECK(editor.points[1].knot_radius == Approx(0.5f));
     CHECK(editor.points[1].stem_sides == 4);
     CHECK(editor.points[1].stem_taper == Approx(0.5f));
+    CHECK(editor.points[1].base_shape == SupportPoint::BaseShape::Default);
 }
 
-TEST_CASE("One support geometry field at a time leaves the other five alone", "[SlaSupportGeometry]")
+TEST_CASE("One support geometry field at a time leaves the other six alone", "[SlaSupportGeometry]")
 {
     SlaSupportPointsEditing editor;
     editor.points.push_back(make_point());
@@ -260,6 +301,7 @@ TEST_CASE("One support geometry field at a time leaves the other five alone", "[
     editor.points[0].stem_sides        = 4;
     editor.points[0].knot_radius       = 0.5f;
     editor.points[0].stem_taper        = 0.5f;
+    editor.points[0].base_shape        = SupportPoint::BaseShape::Flat;
     editor.select_point(0);
 
     editor.support_geometry.tip_diameter_mm  = 1.2;
@@ -268,11 +310,13 @@ TEST_CASE("One support geometry field at a time leaves the other five alone", "[
     editor.support_geometry.knot_diameter_mm = 2.0;
     editor.support_geometry.stem_sides       = 6;
     editor.support_geometry.stem_taper       = 0.25;
+    editor.support_geometry.base_shape       = SupportPoint::BaseShape::Cylinder;
 
-    editor.apply_support_geometry_to_selected(SupportGeometryField::TipShape);
+    editor.apply_support_geometry_to_selected(SupportGeometryField::BaseShape);
 
-    CHECK(editor.points[0].tip_shape == SupportPoint::TipShape::Ball);
+    CHECK(editor.points[0].base_shape == SupportPoint::BaseShape::Cylinder);
     CHECK(editor.points[0].head_front_radius == Approx(0.5f));
+    CHECK(editor.points[0].tip_shape == SupportPoint::TipShape::Cone);
     CHECK(editor.points[0].tip_length == Approx(1.4f));
     CHECK(editor.points[0].knot_radius == Approx(0.5f));
     CHECK(editor.points[0].stem_sides == 4);
@@ -288,6 +332,7 @@ TEST_CASE("A point placed by hand takes the support geometry of the settings", "
     editor.support_geometry.knot_diameter_mm = 1.0;
     editor.support_geometry.stem_sides       = 4;
     editor.support_geometry.stem_taper       = 0.5;
+    editor.support_geometry.base_shape       = SupportPoint::BaseShape::Flat;
 
     editor.add_point(Slic3r::Domain::Vec3d{1., 2., 3.});
 
@@ -298,6 +343,8 @@ TEST_CASE("A point placed by hand takes the support geometry of the settings", "
     CHECK(editor.points[0].knot_radius == Approx(0.5f));
     CHECK(editor.points[0].stem_sides == 4);
     CHECK(editor.points[0].stem_taper == Approx(0.5f));
+    // The foot of a new point is the shape support_base_shape asks for (M2.23b).
+    CHECK(editor.points[0].base_shape == SupportPoint::BaseShape::Flat);
 }
 
 TEST_CASE("A point placed by hand takes the tip diameter of the tool", "[SlaSupportGeometry]")
@@ -329,6 +376,29 @@ TEST_CASE("The three tip shapes map both ways", "[SlaSupportGeometry]")
     }
 }
 
+TEST_CASE("The three foot shapes map onto the point, and a point can follow the setting",
+          "[SlaSupportGeometry]")
+{
+    // The key names a real foot for every one of its values, so a new point takes one of the three
+    // rather than the cone of before. Default is the point's own way of saying "whatever
+    // support_base_shape says" (M2.23, M2.23b).
+    const std::array<std::pair<SupportBaseShape, SupportPoint::BaseShape>, 3> shapes{{
+        {SupportBaseShape::Cone, SupportPoint::BaseShape::Cone},
+        {SupportBaseShape::Cylinder, SupportPoint::BaseShape::Cylinder},
+        {SupportBaseShape::Flat, SupportPoint::BaseShape::Flat},
+    }};
+
+    for (const auto& [config, point] : shapes) {
+        INFO("foot shape " << static_cast<int>(config));
+        CHECK(support_base_shape_of(config) == point);
+    }
+
+    // A point without a shape of its own, which is every point of a project made before the
+    // per-point foot shape (M2.23).
+    SupportPoint following = make_point();
+    CHECK(following.base_shape == SupportPoint::BaseShape::Default);
+}
+
 TEST_CASE("A change of the per-point support geometry refreshes the live preview",
           "[SlaSupportGeometry][SlaSupportPreview]")
 {
@@ -346,11 +416,13 @@ TEST_CASE("A change of the per-point support geometry refreshes the live preview
     sides.stem_sides         = 6;
     SupportPoint taper       = make_point();
     taper.stem_taper         = 0.5f;
-    const std::array<SupportPoint, 6> changed{tip_dia, tip, tip_len, knot, sides, taper};
+    SupportPoint foot        = make_point();
+    foot.base_shape          = SupportPoint::BaseShape::Cylinder;
+    const std::array<SupportPoint, 7> changed{tip_dia, tip, tip_len, knot, sides, taper, foot};
 
-    // The tree of a point whose tip diameter, tip shape, tip length, knot, cross-section or taper
-    // changed is another tree, so the key of the preview has to change with it (M2.16b builds the
-    // geometry, M2.13 and M2.16c write the values, this job the key).
+    // The tree of a point whose tip diameter, tip shape, tip length, knot, cross-section, taper or
+    // foot changed is another tree, so the key of the preview has to change with it (M2.16b and
+    // M2.23 build the geometry, M2.13, M2.16c and M2.23 write the values, this job the key).
     for (const SupportPoint& point : changed) {
         INFO("point changed");
         CHECK(hash_support_points(SupportPoints{point}) != base);

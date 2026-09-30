@@ -276,6 +276,9 @@ TEST_CASE("3MF SLA round trip preserves support points and drain holes", "[3mf][
         3.5f,  // base_diameter override
         1.2f   // base_height override
     });
+    // The per-point "may this support end on the model" switch of M2.26, on the point that asks
+    // for it. The points above keep the default, which is what a project without the switch has.
+    object->sla_support_points[3].on_model = SupportPoint::OnModel::Allow;
 
     // sla_points_status is a separate field NOT serialized in 3MF (gap)
     object->sla_points_status = PointsStatus::UserModified;
@@ -324,6 +327,8 @@ TEST_CASE("3MF SLA round trip preserves support points and drain holes", "[3mf][
     CHECK(Domain::is_approx(loaded_object->sla_support_points[0].base_diameter, 0.f));
     CHECK(Domain::is_approx(loaded_object->sla_support_points[0].base_height, 0.f));
     CHECK(loaded_object->sla_support_points[0].type == SupportPointType::manual_add);
+    // No "om" in the file, so the point follows the object, as every point of an older project does.
+    CHECK(loaded_object->sla_support_points[0].on_model == SupportPoint::OnModel::Inherit);
 
     CHECK(Domain::is_approx(loaded_object->sla_support_points[1].pos.x(), 15.0f));
     CHECK(Domain::is_approx(loaded_object->sla_support_points[1].pos.y(), 15.0f));
@@ -354,6 +359,7 @@ TEST_CASE("3MF SLA round trip preserves support points and drain holes", "[3mf][
     CHECK(Domain::is_approx(loaded_object->sla_support_points[3].base_diameter, 3.5f));
     CHECK(Domain::is_approx(loaded_object->sla_support_points[3].base_height, 1.2f));
     CHECK(loaded_object->sla_support_points[3].type == SupportPointType::manual_add);
+    CHECK(loaded_object->sla_support_points[3].on_model == SupportPoint::OnModel::Allow);
 
     // sla_points_status round-trips (was a gap, now fixed)
     CHECK(loaded_object->sla_points_status == PointsStatus::UserModified);
