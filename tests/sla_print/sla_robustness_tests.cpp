@@ -436,7 +436,8 @@ void check_slice_result(const SliceResult& result)
 {
     if (result.reported_error)
         INFO("the engine reported: " << result.error);
-    CHECK(result.finished || result.reported_error);
+    // Catch2 decomposes the expression itself, so the disjunction has to be parenthesized.
+    CHECK((result.finished || result.reported_error));
     if (result.finished) {
         INFO("layers: " << result.layers << ", support facets: " << result.support_facets
                         << ", raft facets: " << result.raft_facets);

@@ -39,20 +39,29 @@ struct BoxModel
     }
 };
 
+// The rotation as a transform. The engine hands out a float transform, but the mesh vertices are
+// cast to double below, so the transform is widened here: Eigen does not mix scalar types.
+Slic3r::Transform3d rotation_transform(const Slic3r::Vec2d& rotation)
+{
+    const Slic3r::Matrix3d m =
+        Slic3r::sla::rotation_angles_to_transform(rotation).matrix().cast<double>();
+    return Slic3r::Transform3d{m};
+}
+
 // Height of the object's mesh after rotating it by the given X/Y angles.
 double height_after_rotation(const Slic3r::Domain::ModelObject& object, const Slic3r::Vec2d& rotation)
 {
-    const Slic3r::Transform3f trafo = Slic3r::sla::rotation_angles_to_transform(rotation);
-    float min_z = std::numeric_limits<float>::max();
-    float max_z = std::numeric_limits<float>::lowest();
+    const Slic3r::Transform3d trafo = rotation_transform(rotation);
+    double min_z = std::numeric_limits<double>::max();
+    double max_z = std::numeric_limits<double>::lowest();
     for (const auto& volume : object.volumes) {
         for (const auto& vertex : volume->mesh().its.vertices) {
-            const float z = (trafo * vertex).z();
+            const double z = (trafo * vertex.cast<double>()).z();
             min_z = std::min(min_z, z);
             max_z = std::max(max_z, z);
         }
     }
-    return double(max_z - min_z);
+    return max_z - min_z;
 }
 
 struct Faces
@@ -68,14 +77,14 @@ struct Faces
 // The faces of the object's mesh after rotating it by the given X/Y angles.
 Faces faces_after_rotation(const Slic3r::Domain::ModelObject& object, const Slic3r::Vec2d& rotation)
 {
-    const Slic3r::Transform3f trafo = Slic3r::sla::rotation_angles_to_transform(rotation);
+    const Slic3r::Transform3d trafo = rotation_transform(rotation);
     Faces faces;
     for (const auto& volume : object.volumes) {
         const indexed_triangle_set& its{volume->mesh().its};
         for (const auto& face : its.indices) {
-            const Slic3r::Vec3d p0{trafo * its.vertices[face[0]]};
-            const Slic3r::Vec3d p1{trafo * its.vertices[face[1]]};
-            const Slic3r::Vec3d p2{trafo * its.vertices[face[2]]};
+            const Slic3r::Vec3d p0{trafo * its.vertices[face[0]].cast<double>()};
+            const Slic3r::Vec3d p1{trafo * its.vertices[face[1]].cast<double>()};
+            const Slic3r::Vec3d p2{trafo * its.vertices[face[2]].cast<double>()};
             const Slic3r::Vec3d cross{(p1 - p0).cross(p2 - p0)};
             const double area = 0.5 * cross.norm();
             if (area > faces.largest) {
