@@ -54,8 +54,21 @@ void build_tree(PointCloud &nodes, Builder &builder)
                 dmax = std::max(dmax, dst_euql);
             }, K, prev_dist_max);
 
-        std::sort(distances.begin(), distances.end(),
-                  [](auto &a, auto &b) { return a.dst_branching < b.dst_branching; });
+        // By the distance to branch at, and by the node id where two nodes are the
+        // same distance away. The order the candidates arrive in is the order the
+        // point cloud hands them over, so a sort that left ties where they fell
+        // would let the tree try two candidates the other way round from one build
+        // to the next. (M4.5c)
+        std::sort(
+            distances.begin(),
+            distances.end(),
+            [](const NodeDistance &a, const NodeDistance &b)
+            {
+                return a.dst_branching != b.dst_branching ?
+                    a.dst_branching < b.dst_branching :
+                    a.node_id < b.node_id;
+            }
+        );
 
         if (distances.empty()) {
             builder.report_unroutable(node);

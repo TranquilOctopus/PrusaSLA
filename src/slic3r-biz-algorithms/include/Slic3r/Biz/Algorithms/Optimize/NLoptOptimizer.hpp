@@ -11,6 +11,7 @@
 #pragma warning(pop)
 #endif
 
+#include <mutex>
 #include <utility>
 
 #include "Slic3r/Biz/Algorithms/Optimize/Optimizer.hpp"
@@ -18,6 +19,21 @@
 namespace Slic3r::Biz::Algorithms::Optimize {
 
 namespace detail {
+
+// NLopt draws from one process wide random generator: nlopt_srand() seeds the
+// single stream every running algorithm takes its numbers from. Two searches
+// that run at the same time therefore consume each other's numbers, and what a
+// search returns depends on which thread happened to reach nlopt_srand() first,
+// which is the scheduling and nothing else. This lock is held from the seeding
+// to the end of the optimization, so that every search starts from its own seed
+// and runs to the end before the next one starts. The searches themselves are
+// not what runs in parallel here: the ray casts of one beam are, inside a single
+// call.
+inline std::mutex &nlopt_rng_lock()
+{
+    static std::mutex mtx;
+    return mtx;
+}
 
 // Helper types for NLopt algorithm selection in template contexts
 template<nlopt_algorithm alg> struct NLoptAlg {};
@@ -118,6 +134,11 @@ class NLoptOpt {
     StopCriteria m_stopcr;
     StopCriteria m_loc_stopcr;
     OptDir m_dir = OptDir::MIN;
+
+    // The seed of the search. It is given to NLopt's generator when the search
+    // runs rather than when it is asked for, since the generator is the one of
+    // the whole process and another search may reseed it in between.
+    long m_seed = 0;
 
     static constexpr double ConstraintEps = 1e-6;
 
@@ -233,6 +254,13 @@ class NLoptOpt {
         }
 
         r.optimum = initvals;
+
+        // The same seed for every call, and no other search in between: the same
+        // search on the same input then returns the same result whatever the
+        // thread it runs on and whatever runs next to it.
+        std::lock_guard<std::mutex> lk{nlopt_rng_lock()};
+        nlopt_srand(static_cast<unsigned long>(m_seed));
+
         r.resultcode = nlopt_optimize(nl.ptr, r.optimum.data(), &r.score);
 
         return r;
@@ -299,7 +327,7 @@ public:
     const StopCriteria &get_loc_criteria() const noexcept { return m_loc_stopcr; }
 
     void set_dir(OptDir dir) noexcept { m_dir = dir; }
-    void seed(long s) { nlopt_srand(s); }
+    void seed(long s) { m_seed = s; }
 };
 
 template<class Alg> struct AlgFeatures_ {

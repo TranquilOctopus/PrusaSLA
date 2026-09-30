@@ -432,11 +432,16 @@ void create_branching_tree(SupportTreeBuilder &builder, const SupportableMesh &s
             // The leaf carries the radius of what sits at the junction: the back
             // of the pinhead, or the knot ball the point asked for. (M2.16b)
             leafs.emplace_back(h->junction_point().cast<float>(), h->junction_radius());
-            h->id = long(leafs.size() - 1);
             // Remember which support point a leaf belongs to, so the ground
             // connection can read the per point sizes of the support presets.
             leaf_pts.emplace_back(nondup_idx[i]);
-            builder.add_head(h->id, *h);
+            // The head is added under the id of the support point it was calculated
+            // for, which is the id the builder keys its heads by, and which is not
+            // the number of the leaf: a point that got no head of its own and a point
+            // that was dropped as the duplicate of a point next to it both move the
+            // leaves off the support points, so a head asked for by the number of a
+            // leaf would be the head of some other point. (M4.5c)
+            builder.add_head(unsigned(nondup_idx[i]), *h);
         }
 
     auto &its = *sm.emesh.get_triangle_mesh();
@@ -479,9 +484,20 @@ void create_branching_tree(SupportTreeBuilder &builder, const SupportableMesh &s
 
     build_pillars(builder, vbuilder, sm);
 
-    for (size_t id : vbuilder.unroutable_pinheads())
-        builder.head(id).invalidate();
+    // The leaves the tree could not route, sorted and deduplicated first, so that
+    // the heads are given up in one order whatever order the traversal found them
+    // in, and looked up by the support point each leaf was built for: that is the id
+    // the head of the leaf carries, and the number of the leaf is not the id of the
+    // support point behind it. (M4.5c)
+    std::vector<size_t> unroutable = vbuilder.unroutable_pinheads();
+    std::sort(unroutable.begin(), unroutable.end());
+    unroutable.erase(std::unique(unroutable.begin(), unroutable.end()), unroutable.end());
 
+    for (size_t leaf : unroutable)
+        if (leaf < leaf_pts.size()) {
+            if (Head *h = builder.head_of(unsigned(leaf_pts[leaf])))
+                h->invalidate();
+        }
 }
 
 }} // namespace Slic3r::sla

@@ -292,6 +292,13 @@ class SupportTreeBuilder {
     // For heads it is beneficial to use the same IDs as for the support points.
     std::vector<Head>       m_heads;
     std::vector<size_t>     m_head_indices;
+
+    // A slot of m_head_indices that no head was added under. The ids are the ids
+    // of the support points and need not be consecutive: a point that got no head
+    // of its own and a point that was dropped as the duplicate of a point next to
+    // it both leave a hole, and a lookup of such an id must not hand out the head
+    // of some other point. (M4.5c)
+    static constexpr size_t no_head = size_t(-1);
     std::vector<Pillar>     m_pillars;
     std::vector<Junction>   m_junctions;
     std::vector<Bridge>     m_bridges;
@@ -334,8 +341,9 @@ public:
         std::lock_guard<Mutex> lk(m_mutex);
         m_heads.emplace_back(std::forward<Args>(args)...);
         m_heads.back().id = id;
-        
-        if (id >= m_head_indices.size()) m_head_indices.resize(id + 1);
+
+        if (id >= m_head_indices.size())
+            m_head_indices.resize(id + 1, no_head);
         m_head_indices[id] = m_heads.size() - 1;
         
         m_meshcache_valid = false;
@@ -482,11 +490,36 @@ public:
     {
         std::lock_guard<Mutex> lk(m_mutex);
         assert(id < m_head_indices.size());
-        
+        assert(m_head_indices[id] != no_head);
+
         m_meshcache_valid = false;
         return m_heads[m_head_indices[id]];
     }
-    
+
+    // The head that was built for the support point with this id, or nullptr when
+    // that point got no head: either because no head fitted under it, or because it
+    // was dropped as the duplicate of a point next to it before the tree was built.
+    // (M4.5c)
+    Head *head_of(unsigned id)
+    {
+        std::lock_guard<Mutex> lk(m_mutex);
+        const size_t idx = id < m_head_indices.size() ? m_head_indices[id] : no_head;
+        return idx == no_head ? nullptr : &m_heads[idx];
+    }
+
+    const Head *head_of(unsigned id) const
+    {
+        std::lock_guard<Mutex> lk(m_mutex);
+        const size_t idx = id < m_head_indices.size() ? m_head_indices[id] : no_head;
+        return idx == no_head ? nullptr : &m_heads[idx];
+    }
+
+    // Whether the support point with this id got a head of its own.
+    bool has_head(unsigned id) const
+    {
+        return head_of(id) != nullptr;
+    }
+
     inline size_t pillarcount() const {
         std::lock_guard<Mutex> lk(m_mutex);
         return m_pillars.size();
