@@ -4,6 +4,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <algorithm>
+#include <optional>
+#include <string>
 #include <string_view>
 
 #include "sla_test_utils.hpp"
@@ -453,24 +455,25 @@ TEST_CASE("Support points for an object thinner than one layer", "[SLASupportPoi
     // the end of the vector, which a release build neither catches nor survives. Either finishing
     // the step or refusing the model is a pass; only a crash or some other error is not.
     SupportPointStepResult result;
-    const char *refusal = nullptr;
+    std::optional<std::string> refusal;
     try {
         result = run_support_point_step(
             Biz::Algorithms::TriangleMesh::make_cube(10., 10., 0.02), 10.);
     } catch (const Slic3r::RuntimeError& e) {
         // The engine's own refusal (SLAPrintSteps.cpp:706), which BackgroundProcess turns into an
         // error on the bed. Only that one is a handled outcome here - any other exception escapes.
+        // The message is copied out of the exception, which dies with the catch block.
         refusal = e.what();
     }
 
-    if (refusal == nullptr) {
+    if (!refusal) {
         // The step ran, so the reads under test were reached. The plate itself covers no grid
         // level at this elevation, so the number of points it ends up with is not what this test
         // is about.
         CHECK(result.step_done);
     } else {
-        CAPTURE(refusal);
-        CHECK(std::string_view{refusal}.find("can not be sliced") != std::string_view::npos);
+        CAPTURE(*refusal);
+        CHECK(refusal->find("can not be sliced") != std::string::npos);
     }
 }
 
