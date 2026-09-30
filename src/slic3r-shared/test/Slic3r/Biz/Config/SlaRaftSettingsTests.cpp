@@ -95,6 +95,23 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         CHECK(def->tooltip.find("build plate") != std::string::npos);
     }
 
+    // Check raft_edge_taper, the bevel on the top edge of the raft
+    {
+        const ConfigItemDef* def = find_def("raft_edge_taper");
+        REQUIRE(def != nullptr);
+        CHECK(def->category == ConfigItemDef::Category::Print_Pad);
+        CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
+        CHECK(def->label == "Raft edge taper");
+        CHECK(def->tooltip.find("pried off the build plate") != std::string::npos);
+        // It shapes the same wall as the raft slope, so it goes right after it.
+        const ConfigItemDef* slope = find_def("pad_wall_slope");
+        const ConfigItemDef* merge = find_def("pad_max_merge_distance");
+        REQUIRE(slope != nullptr);
+        REQUIRE(merge != nullptr);
+        CHECK(slope->order < def->order);
+        CHECK(def->order < merge->order);
+    }
+
     // Check pad_object_gap (now "Raft gap to object")
     {
         const ConfigItemDef* def = find_def("pad_object_gap");
@@ -193,6 +210,7 @@ TEST_CASE("The raft type decides which raft settings are shown", "[Config][SLA][
                                        "pad_wall_thickness",
                                        "pad_brim_size",
                                        "pad_wall_slope",
+                                       "raft_edge_taper",
                                        "pad_max_merge_distance",
                                        "pad_object_gap",
                                        "pad_around_object_everywhere",
@@ -211,6 +229,7 @@ TEST_CASE("The raft type decides which raft settings are shown", "[Config][SLA][
                                        "pad_wall_thickness",
                                        "pad_brim_size",
                                        "pad_wall_slope",
+                                       "raft_edge_taper",
                                        "pad_max_merge_distance"}) {
             INFO("setting " << key);
             CHECK(raft_type_uses_setting(RaftType::Full, key));
@@ -232,6 +251,7 @@ TEST_CASE("The raft type decides which raft settings are shown", "[Config][SLA][
                                        "pad_wall_thickness",
                                        "pad_brim_size",
                                        "pad_wall_slope",
+                                       "raft_edge_taper",
                                        "pad_max_merge_distance",
                                        "pad_object_gap",
                                        "pad_around_object_everywhere",
@@ -247,6 +267,7 @@ TEST_CASE("The raft type decides which raft settings are shown", "[Config][SLA][
     {
         for (const std::string& key : {"pad_wall_height",
                                        "pad_wall_thickness",
+                                       "raft_edge_taper",
                                        "pad_max_merge_distance",
                                        "pad_object_gap",
                                        "pad_around_object_everywhere",

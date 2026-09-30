@@ -155,13 +155,14 @@ static inline double get_merge_distance(const PadConfig &c)
 
 // Part of the pad configuration that is used for 3D geometry generation
 struct PadConfig3D {
-    double thickness, height, wing_height, slope;
+    double thickness, height, wing_height, slope, edge_taper;
 
     explicit PadConfig3D(const PadConfig &cfg2d)
         : thickness{cfg2d.wall_thickness_mm}
         , height{cfg2d.full_height()}
         , wing_height{cfg2d.wall_height_mm}
         , slope{cfg2d.wall_slope}
+        , edge_taper{cfg2d.edge_taper_mm}
     {}
 
     inline double bottom_offset() const
@@ -398,8 +399,33 @@ indexed_triangle_set create_outer_pad_geometry(const ExPolygons & skeleton,
 {
     indexed_triangle_set ret;
 
+    // The top edge of the pad may be bevelled: the rim is pulled in over the top of the wall, which
+    // leaves a thin lip a spatula can get under, so the pad can be pried off the build plate. The
+    // bevel runs at 45 degrees, as deep as it is wide. A bevel that would eat the whole wall is not
+    // a bevel, so then the pad keeps its sharp edge.
+    const double taper = cfg.edge_taper < cfg.height ? cfg.edge_taper : 0.;
+
     for (const ExPolygon &pad_part : skeleton) {
-        ExPolygon top_poly{pad_part};
+        // The rim at z = 0 and, with a bevel, the point where the bevel meets the sloped wall.
+        ExPolygon top_poly{pad_part}, bevel_poly{pad_part};
+        double      taper_z = 0;
+
+        if (taper > EPSILON) {
+            ExPolygon rim  = offset_contour_only(pad_part, -scaled(taper));
+            // The wall keeps the pad slope below the bevel, so it starts from the skeleton pulled
+            // in by whatever is left of the height.
+            ExPolygon wall = offset_contour_only(
+                pad_part, -scaled((cfg.height - taper) / std::tan(cfg.slope)));
+
+            // A bevel the offset cannot deliver would leave a hole in the pad, so it is dropped
+            // and the part gets the sharp edge.
+            if (!rim.empty() && !wall.empty()) {
+                top_poly   = std::move(rim);
+                bevel_poly = std::move(wall);
+                taper_z    = -taper;
+            }
+        }
+
         ExPolygon bottom_poly =
             offset_contour_only(pad_part, -scaled(cfg.bottom_offset()));
 
@@ -407,13 +433,19 @@ indexed_triangle_set create_outer_pad_geometry(const ExPolygons & skeleton,
         thr();
         
         double z_min = -cfg.height, z_max = 0;
-        its_merge(ret, walls(top_poly.contour, bottom_poly.contour, z_max, z_min));
+        if (taper_z < 0) {
+            its_merge(ret, walls(bevel_poly.contour, top_poly.contour, taper_z, z_max));
+            z_max = taper_z;
+        }
+        its_merge(ret, walls(bevel_poly.contour, bottom_poly.contour, z_max, z_min));
 
         if (cfg.wing_height > 0. && add_cavity(ret, top_poly, cfg, thr))
             z_max = -cfg.wing_height;
 
+        // The bevelled rim closes the top face at z = 0, so then the holes run the full height.
+        const double hole_z_max = taper_z < 0 ? 0. : z_max;
         for (auto &h : bottom_poly.holes)
-            its_merge(ret, straight_walls(h, z_max, z_min));
+            its_merge(ret, straight_walls(h, hole_z_max, z_min));
         
         its_merge(ret, triangulate_expolygon_3d(bottom_poly, z_min, NORMALS_DOWN));
         its_merge(ret, triangulate_expolygon_3d(top_poly, NORMALS_UP));

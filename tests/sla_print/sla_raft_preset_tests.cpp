@@ -17,7 +17,8 @@ TEST_CASE("RaftPreset: None disables pad", "[SLA][RaftPreset]")
         2.0,   // wall_thickness_mm
         1.6,   // expansion_mm
         90.0,  // slope_deg
-        1.0    // object_gap_mm
+        1.0,   // object_gap_mm
+        0.0    // edge_taper_mm
     );
 
     CHECK(vals.pad_enable == false);
@@ -38,7 +39,8 @@ TEST_CASE("RaftPreset: Full enables plate-wide pad", "[SLA][RaftPreset]")
         2.0,   // wall_thickness_mm
         1.6,   // expansion_mm
         90.0,  // slope_deg
-        1.0    // object_gap_mm
+        1.0,   // object_gap_mm
+        0.0    // edge_taper_mm
     );
 
     CHECK(vals.pad_enable == true);
@@ -58,7 +60,8 @@ TEST_CASE("RaftPreset: AroundObject sets pad_around_object flag", "[SLA][RaftPre
         2.0,   // wall_thickness_mm
         1.6,   // expansion_mm
         90.0,  // slope_deg
-        1.0    // object_gap_mm
+        1.0,   // object_gap_mm
+        0.0    // edge_taper_mm
     );
 
     CHECK(vals.pad_enable == true);
@@ -78,7 +81,8 @@ TEST_CASE("RaftPreset: Skate differs from AroundObject in brim and slope", "[SLA
         2.0,   // wall_thickness_mm
         1.6,   // expansion_mm
         90.0,  // slope_deg
-        1.0    // object_gap_mm
+        1.0,   // object_gap_mm
+        0.0    // edge_taper_mm
     );
 
     RaftPadValues vals_skate = raft_preset_to_pad_values(
@@ -87,7 +91,8 @@ TEST_CASE("RaftPreset: Skate differs from AroundObject in brim and slope", "[SLA
         2.0,   // wall_thickness_mm
         1.6,   // expansion_mm
         90.0,  // slope_deg
-        1.0    // object_gap_mm
+        1.0,   // object_gap_mm
+        0.0    // edge_taper_mm
     );
 
     CHECK(vals_skate.pad_enable == true);
@@ -113,7 +118,8 @@ TEST_CASE("RaftPreset: Shared knobs pass through unchanged for Full", "[SLA][Raf
         2.5,   // wall_thickness_mm
         2.0,   // expansion_mm
         80.0,  // slope_deg
-        1.5    // object_gap_mm
+        1.5,   // object_gap_mm
+        0.0    // edge_taper_mm
     );
 
     CHECK(vals.pad_wall_height_mm == Approx(3.5));
@@ -131,7 +137,8 @@ TEST_CASE("RaftPreset: Shared knobs pass through unchanged for AroundObject", "[
         2.5,   // wall_thickness_mm
         2.0,   // expansion_mm
         80.0,  // slope_deg
-        1.5    // object_gap_mm
+        1.5,   // object_gap_mm
+        0.0    // edge_taper_mm
     );
 
     CHECK(vals.pad_wall_height_mm == Approx(3.5));
@@ -149,7 +156,8 @@ TEST_CASE("RaftPreset: Shared knobs pass through for Skate (except brim/slope)",
         2.5,   // wall_thickness_mm
         2.0,   // expansion_mm
         80.0,  // slope_deg
-        1.5    // object_gap_mm
+        1.5,   // object_gap_mm
+        0.0    // edge_taper_mm
     );
 
     CHECK(vals.pad_wall_height_mm == Approx(3.5));
@@ -159,4 +167,27 @@ TEST_CASE("RaftPreset: Shared knobs pass through for Skate (except brim/slope)",
     // Slope is fixed to 70
     CHECK(vals.pad_wall_slope_deg == Approx(70.0));
     CHECK(vals.pad_object_gap_mm == Approx(1.5));
+}
+
+TEST_CASE("RaftPreset: the edge taper is a shared knob, no type replaces it", "[SLA][RaftPreset]")
+{
+    // The taper is a bevel on the top edge of the raft, so every printed raft reads it. How deep
+    // it should be for a skate is a tuning question, so no type decides it on its own.
+    for (const sla::RaftType type : {sla::RaftType::None,
+                                     sla::RaftType::Full,
+                                     sla::RaftType::AroundObject,
+                                     sla::RaftType::Skate}) {
+        INFO("raft type " << static_cast<int>(type));
+        RaftPadValues vals = raft_preset_to_pad_values(
+            type,
+            0.0,   // wall_height_mm
+            2.0,   // wall_thickness_mm
+            1.6,   // expansion_mm
+            90.0,  // slope_deg
+            1.0,   // object_gap_mm
+            1.2    // edge_taper_mm
+        );
+
+        CHECK(vals.raft_edge_taper_mm == Approx(1.2));
+    }
 }

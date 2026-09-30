@@ -643,7 +643,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Max merge distance");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 5; // below raft_type, see raft_type_visible_settings
+    def->order = 6; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
      def->tooltip = L("Some objects can get along with a few smaller rafts "
                       "instead of a single big one. This parameter defines "
@@ -693,7 +693,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft around object everywhere");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 7; // below raft_type, see raft_type_visible_settings
+    def->order = 8; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::checkbox;
     def->tooltip = L("Make the raft follow the object everywhere, even where the supports do not reach.");
     def->init_fn = init_with(false);
@@ -704,7 +704,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft gap to object");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 6; // below raft_type, see raft_type_visible_settings
+    def->order = 7; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip  = L("The gap left between the object bottom and the raft that carries it.");
     def->units = {L("mm")};
@@ -718,7 +718,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft object connector stride");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 8; // below raft_type, see raft_type_visible_settings
+    def->order = 9; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Distance between two connector sticks which tie the object to the raft.");
     def->units = {L("mm")};
@@ -731,7 +731,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft object connector width");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 9; // below raft_type, see raft_type_visible_settings
+    def->order = 10; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip  = L("Width of the connector sticks which tie the object to the raft.");
     def->units = {L("mm")};
@@ -744,7 +744,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft object connector penetration");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 10; // below raft_type, see raft_type_visible_settings
+    def->order = 11; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip  = L(
         "How far the tiny connectors that tie the object to the raft reach into the object body.");
@@ -769,6 +769,23 @@ void sla_config_init_fn(ConfigDefinitions& defs)
          {int(sla::RaftType::AroundObject), "around_object", L("Around object")},
          {int(sla::RaftType::Skate), "skate", L("Skate")}}
     );
+
+    def = defs.add("raft_edge_taper", typeid(double));
+    def->location = Print;
+    def->overrides_in = Locations{ Object };
+    def->label = L("Raft edge taper");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
+    def->category = ConfigItemDef::Category::Print_Pad;
+    // It shapes the same wall as the raft slope above it, so it goes right after it.
+    def->order = 5;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("How far the top edge of the raft is bevelled in, which leaves a thin lip to get "
+                     "a spatula under so the raft can be pried off the build plate. The bevel is as "
+                     "deep as it is wide. Zero keeps the sharp edge.");
+    def->units = {L("mm")};
+    def->min = 0;
+    def->max = 30;
+    def->init_fn = init_with(0.);
 
     def = defs.add("hollowing_enable", typeid(bool));
     def->location = Print;

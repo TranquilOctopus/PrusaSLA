@@ -92,7 +92,10 @@ std::optional<Domain::SLA::RaftPadValues> raft_values(const SLAPrintObjectConfig
         c.get<double>("pad_wall_thickness"),
         c.get<double>("pad_brim_size"),
         c.get<double>("pad_wall_slope"),
-        c.get<double>("pad_object_gap")
+        c.get<double>("pad_object_gap"),
+        // A config saved before the edge taper existed has none, which is the sharp edge it
+        // always had.
+        c.values().count("raft_edge_taper") == 0 ? 0. : c.get<double>("raft_edge_taper")
     );
 }
 } // namespace
@@ -219,6 +222,7 @@ sla::PadConfig make_pad_cfg(const SLAPrintObjectConfigView& c)
         pcfg.max_merge_dist_mm = c.get<double>("pad_max_merge_distance");
         pcfg.wall_height_mm = vals->pad_wall_height_mm;
         pcfg.brim_size_mm = vals->pad_brim_size_mm;
+        pcfg.edge_taper_mm = vals->raft_edge_taper_mm;
     } else {
         // Legacy behavior
         pcfg.wall_thickness_mm = c.get<double>("pad_wall_thickness");
@@ -227,6 +231,8 @@ sla::PadConfig make_pad_cfg(const SLAPrintObjectConfigView& c)
         pcfg.max_merge_dist_mm = c.get<double>("pad_max_merge_distance");
         pcfg.wall_height_mm = c.get<double>("pad_wall_height");
         pcfg.brim_size_mm = c.get<double>("pad_brim_size");
+        pcfg.edge_taper_mm =
+            c.values().count("raft_edge_taper") == 0 ? 0. : c.get<double>("raft_edge_taper");
     }
 
     // set builtin pad implicitly ON
@@ -696,6 +702,7 @@ const std::map<std::string, std::vector<Step>> invalidated_by{
     {"pad_wall_height", steps({propagate(slaposPad)})},
     {"pad_wall_slope", steps({propagate(slaposPad)})},
     {"pad_wall_thickness", steps({propagate(slaposObjectSlice)})},
+    {"raft_edge_taper", steps({propagate(slaposPad)})},
     {"raft_type", steps({propagate(slaposObjectSlice), propagate(slaposPad)})},
     {"printer_model", steps({})},
     {"printer_notes", steps({})},
