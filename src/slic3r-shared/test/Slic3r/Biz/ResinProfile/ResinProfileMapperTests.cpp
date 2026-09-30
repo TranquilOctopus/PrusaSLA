@@ -648,6 +648,19 @@ TEST_CASE(
         );
 
         CHECK(result.material_values.at("bottle_cost") == "12.5");
+        // The bottle the price was made for is kept as a resin setting of its own, so that the
+        // price per litre can be written back out of the two of them (M3.15b).
+        CHECK(result.material_values.at("bottle_volume") == "500");
+        const MappedField& volume = row_of(result, "bottleVolume");
+        CHECK(volume.target_key == "bottle_volume");
+        CHECK(volume.value == "500");
+        CHECK(volume.status == MappingStatus::Exact);
+        CHECK(volume.target_unit == "ml");
+        // A profile that names no bottle of its own states none, rather than the assumed 1 litre
+        // bottle being written as if the file had said so.
+        const MappingResult without =
+            map_resin_profile(profile_of({{"resinPrice", "25"}, {"resinUnit", "L"}}), TargetPrinterClass::Tilt);
+        CHECK(without.material_values.count("bottle_volume") == 0);
     }
 
     SECTION("a price that is not per litre is not written")
@@ -867,6 +880,7 @@ TEST_CASE(
         {"resinDensity", "1.12"},
         {"resinPrice", "25"},
         {"resinUnit", "L"},
+        {"bottleVolume", "500"},
         {"lightOffTime", "3"},
         {"resetTimeBeforeLift", "1"},
         {"resetTimeAfterLift", "1"},

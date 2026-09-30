@@ -21,6 +21,24 @@ namespace {
 // in the other direction.
 constexpr double MM_PER_MIN_IN_MM_PER_S = 60.;
 
+// The two halves of a price in a .cfg: a number and the unit it is per. Chitubox states a price per
+// litre, and the price is only a price per litre together with the unit, so both keys are written
+// or neither is. The spelling of the unit is not confirmed by a real file yet (M3.1/M3.2); it is
+// one of the ways the import reads as a litre, so a file written here comes back in as the same
+// price (see is_per_litre() in ResinProfileMapper.cpp).
+constexpr const char* PRICE_KEY        = "resinPrice";
+constexpr const char* PRICE_UNIT_KEY   = "resinUnit";
+constexpr const char* PRICE_UNIT_LITRE = "L";
+
+// The resin preset keys the price is made out of: the cost of one bottle, and the size of that
+// bottle. Both are keys of sla_material_settings, and the import writes both of them (M3.15b).
+constexpr const char* BOTTLE_VOLUME_KEY = "bottle_volume";
+constexpr double      ML_PER_LITRE      = 1000.;
+
+// A bottle size the resin preset does not state: the usual 1 litre bottle, the same assumption the
+// import makes when a file names no size, so that a price and the cost of it agree both ways.
+constexpr double ASSUMED_BOTTLE_VOLUME_ML = 1000.;
+
 /// A number the way the config writes it into an .ini file and the way a .cfg wants it: six
 /// significant digits, no trailing zeros. The same form the mapper writes, so that a value that
 /// makes the round trip is the same text both ways.
@@ -49,6 +67,7 @@ enum class ReverseTransform
     CopyInt, ///< A count or a level, written as a whole number.
     MmPerSecToMmPerMin, ///< A motion speed, converted back to mm/min.
     FirstOfPair, ///< A [below area fill, above area fill] pair; Chitubox has one value for both.
+    PricePerLitre, ///< The cost of one bottle, turned into a price per litre with the bottle size.
 };
 
 /// What one printer class does with one resin preset key.
@@ -73,13 +92,31 @@ struct ReverseRule
 struct Applied
 {
     std::optional<std::string> value;
+    /// The key of the unit, when the format states the unit as a key of its own.
+    std::string unit_key;
+    std::string unit_value;
     std::string note;
 };
 
-Applied apply(ReverseTransform transform, const Domain::ConfigItem* item, const std::string& rule_note)
+/// Read one number out of a resin preset, or nothing when the preset does not carry a number here.
+std::optional<double> number_of(const Domain::ConfigItems& material, const std::string& key)
+{
+    const Domain::ConfigItem* item = material.find(key);
+    if (item == nullptr || !item->holds_alternative<double>())
+        return std::nullopt;
+    return item->get<double>();
+}
+
+Applied apply(
+    ReverseTransform          transform,
+    const Domain::ConfigItems &material,
+    const std::string         &material_key,
+    const std::string         &rule_note
+)
 {
     Applied applied;
     applied.note = rule_note;
+    const Domain::ConfigItem* item = material.find(material_key);
 
     switch (transform) {
     case ReverseTransform::None:
@@ -147,6 +184,48 @@ Applied apply(ReverseTransform transform, const Domain::ConfigItem* item, const 
         }
         break;
     }
+
+    case ReverseTransform::PricePerLitre: {
+        const std::optional<double> cost = number_of(material, material_key);
+        if (!cost) {
+            applied.note += " Nothing written: the resin preset does not carry a number here.";
+            return applied;
+        }
+        if (*cost <= 0.) {
+            // The same rule as every other number: zero is not a price but the absence of one.
+            applied.note += fmt::format(
+                " Nothing written: the value is {:g}, which means the setting is not used.",
+                *cost
+            );
+            return applied;
+        }
+
+        // The bottle the cost is for is a resin setting of its own since M3.15b, which is what makes
+        // this possible. A bottle size of zero is not a bottle, so the assumed one is used and the
+        // report says so rather than dividing by it.
+        const std::optional<double> bottle_ml = number_of(material, BOTTLE_VOLUME_KEY);
+        double                       volume    = ASSUMED_BOTTLE_VOLUME_ML;
+        if (bottle_ml && *bottle_ml > 0.) {
+            volume = *bottle_ml;
+        } else {
+            applied.note += fmt::format(
+                " The bottle volume is {:g}, so the cost is priced per the usual {:g} ml bottle instead.",
+                bottle_ml.value_or(0.),
+                volume
+            );
+        }
+
+        applied.value      = format_number(*cost * ML_PER_LITRE / volume);
+        applied.unit_key   = PRICE_UNIT_KEY;
+        applied.unit_value = PRICE_UNIT_LITRE;
+        applied.note += fmt::format(
+            " Computed from {:g} for a {:g} ml bottle. The unit is written as \"{}\", and the spelling that format uses is not verified yet (M3.1/M3.2).",
+            *cost,
+            volume,
+            PRICE_UNIT_LITRE
+        );
+        break;
+    }
     }
 
     return applied;
@@ -192,12 +271,18 @@ const std::vector<ReverseRule>& reverse_table()
          .generic = {ReverseTransform::Copy, "resinDensity", MappingStatus::Exact},
          .note    = "Both in g/ml, no conversion."},
 
-        // The import made a bottle cost out of a price per litre and the size of the bottle, and
-        // the resin preset keeps neither, so there is no price per litre to write back.
+        // The price is the one setting the import computes and the export has to take apart again.
+        // The bottle it was computed with is a resin setting of its own, so a price per litre can be
+        // written out of the two of them, with the unit that makes it a price per litre.
         {.material_key = "bottle_cost",
-         .tilt         = {ReverseTransform::None, "", MappingStatus::NotApplicable},
-         .generic      = {ReverseTransform::None, "", MappingStatus::NotApplicable},
-         .note         = "A price per bottle is not a price per litre, and the bottle it was made for is not a resin setting, so the price and its unit are not written."},
+         .tilt         = {ReverseTransform::PricePerLitre, PRICE_KEY, MappingStatus::Converted},
+         .generic      = {ReverseTransform::PricePerLitre, PRICE_KEY, MappingStatus::Converted},
+         .note         = "A price per litre and the unit it is per, from the cost of one bottle and the size of that bottle. The currency is not converted."},
+
+        {.material_key = "bottle_volume",
+         .tilt         = {ReverseTransform::Copy, "bottleVolume", MappingStatus::Exact},
+         .generic      = {ReverseTransform::Copy, "bottleVolume", MappingStatus::Exact},
+         .note         = "The bottle resinPrice is a price per litre of, both in ml. Written so that a file that comes back is priced for the same bottle."},
 
         {.material_key = "delay_before_exposure",
          .tilt    = {ReverseTransform::FirstOfPair, "lightOffTime", MappingStatus::Approximated},
@@ -307,14 +392,15 @@ ChituboxCfgExport export_chitubox_cfg_report(
 
     for (const ReverseRule& rule : reverse_table()) {
         const ReverseTarget& target = printer_class == TargetPrinterClass::Tilt ? rule.tilt : rule.generic;
-        const Domain::ConfigItem* item = material.find(rule.material_key);
-        const Applied applied          = apply(target.transform, item, rule.note);
+        const Applied applied = apply(target.transform, material, rule.material_key, rule.note);
 
         if (!applied.value || target.key.empty()) {
             result.keys.push_back(
                 {.material_key  = rule.material_key,
                  .chitubox_key  = {},
                  .value         = {},
+                 .unit_key      = {},
+                 .unit_value    = {},
                  .status        = target.status,
                  .note          = applied.note}
             );
@@ -323,10 +409,16 @@ ChituboxCfgExport export_chitubox_cfg_report(
         }
 
         text += fmt::format("{}: {}\n", target.key, *applied.value);
+        // A price is a number and the unit it is per, and that format states them as two keys, so
+        // the unit goes in next to the value or the price is not a price at all on the way back in.
+        if (!applied.unit_key.empty())
+            text += fmt::format("{}: {}\n", applied.unit_key, applied.unit_value);
         result.keys.push_back(
             {.material_key  = rule.material_key,
              .chitubox_key  = target.key,
              .value         = *applied.value,
+             .unit_key      = applied.unit_key,
+             .unit_value    = applied.unit_value,
              .status        = target.status,
              .note          = applied.note}
         );

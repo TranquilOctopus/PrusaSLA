@@ -494,9 +494,32 @@ Unit and meaning questions marked "verify" get settled in M3.1 by comparing a sa
   - [x] **M3.8b** Read a sliced archive lazily, so a job of many layers can be imported: a reader declares that it opens a container and extracts only the entries it needs, and the 8 MB ceiling applies to what is read into memory instead of to the file. · S · needs M3.8
     Result: `IResinProfileReader` gained `reads_container_lazily()` and `sniff_path()`, both defaulting to false, and `ResinProfileReaderRegistry::read_file()` asks those readers first, on the path alone, and only then applies `MAX_FILE_SIZE` to a plain text file. `SlicedArchiveResinReader` claims a `.sl1`/`.sl1s` by extension plus a zip that opens (opening one reads the central directory alone, so it costs the same on a 300 MB file), extracts only `config.ini` and `prusaslicer.ini` and never a layer image, and caps what it reads against what the central directory declares: `MAX_INI_ENTRY_SIZE` (1 MB) per ini entry, checked by `read_zip_entry()` before a buffer is allocated, and `MAX_ENTRIES_SCANNED` (16384) entries walked through. `.cfg` keeps the 8 MB ceiling. 4 tests in `SlicedArchiveResinReaderTests.cpp` (10 -> 14 cases in that file): a 20 MB archive of a stored padding entry plus a `config.ini` imports through the registry, an ini entry one byte over the cap is refused with the entry name and both sizes in the error, a zip written byte by byte whose `config.ini` claims 3.75 GB is refused instead of allocated, and an archive over the entry cap is refused by name. The user guide's 8 MB paragraph for archives was corrected.
     Left: miniz reads the whole central directory into memory when a zip is opened, so the number of entries an archive may declare is bounded by what that costs before the reader's own cap applies; `bottom_layer_count` is still usually absent because the SL1 writers do not record it (M3.8).
-- [ ] **M3.8d** Opening a zip through miniz reads the whole central directory into memory, so how many entries an archive may declare is bounded by what that costs before the reader's own `MAX_ENTRIES_SCANNED` cap applies: cap what the central directory may cost (or count the entries from the end-of-central-directory record before parsing it) and refuse an archive over the cap. · M · needs M3.8b
   - [x] **M3.8c** The writer side of the Left note above: a `.sl1`/`.sl1s` this fork exports records the bottom layer count the print used, in `config.ini` and in `prusaslicer.ini`, and the resin reader maps it back to `bottom_layer_count`. · S · needs M3.8
     Result: the SL1 container has no key for the count (Prusa's own writer records none, and the format has one exposure for the first layer and one for the rest), and `numFade` is the transition count, not this, so the writer states it under keys of its own: `fill_iniconf()` writes `numBottom` next to `numFade`/`numSlow`/`numFast` in `config.ini`, and `store_sl1()` appends `bottom_layer_count` to `prusaslicer.ini` through a new `with_ini_key()`, because the legacy serialization behind that file has no such key (the line is only added when the text does not state it already, so every existing key and value of both files is untouched). `SlicedArchiveResinReader` reads `bottom_layer_count` first and `numBottom` second, so a file with an embedded profile and a file without one both come back with the same count. Tests: `Sl1ImportTests.cpp` slices a 20 mm cube with `bottom_layer_count` 6, exports it, reads it back with `SlicedArchiveResinReader` and checks the count, both spellings, that `numFade` still reads as the faded layer count and that the keys the printer reads are unchanged; `SlicedArchiveResinReaderTests.cpp` gets a hand-written `config.ini` whose `numBottom` is read with no embedded profile. The keys are documented in the new `doc/sla-fork/formats/sl1.md` (the format notes had no `.sl1` one), which records the entry list and the whole `config.ini` key set as unverified on hardware: no file sliced by Prusa's own slicer has been compared and no printer has printed one of these from this fork. The user guide's sliced-archive section says a file of ours no longer loses the count. Not built when it was written.
+- [x] **M3.8d** Opening a zip through miniz reads the whole central directory into memory, so how many entries an archive may declare is bounded by what that costs before the reader's own `MAX_ENTRIES_SCANNED` cap applies: cap what the central directory may cost (or count the entries from the end-of-central-directory record before parsing it)   and refuse an archive over the cap. · M · needs M3.8b
+  Result: the counts are taken from the end-of-central-directory record before the open, which is
+  the number miniz sizes its directory and its index from. `ArchiveIni.{hpp,cpp}` gained
+  `ZipLimits` (max entries, max directory bytes), `ZipDirectoryInfo`, the pure
+  `read_zip_directory_info(tail, file_size)` and `is_zip_file(fname)`, and `ZipReader` takes limits
+  and carries the reason in `error()`; with no limits (the default, so `SL1Import` is untouched) it
+  does not even read the file. The record is looked for from the end of the last 64 kB + 22 bytes
+  backwards and only taken when its comment length reaches the end of the file, so a `PK\x05\x06`
+  inside a comment is not mistaken for it, and a zip64 record is followed through its locator when
+  the 16 bit count or the 32 bit sizes are saturated - the only way an archive can declare more than
+  miniz reads. `SlicedArchiveResinReader` passes `MAX_ENTRIES_SCANNED` and the new
+  `MAX_CENTRAL_DIRECTORY_SIZE` (4 MB, which 16384 entries of a job stay well under), so an archive
+  over either is refused with the file, both numbers and the cap in the error and is never opened;
+  the post-open entry count stays as a second line of defence. `sniff_path()` now asks
+  `is_zip_file()` instead of opening the archive, which is cheaper and keeps the refusal with its
+  numbers on the path the user is really on: the registry still dispatches the file to this reader,
+  so the import says what was wrong with the archive rather than that nothing recognised it. Tests
+  in `SlicedArchiveResinReaderTests.cpp` (2 cases, 6 sections): the record of a plain zip, a comment
+  that carries a signature of its own, a zip64 record, a file that is not a zip; and the refusals -
+  500000 entries in an archive of one, a 3 GB central directory, the same promise in a zip64 record,
+  all three through `read()` (and the first through the registry as well, with `sniff_path()` still
+  claiming the file), against an archive with a comment inside the caps that imports as before. The
+  user guide's archive paragraph and its known limits carry the numbers. NOT BUILT when it was
+  written; a human builds and runs the suites.
 - [x] **M3.9** CLI `--import-resin-profile` with `--dry-run` and a JSON `--report` option. · S · needs M3.7
   Done when: running it on the fixtures produces a stable JSON report, checked by a test.
   Result: `--import-resin-profile <FILE-OR-FOLDER>` is parsed in `ReadCLI.cpp` and run in `ProcessActions.cpp` through the existing `ResinProfileImportInteractor`, with `--dry-run` and `--report <FILE>`; a folder imports every file, anything else imports that one file, the target is the selected printer (`--printer-profile` picks it), one line per file goes to stdout and the exit code is 0 only when every file imported. The report is `Biz::ResinProfile::resin_import_report_json()` (`Slic3r/Biz/ResinProfile/ResinImportReport.{hpp,cpp}`): compact JSON, fixed key order, mapping rows sorted by key, file name only, no timestamp. 5 tests in `ResinImportReportTests.cpp` pin the document of a two-file dry run, the sorting, the empty batch and a file no reader recognizes; the import fixture moved to `ResinProfileImportTestFixture.hpp` so both test files share it. Not built when it was written; build 32 (2026-09-30) builds it and both suites are green.
@@ -535,8 +558,48 @@ Unit and meaning questions marked "verify" get settled in M3.1 by comparing a sa
 - [x] **M3.15** *(optional)* Export back to Chitubox `.cfg` for people going the other way, using the same mapping in reverse. · M · needs M3.7
   Result: the reverse of the M3.5/M3.6 table is `Biz/ResinProfile/ChituboxCfgExport.{hpp,cpp}`: `export_chitubox_cfg(material, printer class, name)` writes the keys `ChituboxCfgReader` reads, one "key: value" per line under a comment header, and `export_chitubox_cfg_report()` returns the same text plus a report with a row per key of the table - what was written, and for a setting Chitubox has no key for (bottle_cost, material_vendor, use_tilt, the lift keys on a tilt printer) a row that says why and is listed in `skipped`. Units go back the other way (mm/s -> mm/min for the lift, retract and drop speeds), a [below, above] area fill pair is written as the one value Chitubox has (the one below the threshold) with the other named in the note, a value of zero is not written because zero means the setting is unused, and `export_printer_class()` decides the table from the printer model and the preset's use_tilt, the same way the import does, so a preset that goes out and comes back is mapped the same way both times. `ChituboxCfgExportTests.cpp` (registered in `CMakeLists.txt`) has 9 cases: the keys of a generic MSLA preset, the speeds converted back, the tilt table (no lift keys, the fade as transition layers, the wait before a lift as a delay after the exposure), the settings left out and reported, zero, the area fill pair, a preset name that cannot break the line it is on, the printer class, and the round trip: a hand-written fixture .cfg -> import (dry run mapping, and the mapper directly for the tilt class) -> export -> the reader reads it back and every mapped key comes back with the value the file gave it. On the CLI it is `--export-resin-profile <preset-name> --output <file.cfg>` next to M3.9's `--import-resin-profile` (`Init.hpp`, `ReadCLI.cpp`, `ProcessActions.cpp`): the preset is looked up by name or id among the resins of the selected printer, and the settings the file has no key for are named in the console. NOT BUILT when it was written.
   Left: the file is a resin profile, not a print profile: a real .cfg also carries the machine's G-code, its model and its build volume, and none of that is a resin setting, so the file is meant to be read as a resin rather than opened as a print; the price of a bottle cannot go back at all, since a .cfg states a price per litre and the bottle it was made for is not a resin setting; there is no UI button, which M3.15 leaves out on purpose.
-- [ ] **M3.15b** The `.cfg` export leaves `bottle_cost` in `skipped`, so a price cannot go back at all: keep the bottle volume the import reads (`bottleVolume` and `bottle_volume` are dropped today) and write `resinPrice` with `resinUnit` per litre from `bottle_cost` and that volume, with the row in the export report. · S · needs M3.15
-- [ ] **M3.15c** The `.cfg` export is reachable from the CLI only, so the app has no button for it: add an "Export resin profile..." button next to M3.10b's import button in `MaterialSelectionDialog`, shown for SLA, that writes the selected resin through `export_chitubox_cfg`. · S · needs M3.15, M3.10b
+- [x] **M3.15b** The `.cfg` export leaves `bottle_cost` in `skipped`, so a price cannot go back at all: keep the bottle volume the import reads (`bottleVolume` and `bottle_volume` are dropped today) and write `resinPrice` with `resinUnit` per litre from `bottle_cost` and that volume, with the row in the export report. · S · needs M3.15
+  Result: the import keeps the bottle. The `bottleVolume`/`bottle_volume` row writes `bottle_volume`
+  (ml, Exact, both printer classes) instead of dropping it, so a profile that came from a file, and a
+  datasheet (which states the bottle), carry the size of the bottle the price was made for. The export
+  takes the two apart again: the new `ReverseTransform::PricePerLitre` turns `bottle_cost` and
+  `bottle_volume` into `resinPrice` with `resinUnit: L` (25 for a 500 ml bottle is 50 per litre), the
+  `bottle_volume` row writes `bottleVolume`, and `ExportedResinKey` gained `unit_key`/`unit_value`,
+  because a price and the unit it is per are two keys of that format. The unit is one of the
+  spellings `is_per_litre()` reads, so a file written here comes back in as the same price, but the
+  spelling is not confirmed against a real file (M3.1/M3.2) and the note of the row says so. A cost of
+  zero is not written (zero is the absence of a price), a bottle volume of zero or of none falls back
+  to the 1 litre bottle the import assumes and the note names it, and the currency is not converted.
+  Tests: a new case in `ChituboxCfgExportTests.cpp` for those four cases and for a file of the shape
+  the export writes (`resinPrice`/`resinUnit`/`bottleVolume`) through the interactor and back out
+  again, the price keys in the first case of that file, the unit invariant in "a setting with no
+  Chitubox key is left out and named", the kept volume in `ResinProfileMapperTests.cpp` and in the
+  datasheet test's saved preset; the user guide's export section and its `bottleVolume` row were
+  corrected. NOT BUILT when it was written; a human builds and runs the suites.
+- [x] **M3.15c** The `.cfg` export is reachable from the CLI only, so the app has no button for it: add an "Export resin profile..." button next to M3.10b's import button in `MaterialSelectionDialog`, shown for SLA, that writes the selected resin   through `export_chitubox_cfg`. · S · needs M3.15, M3.10b
+  Result: the button is the third full-width one in `MaterialSelectionDialog`, between M3.10b's import
+  button and M3.11's datasheet one, `_u8L("Export resin profile")` plus an ellipsis outside the
+  translated string, shown and hidden with the other two in `update_type_filter_visibility()` (so SLA
+  only). It asks the platform for a path through `IDialogManager::show_file_dialog` with
+  `FileDialogType::Save` and the new `Wildcards::TypeFlag::ChituboxCfg` (*Chitubox profile (\*.cfg)*,
+  which is why `AllFlags` moved to 1 << 15), offering the name of the selected resin as the name of
+  the file through the new `suggested_cfg_file_name()`. The writing itself is Biz, not the dialog:
+  `ResinProfileExportInteractor` (new `Biz/ResinProfile/ResinProfileExportInteractor.{hpp,cpp}`,
+  registered in `CMakeLists.txt`) resolves the resin out of the presets of the selected printer (by
+  name, by id, or the one in the slot when the caller has no row to hand over), refuses a printer
+  that is not an SLA one or a name it does not have, decides the table with `export_printer_class()`
+  and either returns the text plus its report (`export_preset`, which is what lets the caller report
+  before the file exists) or writes it (`export_preset_to_file`, truncating, saying which path could
+  not be opened). A failure is an error dialog; a success is a `PopNotification` naming how many keys
+  were written and which settings the format has no key for, the same promise the CLI makes on its
+  console. Tests: the new `ResinProfileExportInteractorTests.cpp` (registered in `CMakeLists.txt`) has
+  5 cases - the file name a preset name becomes, the resin of the slot under an empty name (compared
+  against what the container holds, so the test does not depend on which resin that is), a preset
+  found by name (with the price per litre of that system resin in the file) and by id, a name the
+  printer does not have, the file that is written read back by `ChituboxCfgReader`, and a path that
+  cannot be opened. The user guide's three-ways-in section, its export section and its known limits
+  were corrected; the screenshot placeholders are still pending. NOT BUILT when it was written; a
+  human builds and runs the suites.
 
 ## M4: Engine quality (measure first; every PR includes before/after metrics)
 

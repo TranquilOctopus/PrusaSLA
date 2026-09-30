@@ -11,6 +11,10 @@
 #include "Slic3r/App/MaterialSettingsDialog.hpp"
 #include "Slic3r/App/AppConfigInteractor.hpp"
 #include "Slic3r/App/PrinterSearchFunction.hpp"
+#include "Slic3r/App/PopNotification/PopNotificationCenter.hpp"
+#include "Slic3r/App/PopNotification/PopNotificationData.hpp"
+#include "Slic3r/App/PopNotification/PopNotificationLayout.hpp"
+#include "Slic3r/App/PopNotification/PopNotificationObservableList.hpp"
 #include "Slic3r/App/ResinImportDialog.hpp"
 #include "Slic3r/App/ResinDatasheetDialog.hpp"
 #include "Slic3r/App/IsSlaActive.hpp"
@@ -20,9 +24,15 @@
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/Biz/Preset/PresetInteractor.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
+#include "Slic3r/Biz/ResinProfile/ResinProfileExportInteractor.hpp"
+
+#include <fmt/format.h>
 
 #include <algorithm>
 #include <boost/locale.hpp>
+#include <chrono>
+#include <string>
+#include <vector>
 
 using namespace Slic3r::App::Yoga;
 using namespace Slic3r::Biz;
@@ -55,6 +65,9 @@ void MaterialSelectionDialog::update_type_filter_visibility()
     // use where the selected printer takes a resin.
     m_import_resin_profile_button->set_visible(sla_active);
     m_new_datasheet_resin_button->set_visible(sla_active);
+    // And so is the way back out: a .cfg is written out of a resin preset, which only an SLA
+    // printer has.
+    m_export_resin_profile_button->set_visible(sla_active);
 
     // Show/hide the appropriate button set (excluding shared "All")
     for (auto* btn : m_fff_type_filter_buttons) {
@@ -321,6 +334,15 @@ m_material_filter->set_filter_fn(
     m_import_resin_profile_button->set_visible(false);
     m_import_resin_profile_button->callbacks().action = [this]() { pick_resin_profile(); };
 
+    // The other way out of a resin profile: the selected resin as a Chitubox .cfg, which is what
+    // M3.15 wrote and only the command line could reach. Next to the import button, because it is
+    // the same round trip seen from the other side.
+    m_export_resin_profile_button =
+        content()->emplace_back<LayoutButton>(_u8L("Export resin profile") + "...");
+    m_export_resin_profile_button->set_width_percent(100.f);
+    m_export_resin_profile_button->set_visible(false);
+    m_export_resin_profile_button->callbacks().action = [this]() { export_resin_profile(); };
+
     // And the way in for a resin whose profile nobody has: the datasheet form of M3.11, which types
     // the few values a datasheet states and then goes through the same review and save. No ellipsis
     // here: it opens the form, not a file picker.
@@ -482,6 +504,105 @@ void MaterialSelectionDialog::pick_resin_profile()
         Wildcards::generate_wildcards(Wildcards::TypeFlag::ResinProfile),
         callback
     );
+}
+
+void MaterialSelectionDialog::export_resin_profile()
+{
+    // The file dialog is the one to be opened, so this dialog has to be the opened one while the
+    // user picks a path in it.
+    m_navigator.set_opened_dialog(this);
+
+    const Biz::Preset::PresetItem* resin = selected_resin();
+
+    IDialogManager::FileCallback callback =
+        [this](bool success, const std::vector<boost::filesystem::path>& file_paths)
+    {
+        // One file out of one pick: the dialog is opened for a single file.
+        if (success && !file_paths.empty()) {
+            export_resin_profile_to(file_paths.front());
+        }
+    };
+
+    AppServices::instance().dialog_manager().show_file_dialog(
+        FileDialogType::Save,
+        _u8L("Export resin profile"),
+        m_project_interactor.project_dir(
+            m_project_interactor.selected_project_id(),
+            AppServices::instance().app_config().get<std::string>("last_used_directory")
+        ),
+        // Offering the name of the resin as the name of the file saves typing it. The dialog adds
+        // the extension of the filter when the name it comes back with has none.
+        resin == nullptr ? std::string{} : Biz::ResinProfile::suggested_cfg_file_name(resin->name),
+        Wildcards::generate_wildcards(Wildcards::TypeFlag::ChituboxCfg),
+        callback
+    );
+}
+
+void MaterialSelectionDialog::export_resin_profile_to(const boost::filesystem::path& path)
+{
+    using namespace std::chrono_literals;
+
+    // The row the list has selected, by id. An empty id is the resin that is in the slot, which is
+    // what the export then writes.
+    const Biz::Preset::PresetItem* resin = selected_resin();
+
+    Biz::ResinProfile::ResinProfileExportInteractor exporter(m_project_interactor.preset_interactor());
+    std::string error;
+    const Biz::ResinProfile::ResinProfileExportResult exported = exporter.export_preset_to_file(
+        path,
+        m_project_interactor.selected_project_id(),
+        resin == nullptr ? std::string{} : resin->id,
+        m_material_index == Domain::INVALID_ID ? 0 : m_material_index,
+        &error
+    );
+
+    if (!exported.ok) {
+        // A resin that cannot be exported, or a file that cannot be written, is the one thing the
+        // user has to know about: nothing was written, and the picker that has just closed is the
+        // only other thing on the screen.
+        AppServices::instance().dialog_manager().show_error_dialog(
+            fmt::format(fmt::runtime(_u8L("The resin profile was not exported. {}")), error),
+            _u8L("Export resin profile")
+        );
+        return;
+    }
+
+    // What the file does not carry is named here rather than in the file, which is the same promise
+    // the command line makes on the console.
+    const std::size_t written = exported.exported.keys.size() - exported.exported.skipped.size();
+    std::string body = fmt::format(
+        fmt::runtime(_u8L("{} keys were written to {}.")),
+        written,
+        path.string()
+    );
+    if (!exported.exported.skipped.empty()) {
+        std::string left_out;
+        for (std::size_t i = 0; i < exported.exported.skipped.size(); ++i) {
+            left_out += i == 0 ? "" : ", ";
+            left_out += exported.exported.skipped[i];
+        }
+        body += " " + fmt::format(fmt::runtime(_u8L("No Chitubox key for: {}.")), left_out);
+    }
+
+    AppServices::instance().pop_notification_center().upsert_notification(
+        {PopNotification::PopNotificationType::Custom,
+         PopNotification::PopNotificationLevel::Regular,
+         10s,
+         PopNotification::PopNotificationLayoutHeaderText(_u8L("Resin profile exported"), body),
+         {},
+         m_project_interactor.selected_project_id()},
+        PopNotification::never_equal_matcher
+    );
+}
+
+const Biz::Preset::PresetItem* MaterialSelectionDialog::selected_resin() const
+{
+    if (m_preset_list == nullptr || m_material_index == Domain::INVALID_ID)
+        return nullptr;
+    const size_t index = m_preset_list->selected_index();
+    if (index == Domain::INVALID_ID || index >= m_preset_list->items().size())
+        return nullptr;
+    return &m_preset_list->items().at(index);
 }
 
 void MaterialSelectionDialog::on_app_config_changed(const std::string& key)

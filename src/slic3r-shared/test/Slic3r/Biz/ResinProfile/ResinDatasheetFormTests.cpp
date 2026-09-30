@@ -699,6 +699,12 @@ TEST_CASE("a datasheet profile saves a user resin preset", "[resin_datasheet][im
     REQUIRE(bottle_cost != nullptr);
     CHECK(bottle_cost->get<double>() == 25.);
 
+    // The bottle that cost is for is a resin setting of its own, so the price per litre of the
+    // datasheet can be written back out of the two of them (M3.15b).
+    const Domain::ConfigItem* bottle_volume = imported->config_box().items.find("bottle_volume");
+    REQUIRE(bottle_volume != nullptr);
+    CHECK(bottle_volume->get<double>() == 500.);
+
     // The layer separation the datasheet stated, mapped through the same keys a .cfg is read
     // with, so the speeds arrive as mm/s and the counts as counts.
     const Domain::ConfigItem* lift_height = imported->config_box().items.find("lift_height");

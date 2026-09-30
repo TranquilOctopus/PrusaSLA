@@ -72,6 +72,21 @@ public:
      */
     void open_resin_datasheet();
 
+    /**
+     * @brief Ask the platform where to write the selected resin and write it there as a Chitubox
+     * .cfg, through ResinProfileExportInteractor (M3.15c).
+     *
+     * The file dialog has to be the opened one while it is up, so this dialog is the opened one for
+     * the duration of the pick, the way pick_resin_profile() does it for the import.
+     */
+    void export_resin_profile();
+
+    /**
+     * @brief Write the selected resin to @p path as a Chitubox .cfg, and say what became of it: the
+     * keys that were written, the settings the format has no key for, or why there is no file.
+     */
+    void export_resin_profile_to(const boost::filesystem::path& path);
+
     ResinImportDialog& resin_import_dialog();
 
     /// @brief The "New resin from datasheet" form, which the render modules register in the dialog
@@ -95,6 +110,10 @@ private:
 
     /// Ask the platform for a resin profile file and hand it to the review dialog.
     void pick_resin_profile();
+
+    /// The resin preset row the list has selected, nullptr when there is none. The export button
+    /// writes this one; with no row the interactor writes the resin that is in the slot instead.
+    const Biz::Preset::PresetItem* selected_resin() const;
 
 private:
     using SelectionRowListViewFactory = Yoga::ViewFactory<
@@ -129,6 +148,7 @@ private:
     Yoga::InputText* m_input_text_search                 = nullptr;
     Yoga::LayoutButton* m_only_favorites_button          = nullptr;
     Yoga::LayoutButton* m_import_resin_profile_button    = nullptr;
+    Yoga::LayoutButton* m_export_resin_profile_button    = nullptr;
     Yoga::LayoutButton* m_new_datasheet_resin_button     = nullptr;
     SelectionRowListView* m_selection_row_list_view      = nullptr;
     Biz::Preset::PresetItemObservableList* m_preset_list = nullptr;

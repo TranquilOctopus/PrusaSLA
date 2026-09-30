@@ -20,6 +20,11 @@ struct ExportedResinKey
     std::string chitubox_key;
     /// @brief The value as it is written into the file, empty when nothing is written.
     std::string value;
+    /// @brief The key of the unit the value is in, for a setting that format states as two keys
+    /// ("resinPrice" and "resinUnit" are one price). Empty when the row writes one key alone.
+    std::string unit_key;
+    /// @brief The value written under unit_key, empty when there is none.
+    std::string unit_value;
     /// @brief How faithfully the setting survives the trip, the same statuses the import uses.
     MappingStatus status{MappingStatus::NotApplicable};
     /// @brief Why, and for a value left out of the file, what it was.

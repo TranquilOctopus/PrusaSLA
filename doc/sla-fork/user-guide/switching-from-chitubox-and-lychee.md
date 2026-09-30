@@ -53,7 +53,9 @@ Prusa archive from Lychee, it opens and the same applies to it.
 An archive is of any size: only its `config.ini` and `prusaslicer.ini` are opened, a few
 kilobytes each, so a job of a few hundred megabytes of layer images reads like a small one. Each
 of those two is capped at 1 MB on its own, and an entry that claims to be larger is refused by
-name.
+name. The archive is also capped before it is opened at all, because opening one reads its central
+directory whole: 16384 entries and 4 MB of directory, which is a print of sixteen thousand layers,
+and an archive that declares more of either is refused with both numbers in the message.
 
 ### Why `.cfgx` and `.lyr` are not read yet
 
@@ -73,18 +75,22 @@ name.
 ### 1. The Import resin profile button
 
 In **Prepare**, click the **Resin** row in the right-hand sidebar to open the resin picker. Under
-the list of resins there are two full-width buttons:
+the list of resins there are three full-width buttons:
 
 - **Import resin profile...** opens a file dialog filtered to
   *Resin profile files (\*.cfg, \*.cfgx, \*.lyr, \*.sl1, \*.sl1s)*, picks one file, and opens the
   review dialog on it.
+- **Export resin profile...** writes the resin that is selected in the list out as a Chitubox `.cfg`,
+  through a *Save* dialog filtered to *Chitubox profile (\*.cfg)*. The name of the resin is offered
+  as the name of the file, and a notification says how many keys were written and which settings the
+  format has no key for.
 - **New resin from datasheet** opens the form described further down.
 
-Both are shown only while a resin printer is selected. `File > Import File` is not involved: the
+All three are shown only while a resin printer is selected. `File > Import File` is not involved: the
 profile formats are deliberately kept out of the model import, so a `.cfg` dropped in or chosen
 there cannot be mistaken for a model.
 
-![TODO screenshot: the resin picker with the Import resin profile and New resin from datasheet buttons at the bottom]()
+![TODO screenshot: the resin picker with the Import resin profile, Export resin profile and New resin from datasheet buttons at the bottom]()
 
 ![TODO screenshot: the file dialog filtered to Resin profile files]()
 
@@ -150,7 +156,8 @@ unit on either side rather than a guessed one, so read it as the plain number it
 ### Writing a profile back out
 
 For people going the other way, the same mapping runs in reverse and writes a `.cfg` you can open in
-Chitubox. It is a command-line action only; there is no button in the app yet:
+Chitubox. The **Export resin profile...** button of the resin picker does it for the resin that is
+selected there, and the command line does it for a resin named on it:
 
 ```powershell
 # The resin of the selected printer, written out as a Chitubox .cfg.
@@ -164,9 +171,13 @@ Chitubox. It is a command-line action only; there is no button in the app yet:
   same way the import picks its table, so a preset that goes out and comes back is mapped the same
   way both times. Speeds are converted back to mm/min, and a `[below, above]` area-fill pair is
   written as the single value Chitubox has, with the other named in the console.
-- A setting the `.cfg` format has no key for — the bottle cost, the vendor, `use_tilt`, the lift keys
-  on a tilt printer — is not written and is named in the console instead, so nothing is dropped
-  quietly. A value of zero is not written either, because zero means the setting is unused.
+- A setting the `.cfg` format has no key for — the vendor, `use_tilt`, the lift keys on a tilt
+  printer — is not written and is named in the console instead, so nothing is dropped quietly. A
+  value of zero is not written either, because zero means the setting is unused.
+- The price goes back as a price per litre: the bottle cost and the bottle volume the resin preset
+  carries become `resinPrice` with `resinUnit`, and the bottle itself is written as `bottleVolume`,
+  so a file that comes back in is priced for the same bottle. A bottle volume of zero would not be a
+  bottle, so the usual 1 litre bottle is used instead and the console says so.
 - What the file is not: it is a resin profile, not a print profile. A real `.cfg` also carries the
   machine's G-code, its model and its build volume, and none of that is a resin setting, so open it
   in Chitubox as a resin rather than as a print.
@@ -286,6 +297,8 @@ by the printer you import into.
 | `resinDensity` | `material_density` | g/ml to g/ml | Exact | Exact |
 | `resinPrice` with `resinUnit` | `bottle_cost` | per bottle as it is; per litre x bottle volume / 1000 | Converted | Converted |
 | `bottleVolume`, `bottle_volume` | read with `resinPrice`, writes nothing of its own | ml | Converted | Converted |
+| `resinPrice` with `resinUnit` | `bottle_cost` | price per litre x bottle volume / 1000 | Converted | Converted |
+| `bottleVolume`, `bottle_volume` | `bottle_volume` | ml to ml | Exact | Exact |
 | `lightOffTime`, `bottomLightOffTime` | `delay_before_exposure` | s, written twice as `v,v` | Approximated | Approximated |
 | `resetTimeBeforeLift` | SL1: `delay_after_exposure`; MSLA: `wait_before_lift` | s, `v,v` on tilt | Approximated | Exact |
 | `resetTimeAfterLift` | MSLA: `wait_after_lift` | s | Not applicable | Exact |
@@ -338,6 +351,12 @@ not use yet, so they arrive as *Unknown* rather than silently:
   per-kilo price, or a file with no unit, is reported and nothing is written. The currency is never
   converted, so the cost estimate stays in the currency of the source profile. Without a
   `bottleVolume` in the file a 1 litre bottle is assumed, and the note says so.
+- **A price only becomes a bottle cost when the file says it is per litre.** A per-kilo price, or a
+  file with no unit, is reported and nothing is written. The currency is never converted, so the
+  cost estimate stays in the currency of the source profile. Without a `bottleVolume` in the file a
+  1 litre bottle is assumed for that calculation, and the note says so. A `bottleVolume` that is
+  there is kept as the resin's own `bottle_volume`, which is what lets the export write the price
+  back as a price per litre of that same bottle.
 - **On a tilt printer the bottom layer count becomes the transition layer count**, clamped to the
   3 to 20 layers a tilt printer fades the exposure over, because a tilt printer has no block of
   bottom layers. If the file states a transition layer count as well, that one is what lands in
@@ -360,10 +379,13 @@ not use yet, so they arrive as *Unknown* rather than silently:
   be kept and shown in the table as *Unknown* rather than dropped, which is how it would be found.
 - There is no printer picker in the review dialog. Pick the printer in the sidebar first; the
   import goes into the selected one or it does not happen.
-- There is no button for writing a profile back out; that is the `--export-resin-profile` command
-  line above, and it carries only what the `.cfg` format has keys for.
+- The file that goes out carries only what the `.cfg` format has keys for. The **Export resin
+  profile...** button names the settings it leaves out in a notification, and the
+  `--export-resin-profile` command line above names them on the console.
+
 - A single text profile (`.cfg`) is capped at 8 MB and a folder import at 1000 files. A sliced
-  archive (`.sl1`, `.sl1s`) has no cap on the file: only its two ini entries are read.
+  archive (`.sl1`, `.sl1s`) has no cap on the file: only its two ini entries are read, and the
+  central directory it declares is capped at 16384 entries and 4 MB.
 - The table shows at most 500 rows, so a `.cfg` with a very long machine section is cut off there.
 
 ## See also
