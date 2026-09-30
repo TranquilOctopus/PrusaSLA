@@ -35,6 +35,9 @@ CMakeUserPresets.json
 tools/support-research/.venv/
 __pycache__/
 
+# Scratch space for agent sessions, never committed
+/.agent-scratch/
+
 # Artefacts written into the working directory by the test suites
 /Bad_polygon.svg
 /Halfcone.obj
