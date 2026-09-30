@@ -108,8 +108,10 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
             return;
         }
         if (m_edit_state.has_value()) {
-            m_edit_state->editing.head_diameter_mm = value;
-            this->apply_head_diameter_to_selected();
+            // The tip diameter is the head diameter of the tool (M2.24), one of the per-point
+            // geometry fields, so it goes on the points that are selected like the others.
+            m_edit_state->editing.support_geometry.tip_diameter_mm = value;
+            this->apply_support_geometry_to_selected(SupportGeometryField::TipDiameter);
         }
     };
     m_dialog->callbacks().pillar_diameter_changed = [this](double value)
@@ -156,7 +158,7 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
         if (m_edit_state.has_value()) {
             m_edit_state->editing.head_diameter_use_global = value;
             if (value) {
-                this->apply_head_diameter_to_selected();
+                this->apply_support_geometry_to_selected(SupportGeometryField::TipDiameter);
             }
         }
     };
@@ -209,6 +211,16 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
         if (m_edit_state.has_value()) {
             m_edit_state->editing.support_geometry.tip_shape = shape;
             this->apply_support_geometry_to_selected(SupportGeometryField::TipShape);
+        }
+    };
+    m_dialog->callbacks().tip_length_changed = [this](double value)
+    {
+        if (m_syncing_dialog) {
+            return;
+        }
+        if (m_edit_state.has_value()) {
+            m_edit_state->editing.support_geometry.tip_length_mm = value;
+            this->apply_support_geometry_to_selected(SupportGeometryField::TipLength);
         }
     };
     m_dialog->callbacks().knot_diameter_changed = [this](double value)
@@ -621,7 +633,8 @@ void SlaSupportPointsGizmo::on_generation_completed(std::optional<Domain::SLA::S
 
     if (support_points.has_value() && !support_points->empty()) {
         // The generator only fills the position and the head diameter, so a generated point takes
-        // the tip shape, knot, stem cross-section and stem taper of the settings as well (M2.16c).
+        // the tip shape, tip length, knot, stem cross-section and stem taper of the settings as well
+        // (M2.16c, M2.24). The head radius it fills is the one of the tree type it generated for.
         const SlaSupportGeometry geometry = support_geometry_defaults(
             m_project_interactor.selected_project().find_object_by_id(m_selected_object_id.id)
         );
@@ -855,8 +868,8 @@ void SlaSupportPointsGizmo::on_auto_support_completed(Domain::ObjectID obj_id, s
         if (model_object) {
             m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SlaSupportPointsApply);
 
-            // A generated point takes the tip shape, knot, stem cross-section and stem taper of the
-            // settings of its own model, like a point placed by hand (M2.16c).
+            // A generated point takes the tip shape, tip length, knot, stem cross-section and stem
+            // taper of the settings of its own model, like a point placed by hand (M2.16c, M2.24).
             const SlaSupportGeometry geometry = support_geometry_defaults(model_object);
             for (Domain::SLA::SupportPoint& point : *support_points) {
                 apply_support_geometry(point, geometry);
@@ -917,14 +930,6 @@ void SlaSupportPointsGizmo::begin_editing()
     m_edit_state = SupportPointEditState{};
     m_edit_state->editing.points = model_object->sla_support_points;
 
-    double head_diameter = 0.4;
-    auto head_result = model_object->object_settings_sla.find("support_head_front_diameter");
-    if (head_result.item) {
-        head_diameter = head_result.item->get<double>();
-    }
-    m_edit_state->editing.head_diameter_mm = head_diameter;
-    m_dialog->set_head_diameter(head_diameter);
-
     double pillar_diameter = 0.8;
     auto pillar_result = model_object->object_settings_sla.find("support_pillar_diameter");
     if (pillar_result.item) {
@@ -955,12 +960,14 @@ void SlaSupportPointsGizmo::begin_editing()
     m_dialog->set_base_height(base_height);
     m_dialog->set_base_height_use_global(true);
 
-    // The tip shape, knot, stem cross-section and stem taper a new point takes (M2.16c). The
-    // fields show the selection, which is empty while the tool opens.
+    // The tip diameter, tip shape, tip length, knot, stem cross-section and stem taper a new point
+    // takes (M2.16c, M2.24). The tip diameter is the head diameter control above, which takes the
+    // configured value; the fields then show the selection, empty while the tool opens.
     m_edit_state->editing.support_geometry = support_geometry_defaults(model_object);
+    m_dialog->set_head_diameter(m_edit_state->editing.support_geometry.tip_diameter_mm);
+    m_dialog->set_head_diameter_use_global(true);
     update_selected_support_geometry();
 
-    m_dialog->set_head_diameter_use_global(true);
     m_dialog->set_lock_island_supports(false);
 
     m_dialog->set_apply_enabled(true);
@@ -1192,7 +1199,7 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
     // Track hovered point (when not dragging or rectangle selecting)
     if (!m_edit_state->dragged_point_idx.has_value() && !m_edit_state->rect_select_active && has_hit) {
         const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
-        const double hover_radius = m_edit_state->editing.head_diameter_mm * 2.0;
+        const double hover_radius = m_edit_state->editing.support_geometry.tip_diameter_mm * 2.0;
         m_hovered_point_idx = find_nearest_point(mesh_pos, hover_radius);
     } else if (!has_hit || m_edit_state->dragged_point_idx.has_value() || m_edit_state->rect_select_active) {
         m_hovered_point_idx.reset();
@@ -1221,7 +1228,7 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
         if (ctrl_down) {
             if (has_hit) {
                 const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
-                const double removal_radius = m_edit_state->editing.head_diameter_mm * 2.0;
+                const double removal_radius = m_edit_state->editing.support_geometry.tip_diameter_mm * 2.0;
                 if (auto idx = find_nearest_point(mesh_pos, removal_radius); idx.has_value()) {
                     if (!m_edit_state->editing.lock_island_supports || !m_edit_state->editing.points[*idx].is_island()) {
                         remove_point_at_index(*idx);
@@ -1241,7 +1248,7 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
         // Shift+click on point: toggle selection
         if (shift_down && has_hit) {
             const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
-            const double selection_radius = m_edit_state->editing.head_diameter_mm * 2.0;
+            const double selection_radius = m_edit_state->editing.support_geometry.tip_diameter_mm * 2.0;
             if (auto idx = find_nearest_point(mesh_pos, selection_radius); idx.has_value()) {
                 m_edit_state->editing.toggle_point(*idx);
                 update_point_visuals();
@@ -1252,7 +1259,7 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
         // Regular click on point: select and start drag
         if (has_hit) {
             const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
-            const double selection_radius = m_edit_state->editing.head_diameter_mm * 2.0;
+            const double selection_radius = m_edit_state->editing.support_geometry.tip_diameter_mm * 2.0;
             if (auto idx = find_nearest_point(mesh_pos, selection_radius); idx.has_value()) {
                 if (!m_edit_state->editing.lock_island_supports || !m_edit_state->editing.points[*idx].is_island()) {
                     clear_selection();
@@ -1280,7 +1287,7 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
     if (is_right_button_event && mouse_event.type() == MouseEvent::Type::ButtonDown) {
         if (has_hit) {
             const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
-            const double removal_radius = m_edit_state->editing.head_diameter_mm * 2.0;
+            const double removal_radius = m_edit_state->editing.support_geometry.tip_diameter_mm * 2.0;
             if (auto idx = find_nearest_point(mesh_pos, removal_radius); idx.has_value()) {
                 if (!m_edit_state->editing.lock_island_supports || !m_edit_state->editing.points[*idx].is_island()) {
                     remove_point_at_index(*idx);
@@ -1593,17 +1600,6 @@ void SlaSupportPointsGizmo::delete_selected_points()
     }
 }
 
-void SlaSupportPointsGizmo::apply_head_diameter_to_selected()
-{
-    if (!m_edit_state.has_value()) {
-        return;
-    }
-    take_undo_snapshot();
-    m_edit_state->editing.apply_head_diameter_to_selected();
-    update_point_visuals();
-    commit_edited_points_live();
-}
-
 void SlaSupportPointsGizmo::apply_pillar_diameter_to_selected()
 {
     if (!m_edit_state.has_value()) {
@@ -1675,14 +1671,19 @@ void SlaSupportPointsGizmo::apply_support_on_model_to_selected(SupportOnModel on
 void SlaSupportPointsGizmo::update_selected_support_geometry()
 {
     DialogSyncGuard guard(*this);
-    m_dialog->set_support_geometry(
-        m_edit_state.has_value() ? m_edit_state->editing.selected_support_geometry() : std::nullopt
-    );
+    if (!m_edit_state.has_value()) {
+        m_dialog->set_support_geometry(std::nullopt, false);
+        m_dialog->set_support_on_model(std::nullopt);
+        return;
+    }
+    // The dialog needs to tell "nothing is selected" from "the points disagree": the tip diameter is
+    // the head diameter control as well, which keeps showing what a new point takes when there is
+    // no selection to show.
+    m_dialog->set_support_geometry(m_edit_state->editing.selected_support_geometry(),
+                                   !m_edit_state->editing.selected_point_indices.empty());
     // The "may rest on the model" switch has a value of its own, so it is shown for a selection
     // that agrees on it even when the selection shows no geometry at all (M2.26).
-    m_dialog->set_support_on_model(
-        m_edit_state.has_value() ? m_edit_state->editing.selected_support_on_model() : std::nullopt
-    );
+    m_dialog->set_support_on_model(m_edit_state->editing.selected_support_on_model());
 }
 
 SlaSupportGeometry SlaSupportPointsGizmo::support_geometry_defaults(const Domain::ModelObject* model_object) const
@@ -1694,8 +1695,16 @@ SlaSupportGeometry SlaSupportPointsGizmo::support_geometry_defaults(const Domain
 
     const auto& settings = model_object->object_settings_sla;
 
+    // The tip diameter is the "head diameter" control of the tool (M2.24), so a point placed by hand
+    // takes the configured one and a preset button replaces it.
+    if (auto result = settings.find("support_head_front_diameter"); result.item != nullptr) {
+        geometry.tip_diameter_mm = result.item->get<double>();
+    }
     if (auto result = settings.find("support_tip_shape"); result.item != nullptr) {
         geometry.tip_shape = support_tip_shape_of(result.item->get<Domain::sla::SupportTipShape>());
+    }
+    if (auto result = settings.find("support_tip_length"); result.item != nullptr) {
+        geometry.tip_length_mm = result.item->get<double>();
     }
     if (auto result = settings.find("support_knot_diameter"); result.item != nullptr) {
         geometry.knot_diameter_mm = result.item->get<double>();
@@ -1762,7 +1771,7 @@ void SlaSupportPointsGizmo::apply_support_preset(float head_diameter, float pill
         return;
     }
 
-    m_edit_state->editing.head_diameter_mm = head_diameter;
+    m_edit_state->editing.support_geometry.tip_diameter_mm = head_diameter;
     m_edit_state->editing.pillar_diameter_mm = pillar_diameter;
     m_edit_state->editing.base_diameter_mm = base_diameter;
     m_edit_state->editing.base_height_mm = base_height;
@@ -1783,7 +1792,7 @@ void SlaSupportPointsGizmo::apply_support_preset(float head_diameter, float pill
 
     if (!m_edit_state->editing.selected_point_indices.empty()) {
         take_undo_snapshot();
-        m_edit_state->editing.apply_head_diameter_to_selected();
+        m_edit_state->editing.apply_support_geometry_to_selected(SupportGeometryField::TipDiameter);
         m_edit_state->editing.apply_pillar_diameter_to_selected();
         m_edit_state->editing.apply_base_diameter_to_selected();
         m_edit_state->editing.apply_base_height_to_selected();

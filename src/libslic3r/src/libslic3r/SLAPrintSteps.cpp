@@ -1714,9 +1714,20 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
         heights.push_back(level_f);
     }
 
-    // Compute per-layer exposed area and peel force estimates (M4.9).
+    // Compute per-layer exposed area and peel force estimates (M4.9). The peel force is a model,
+    // not a measurement: area, boundary and the suction of the cups of M4.8e, each with the
+    // coefficient of the vat film, see doc/sla-fork/profiling/peel-force.md.
     std::vector<float> layer_areas = SLA::layer_areas_mm2(slices);
-    std::vector<float> layer_peel_force = SLA::peel_force_estimate(layer_areas);
+    SLA::PeelForceSettings peel_settings;
+    peel_settings.film = config.get<Domain::sla::VatFilmType>("vat_film_type");
+    peel_settings.area_coefficient = config.get<double>("peel_area_coefficient");
+    peel_settings.perimeter_coefficient = config.get<double>("peel_perimeter_coefficient");
+    const SLA::PeelForceCoefficients peel_coefficients = peel_settings.coefficients();
+    std::vector<float> layer_peel_force = SLA::peel_force_estimate(
+        slices, SLA::cup_suction_area_mm2(cavities.cups, slices.size()), peel_coefficients);
+    const double peel_warning_n = SLA::peel_force_warning_n(config.get<double>("peel_force_warning"), peel_coefficients);
+    const std::vector<size_t> high_peel_layers =
+        SLA::layers_over_peel_force(layer_peel_force, peel_warning_n);
 
     // Convert island hits to SlaIssue entries.
     std::vector<Sla::SlaIssue> issues;
@@ -1779,6 +1790,23 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
             .object_id = Domain::ObjectID{},
             .position = Domain::Vec3d(trapped.centroid.x(), trapped.centroid.y(),
                                       layer_bottom_z(trapped.first_layer)),
+            .note = note_ss.str()
+        });
+    }
+
+    // The layers the peel force model calls high. One entry per layer, so the count in the
+    // sidebar is the number of layers and not the number of problems inside them. The position is
+    // the layer, not a spot in it: there is no spot, so x and y stay at the middle of the plate.
+    for (size_t layer : high_peel_layers) {
+        std::ostringstream note_ss;
+        note_ss << std::fixed << std::setprecision(1) << "peel force "
+                << (layer < layer_peel_force.size() ? layer_peel_force[layer] : 0.f) << " N over "
+                << peel_warning_n << " N";
+        issues.emplace_back(Sla::SlaIssue{
+            .kind = Sla::SlaIssue::Kind::HighPeelForce,
+            .layer = layer,
+            .object_id = Domain::ObjectID{},
+            .position = Domain::Vec3d(0., 0., layer_bottom_z(layer)),
             .note = note_ss.str()
         });
     }
@@ -1888,9 +1916,9 @@ void SLAPrint::Steps::rasterize()
     // (granularity 1, no concurrency cap) made that multiplier the core count. The batch makes
     // the peak a function of the budget in RasterMemory.hpp instead. See
     // doc/sla-fork/profiling/raster-memory.md.
-    const size_t batch = raw_raster_batch_size(rasterizer_ptr->raw_raster_bytes(),
-                                               layers.size(),
-                                               execution::max_concurrency(execution::ex_tbb));
+    const size_t batch = sla::raw_raster_batch_size(rasterizer_ptr->raw_raster_bytes(),
+                                                    layers.size(),
+                                                    execution::max_concurrency(execution::ex_tbb));
     for (size_t first = 0; first < layers.size(); first += batch) {
         if (cancel_fn())
             break;

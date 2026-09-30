@@ -118,9 +118,10 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     m_base_height_use_global_checkbox->callbacks().checked_changed = [this](bool value)
     { m_callbacks.base_height_use_global_changed(value); };
 
-    // The per-point support geometry (M2.16c): the tip shape and the knot around the tip, then the
-    // cross-section and the taper of the stem. They take no global override, they are the values a
-    // new point is placed with.
+    // The per-point support geometry (M2.16c, M2.24): the tip shape and the knot around the tip,
+    // then the cross-section and the taper of the stem. They take no global override, they are the
+    // values a new point is placed with. The tip diameter is not here: it is the head diameter
+    // slider above, which is one of these fields and the value a new point is placed with.
     this->add_separator(settings);
 
     add_row_with_combo_box(_u8L("Tip shape"), settings, &m_tip_shape_combo);
@@ -139,6 +140,19 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
             break;
         }
     };
+
+    add_row_with_slider(
+        settings,
+        &m_tip_length_slider,
+        _u8L("Tip length"),
+        _u8L("mm")
+    );
+    m_tip_length_slider->set_begin_value(0);
+    m_tip_length_slider->set_end_value(20.0);
+    m_tip_length_slider->set_step(0.1);
+    m_tip_length_slider->set_validator_precision(1);
+    m_tip_length_slider->callbacks().value_changed = [this](double value)
+    { m_callbacks.tip_length_changed(value); };
 
     add_row_with_slider(
         settings,
@@ -369,16 +383,25 @@ void SlaSupportPointsDialog::set_base_height_use_global(bool use_global)
     m_base_height_slider->set_enabled(!use_global);
 }
 
-void SlaSupportPointsDialog::set_support_geometry(const std::optional<SlaSupportGeometry>& geometry)
+void SlaSupportPointsDialog::set_support_geometry(
+    const std::optional<SlaSupportGeometry>& geometry,
+    bool has_selection)
 {
     if (!geometry.has_value()) {
         // Nothing is selected, or the selected points disagree on one of the values: the fields
         // show no value, so the user is never shown a value only some of the points have. A
         // dropdown has no empty state of its own, so it says the one word the app uses for this.
         m_tip_shape_combo->set_override_label(_u8L("Mixed"));
+        m_tip_length_slider->set_undef_value();
         m_knot_diameter_slider->set_undef_value();
         m_stem_sides_slider->set_undef_value();
         m_stem_taper_slider->set_undef_value();
+        // The tip diameter is the head diameter control as well. While the control takes
+        // the global diameter it shows that one, so only a selection that disagrees blanks it, and
+        // with nothing selected it keeps showing the diameter a new point takes.
+        if (has_selection && !m_head_diameter_use_global_checkbox->checked()) {
+            m_head_diameter_slider->set_undef_value();
+        }
         return;
     }
 
@@ -395,6 +418,12 @@ void SlaSupportPointsDialog::set_support_geometry(const std::optional<SlaSupport
         m_tip_shape_combo->set_current_index(0);
         break;
     }
+    // While the control takes the global diameter it shows that one, the way the stem, base diameter
+    // and base height sliders do; otherwise it shows what the selected points carry.
+    if (!m_head_diameter_use_global_checkbox->checked()) {
+        m_head_diameter_slider->set_value(geometry->tip_diameter_mm);
+    }
+    m_tip_length_slider->set_value(geometry->tip_length_mm);
     m_knot_diameter_slider->set_value(geometry->knot_diameter_mm);
     m_stem_sides_slider->set_value(geometry->stem_sides);
     m_stem_taper_slider->set_value(geometry->stem_taper);

@@ -202,7 +202,8 @@ class DefaultSupportTree {
 
     void add_pillar_base(long pid)
     {
-        m_builder.add_pillar_base(pid, m_sm.cfg.base_height_mm, m_sm.cfg.base_radius_mm);
+        m_builder.add_pillar_base(pid, m_sm.cfg.base_height_mm, m_sm.cfg.base_radius_mm,
+                                  m_sm.cfg.base_shape);
     }
 
     std::optional<DiffBridge> search_widening_path(const Vec3d &jp,

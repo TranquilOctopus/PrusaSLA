@@ -267,6 +267,77 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->max = 1;
     def->init_fn = init_with(1.);
 
+    // The vat film and the peel force model that reads it, see doc/sla-fork/profiling/peel-force.md.
+    // The film decides the coefficients, the two coefficients below only override it when they are
+    // set, and the warning picks how many layers are called high.
+    def = defs.add("vat_film_type", typeid(EnumWrapper));
+    def->location = Printer;
+    def->label = L("Vat film");
+    def->option_group = ConfigItemDef::OptionGroup::Printer_General_Advanced;
+    def->category = ConfigItemDef::Category::Printer_General;
+    def->order = 20;
+    def->gui_type = ConfigItemDef::GUIType::combobox;
+    def->tooltip = L("The material of the film at the bottom of the vat. It decides the "
+                     "coefficients of the peel force estimate shown per layer, because a stiffer "
+                     "film is harder to peel: FEP holds on the longest, nFEP a little less, PFA is "
+                     "stiff but thin and ACF gives way early because it inflates instead of "
+                     "stretching. The estimate is a rough model, not a measurement.");
+    def->init_fn = init_with(
+        sla::VatFilmType::FEP,
+        {{int(sla::VatFilmType::FEP), "FEP", L("FEP")},
+         {int(sla::VatFilmType::nFEP), "nFEP", L("nFEP")},
+         {int(sla::VatFilmType::PFA), "PFA", L("PFA")},
+         {int(sla::VatFilmType::ACF), "ACF", L("ACF")}}
+    );
+
+    def = defs.add("peel_area_coefficient", typeid(double));
+    def->location = Printer;
+    def->label = L("Peel force per area");
+    def->option_group = ConfigItemDef::OptionGroup::Printer_General_Advanced;
+    def->category = ConfigItemDef::Category::Printer_General;
+    def->order = 21;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("How many newtons of peel force one square millimetre of cured layer is "
+                     "estimated to cost, used to scale the peel force estimate to your printer. "
+                     "Zero takes the value of the vat film above. The default is a rough figure "
+                     "from the literature, so tune this only if you measured a peel force of your "
+                     "own and know which layer produced it.");
+    def->units = {L("N/mm2")};
+    def->min = 0;
+    def->max = 100;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("peel_perimeter_coefficient", typeid(double));
+    def->location = Printer;
+    def->label = L("Peel force per perimeter");
+    def->option_group = ConfigItemDef::OptionGroup::Printer_General_Advanced;
+    def->category = ConfigItemDef::Category::Printer_General;
+    def->order = 22;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("How many newtons of peel force one millimetre of layer boundary is "
+                     "estimated to cost. The film is lifted off the part along its whole outline, "
+                     "so a thin comb of the same area as a solid block costs more to peel. Zero "
+                     "takes the value of the vat film above.");
+    def->units = {L("N/mm")};
+    def->min = 0;
+    def->max = 100;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("peel_force_warning", typeid(double));
+    def->location = Printer;
+    def->label = L("Peel force warning");
+    def->option_group = ConfigItemDef::OptionGroup::Printer_General_Advanced;
+    def->category = ConfigItemDef::Category::Printer_General;
+    def->order = 23;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("The estimated peel force in newtons above which a layer is called high and "
+                     "is listed as an issue. A negative value takes the default of the vat film "
+                     "above, zero reports no layer at all.");
+    def->units = {L("N")};
+    def->min = -1;
+    def->max = 1000;
+    def->init_fn = init_with(-1.);
+
 
     def = defs.add("material_colour", typeid(std::string));
     def->location = Material;
@@ -638,6 +709,26 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->max = 30;
     def->init_fn = init_with(2.);
 
+    def = defs.add("raft_floor_thickness", typeid(double));
+    def->location = Print;
+    def->overrides_in = Locations{ Object };
+    def->label = L("Raft floor thickness");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
+    def->category = ConfigItemDef::Category::Print_Pad;
+    // It is the slab on the build plate the walls stand on, so it goes right after the wall
+    // thickness above it.
+    def->order = 3;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("How thick the slab on the build plate the raft stands on is, which need "
+                     "not be the thickness of the walls above it. A thicker floor makes the raft "
+                     "taller without moving its outline, its walls or its top face, and the "
+                     "object still sits where it did. Zero keeps the floor as thick as the walls, "
+                     "which is the raft of today.");
+    def->units = {L("mm")};
+    def->min = 0;
+    def->max = 30;
+    def->init_fn = init_with(0.);
+
     def = defs.add("pad_wall_height", typeid(double));
     def->location = Print;
     def->overrides_in = Locations{ Object };
@@ -658,7 +749,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft expansion");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 3; // below raft_type, see raft_type_visible_settings
+    def->order = 4; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("How far the raft reaches around the object. Must be wide enough for the raft to hold the object it carries.");
     def->units = {L("mm")};
@@ -672,7 +763,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Max merge distance");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 12; // below raft_type, see raft_type_visible_settings
+    def->order = 13; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
      def->tooltip = L("Some objects can get along with a few smaller rafts "
                       "instead of a single big one. This parameter defines "
@@ -697,7 +788,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft slope");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 4; // below raft_type, see raft_type_visible_settings
+    def->order = 5; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("The slope of the raft wall relative to the build plate. 90 degrees means straight walls; a lower value makes the raft wider at the bottom.");
     def->units = {L("°")};
@@ -722,7 +813,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft around object everywhere");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 14; // below raft_type, see raft_type_visible_settings
+    def->order = 15; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::checkbox;
     def->tooltip = L("Make the raft follow the object everywhere, even where the supports do not reach.");
     def->init_fn = init_with(false);
@@ -733,7 +824,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft gap to object");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 13; // below raft_type, see raft_type_visible_settings
+    def->order = 14; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip  = L("The gap left between the object bottom and the raft that carries it.");
     def->units = {L("mm")};
@@ -747,7 +838,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft object connector stride");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 15; // below raft_type, see raft_type_visible_settings
+    def->order = 16; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Distance between two connector sticks which tie the object to the raft.");
     def->units = {L("mm")};
@@ -760,7 +851,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft object connector width");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 16; // below raft_type, see raft_type_visible_settings
+    def->order = 17; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip  = L("Width of the connector sticks which tie the object to the raft.");
     def->units = {L("mm")};
@@ -773,7 +864,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft object connector penetration");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 17; // below raft_type, see raft_type_visible_settings
+    def->order = 18; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip  = L(
         "How far the tiny connectors that tie the object to the raft reach into the object body.");
@@ -806,7 +897,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
     // It shapes the same wall as the raft slope above it, so it goes right after it.
-    def->order = 5;
+    def->order = 6;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("How far the top edge of the raft is bevelled in, which leaves a thin lip to get "
                      "a spatula under so the raft can be pried off the build plate. The bevel is as "
@@ -823,7 +914,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
     // It fills the inside of the raft, so it goes after the knobs that shape the raft itself.
-    def->order = 6;
+    def->order = 7;
     def->gui_type = ConfigItemDef::GUIType::combobox;
     def->tooltip = L("Fill the inside of the raft with a pattern instead of solid resin, which "
                      "saves resin and shortens the peel off the build plate. The raft keeps a "
@@ -843,7 +934,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
     // The three infill knobs read only when the infill is not None, and in this order.
-    def->order = 7;
+    def->order = 8;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Clear size of one open cell of the raft infill, the gap between two "
                      "neighbouring ribs of the pattern.");
@@ -858,7 +949,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft infill wall");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 8;
+    def->order = 9;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip  = L("Thickness of the material between two open cells of the raft infill. It is "
                       "also the width of the solid rim that keeps the pattern inside the raft "
@@ -874,7 +965,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft infill skin");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 9;
+    def->order = 10;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip  = L("How much solid material is left under the top face of the raft, so the "
                       "object never rests on a hole. One or two layers is usually enough.");
@@ -891,7 +982,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->category = ConfigItemDef::Category::Print_Pad;
     // The interface is the skin of the raft the object sits on, so it comes with the knobs that
     // make up the raft itself, after the pattern cut into it.
-    def->order = 10;
+    def->order = 11;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("How deep the raft interface reaches down into the top of the raft, the skin "
                      "between the raft and the object that the object can rest on and that can be "
@@ -911,7 +1002,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft interface exposure");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 11;
+    def->order = 12;
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Exposure of the raft interface, the band of layers at the top of the raft "
                      "that the raft interface thickness marks. Zero exposes it like every other "
@@ -1695,6 +1786,24 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->min = 0;
         def->init_fn = init_with(1.);
 
+        def = defs.add(prefix.first + "support_base_shape", typeid(EnumWrapper));
+        def->label = prefix.second;
+        def->location = Print;
+        def->overrides_in = Locations{ Object };
+        def->row_group = L("Support base shape");
+        def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
+        def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
+        def->gui_type = ConfigItemDef::GUIType::combobox;
+        def->tooltip = L("The shape of the pillar base where it meets the raft or the build plate. "
+            "A cone flares gradually, a cylinder is a straight foot of the base diameter and height, "
+            "and a flat disc is a thin foot of at most 0.5 mm under a pillar that runs straight down.");
+        def->init_fn = init_with(
+            sla::SupportBaseShape::Cone,
+            {{int(sla::SupportBaseShape::Cone), "cone", L("Cone")},
+             {int(sla::SupportBaseShape::Cylinder), "cylinder", L("Cylinder")},
+             {int(sla::SupportBaseShape::Flat), "flat", L("Flat disc")}}
+        );
+
         def = defs.add(prefix.first + "support_base_safety_distance", typeid(double));
         def->label = prefix.second;
         def->location = Print;
@@ -1831,6 +1940,24 @@ def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : 
     def->tooltip = L("How much of the stem diameter is lost from its base to its tip, as a fraction: 0.25 makes a stem that is a quarter narrower at the tip. Zero prints stems of one diameter.");
     def->min = 0;
     def->max = 1;
+    def->init_fn = init_with(0.);
+
+    // The length of the tapered tip, a parameter of its own next to the pinhead width (M2.24). A
+    // support point carries its own tip_length (M2.13) and the tree builds it; this is the default a
+    // point that carries none falls back to. Zero derives the length from support_head_width, which
+    // is what the tree has always built, so a print preset that never sets it keeps today's mesh.
+    def = defs.add("support_tip_length", typeid(double));
+    def->location = Print;
+    def->overrides_in = Locations{ Object };
+    def->label = L("Tip length");
+    def->row_group = L("Tip length");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportHead;
+    def->category = ConfigItemDef::Category::Print_Supports;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Length of the tapered tip between the point that touches the model and the stem. Zero takes the pinhead width, which is what supports have always been built with.");
+    def->units = {L("mm")};
+    def->min = 0;
+    def->max = 20;
     def->init_fn = init_with(0.);
 
     // Support presets for the SLA Support Points tool (Mini, Light, Medium, Heavy)

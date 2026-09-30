@@ -343,7 +343,7 @@ set(SLIC3R_SOURCES
     src/libslic3r/SLA/RasterBase.cpp
     src/libslic3r/SLA/RasterBase.hpp
     src/libslic3r/SLA/RasterMemory.cpp
-    src/libslic3r/SLA/RasterMemory.hpp
+    include/libslic3r/SLA/RasterMemory.hpp
     src/libslic3r/SLA/RasterToPolygons.cpp
     src/libslic3r/SLA/RasterToPolygons.hpp
     src/libslic3r/SLA/ReprojectPointsOnMesh.hpp
@@ -380,7 +380,7 @@ set(SLIC3R_SOURCES
     src/libslic3r/SLA/IslandDetection.cpp
     src/libslic3r/SLA/IslandDetection.hpp
     src/libslic3r/SLA/LayerStats.cpp
-    src/libslic3r/SLA/LayerStats.hpp
+    include/libslic3r/SLA/LayerStats.hpp
     src/libslic3r/SLAPrint.hpp
     src/libslic3r/SLAPrint.cpp
     src/libslic3r/SLAPrintSteps.cpp

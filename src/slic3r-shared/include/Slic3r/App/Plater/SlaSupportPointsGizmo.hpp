@@ -177,7 +177,6 @@ private:
     void select_all_points();
     void clear_selection();
     void delete_selected_points();
-    void apply_head_diameter_to_selected();
     void apply_pillar_diameter_to_selected();
     void apply_base_diameter_to_selected();
     void apply_base_height_to_selected();
@@ -186,12 +185,13 @@ private:
     // Writes the per-point "may this support end on the model" state on the selected points and
     // asks for the tree again, because it changes where their pillars end (M2.26).
     void apply_support_on_model_to_selected(SupportOnModel on_model);
-    // Shows the tip shape, knot, stem cross-section and stem taper of the selected points, empty
-    // when nothing is selected or the points disagree on one of them (M2.16c), and the per-point
-    // "may rest on the model" state, which is a value of its own (M2.26).
+    // Shows the tip diameter, tip shape, tip length, knot, stem cross-section and stem taper of the
+    // selected points, empty when nothing is selected or the points disagree on one of them
+    // (M2.16c, M2.24), and the per-point "may rest on the model" state, which is a value of its own
+    // (M2.26).
     void update_selected_support_geometry();
-    // The tip shape, knot, stem cross-section and stem taper a new point takes, from the Supports &
-    // raft settings of @p model_object.
+    // The tip diameter, tip shape, tip length, knot, stem cross-section and stem taper a new point
+    // takes, from the Supports & raft settings of @p model_object.
     SlaSupportGeometry support_geometry_defaults(const Domain::ModelObject* model_object) const;
     void apply_preset_light();
     void apply_preset_medium();

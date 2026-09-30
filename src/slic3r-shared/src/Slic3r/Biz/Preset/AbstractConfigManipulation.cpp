@@ -382,6 +382,7 @@ void AbstractConfigManipulation::toggle_print_sla_options(DynamicPrintConfig* co
     toggle_field("support_buildplate_only", supports_en && is_default_tree);
     toggle_field("support_base_diameter", supports_en && is_default_tree);
     toggle_field("support_base_height", supports_en && is_default_tree);
+    toggle_field("support_base_shape", supports_en && is_default_tree);
     toggle_field("support_base_safety_distance", supports_en && is_default_tree);
     toggle_field("support_critical_angle", supports_en && is_default_tree);
     toggle_field("support_max_bridge_length", supports_en && is_default_tree);
@@ -400,6 +401,7 @@ void AbstractConfigManipulation::toggle_print_sla_options(DynamicPrintConfig* co
     toggle_field("branchingsupport_buildplate_only", supports_en && is_branching_tree);
     toggle_field("branchingsupport_base_diameter", supports_en && is_branching_tree);
     toggle_field("branchingsupport_base_height", supports_en && is_branching_tree);
+    toggle_field("branchingsupport_base_shape", supports_en && is_branching_tree);
     toggle_field("branchingsupport_base_safety_distance", supports_en && is_branching_tree);
     toggle_field("branchingsupport_critical_angle", supports_en && is_branching_tree);
     toggle_field("branchingsupport_max_bridge_length", supports_en && is_branching_tree);

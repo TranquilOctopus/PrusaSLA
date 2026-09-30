@@ -20,6 +20,7 @@ TEST_CASE("RaftPreset: None disables pad", "[SLA][RaftPreset]")
         1.0,   // object_gap_mm
         0.0,   // edge_taper_mm
         {},    // infill
+        0.0,   // floor_thickness_mm
     );
 
     CHECK(vals.pad_enable == false);
@@ -43,6 +44,7 @@ TEST_CASE("RaftPreset: Full enables plate-wide pad", "[SLA][RaftPreset]")
         1.0,   // object_gap_mm
         0.0,   // edge_taper_mm
         {},    // infill
+        0.0,   // floor_thickness_mm
     );
 
     CHECK(vals.pad_enable == true);
@@ -65,6 +67,7 @@ TEST_CASE("RaftPreset: AroundObject sets pad_around_object flag", "[SLA][RaftPre
         1.0,   // object_gap_mm
         0.0,   // edge_taper_mm
         {},    // infill
+        0.0,   // floor_thickness_mm
     );
 
     CHECK(vals.pad_enable == true);
@@ -87,6 +90,7 @@ TEST_CASE("RaftPreset: Skate differs from AroundObject in brim and slope", "[SLA
         1.0,   // object_gap_mm
         0.0,   // edge_taper_mm
         {},    // infill
+        0.0,   // floor_thickness_mm
     );
 
     RaftPadValues vals_skate = raft_preset_to_pad_values(
@@ -98,6 +102,7 @@ TEST_CASE("RaftPreset: Skate differs from AroundObject in brim and slope", "[SLA
         1.0,   // object_gap_mm
         0.0,   // edge_taper_mm
         {},    // infill
+        0.0,   // floor_thickness_mm
     );
 
     CHECK(vals_skate.pad_enable == true);
@@ -126,6 +131,7 @@ TEST_CASE("RaftPreset: Shared knobs pass through unchanged for Full", "[SLA][Raf
         1.5,   // object_gap_mm
         0.0,   // edge_taper_mm
         {},    // infill
+        0.0,   // floor_thickness_mm
     );
 
     CHECK(vals.pad_wall_height_mm == Approx(3.5));
@@ -146,6 +152,7 @@ TEST_CASE("RaftPreset: Shared knobs pass through unchanged for AroundObject", "[
         1.5,   // object_gap_mm
         0.0,   // edge_taper_mm
         {},    // infill
+        0.0,   // floor_thickness_mm
     );
 
     CHECK(vals.pad_wall_height_mm == Approx(3.5));
@@ -166,6 +173,7 @@ TEST_CASE("RaftPreset: Shared knobs pass through for Skate (except brim/slope)",
         1.5,   // object_gap_mm
         0.0,   // edge_taper_mm
         {},    // infill
+        0.0,   // floor_thickness_mm
     );
 
     CHECK(vals.pad_wall_height_mm == Approx(3.5));
@@ -195,6 +203,7 @@ TEST_CASE("RaftPreset: the edge taper is a shared knob, no type replaces it", "[
             1.0,   // object_gap_mm
             1.2,   // edge_taper_mm
             {},    // infill
+            0.0,   // floor_thickness_mm
         );
 
         CHECK(vals.raft_edge_taper_mm == Approx(1.2));
@@ -224,7 +233,8 @@ TEST_CASE("RaftPreset: the infill is a shared knob, no type replaces it", "[SLA]
             90.0,  // slope_deg
             1.0,   // object_gap_mm
             0.0,   // edge_taper_mm
-            grid   // infill
+            grid,  // infill
+            0.0    // floor_thickness_mm
         );
 
         CHECK(vals.raft_infill.type == sla::RaftInfillType::Grid);
@@ -246,8 +256,54 @@ TEST_CASE("RaftPreset: no infill is the solid raft of today", "[SLA][RaftPreset]
         90.0,  // slope_deg
         1.0,   // object_gap_mm
         0.0,   // edge_taper_mm
-        {}     // infill
+        {},    // infill
+        0.0     // floor_thickness_mm
     );
 
     CHECK(vals.raft_infill.type == sla::RaftInfillType::None);
+}
+
+TEST_CASE("RaftPreset: the floor thickness is a shared knob, no type replaces it", "[SLA][RaftPreset]")
+{
+    // The floor is the slab on the build plate the raft stands on. How thick it should be for a
+    // skate is a tuning question against Lychee and Chitubox, so no raft type decides it, and zero
+    // keeps it as thick as the wall.
+    for (const sla::RaftType type : {sla::RaftType::None,
+                                     sla::RaftType::Full,
+                                     sla::RaftType::AroundObject,
+                                     sla::RaftType::Skate}) {
+        INFO("raft type " << static_cast<int>(type));
+        RaftPadValues vals = raft_preset_to_pad_values(
+            type,
+            0.0,   // wall_height_mm
+            2.0,   // wall_thickness_mm
+            1.6,   // expansion_mm
+            90.0,  // slope_deg
+            1.0,   // object_gap_mm
+            0.0,   // edge_taper_mm
+            {},    // infill
+            0.8    // floor_thickness_mm
+        );
+
+        CHECK(vals.raft_floor_thickness_mm == Approx(0.8));
+        // The wall thickness is untouched: the floor is a knob of its own.
+        CHECK(vals.pad_wall_thickness_mm == Approx(2.0));
+    }
+}
+
+TEST_CASE("RaftPreset: no floor thickness is a floor as thick as the wall", "[SLA][RaftPreset]")
+{
+    RaftPadValues vals = raft_preset_to_pad_values(
+        sla::RaftType::Full,
+        1.0,   // wall_height_mm
+        2.0,   // wall_thickness_mm
+        1.6,   // expansion_mm
+        90.0,  // slope_deg
+        1.0,   // object_gap_mm
+        0.0,   // edge_taper_mm
+        {},    // infill
+        0.0    // floor_thickness_mm
+    );
+
+    CHECK(vals.raft_floor_thickness_mm == Approx(0.));
 }

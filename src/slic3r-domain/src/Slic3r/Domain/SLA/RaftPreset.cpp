@@ -18,11 +18,13 @@ RaftPadValues raft_preset_to_pad_values(
     double slope_deg,
     double object_gap_mm,
     double edge_taper_mm,
-    RaftInfill infill
+    RaftInfill infill,
+    double floor_thickness_mm
 ) {
     RaftPadValues vals;
     vals.pad_wall_height_mm = wall_height_mm;
     vals.pad_wall_thickness_mm = wall_thickness_mm;
+    vals.raft_floor_thickness_mm = floor_thickness_mm;
     vals.pad_brim_size_mm = expansion_mm;
     vals.pad_wall_slope_deg = slope_deg;
     vals.pad_object_gap_mm = object_gap_mm;
@@ -60,17 +62,18 @@ RaftPadValues raft_preset_to_pad_values(
 
 namespace {
 
-// The knobs every printed raft reads: the cavity height, the wall thickness, how far the raft
-// reaches around the geometry, how steep its walls are, how far its top edge is bevelled in, what
-// its inside is filled with, the skin of the interface the object rests on and how close separate
-// pieces are allowed to be before they become one raft. The three knobs that shape the infill
-// pattern are in here too: they are raft settings, but the raft type alone does not decide them,
-// raft_infill_visible_settings does.
+// The knobs every printed raft reads: the cavity height, the wall thickness, how thick the slab
+// on the build plate is, how far the raft reaches around the geometry, how steep its walls are,
+// how far its top edge is bevelled in, what its inside is filled with, the skin of the interface
+// the object rests on and how close separate pieces are allowed to be before they become one
+// raft. The three knobs that shape the infill pattern are in here too: they are raft settings,
+// but the raft type alone does not decide them, raft_infill_visible_settings does.
 const std::vector<std::string>& raft_shape_settings()
 {
     static const std::vector<std::string> settings{
         "pad_wall_height",
         "pad_wall_thickness",
+        "raft_floor_thickness",
         "pad_brim_size",
         "pad_wall_slope",
         "raft_edge_taper",

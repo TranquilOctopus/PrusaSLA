@@ -28,15 +28,16 @@ struct RaftInfill
 
 struct RaftPadValues
 {
-    bool pad_enable              = true;
-    bool pad_around_object       = false;
-    double pad_wall_height_mm    = 0.0;
-    double pad_wall_thickness_mm = 2.0;
-    double pad_brim_size_mm      = 1.6;
-    double pad_wall_slope_deg    = 90.0;
-    double pad_object_gap_mm     = 1.0;
-    double raft_edge_taper_mm    = 0.0;
-    RaftInfill raft_infill       = {};
+    bool pad_enable                = true;
+    bool pad_around_object         = false;
+    double pad_wall_height_mm      = 0.0;
+    double pad_wall_thickness_mm   = 2.0;
+    double raft_floor_thickness_mm = 0.0;
+    double pad_brim_size_mm        = 1.6;
+    double pad_wall_slope_deg      = 90.0;
+    double pad_object_gap_mm       = 1.0;
+    double raft_edge_taper_mm      = 0.0;
+    RaftInfill raft_infill         = {};
 };
 
 /// Map a raft type and shared knobs to the pad configuration values.
@@ -49,6 +50,8 @@ struct RaftPadValues
 /// @param edge_taper_mm How far the top edge of the raft is bevelled in, 0 for a sharp edge.
 /// @param infill What the inside of the raft is filled with. No raft type replaces it, the user
 /// picks the pattern and the raft type only decides whether a raft is printed at all.
+/// @param floor_thickness_mm How thick the slab on the build plate the raft stands on is. Zero
+/// keeps it as thick as the wall, which is the raft the pad generator has always built.
 /// @return RaftPadValues to be applied to the pad generator.
 RaftPadValues raft_preset_to_pad_values(
     sla::RaftType type,
@@ -58,7 +61,8 @@ RaftPadValues raft_preset_to_pad_values(
     double slope_deg,
     double object_gap_mm,
     double edge_taper_mm,
-    RaftInfill infill
+    RaftInfill infill,
+    double floor_thickness_mm
 );
 
 /// The raft settings the given raft type actually reads, in the order they should be shown:

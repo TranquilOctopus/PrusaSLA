@@ -351,22 +351,43 @@ inline double head_penetration(const SupportableMesh            &sm,
 }
 
 // The base (pedestal) a pillar gets where it reaches the ground: the support
-// point's own diameter and height when it carries a per point size (the
+// point's own diameter, height and shape when it carries a per point size (the
 // support presets), the global config otherwise.
 struct BaseSize
 {
     double radius = 0.;
     double height = 0.;
+    Domain::sla::SupportBaseShape shape = Domain::sla::SupportBaseShape::Cone;
 };
+
+// The shape of the foot of this support point: its own, or the globally configured one when
+// the point does not ask for a shape of its own.
+inline Domain::sla::SupportBaseShape base_shape_of(const Domain::SLA::SupportPoint &sp)
+{
+    switch (sp.base_shape) {
+    case Domain::SLA::SupportPoint::BaseShape::Cone:
+        return Domain::sla::SupportBaseShape::Cone;
+    case Domain::SLA::SupportPoint::BaseShape::Cylinder:
+        return Domain::sla::SupportBaseShape::Cylinder;
+    case Domain::SLA::SupportPoint::BaseShape::Flat:
+        return Domain::sla::SupportBaseShape::Flat;
+    case Domain::SLA::SupportPoint::BaseShape::Default:
+        break;
+    }
+
+    return Domain::sla::SupportBaseShape::Cone;
+}
 
 inline BaseSize base_size(const SupportableMesh            &sm,
                           const Domain::SLA::SupportPoint *sp)
 {
-    BaseSize ret{sm.cfg.base_radius_mm, sm.cfg.base_height_mm};
+    BaseSize ret{sm.cfg.base_radius_mm, sm.cfg.base_height_mm, sm.cfg.base_shape};
 
     if (sp != nullptr) {
         if (sp->base_diameter > 0.f) ret.radius = 0.5 * double(sp->base_diameter);
         if (sp->base_height > 0.f) ret.height = double(sp->base_height);
+        if (sp->base_shape != Domain::SLA::SupportPoint::BaseShape::Default)
+            ret.shape = base_shape_of(*sp);
     }
 
     return ret;
@@ -632,7 +653,8 @@ inline long build_ground_connection(SupportTreeBuilder &builder,
                              conn.stem);
 
     if (conn.pillar_base->r_top >= full_r)
-        builder.add_pillar_base(ret, conn.pillar_base->height, conn.pillar_base->r_bottom);
+        builder.add_pillar_base(ret, conn.pillar_base->height, conn.pillar_base->r_bottom,
+                                conn.pillar_base->shape);
 
     return ret;
 }
@@ -860,7 +882,7 @@ GroundConnection deepsearch_ground_connection(
     // The resulting ground connection is only valid if the pillar base is set.
     // At this point it will only be set if the search was succesful.
     if (z_fn(Biz::Algorithms::Optimize::Input<3>({plr, azm, bridge_l})) <= gndlvl) {
-        conn.pillar_base = Pedestal{gp, base.height, base_r, end_radius};
+        conn.pillar_base = Pedestal{gp, base.height, base_r, end_radius, base.shape};
         conn.full_radius = sp != nullptr ? head_back_radius(sm, *sp) : 0.;
         conn.stem        = stem_geometry(sm, sp);
     }
