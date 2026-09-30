@@ -42,6 +42,8 @@ const std::map<TypeFlag, std::string>& get_wildcard_map()
         // Biz::FileLoadingLogic::get_resin_profile_extensions().
         {TypeFlag::ResinProfile,   "Resin profile files (*.cfg, *.cfgx, *.lyr, *.sl1, *.sl1s)"
                                     "|*.cfg;*.cfgx;*.lyr;*.sl1;*.sl1s"},
+        // The Save dialog of the resin export, which offers the one extension that format has.
+        {TypeFlag::ChituboxCfg,    "Chitubox profile (*.cfg)|*.cfg"},
     };
     return map;
 }

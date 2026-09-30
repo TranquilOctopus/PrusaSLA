@@ -538,7 +538,30 @@ Unit and meaning questions marked "verify" get settled in M3.1 by comparing a sa
   Chitubox key is left out and named", the kept volume in `ResinProfileMapperTests.cpp` and in the
   datasheet test's saved preset; the user guide's export section and its `bottleVolume` row were
   corrected. NOT BUILT when it was written; a human builds and runs the suites.
-- [ ] **M3.15c** The `.cfg` export is reachable from the CLI only, so the app has no button for it: add an "Export resin profile..." button next to M3.10b's import button in `MaterialSelectionDialog`, shown for SLA, that writes the selected resin through `export_chitubox_cfg`. · S · needs M3.15, M3.10b
+- [x] **M3.15c** The `.cfg` export is reachable from the CLI only, so the app has no button for it: add an "Export resin profile..." button next to M3.10b's import button in `MaterialSelectionDialog`, shown for SLA, that writes the selected resin   through `export_chitubox_cfg`. · S · needs M3.15, M3.10b
+  Result: the button is the third full-width one in `MaterialSelectionDialog`, between M3.10b's import
+  button and M3.11's datasheet one, `_u8L("Export resin profile")` plus an ellipsis outside the
+  translated string, shown and hidden with the other two in `update_type_filter_visibility()` (so SLA
+  only). It asks the platform for a path through `IDialogManager::show_file_dialog` with
+  `FileDialogType::Save` and the new `Wildcards::TypeFlag::ChituboxCfg` (*Chitubox profile (\*.cfg)*,
+  which is why `AllFlags` moved to 1 << 15), offering the name of the selected resin as the name of
+  the file through the new `suggested_cfg_file_name()`. The writing itself is Biz, not the dialog:
+  `ResinProfileExportInteractor` (new `Biz/ResinProfile/ResinProfileExportInteractor.{hpp,cpp}`,
+  registered in `CMakeLists.txt`) resolves the resin out of the presets of the selected printer (by
+  name, by id, or the one in the slot when the caller has no row to hand over), refuses a printer
+  that is not an SLA one or a name it does not have, decides the table with `export_printer_class()`
+  and either returns the text plus its report (`export_preset`, which is what lets the caller report
+  before the file exists) or writes it (`export_preset_to_file`, truncating, saying which path could
+  not be opened). A failure is an error dialog; a success is a `PopNotification` naming how many keys
+  were written and which settings the format has no key for, the same promise the CLI makes on its
+  console. Tests: the new `ResinProfileExportInteractorTests.cpp` (registered in `CMakeLists.txt`) has
+  5 cases - the file name a preset name becomes, the resin of the slot under an empty name (compared
+  against what the container holds, so the test does not depend on which resin that is), a preset
+  found by name (with the price per litre of that system resin in the file) and by id, a name the
+  printer does not have, the file that is written read back by `ChituboxCfgReader`, and a path that
+  cannot be opened. The user guide's three-ways-in section, its export section and its known limits
+  were corrected; the screenshot placeholders are still pending. NOT BUILT when it was written; a
+  human builds and runs the suites.
 
 ## M4: Engine quality (measure first; every PR includes before/after metrics)
 

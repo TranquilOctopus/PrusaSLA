@@ -67,18 +67,22 @@ name.
 ### 1. The Import resin profile button
 
 In **Prepare**, click the **Resin** row in the right-hand sidebar to open the resin picker. Under
-the list of resins there are two full-width buttons:
+the list of resins there are three full-width buttons:
 
 - **Import resin profile...** opens a file dialog filtered to
   *Resin profile files (\*.cfg, \*.cfgx, \*.lyr, \*.sl1, \*.sl1s)*, picks one file, and opens the
   review dialog on it.
+- **Export resin profile...** writes the resin that is selected in the list out as a Chitubox `.cfg`,
+  through a *Save* dialog filtered to *Chitubox profile (\*.cfg)*. The name of the resin is offered
+  as the name of the file, and a notification says how many keys were written and which settings the
+  format has no key for.
 - **New resin from datasheet** opens the form described further down.
 
-Both are shown only while a resin printer is selected. `File > Import File` is not involved: the
+All three are shown only while a resin printer is selected. `File > Import File` is not involved: the
 profile formats are deliberately kept out of the model import, so a `.cfg` dropped in or chosen
 there cannot be mistaken for a model.
 
-![TODO screenshot: the resin picker with the Import resin profile and New resin from datasheet buttons at the bottom]()
+![TODO screenshot: the resin picker with the Import resin profile, Export resin profile and New resin from datasheet buttons at the bottom]()
 
 ![TODO screenshot: the file dialog filtered to Resin profile files]()
 
@@ -142,7 +146,8 @@ goes into the preset.
 ### Writing a profile back out
 
 For people going the other way, the same mapping runs in reverse and writes a `.cfg` you can open in
-Chitubox. It is a command-line action only; there is no button in the app yet:
+Chitubox. The **Export resin profile...** button of the resin picker does it for the resin that is
+selected there, and the command line does it for a resin named on it:
 
 ```powershell
 # The resin of the selected printer, written out as a Chitubox .cfg.
@@ -349,8 +354,10 @@ not use yet, so they arrive as *Unknown* rather than silently:
   vendor or brand key of the `.cfg` format is known yet, so nothing is guessed at one.
 - There is no printer picker in the review dialog. Pick the printer in the sidebar first; the
   import goes into the selected one or it does not happen.
-- There is no button for writing a profile back out; that is the `--export-resin-profile` command
-  line above, and it carries only what the `.cfg` format has keys for.
+- The file that goes out carries only what the `.cfg` format has keys for. The **Export resin
+  profile...** button names the settings it leaves out in a notification, and the
+  `--export-resin-profile` command line above names them on the console.
+
 - A single text profile (`.cfg`) is capped at 8 MB and a folder import at 1000 files. A sliced
   archive (`.sl1`, `.sl1s`) has no cap on the file: only its two ini entries are read.
 - The table shows at most 500 rows, so a `.cfg` with a very long machine section is cut off there.

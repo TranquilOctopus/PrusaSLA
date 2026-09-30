@@ -24,7 +24,9 @@ enum class TypeFlag : int
     AllTextures    = 1 << 11,
     Zip            = 1 << 12,
     ResinProfile   = 1 << 13,
-    AllFlags       = 1 << 14
+    /// The one filter of a Save dialog: a Chitubox profile, which is what the resin export writes.
+    ChituboxCfg     = 1 << 14,
+    AllFlags       = 1 << 15
 };
 
 constexpr TypeFlag operator|(TypeFlag lhs, TypeFlag rhs)
