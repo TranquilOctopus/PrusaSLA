@@ -43,6 +43,11 @@ struct SupportTreeConfig
     // Width in mm from the back sphere center to the front sphere center.
     double head_width_mm = 1.0;
 
+    // The length in mm of the tapered tip of a support point that carries no tip length of its
+    // own (support_tip_length). Zero means the pinhead width is used, which is what the tree has
+    // always built.
+    double tip_length_mm = 0.;
+
     // How to connect pillars
     Domain::sla::PillarConnectionMode pillar_connection_mode = Domain::sla::PillarConnectionMode::dynamic;
 

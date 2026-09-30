@@ -172,6 +172,9 @@ sla::SupportTreeConfig make_support_cfg(const SLAPrintObjectConfigView& c)
             c.get<Percentage>("support_small_pillar_diameter_percent").get_abs_value(1.0) * pillar_r;
         scfg.head_penetration_mm = c.get<double>("support_head_penetration");
         scfg.head_width_mm = c.get<double>("support_head_width");
+        // The tip length a support point that carries no tip length of its own is built with
+        // (M2.24). Zero keeps the pinhead width, which is what the tree has always built.
+        scfg.tip_length_mm = c.get<double>("support_tip_length");
         scfg.object_elevation_mm = is_zero_elevation(c) ?
                                        0. : c.get<double>("support_object_elevation");
         scfg.bridge_slope = c.get<double>("support_critical_angle") * PI / 180.0 ;
@@ -814,6 +817,9 @@ const std::map<std::string, std::vector<Step>> invalidated_by{
     {"support_small_pillar_diameter_percent", steps({propagate(slaposSupportTree)})},
     {"support_stem_sides", steps({})},
     {"support_stem_taper", steps({})},
+    // M2.24: the default tip length of a support point. The default tree reads it for every point
+    // that carries no tip length of its own, so it rebuilds the trees.
+    {"support_tip_length", steps({propagate(slaposSupportTree)})},
     {"support_tip_shape", steps({})},
     {"support_tree_type", steps({propagate(slaposObjectSlice)})},
     {"supports_enable", steps({propagate(slaposObjectSlice)})},

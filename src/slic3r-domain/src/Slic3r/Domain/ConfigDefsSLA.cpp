@@ -1833,6 +1833,24 @@ def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : 
     def->max = 1;
     def->init_fn = init_with(0.);
 
+    // The length of the tapered tip, a parameter of its own next to the pinhead width (M2.24). A
+    // support point carries its own tip_length (M2.13) and the tree builds it; this is the default a
+    // point that carries none falls back to. Zero derives the length from support_head_width, which
+    // is what the tree has always built, so a print preset that never sets it keeps today's mesh.
+    def = defs.add("support_tip_length", typeid(double));
+    def->location = Print;
+    def->overrides_in = Locations{ Object };
+    def->label = L("Tip length");
+    def->row_group = L("Tip length");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportHead;
+    def->category = ConfigItemDef::Category::Print_Supports;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Length of the tapered tip between the point that touches the model and the stem. Zero takes the pinhead width, which is what supports have always been built with.");
+    def->units = {L("mm")};
+    def->min = 0;
+    def->max = 20;
+    def->init_fn = init_with(0.);
+
     // Support presets for the SLA Support Points tool (Mini, Light, Medium, Heavy)
     // Each preset has 4 dimensions: head_diameter, pillar_diameter, base_diameter, base_height
     struct SupportPreset {
