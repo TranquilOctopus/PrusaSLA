@@ -29,6 +29,29 @@ Domain::Vec2d auto_orient(
         return Domain::Vec2d::Zero();
     }
 
+    return auto_orient(mesh_to_rotate(object), goal, std::move(status));
+}
+
+Domain::Vec2d auto_orient_min_height(const Domain::ModelObject& object, AutoOrientStatus status)
+{
+    return auto_orient(object, AutoOrientGoal::MinHeight, std::move(status));
+}
+
+Domain::TriangleMesh auto_orient_mesh(const Domain::ModelObject& object)
+{
+    if (!has_geometry_to_rotate(object)) {
+        return Domain::TriangleMesh{};
+    }
+
+    return mesh_to_rotate(object);
+}
+
+Domain::Vec2d auto_orient(const Domain::TriangleMesh& mesh, AutoOrientGoal goal, AutoOrientStatus status)
+{
+    if (mesh.its.vertices.empty() || mesh.its.indices.empty()) {
+        return Domain::Vec2d::Zero();
+    }
+
     RotOptimizeParams params;
     if (status) {
         params.statucb(std::move(status));
@@ -36,17 +59,16 @@ Domain::Vec2d auto_orient(
 
     switch (goal) {
     case AutoOrientGoal::LeastSupports:
-        return find_least_supports_rotation(object, params);
+        return find_least_supports_rotation(mesh, params);
+    case AutoOrientGoal::LeastPeel:
+        return find_least_peel_rotation(mesh, params);
+    case AutoOrientGoal::NoCups:
+        return find_no_cups_rotation(mesh, params);
     case AutoOrientGoal::MinHeight:
-        return find_min_z_height_rotation(object, params);
+        return find_min_z_height_rotation(mesh, params);
     }
 
     return Domain::Vec2d::Zero();
-}
-
-Domain::Vec2d auto_orient_min_height(const Domain::ModelObject& object, AutoOrientStatus status)
-{
-    return auto_orient(object, AutoOrientGoal::MinHeight, std::move(status));
 }
 
 } // namespace Slic3r::sla

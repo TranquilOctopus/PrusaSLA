@@ -98,6 +98,16 @@ const JobNotificationSpec* find_job_spec(const std::string& job_key)
             .finished_header = L("Repair Finished"),
             // TRN Header of a failed repair notification.
             .failed_header = L("Repair Failed")
+        },
+        JobNotificationSpec{
+            .key_prefix = "sla_auto_orient",
+            // TRN Header of a notification while the SLA auto orientation searches for a rotation.
+            .started_header = L("Auto orienting..."),
+            // TRN Header of a finished SLA auto orientation notification.
+            .finished_header = L("Auto orient finished"),
+            // TRN Header of a failed SLA auto orientation notification.
+            .failed_header = L("Auto orient failed"),
+            .icon = Render::Icon::Rotate
         }
     };
 

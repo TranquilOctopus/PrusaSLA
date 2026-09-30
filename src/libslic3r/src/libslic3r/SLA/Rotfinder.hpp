@@ -13,6 +13,7 @@
 
 namespace Slic3r::Domain {
 class ModelObject;
+class TriangleMesh;
 } // namespace Slic3r::Domain
 
 namespace Slic3r {
@@ -78,6 +79,54 @@ Vec2d find_least_supports_rotation(const Domain::ModelObject &modelobj,
 
 Vec2d find_min_z_height_rotation(const Domain::ModelObject &mo,
                                  const RotOptimizeParams &params = {});
+
+/**
+  * Find the rotation whose biggest cross section is the smallest (PLAN B7's least peel area).
+  *
+  * Every peel has to lift the layer it is on off the film, so the layer with the most cured area in
+  * it is the peak the print has to get through. The poses that lay a convex hull face flat on the
+  * plate are sliced coarsely (SLA/OrientCrossSection.hpp) and the one with the smallest peak wins,
+  * which is usually not the one with the fewest layers: a thin plate standing on its edge peels far
+  * more easily than the same plate lying down.
+  *
+  * @param modelobj The model object representing the 3d mesh.
+  * @param params The optimization accuracy and the status callback, as above.
+  *
+  * @return Returns the rotations around the X and Y axes in the same convention as the functions
+  * above: R = Ry(y) * Rx(x).
+  */
+Vec2d find_least_peel_rotation(const Domain::ModelObject &modelobj,
+                               const RotOptimizeParams & = {});
+
+/**
+  * Find the rotation that leaves the object with no upside down cups (PLAN B7's cup avoidance).
+  *
+  * A cup is a pocket that is enclosed in its layer and stays enclosed going up until a layer closes
+  * it, so it holds a vacuum against the vat film and adds to the peel force of every layer it is
+  * open for. The poses that lay a convex hull face flat on the plate are sliced coarsely and run
+  * through the cavity detection of M4.8e, and the pose with the least cup opening wins. The peak
+  * cross section still counts a little, only to pick between the poses that have no cup at all
+  * rather than an arbitrary one of them.
+  *
+  * @param modelobj The model object representing the 3d mesh.
+  * @param params The optimization accuracy and the status callback, as above.
+  *
+  * @return Returns the rotations around the X and Y axes in the same convention as the functions
+  * above: R = Ry(y) * Rx(x).
+  */
+Vec2d find_no_cups_rotation(const Domain::ModelObject &modelobj,
+                            const RotOptimizeParams & = {});
+
+// The mesh the search above works on, taken out of the model so that a caller holding no model (a
+// job off the UI thread) can run the same search. See SLAAutoOrient.hpp, which is the public way in.
+Domain::TriangleMesh mesh_to_rotate(const Domain::ModelObject &modelobj);
+
+// The same searches on a mesh that is already in that shape.
+Vec2d find_best_misalignment_rotation(const Domain::TriangleMesh &mesh, const RotOptimizeParams & = {});
+Vec2d find_least_supports_rotation(const Domain::TriangleMesh &mesh, const RotOptimizeParams & = {});
+Vec2d find_min_z_height_rotation(const Domain::TriangleMesh &mesh, const RotOptimizeParams & = {});
+Vec2d find_least_peel_rotation(const Domain::TriangleMesh &mesh, const RotOptimizeParams & = {});
+Vec2d find_no_cups_rotation(const Domain::TriangleMesh &mesh, const RotOptimizeParams & = {});
 
 // Helper to convert XY rotation angles to a Transform3f
 Transform3f rotation_angles_to_transform(const Vec2d &angles);

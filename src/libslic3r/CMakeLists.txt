@@ -381,6 +381,8 @@ set(SLIC3R_SOURCES
     src/libslic3r/SLA/IslandDetection.hpp
     src/libslic3r/SLA/LayerStats.cpp
     include/libslic3r/SLA/LayerStats.hpp
+    src/libslic3r/SLA/OrientCrossSection.cpp
+    src/libslic3r/SLA/OrientCrossSection.hpp
     src/libslic3r/SLAPrint.hpp
     src/libslic3r/SLAPrint.cpp
     src/libslic3r/SLAPrintSteps.cpp
