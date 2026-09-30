@@ -984,7 +984,7 @@ Scene::IGizmoController& PlaterRenderModule::gizmo_controller() {
 SidebarBed& PlaterRenderModule::sidebar_bed()
 {
     ASSERT(m_sidebar_bed.get());
-    return *m_sidebar_bed;
+    return *m_sidebar_bed.get();
 }
 
 void PlaterRenderModule::init_scene()
