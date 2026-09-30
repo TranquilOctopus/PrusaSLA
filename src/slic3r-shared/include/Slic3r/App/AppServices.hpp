@@ -2,6 +2,8 @@
 
 #include <memory>
 
+#include "Slic3r/App/SlaLayerJump.hpp"
+
 namespace Slic3r::App::PopNotification {
 class PopNotificationCenter;
 } // namespace Slic3r::App::PopNotification
@@ -34,6 +36,9 @@ public:
     void set_preset_updater_controller(std::unique_ptr<PresetUpdater::PresetUpdaterController>&& controller);
     void set_theme(std::unique_ptr<Theme>&& theme);
 
+    /// The "show this layer in the layer image window" channel between the two render modules.
+    SlaLayerJump& sla_layer_jump();
+
     PopNotification::PopNotificationCenter& pop_notification_center() const;
     IDialogManager& dialog_manager() const;
     Platform::IFileExplorerHandler& file_explorer_handler() const;
@@ -51,6 +56,7 @@ private:
     std::unique_ptr<AppConfigInteractor> m_app_config_interactor;
     std::unique_ptr<PresetUpdater::PresetUpdaterController> m_preset_updater_controller;
     std::unique_ptr<Theme> m_theme;
+    SlaLayerJump m_sla_layer_jump;
 };
 
 } // namespace Slic3r::App

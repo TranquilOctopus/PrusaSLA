@@ -57,6 +57,11 @@ void AppServices::set_theme(std::unique_ptr<Theme>&& theme)
     m_theme = std::move(theme);
 }
 
+SlaLayerJump& AppServices::sla_layer_jump()
+{
+    return m_sla_layer_jump;
+}
+
 PopNotification::PopNotificationCenter& AppServices::pop_notification_center() const
 {
     ASSERT(m_pop_notification_center != nullptr);

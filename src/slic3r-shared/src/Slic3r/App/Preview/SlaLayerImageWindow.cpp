@@ -1,5 +1,7 @@
 #include "Slic3r/App/Preview/SlaLayerImageWindow.hpp"
 
+#include "Slic3r/App/AppServices.hpp"
+#include "Slic3r/App/SlaIssueRows.hpp"
 #include "Slic3r/App/Yoga/Text.hpp"
 #include "Slic3r/App/Yoga/LayoutButton.hpp"
 #include "Slic3r/App/Yoga/ScrollArea.hpp"
@@ -21,8 +23,6 @@
 #include <fmt/format.h>
 
 #include <algorithm>
-#include <cctype>
-#include <charconv>
 #include <iterator>
 
 namespace Slic3r::App::Preview {
@@ -100,27 +100,6 @@ ImVec2 bed_mm_to_image_px(
     const double v = 1. - y_mm / mapping.height_mm;
 
     return ImVec2(rect_min.x + float(u) * rect_size.x, rect_min.y + float(v) * rect_size.y);
-}
-
-// The slicer writes island notes as "island, 4.20 mm2", pick the area out of it.
-std::optional<double> island_area_from_note(const std::string& note)
-{
-    size_t begin = note.find_first_of("0123456789");
-    if (begin == std::string::npos)
-        return std::nullopt;
-
-    size_t end = begin;
-    while (end < note.size() && (std::isdigit(static_cast<unsigned char>(note[end])) || note[end] == '.'))
-        ++end;
-    if (end == begin)
-        return std::nullopt;
-
-    double area = 0.;
-    const auto parsed = std::from_chars(note.data() + begin, note.data() + end, area);
-    if (parsed.ec != std::errc{} || parsed.ptr != note.data() + end)
-        return std::nullopt;
-
-    return area;
 }
 
 } // namespace
@@ -250,6 +229,15 @@ void SlaLayerImageWindow::update(const Biz::Slicing::SLAResult* result)
     if (!m_slider) {
         set_visible(false);
         return;
+    }
+
+    // A row of the sidebar issues list asked for a layer of this bed (M1.11b). Answered before
+    // the layer is read below, so the image of the asked layer is built in this same update.
+    if (std::optional<size_t> layer = AppServices::instance().sla_layer_jump().take(
+            m_project_interactor.selected_bed_slicing_id()
+        ))
+    {
+        go_to_layer(*layer);
     }
 
     set_visible(true);
@@ -661,7 +649,13 @@ void SlaLayerImageWindow::rebuild_island_list()
             if (issue.kind != Biz::Slicing::Sla::SlaIssue::Kind::Island)
                 continue;
             m_islands.push_back(
-                Island{issue.layer, issue.position.x(), issue.position.y(), island_area_from_note(issue.note)});
+                Island{
+                    issue.layer,
+                    issue.position.x(),
+                    issue.position.y(),
+                    sla_issue_area_mm2(issue.note)
+                }
+            );
         }
     }
 

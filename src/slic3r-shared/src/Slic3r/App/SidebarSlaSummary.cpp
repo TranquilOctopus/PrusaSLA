@@ -1,7 +1,10 @@
 #include "Slic3r/App/SidebarSlaSummary.hpp"
 
+#include "Slic3r/App/AppServices.hpp"
+#include "Slic3r/App/Theme.hpp"
 #include "Slic3r/App/Yoga/Text.hpp"
 #include "Slic3r/App/Yoga/Item.hpp"
+#include "Slic3r/App/Yoga/LayoutButton.hpp"
 #include "Slic3r/App/Yoga/Separator.hpp"
 
 #include "Slic3r/Biz/ProjectInteractor.hpp"
@@ -15,6 +18,8 @@
 #include "Slic3r/Domain/Project.hpp"
 #include "Slic3r/Domain/SlicingId.hpp"
 #include "Slic3r/Domain/PrinterTechnology.hpp"
+
+#include "libslic3r/SLAResult.hpp"
 
 #include <iomanip>
 #include <sstream>
@@ -104,6 +109,7 @@ void SidebarSlaSummary::refresh()
     m_current_project_id = project_id;
     m_current_config_container_id = config_container_id;
     m_current_bed_instance_id = bed_instance_id;
+    m_current_slicing_id          = SlicingId{project_id, bed_instance_id};
 
     update_visibility();
 
@@ -137,16 +143,20 @@ void SidebarSlaSummary::refresh()
     ResinEconomicsInteractor economics_interactor(m_project_interactor);
     const BedResinEconomics bed_economics = economics_interactor.compute_bed_economics(project_id, bed_instance_id);
 
-    // Get layer count from SLA result cache
+    // Get layer count and issues from SLA result cache
     std::optional<size_t> layer_count;
+    SlaIssueRows issue_rows;
     if (bed_economics.has_result) {
         const SLAResultCache& sla_cache = m_project_interactor.sla_result_cache();
         const SlicingId slicing_id{project_id, bed_instance_id};
         const std::optional<SLAResultRef> sla_result_opt = sla_cache.get_result(slicing_id);
         if (sla_result_opt) {
             const Slicing::SLAResult& sla_result = sla_result_opt.value().get();
-            if (sla_result.export_data && sla_result.export_data->files.data.size() > 0) {
-                layer_count = sla_result.export_data->files.data.size();
+            if (sla_result.export_data) {
+                if (sla_result.export_data->files.data.size() > 0) {
+                    layer_count = sla_result.export_data->files.data.size();
+                }
+                issue_rows = build_sla_issue_rows(sla_result.export_data->issues);
             }
         }
     }
@@ -188,6 +198,53 @@ void SidebarSlaSummary::refresh()
     std::string layers_label = _u8L("Layers");
     std::string layers_value = SidebarSlaSummaryFormat::format_layers(layer_count);
     add_row(layers_label, layers_value);
+
+    add_issue_rows(issue_rows);
+}
+
+void SidebarSlaSummary::add_issue_rows(const SlaIssueRows& issue_rows)
+{
+    // Nothing found, or the printer is not an SLA one, in which case the whole window is hidden.
+    if (issue_rows.empty()) {
+        return;
+    }
+
+    m_rows_container->emplace_back<Separator>();
+
+    Text* title = m_rows_container->emplace_back<Text>(issue_rows.title());
+    title->set_font_type(Render::ImguiFontType::Bold);
+    title->set_flex_shrink(0_fpx);
+
+    for (const SlaIssueRow& issue_row : issue_rows.rows) {
+        const bool is_cup   = issue_row.kind == Biz::Slicing::Sla::SlaIssue::Kind::Cup;
+        const ImColor color = m_theme->color_imgui(
+            is_cup ? Platform::Color::SlaCupWarning : Platform::Color::SlaIslandWarning
+        );
+
+        LayoutButton* row = m_rows_container->emplace_back<
+            LayoutButton>(sla_issue_row_text(issue_row), Render::Icon::WarningMarker);
+        row->set_label_color(color);
+        row->set_icon_tint(color);
+        // A link, not a panel button: no box around it and the label to the left.
+        row->set_background_color(Platform::Color::ButtonTransparent);
+        row->set_content_justify_content(YGJustifyFlexStart);
+        row->set_content_padding({4.f, 2.f});
+        row->set_flex_shrink(0_fpx);
+        row->set_tooltip(_u8L("Show this layer in the layer image window"));
+
+        const size_t layer      = issue_row.layer;
+        row->callbacks().action = [this, layer]()
+        {
+            // The layer image window lives in another render module, so the request goes through
+            // the app wide channel and is picked up there.
+            AppServices::instance().sla_layer_jump().request(m_current_slicing_id, layer);
+        };
+    }
+
+    if (const std::string more_text = issue_rows.more_text(); !more_text.empty()) {
+        Text* more = m_rows_container->emplace_back<Text>(more_text);
+        more->set_flex_shrink(0_fpx);
+    }
 }
 
 void SidebarSlaSummary::update_visibility()

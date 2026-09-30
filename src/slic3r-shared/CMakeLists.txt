@@ -235,6 +235,9 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/SidebarBed.cpp
         include/Slic3r/App/SidebarSlaSummary.hpp
         src/Slic3r/App/SidebarSlaSummary.cpp
+        include/Slic3r/App/SlaIssueRows.hpp
+        src/Slic3r/App/SlaIssueRows.cpp
+        include/Slic3r/App/SlaLayerJump.hpp
         include/Slic3r/App/SidebarSlaPrintSettings.hpp
         src/Slic3r/App/SidebarSlaPrintSettings.cpp
         include/Slic3r/App/SlaPrintSettingsDialog.hpp
@@ -1619,6 +1622,10 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/App/ThemeTests.cpp
 
             test/Slic3r/App/SidebarSlaSummaryTests.cpp
+
+            test/Slic3r/App/SlaIssueRowsTests.cpp
+
+            test/Slic3r/App/SlaLayerJumpTests.cpp
 
             test/Slic3r/App/SidebarSlaPrintSettingsTests.cpp
 
