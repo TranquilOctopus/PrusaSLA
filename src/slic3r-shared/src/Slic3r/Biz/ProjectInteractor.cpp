@@ -1180,8 +1180,14 @@ void ProjectInteractor::import_sla_archives_to_project(
     const Domain::Vec2d         bed_center =
         cc->bed().center() + Biz::Algorithms::Point::to_2d(inst.transformation.get_offset());
 
+    // The job is created with the archives by value, so it owns them on its worker thread: the
+    // vector they are read from here belongs to the caller, which is gone long before the job ends.
     Biz::Platform::PlatformServices::instance().job_manager()
-        .create_job("sla_archive_import", FileLoadingLogic::import_sla_archives_local, paths)
+        .create_job(
+            "sla_archive_import",
+            FileLoadingLogic::import_sla_archives_local,
+            std::vector<boost::filesystem::path>(paths)
+        )
         .set_project_id(project_id)
         .on_result(
             [this, project_id, selected_bed, bed_center, first_path = paths.front()](

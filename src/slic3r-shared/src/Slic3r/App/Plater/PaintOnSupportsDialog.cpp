@@ -3,6 +3,7 @@
 #include "Slic3r/App/Plater/PaintOnSupportsGizmo.hpp"
 #include "Slic3r/App/Plater/PaintSupportsRules.hpp"
 #include "Slic3r/App/Yoga/LayoutButton.hpp"
+#include "Slic3r/App/Yoga/Separator.hpp"
 #include "Slic3r/App/Yoga/SliderWithInput.hpp"
 #include "Slic3r/App/Yoga/Text.hpp"
 #include "Slic3r/App/Yoga/ToggleButton.hpp"

@@ -1336,11 +1336,12 @@ SlaArchiveRead default_sla_archive_read()
             // something to report to the user.
             if (stop && stop())
                 return SlaArchiveReadResult{.mesh = {}, .error = {}, .cancelled = true};
+            const std::string file_name = path.filename().string();
             return SlaArchiveReadResult{
                 .mesh      = {},
-                .error     = fmt::vformat(
-                    _u8L("Model from {} couldn't be read because it's empty"),
-                    fmt::make_format_args(path.filename().string())
+                .error     = fmt::format(
+                    fmt::runtime(_u8L("Model from {} couldn't be read because it's empty")),
+                    file_name
                 ),
                 .cancelled = false
             };
@@ -1420,8 +1421,7 @@ std::vector<SlaArchiveImport> read_sla_archives(
 std::vector<SlaArchiveImport> import_sla_archives_local(
     Biz::JThread::StopToken stop_token,
     Biz::Platform::JobManager::ProgressTracker progress,
-    const std::vector<boost::filesystem::path>& paths,
-    SlaArchiveRead read
+    std::vector<boost::filesystem::path> paths
 )
 {
     return read_sla_archives(
@@ -1431,8 +1431,7 @@ std::vector<SlaArchiveImport> import_sla_archives_local(
         {
             // The tracker reads its percentage as a share from 0 to 1 and never going back.
             progress.set(Domain::Percentage{std::clamp(share, 0., 1.)});
-        },
-        std::move(read)
+        }
     );
 }
 

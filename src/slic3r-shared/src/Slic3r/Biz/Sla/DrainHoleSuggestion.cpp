@@ -114,7 +114,8 @@ std::optional<DrainHoleSuggestion> suggest_drain_hole(
     // does not follow the convention still gets a hole that goes the right way. The frame of the
     // layers is where "up" is, so the normal is carried over with the inverse transpose, which a
     // non-uniformly scaled instance needs.
-    const Domain::Vec3d world_normal = (mesh_to_mesh.linear().inverse().transpose() * normal).normalized();
+    const Domain::Vec3d world_normal =
+        (mesh_to_world.linear().inverse().transpose() * normal).normalized();
     if (downwards ? (world_normal.z() > 0.) : (world_normal.z() < 0.)) {
         normal = -normal;
     }
