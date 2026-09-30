@@ -39,6 +39,7 @@
 #include "Slic3r/App/Plater/SlaUnsupportedNotification.hpp"
 #include "Slic3r/App/Plater/SlaFirstModelNotification.hpp"
 #include "Slic3r/App/Plater/SlaArchiveSettingsNotification.hpp"
+#include "Slic3r/App/SlaHollowingSuggestion.hpp"
 #include "Slic3r/App/Plater/PaintOnSupportsGizmo.hpp"
 #include "Slic3r/App/Plater/PaintOnSupportsDialog.hpp"
 #include "Slic3r/App/Plater/PaintOnSeamsGizmo.hpp"
@@ -1112,6 +1113,18 @@ void PlaterRenderModule::init_gizmos()
     m_sla_archive_settings_notification = std::make_unique<SlaArchiveSettingsNotification>(
         m_project_interactor,
         [this](const boost::filesystem::path& path) { open_resin_import(path); },
+        AppServices::instance().pop_notification_center()
+    );
+    // The hollowing tool is activated through the navigator, which this module is given after it
+    // is built, so the offer carries a callback that reads it when the button is pressed rather
+    // than now. The listener has already selected the model the tool works on.
+    m_sla_hollowing_notification = std::make_unique<SlaHollowingNotification>(
+        m_project_interactor,
+        [this](Domain::ObjectID) {
+            if (m_render_module_navigator) {
+                m_render_module_navigator->activate_plater_tool(Scene::ToolType::SlaHollow);
+            }
+        },
         AppServices::instance().pop_notification_center()
     );
     // Keeps the support tree and the raft of every model on the plate drawn, so the tool gizmo

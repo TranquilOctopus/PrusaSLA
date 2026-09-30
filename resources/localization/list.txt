@@ -162,6 +162,7 @@ src/slic3r-shared/src/Slic3r/App/SidebarObject.cpp
 src/slic3r-shared/src/Slic3r/App/SidebarPrint.cpp
 src/slic3r-shared/src/Slic3r/App/SidebarSlaPrintSettings.cpp
 src/slic3r-shared/src/Slic3r/App/SidebarSlaSummary.cpp
+src/slic3r-shared/src/Slic3r/App/SlaHollowingSuggestion.cpp
 src/slic3r-shared/src/Slic3r/App/SlaIssueRows.cpp
 src/slic3r-shared/src/Slic3r/App/SlaPrintSettingsDialog.cpp
 src/slic3r-shared/src/Slic3r/App/TopBar.cpp

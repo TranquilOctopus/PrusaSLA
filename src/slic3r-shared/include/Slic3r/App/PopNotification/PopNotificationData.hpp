@@ -36,7 +36,8 @@ enum class PopNotificationType
     SlaIssueDetected,
     SlaUnsupportedDetected,
     SlaHint,
-    SlaArchiveSettings
+    SlaArchiveSettings,
+    SlaHollowingSuggestion
 };
 
 /*
