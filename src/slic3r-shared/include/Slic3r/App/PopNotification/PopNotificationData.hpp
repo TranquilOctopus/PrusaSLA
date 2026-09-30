@@ -35,7 +35,8 @@ enum class PopNotificationType
     PluginInstallationSuccess,
     SlaIssueDetected,
     SlaUnsupportedDetected,
-    SlaHint
+    SlaHint,
+    SlaArchiveSettings
 };
 
 /*

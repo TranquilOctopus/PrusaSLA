@@ -13,6 +13,7 @@
 #include "Slic3r/Biz/IMessageDialogProvider.hpp"
 #include "Slic3r/Biz/UserAccount/ConnectUtils.hpp"
 #include "Slic3r/Biz/Platform/JobManager/JobManager.hpp"
+#include "Slic3r/Biz/Platform/PlatformServices.hpp"
 #include "Slic3r/Biz/PrintHost/PrintHostFormats.hpp"
 #include "Slic3r/Biz/FileLoadingLogic.hpp"
 #include "Slic3r/Biz/Scene/BedFactory.hpp"
@@ -23,6 +24,7 @@
 #include "Slic3r/Domain/TriangleSelector.hpp"
 
 #include <algorithm>
+#include <exception>
 #include <map>
 #include <memory>
 #include <optional>
@@ -1120,6 +1122,25 @@ void ProjectInteractor::set_output_extension(Domain::SelectionId project_id, con
 
 void ProjectInteractor::load_models_to_project(std::vector<boost::filesystem::path> paths)
 {
+    // An SLA archive is read on a worker thread with a progress bar and a cancel: a 200 MB archive
+    // holds thousands of layer images and the window must stay alive through it. Every other
+    // format keeps the synchronous path it has always had, so nothing else changes timing.
+    std::vector<boost::filesystem::path> archives;
+    std::vector<boost::filesystem::path> plain;
+    for (const boost::filesystem::path& path : paths) {
+        if (FileLoadingLogic::is_sla_archive_file(path.string()))
+            archives.push_back(path);
+        else
+            plain.push_back(path);
+    }
+    if (!archives.empty()) {
+        import_sla_archives_to_project(archives);
+    }
+    if (plain.empty()) {
+        return;
+    }
+    paths = std::move(plain);
+
     const auto& proj            = m_workbench.project(selected_project_id());
     Domain::BedRef selected_bed = scene_interactor().bed_selection().last_selected_bed();
     const Domain::ConfigContainer* cc =
@@ -1146,6 +1167,75 @@ void ProjectInteractor::load_models_to_project(std::vector<boost::filesystem::pa
         selected_bed,
         UndoSnapshotType::AddObject
     );
+}
+
+void ProjectInteractor::import_sla_archives_to_project(
+    const std::vector<boost::filesystem::path>& paths)
+{
+    const Domain::SelectionId project_id = selected_project_id();
+    Domain::BedRef selected_bed = scene_interactor().bed_selection().last_selected_bed();
+    const Domain::ConfigContainer* cc =
+        m_workbench.project(project_id).find_config_container(selected_bed.config_container_id);
+    const Domain::BedInstance& inst        = cc->find_bed_instance(selected_bed.instance_id);
+    const Domain::Vec2d         bed_center =
+        cc->bed().center() + Biz::Algorithms::Point::to_2d(inst.transformation.get_offset());
+
+    Biz::Platform::PlatformServices::instance().job_manager()
+        .create_job("sla_archive_import", FileLoadingLogic::import_sla_archives_local, paths)
+        .set_project_id(project_id)
+        .on_result(
+            [this, project_id, selected_bed, bed_center, first_path = paths.front()](
+                std::vector<FileLoadingLogic::SlaArchiveImport> archives)
+            {
+                // An empty result is a cancel, and a cancelled import adds nothing at all: no
+                // object, no undo step, no arrangement.
+                if (archives.empty() || m_workbench.find_project_by_id(project_id) == nullptr) {
+                    return;
+                }
+
+                Domain::ElementRefs new_instances;
+                std::string         errors;
+                for (FileLoadingLogic::SlaArchiveImport& archive : archives) {
+                    if (!archive.error.empty()) {
+                        errors += archive.error + "\n";
+                        continue;
+                    }
+                    const Domain::ElementRefs added = FileLoadingLogic::add_sla_archive_to_scene(
+                        std::move(archive.mesh), archive.path, scene_interactor(), bed_center
+                    );
+                    new_instances.insert(new_instances.end(), added.begin(), added.end());
+                }
+                if (!errors.empty() && m_dialog_provider) {
+                    m_dialog_provider->show_error_dialog(errors, _u8L("Files import") + ":");
+                }
+                if (new_instances.empty()) {
+                    return;
+                }
+
+                set_project_dir(project_id, first_path);
+                arrange_interactor().arrange_added_instances(
+                    project_id, new_instances, selected_bed, UndoSnapshotType::AddObject
+                );
+            })
+        .on_exception([this, project_id](const std::exception_ptr& exception) {
+            if (m_workbench.find_project_by_id(project_id) == nullptr) {
+                return;
+            }
+            try {
+                std::rethrow_exception(exception);
+            } catch (const std::exception& e) {
+                if (m_dialog_provider) {
+                    m_dialog_provider->show_error_dialog(e.what(), _u8L("Files import") + ":");
+                }
+            } catch (...) {
+                if (m_dialog_provider) {
+                    m_dialog_provider->show_error_dialog(
+                        _u8L("The archive could not be read."), _u8L("Files import") + ":"
+                    );
+                }
+            }
+        })
+        .start();
 }
 
 Domain::SelectionId ProjectInteractor::add_config_container()

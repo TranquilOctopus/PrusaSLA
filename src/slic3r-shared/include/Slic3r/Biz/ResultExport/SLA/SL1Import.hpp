@@ -24,7 +24,12 @@ struct Sl1ImportResult {
 /// Fails with a message describing the problem if the file is not an SL1 archive,
 /// if it has no config.ini, no layer images, or a layer image cannot be decoded.
 /// Cancelling through stop() is not an error: the returned mesh is then empty.
+/// @p progress, when given, is called with the share of the work done from 0 to 1, so a caller
+/// running this off the main thread can show a bar. Decoding the layer images is two thirds of
+/// it, tracing them into a mesh the rest.
 tl::expected<Sl1ImportResult, std::string>
-import_sl1_archive(const boost::filesystem::path &path, std::function<bool()> stop = {});
+import_sl1_archive(const boost::filesystem::path &path,
+                   std::function<bool()>            stop     = {},
+                   std::function<void(double)>      progress = {});
 
 } // namespace Slic3r::Biz::PrintHost::Sla

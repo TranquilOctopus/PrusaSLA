@@ -34,8 +34,11 @@ struct LayersToMeshParams {
 // Marching squares on each layer, then stacks the layer outlines into a closed mesh.
 // The layers are expected in bottom to top order. An empty mesh is returned for
 // empty input, and also when stop() returns true (cancel) before all layers are done.
+// progress(), when given, is called with the share of the layers traced so far, from 0 up to
+// but not including 1: the last share is the stacking of the outlines, which the caller reports.
 Domain::TriangleMesh layers_to_mesh(const std::vector<GrayLayerImage> &layers,
                                     const LayersToMeshParams &       params,
-                                    std::function<bool()>            stop = {});
+                                    std::function<bool()>            stop     = {},
+                                    std::function<void(double)>      progress = {});
 
 } // namespace Slic3r::sla

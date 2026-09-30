@@ -72,7 +72,9 @@ void PopNotificationView::layout()
             [this](const PopNotificationLayoutHeaderTextProgress&)
             { layout_type_header_text_progress(); },
             [this](const PopNotificationLayoutHeaderProgress&)
-            { layout_type_header_progress(); }
+            { layout_type_header_progress(); },
+            [this](const PopNotificationLayoutHeaderProgressButtons&)
+            { layout_type_header_progress_buttons(); }
         },
         m_state->layout
     );
@@ -157,6 +159,12 @@ void PopNotificationView::on_data_update()
             {
                 update_header(d.header);
                 update_progress(d.progress);
+            },
+            [this](const PopNotificationLayoutHeaderProgressButtons& d)
+            {
+                update_header(d.header);
+                update_progress(d.progress);
+                update_buttons(d.buttons);
             }
         },
         m_state->layout
@@ -494,6 +502,18 @@ void PopNotificationView::layout_type_header_progress()
     basic_mid_layout();
     basic_mid_header_layout(layout_data->header);
     basic_mid_progress_layout(layout_data->progress);
+}
+
+void PopNotificationView::layout_type_header_progress_buttons()
+{
+    const auto* layout_data =
+        std::get_if<PopNotificationLayoutHeaderProgressButtons>(&m_state->layout);
+    ASSERT(layout_data);
+    basic_layout(layout_data->icon);
+    basic_mid_layout();
+    basic_mid_header_layout(layout_data->header);
+    basic_mid_progress_layout(layout_data->progress);
+    basic_mid_buttons_layout(layout_data->buttons);
 }
 
 void PopNotificationView::update_text(const std::string& text)

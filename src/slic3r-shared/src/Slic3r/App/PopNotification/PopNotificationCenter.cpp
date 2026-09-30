@@ -7,6 +7,8 @@
 
 #include "Slic3r/Biz/I18N/I18N.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
+#include "Slic3r/Biz/Platform/JobManager/JobManager.hpp"
+#include "Slic3r/Biz/Platform/PlatformServices.hpp"
 
 #include <ranges>
 #include <boost/filesystem/operations.hpp>
@@ -60,6 +62,9 @@ struct JobNotificationSpec
     std::string finished_header;
     std::string failed_header;
     Render::Icon icon{Render::Icon::None};
+    /// Whether a running job of this kind can be asked to stop, which puts a button on its
+    /// notification. A job that cannot stop (a repair, an arrange) shows a bar and nothing else.
+    bool cancelable{false};
 };
 void PopNotificationCenter::close_notifications_of_type(PopNotificationType type)
 {
@@ -98,6 +103,19 @@ const JobNotificationSpec* find_job_spec(const std::string& job_key)
             .finished_header = L("Repair Finished"),
             // TRN Header of a failed repair notification.
             .failed_header = L("Repair Failed")
+        },
+        JobNotificationSpec{
+            .key_prefix = "sla_archive_import",
+            // TRN Header of a notification while a sliced-print archive is read.
+            .started_header = L("Reading the archive..."),
+            // TRN Header of a notification when the archive was read.
+            .finished_header = L("Archive read"),
+            // TRN Header of a notification when the archive could not be read.
+            .failed_header = L("Archive not read"),
+            .icon = Render::Icon::TobBarLoad,
+            // Reading a 200 MB archive can take a while, and stopping it leaves the plate as it
+            // was, so the bar comes with a button that asks the job to stop.
+            .cancelable = true
         }
     };
 
@@ -208,9 +226,29 @@ void PopNotificationCenter::on_job_progress(
     }
 
     PopNotificationLayout layout;
-    if (progress.status == JobStatus::Started && progress.percent) {
-        int perc = (int) (progress.percent.value().value * 100);
-        layout   = PopNotificationLayoutHeaderProgress(header, perc, spec.icon);
+    if (progress.status == JobStatus::Started) {
+        // A running job that can be stopped says so on its own bar. The button asks the job to
+        // stop and leaves the notification up, so the last state of the bar stays readable.
+        std::vector<PopNotificationButtonData> buttons;
+        if (spec.cancelable) {
+            buttons.push_back(PopNotificationButtonData{
+                .text     = _u8L("Cancel"),
+                .callback = [job_key]() {
+                    auto& jobs = Biz::Platform::PlatformServices::instance().job_manager();
+                    jobs.request_job_stop(job_key);
+                    return false;
+                }
+            });
+        }
+        if (progress.percent) {
+            int perc = (int) (progress.percent.value().value * 100);
+            layout   = buttons.empty() ?
+                           PopNotificationLayout(PopNotificationLayoutHeaderProgress(header, perc, spec.icon)) :
+                           PopNotificationLayout(PopNotificationLayoutHeaderProgressButtons{
+                               header, perc, std::move(buttons), spec.icon});
+        } else {
+            layout = PopNotificationLayoutHeader(header, spec.icon);
+        }
     } else {
         layout = PopNotificationLayoutHeader(header, spec.icon);
     }

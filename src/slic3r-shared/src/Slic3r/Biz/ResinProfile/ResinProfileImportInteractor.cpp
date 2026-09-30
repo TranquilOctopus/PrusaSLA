@@ -3,7 +3,7 @@
 #include "Slic3r/Biz/Preset/NameValidator.hpp"
 #include "Slic3r/Biz/Preset/PresetInteractor.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
-#include "Slic3r/Biz/ResinProfile/ChituboxCfgReader.hpp"
+#include "Slic3r/Biz/ResinProfile/ResinProfileReaderRegistry.hpp"
 #include "Slic3r/Domain/Config.hpp"
 #include "Slic3r/Domain/Percentage.hpp"
 #include "Slic3r/Domain/Preset/PresetTree.hpp"
@@ -495,8 +495,10 @@ system_resin_presets(const Preset::PresetInteractor& presets, Domain::SelectionI
 
 ResinProfileReaderRegistry ResinProfileImportInteractor::default_registry()
 {
+    // Every reader this build knows about, not just the Chitubox one: an .sl1 archive names its
+    // own exposure and layer height, and the review dialog is what M5.1c opens it in.
     ResinProfileReaderRegistry registry;
-    registry.register_reader(std::make_unique<ChituboxCfgReader>());
+    register_resin_profile_readers(registry);
     return registry;
 }
 

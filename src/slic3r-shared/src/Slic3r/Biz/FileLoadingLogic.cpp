@@ -16,6 +16,7 @@
 #include "Slic3r/Biz/Scene/Selection.hpp"
 #include "Slic3r/Biz/Preset/IO/PresetMetadataLegacyLoader.hpp"
 #include "Slic3r/Biz/Platform/IAppConfigProvider.hpp"
+#include "Slic3r/Biz/Platform/JobManager/JobManager.hpp"
 
 #include "Slic3r/Biz/Algorithms/Bed.hpp"
 #include "Slic3r/Biz/Algorithms/Polygon.hpp"
@@ -1313,6 +1314,148 @@ DropRouting route_dropped_files(const std::vector<boost::filesystem::path>& file
     }
 
     return routing;
+}
+
+bool is_sla_archive_file(const std::string& input_file)
+{
+    return boost::algorithm::iends_with(input_file, ".sl1") ||
+           boost::algorithm::iends_with(input_file, ".sl1s");
+}
+
+SlaArchiveRead default_sla_archive_read()
+{
+    return [](const boost::filesystem::path &path, const std::function<bool()> &stop,
+              const std::function<void(double)> &progress) {
+        auto imported = PrintHost::Sla::import_sl1_archive(path, stop, progress);
+        if (!imported) {
+            return SlaArchiveReadResult{.mesh = {}, .error = imported.error(), .cancelled = false};
+        }
+        if (imported.value().mesh.empty()) {
+            // An empty mesh means one of two things: the reader was stopped, or every layer of the
+            // archive traced to nothing. The stop that was asked for says which, and a stop is not
+            // something to report to the user.
+            if (stop && stop())
+                return SlaArchiveReadResult{.mesh = {}, .error = {}, .cancelled = true};
+            return SlaArchiveReadResult{
+                .mesh      = {},
+                .error     = fmt::vformat(
+                    _u8L("Model from {} couldn't be read because it's empty"),
+                    fmt::make_format_args(path.filename().string())
+                ),
+                .cancelled = false
+            };
+        }
+        return SlaArchiveReadResult{
+            .mesh      = std::move(imported.value().mesh),
+            .error     = {},
+            .cancelled = false
+        };
+    };
+}
+
+std::vector<SlaArchiveImport> read_sla_archives(
+    const std::vector<boost::filesystem::path>& paths,
+    const std::function<bool()>&              stop,
+    const std::function<void(double)>&        progress,
+    SlaArchiveRead                             read)
+{
+    std::vector<SlaArchiveImport> imported;
+    imported.reserve(paths.size());
+
+    SlaArchiveRead reader = read ? std::move(read) : default_sla_archive_read();
+
+    for (size_t i = 0; i < paths.size(); ++i) {
+        // The share of the archives read so far, so a list of ten archives moves the bar once
+        // each and never goes back.
+        if (progress)
+            progress(double(i) / double(paths.size()));
+        // Asked before every archive, and handed to the reader so a cancel can land within one
+        // layer image rather than at the end of the archive.
+        if (stop && stop())
+            return {};
+
+        const boost::filesystem::path &path = paths[i];
+        const std::string              file_name{path.filename().string()};
+
+        if (!is_sla_archive_file(path.string())) {
+            imported.push_back({
+                .path      = path,
+                .file_name = file_name,
+                .mesh      = {},
+                .error     = fmt::vformat(
+                    _u8L("Model from {} couldn't be read because it is not an SLA archive"),
+                    fmt::make_format_args(file_name)
+                )
+            });
+            continue;
+        }
+
+        SlaArchiveReadResult read_result = reader(
+            path,
+            stop,
+            [progress, i, size = paths.size()](double share)
+            {
+                if (progress)
+                    progress((double(i) + std::clamp(share, 0., 1.)) / double(size));
+            }
+        );
+        // A cancelled archive contributes nothing at all rather than an entry with nothing in it.
+        if (read_result.cancelled)
+            return {};
+
+        imported.push_back({
+            .path      = path,
+            .file_name = file_name,
+            .mesh      = std::move(read_result.mesh),
+            .error     = std::move(read_result.error)
+        });
+    }
+
+    if (progress)
+        progress(1.);
+
+    return imported;
+}
+
+std::vector<SlaArchiveImport> import_sla_archives_local(
+    Biz::JThread::StopToken stop_token,
+    Biz::Platform::JobManager::ProgressTracker progress,
+    const std::vector<boost::filesystem::path>& paths,
+    SlaArchiveRead read
+)
+{
+    return read_sla_archives(
+        paths,
+        [stop_token]() { return stop_token.stop_requested(); },
+        [&progress](double share)
+        {
+            // The tracker reads its percentage as a share from 0 to 1 and never going back.
+            progress.set(Domain::Percentage{std::clamp(share, 0., 1.)});
+        },
+        std::move(read)
+    );
+}
+
+ElementRefs add_sla_archive_to_scene(Domain::TriangleMesh&& mesh,
+                                     const boost::filesystem::path& file_path,
+                                     Scene::SceneInteractor& scene_interactor,
+                                     const Domain::Vec2d& bed_center)
+{
+    Domain::BoundingBox3d bbox = mesh.bounding_box();
+    ASSERT(bbox.defined);
+
+    ElementRefs new_instances = scene_interactor.new_object_from_mesh(
+        std::move(mesh), file_path.filename().string(), volume_source_from_path(file_path)
+    );
+
+    // Centred on the build plate, as import_files_and_add_to_scene() centres every mesh file.
+    Transform3d xform = Transform3d::Identity();
+    xform.translate(-Biz::Algorithms::BoundingBox::center(bbox));
+    xform.translate(Vec3d(0., 0., Biz::Algorithms::BoundingBox::sizes(bbox).z() / 2.));
+    xform.translate(Vec3d{bed_center.x(), bed_center.y(), 0});
+    scene_interactor.transform_selection(xform.matrix());
+
+    return new_instances;
 }
 
 } // namespace Slic3r::Biz::FileLoadingLogic

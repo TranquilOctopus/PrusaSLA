@@ -55,6 +55,10 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Plater/SlaUnsupportedNotification.cpp
         include/Slic3r/App/Plater/SlaFirstModelNotification.hpp
         src/Slic3r/App/Plater/SlaFirstModelNotification.cpp
+        include/Slic3r/App/Plater/SlaArchiveSettings.hpp
+        src/Slic3r/App/Plater/SlaArchiveSettings.cpp
+        include/Slic3r/App/Plater/SlaArchiveSettingsNotification.hpp
+        src/Slic3r/App/Plater/SlaArchiveSettingsNotification.cpp
 
         include/Slic3r/App/Hints/SlaHints.hpp
         src/Slic3r/App/Hints/SlaHints.cpp
@@ -1694,6 +1698,8 @@ if(SLIC3R_BUILD_TESTS)
 
             test/Slic3r/App/Plater/SlaUnsupportedObjectsTests.cpp
 
+            test/Slic3r/App/Plater/SlaArchiveSettingsTests.cpp
+
         test/Slic3r/App/Plater/SlaHeightBandMeshesTests.cpp
 
             test/Slic3r/App/ResultExport/SlaPreExportCheckTests.cpp
@@ -1800,6 +1806,7 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/Biz/ResultExport/SLA/SlaExportFileTypesTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/SlaExportIdentityTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/Sl1ImportTests.cpp
+            test/Slic3r/Biz/ResultExport/SLA/SlaArchiveImportJobTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/AnycubicExportTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/PM5ExportTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/GooExportTests.cpp

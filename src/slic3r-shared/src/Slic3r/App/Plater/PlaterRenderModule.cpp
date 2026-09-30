@@ -38,6 +38,7 @@
 #include "Slic3r/App/Plater/SlaIssueNotification.hpp"
 #include "Slic3r/App/Plater/SlaUnsupportedNotification.hpp"
 #include "Slic3r/App/Plater/SlaFirstModelNotification.hpp"
+#include "Slic3r/App/Plater/SlaArchiveSettingsNotification.hpp"
 #include "Slic3r/App/Plater/PaintOnSupportsGizmo.hpp"
 #include "Slic3r/App/Plater/PaintOnSupportsDialog.hpp"
 #include "Slic3r/App/Plater/PaintOnSeamsGizmo.hpp"
@@ -1106,6 +1107,11 @@ void PlaterRenderModule::init_gizmos()
     );
     m_sla_first_model_notification = std::make_unique<SlaFirstModelNotification>(
         m_project_interactor,
+        AppServices::instance().pop_notification_center()
+    );
+    m_sla_archive_settings_notification = std::make_unique<SlaArchiveSettingsNotification>(
+        m_project_interactor,
+        [this](const boost::filesystem::path& path) { open_resin_import(path); },
         AppServices::instance().pop_notification_center()
     );
     // Keeps the support tree and the raft of every model on the plate drawn, so the tool gizmo
