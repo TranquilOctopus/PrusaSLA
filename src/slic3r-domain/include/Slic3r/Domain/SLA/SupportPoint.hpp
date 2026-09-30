@@ -51,6 +51,8 @@ struct SupportPoint
     float base_height = 0.f; // [in mm]
 
     // Tip shape for this point. Default keeps the standard pinhead geometry.
+    // Cone replaces the front sphere with a point, Ball with a ball of the front
+    // radius.
     enum class TipShape : uint8_t { Default, Cone, Ball };
     TipShape tip_shape = TipShape::Default;
 
@@ -61,10 +63,13 @@ struct SupportPoint
     float contact_depth = 0.f; // [in mm]
 
     // Per-point stem cross-section. 0 = use global (round); 4 = square, 6 = hexagon, and so on.
+    // Only 3 to 12 sides are built, anything else falls back to the round pillar.
     uint8_t stem_sides = 0;
 
-    // Per-point stem taper: fraction of the stem diameter lost from base to tip. 0 = no taper.
-    float stem_taper = 0.f;
+    // Per-point stem taper: in mm how much less the pillar radius is at its base
+    // than at its head end, changing linearly along the pillar. 0 = no taper.
+    // The result never drops below the minimum pillar radius.
+    float stem_taper = 0.f; // [in mm]
 
     // Radius of a ball at the tip-to-stem joint. 0 = no knot.
     float knot_radius = 0.f; // [in mm]
