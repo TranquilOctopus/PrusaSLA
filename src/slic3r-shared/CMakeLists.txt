@@ -1042,6 +1042,7 @@ set(SLIC3R_SHARED_FILES
         include/Slic3r/Biz/PrintHost/PrintHostMKS.hpp
         include/Slic3r/Biz/PrintHost/PrintHostJobInfoTag.hpp
         include/Slic3r/Biz/PrintHost/PrintHostJobData.hpp
+        include/Slic3r/Biz/PrintHost/PrintHostFormats.hpp
         src/Slic3r/Biz/PrintHost/PrintHostJobManager.cpp
         src/Slic3r/Biz/PrintHost/PrintHostFactory.cpp
         src/Slic3r/Biz/PrintHost/PrintHostLocal.cpp
@@ -1057,6 +1058,7 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/Biz/PrintHost/PrintHostRepetier.cpp
         src/Slic3r/Biz/PrintHost/PrintHostMKS.cpp
         src/Slic3r/Biz/PrintHost/PrintHostJobData.cpp
+        src/Slic3r/Biz/PrintHost/PrintHostFormats.cpp
 
         include/Slic3r/Biz/Emboss/IFontManager.hpp
         include/Slic3r/Biz/Emboss/Emboss.hpp
@@ -1784,6 +1786,8 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/Biz/ResultExport/SLA/SlaPm5WorkshopOrientationTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/SlaLayerDecoders.hpp
             test/Slic3r/Biz/ResultExport/SLA/SlaUnsupportedSliceTests.cpp
+
+            test/Slic3r/Biz/PrintHost/PrintHostFormatsTests.cpp
 
             test/Slic3r/Biz/BundleCacheTests.cpp
 
