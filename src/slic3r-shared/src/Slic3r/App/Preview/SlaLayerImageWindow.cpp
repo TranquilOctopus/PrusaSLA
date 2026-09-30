@@ -2,6 +2,7 @@
 
 #include "Slic3r/App/AppServices.hpp"
 #include "Slic3r/App/SlaIssueRows.hpp"
+#include "Slic3r/App/SlaLayerKeys.hpp"
 #include "Slic3r/App/Yoga/Text.hpp"
 #include "Slic3r/App/Yoga/LayoutButton.hpp"
 #include "Slic3r/App/Yoga/ScrollArea.hpp"
@@ -12,6 +13,7 @@
 #include "Slic3r/Biz/I18N/I18N.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/App/IsSlaActive.hpp"
+#include "Slic3r/App/Platform/KeyboardEvent.hpp"
 #include "Slic3r/Biz/Platform/PlatformServices.hpp"
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
 
@@ -49,6 +51,46 @@ static constexpr float  islands_list_max_height = 140.f;
 // Ring drawn on an island in the layer image, in screen pixels.
 static constexpr float island_marker_radius    = 6.f;
 static constexpr float island_marker_thickness = 2.f;
+
+// A key the layer image window reads as "the layer that has an issue nearest in this direction".
+static std::optional<SlaLayerKey> issue_key(Platform::KeyCode code)
+{
+    switch (code) {
+    case Platform::KeyCode::Up:
+        return SlaLayerKey::PreviousIssue;
+    case Platform::KeyCode::Down:
+        return SlaLayerKey::NextIssue;
+    default:
+        return std::nullopt;
+    }
+}
+
+// The layer a key steps to, empty when the key is none of the layer keys. Shift is the only
+// modifier read: with Shift the arrows walk the issues, without it the layers.
+static std::optional<SlaLayerKey> layer_key(Platform::KeyCode code, bool shift_down)
+{
+    if (shift_down)
+        return issue_key(code);
+
+    switch (code) {
+    case Platform::KeyCode::Up:
+    case Platform::KeyCode::Left:
+        return SlaLayerKey::PreviousLayer;
+    case Platform::KeyCode::Down:
+    case Platform::KeyCode::Right:
+        return SlaLayerKey::NextLayer;
+    case Platform::KeyCode::PageUp:
+        return SlaLayerKey::PreviousTenLayers;
+    case Platform::KeyCode::PageDown:
+        return SlaLayerKey::NextTenLayers;
+    case Platform::KeyCode::Home:
+        return SlaLayerKey::FirstLayer;
+    case Platform::KeyCode::End:
+        return SlaLayerKey::LastLayer;
+    default:
+        return std::nullopt;
+    }
+}
 
 namespace {
 
@@ -120,6 +162,10 @@ SlaLayerImageWindow::SlaLayerImageWindow(Render::Device& device, Biz::ProjectInt
 {
     set_min_height(320_fpx);
     content()->set_padding(0.f);
+
+    // The keys that move between layers, drawn on one line under the image in render_body().
+    // TRN: The keyboard shortcuts of the layer image window, on one line under the image.
+    m_key_hint = _u8L("Up/Down layer, PgUp/PgDn 10, Shift+Up/Down next issue, Z zoom");
 
     // Layer info text
     m_layer_info_text = content()->emplace_back<Text>("");
@@ -222,6 +268,48 @@ size_t SlaLayerImageWindow::current_layer_index() const
     return layer;
 }
 
+bool SlaLayerImageWindow::on_keyboard_event(const Platform::KeyboardEvent& e)
+{
+    if (e.type() != Platform::KeyboardEvent::Type::KeyDown)
+        return false;
+
+    if (!is_visible() || !m_focused || !m_slider || !m_last_result || m_last_result->slices.empty())
+        return false;
+
+    // A text field owns the keyboard while it is being typed into, and the shortcuts that carry a
+    // Ctrl or an Alt belong to the menu and to the gizmos, so only the plain keys and Shift are
+    // read here.
+    if (ImGui::GetIO().WantTextInput)
+        return false;
+
+    const Platform::KeyModifiers modifiers = e.key_modifiers();
+    const bool shift_down = modifiers == Platform::KeyModifiers(Platform::KeyModifier::Shift);
+    if (!shift_down && modifiers != Platform::KeyModifiers(Platform::KeyModifier::None))
+        return false;
+
+    // Z toggles the native resolution panel. It is not a layer key, so it is answered before the
+    // table of the layer keys is asked.
+    if (!shift_down && e.code() == Platform::KeyCode::Z) {
+        toggle_zoom();
+        return true;
+    }
+
+    const std::optional<SlaLayerKey> key = layer_key(e.code(), shift_down);
+    if (!key)
+        return false;
+
+    if (std::optional<size_t> layer = sla_layer_for_key(
+            *key, current_layer_index(), m_last_result->slices.size(), m_issue_layers
+        ))
+    {
+        go_to_layer(*layer);
+    }
+
+    // The key was one of the layer keys even where it has nowhere to go, so the slider does not
+    // read it as well and step a layer that the user did not ask for.
+    return true;
+}
+
 void SlaLayerImageWindow::update(const Biz::Slicing::SLAResult* result)
 {
     if (!result || result->slices.empty()) {
@@ -269,6 +357,7 @@ void SlaLayerImageWindow::update(const Biz::Slicing::SLAResult* result)
         m_layer_areas      = m_result_data ? alias(m_result_data->layer_areas) : nullptr;
         m_layer_peel_force = m_result_data ? alias(m_result_data->layer_peel_force) : nullptr;
         rebuild_island_list();
+        rebuild_issue_layers();
     }
 
     bool needs_rebuild = false;
@@ -460,10 +549,42 @@ void SlaLayerImageWindow::close_zoom()
     Biz::Platform::PlatformServices::instance().render_request_handler().request_render();
 }
 
+void SlaLayerImageWindow::toggle_zoom()
+{
+    if (m_zoom_panel->is_visible()) {
+        close_zoom();
+        return;
+    }
+
+    if (!m_last_result || !m_last_result->export_data)
+        return;
+
+    // The keyboard has no position to zoom into, so the window opens on the centre of the
+    // display, the same spot the fitted image shows by default.
+    const DisplayMapping mapping = display_mapping(m_last_result->export_data->config);
+    m_zoom_center_x_mm            = mapping.width_mm * 0.5;
+    m_zoom_center_y_mm            = mapping.height_mm * 0.5;
+
+    m_zoom_panel->set_visible(true);
+    // The panel is a regular layout child, the window has to be tall enough to hold it.
+    update_min_height();
+    render_zoom_region(current_layer_index());
+    Biz::Platform::PlatformServices::instance().render_request_handler().request_render();
+}
+
 void SlaLayerImageWindow::render_body(const Domain::Vec2f& pos, const Domain::Vec2f& size)
 {
     // Render the standard content (layer info, controls)
     CollapsibleWindow::render_body(pos, size);
+
+    // The layer keys follow the keyboard focus, read while this window is drawn because that is
+    // the only place ImGui knows which of its windows the keyboard belongs to. The keyboard is
+    // ours when this window has it, and also when no ImGui window has it at all: then it is on
+    // the 3D scene of the Preview, which is where it was before this window was clicked. A
+    // window that is not drawn any more (the Preview was left for the Plater) gives the keyboard
+    // back, because the layer keys are answered from the same frame this flag is read in.
+    m_focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)
+        || !ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow);
 
     const bool zoom_visible = m_zoom_panel->is_visible();
 
@@ -477,8 +598,12 @@ void SlaLayerImageWindow::render_body(const Domain::Vec2f& pos, const Domain::Ve
     const int   plot_count  = static_cast<int>(has_areas) + static_cast<int>(has_peel);
     const float text_height = ImGui::GetTextLineHeightWithSpacing();
 
-    // Reserve a fixed strip at the bottom for the charts, the image takes the rest
-    const float stats_height = plot_count * plot_height + (plot_count > 0 ? text_height : 0.f);
+    // The line of keyboard hints under the image takes a line of its own, like the statistics
+    // text under the charts.
+    const float hint_height = text_height;
+
+    // Reserve a fixed strip at the bottom for the hints and the charts, the image takes the rest
+    const float stats_height = plot_count * plot_height + (plot_count > 0 ? text_height : 0.f) + hint_height;
 
     const ImVec2 region      = ImGui::GetContentRegionAvail();
     const ImVec2 region_min  = ImGui::GetCursorScreenPos();
@@ -527,10 +652,17 @@ void SlaLayerImageWindow::render_body(const Domain::Vec2f& pos, const Domain::Ve
             on_layer_image_clicked();
     }
 
+    // The keys that step between layers, on one line between the image and the charts, so that
+    // the keyboard navigation can be found without the manual.
+    if (!m_key_hint.empty()) {
+        ImGui::SetCursorScreenPos(ImVec2(region_min.x, region_max.y - bottom_strip));
+        ImGui::TextUnformatted(m_key_hint.c_str());
+    }
+
     // The charts fill the reserved strip at the bottom of the window, right above the
     // zoom panel and the island list.
     if (plot_count > 0) {
-        ImGui::SetCursorScreenPos(ImVec2(region_min.x, region_max.y - bottom_strip));
+        ImGui::SetCursorScreenPos(ImVec2(region_min.x, region_max.y - bottom_strip + hint_height));
 
         if (has_areas) {
             render_plot(
@@ -773,6 +905,20 @@ std::string SlaLayerImageWindow::island_row_text(const Island& island) const
     // build plate.
     text += fmt::format(fmt::runtime(_u8L(" at ({0:.1f}, {1:.1f})")), island.x_mm, island.y_mm);
     return text;
+}
+
+void SlaLayerImageWindow::rebuild_issue_layers()
+{
+    m_issue_layers.clear();
+
+    // Every kind of issue the slicer reported, not only the islands the panel above lists: the
+    // Shift+Up and Shift+Down keys step through all of them, so a user with a cup or a trapped
+    // resin pocket finds it the same way as an island.
+    for (const Biz::Slicing::Sla::SlaIssue& issue : m_result_data->issues)
+        m_issue_layers.push_back(issue.layer);
+
+    std::sort(m_issue_layers.begin(), m_issue_layers.end());
+    m_issue_layers.erase(std::unique(m_issue_layers.begin(), m_issue_layers.end()), m_issue_layers.end());
 }
 
 std::optional<size_t> SlaLayerImageWindow::prev_island_layer() const

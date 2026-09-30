@@ -310,11 +310,16 @@ void PreviewRenderModule::on_scene_mouse_event(const Platform::MouseEvent& e)
 
 void PreviewRenderModule::on_scene_keyboard_event(const Platform::KeyboardEvent& e)
 {
-    if (!m_render_module_navigator->is_any_modal_dialog_opened()
-        && !m_gizmo_manager->on_scene_keyboard_event(e))
-    {
-        Platform::AbstractRenderModule::on_scene_keyboard_event(e);
-    }
+    if (m_render_module_navigator->is_any_modal_dialog_opened() || m_gizmo_manager->on_scene_keyboard_event(e))
+        return;
+
+    // The layer image window reads the layer keys itself while it has the focus and steps the
+    // slider through the same set_higher_pos() its Go buttons use, so the slider commands below
+    // must not step the same layer a second time for one key press.
+    if (m_sla_layer_image_window.get() != nullptr && m_sla_layer_image_window->on_keyboard_event(e))
+        return;
+
+    Platform::AbstractRenderModule::on_scene_keyboard_event(e);
 }
 
 void PreviewRenderModule::set_navigator(Navigator* navigator)
