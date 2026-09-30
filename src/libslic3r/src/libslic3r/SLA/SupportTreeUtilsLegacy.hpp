@@ -82,7 +82,7 @@ std::optional<DiffBridge> search_widening_path(Ex                     policy,
         double t    = std::get<2>(oresult.optimum);
         Vec3d  endp = jp + t * spheric_to_dir(polar, azimuth);
 
-        return DiffBridge(jp, endp, radius, sm.cfg.head_back_radius_mm);
+        return DiffBridge(jp, endp, radius, new_radius);
     }
 
     return {};
@@ -141,11 +141,10 @@ std::pair<bool, long> create_ground_pillar(
     eval_limits();
 
          // We are dealing with a mini pillar that's potentially too long
-    if (radius < sm.cfg.head_back_radius_mm && jp.z() - gndlvl > 20 * radius)
+    if (radius < full_r && jp.z() - gndlvl > 20 * radius)
     {
         std::optional<DiffBridge> diffbr =
-            search_widening_path(policy, sm, jp, dir, radius,
-                                 sm.cfg.head_back_radius_mm);
+            search_widening_path(policy, sm, jp, dir, radius, full_r);
 
         if (diffbr && diffbr->endp.z() > jp_gnd) {
             auto &br = builder.add_diffbridge(*diffbr);
