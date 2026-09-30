@@ -450,6 +450,27 @@ void add_action_options(CLI::App& app, App::InitParams& params)
         "Write information about the model to the console."
     );
 
+    app.add_option(
+           "--import-resin-profile",
+           params.action.import_resin_profile,
+           "Import a foreign resin profile file, or every profile in a folder, as user resin presets of the "
+           "selected printer. Use 'printer-profile' to choose the printer they are imported into."
+    )
+        ->type_name("FILE-OR-FOLDER");
+
+    app.add_flag(
+        "--dry-run",
+        params.action.import_resin_profile_dry_run,
+        "Report what --import-resin-profile would do, without saving any preset."
+    );
+
+    app.add_option(
+           "--report",
+           params.action.import_resin_profile_report,
+           "Write what --import-resin-profile did, or would do, as JSON into the given file."
+    )
+        ->type_name("FILE");
+
     app.add_flag(
         "--query-print-tool-filament-profiles",
         params.action.query_print_tool_filament_profiles,

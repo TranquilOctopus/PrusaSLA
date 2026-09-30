@@ -19,6 +19,8 @@
 #include "Slic3r/Biz/Preset/IO/BundleLoader.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/Biz/ResultExport/ExportNameParser.hpp"
+#include "Slic3r/Biz/ResinProfile/ResinImportReport.hpp"
+#include "Slic3r/Biz/ResinProfile/ResinProfileImportInteractor.hpp"
 #include "Slic3r/Biz/Slicing/SlicingInteractor.hpp"
 #include "Slic3r/Biz/Utils/CopyFile.hpp"
 #include "Slic3r/Biz/PresetUpdater/IPresetUpdaterResultListener.hpp"
@@ -701,6 +703,84 @@ static bool perform_configuration_save(CLIRuntime& runtime, const MiscParams& mi
 }
 
 /**
+ * @brief The file a result is about, without the folder it was read from. The JSON report names
+ * files the same way, so that two imports of the same profiles compare the same.
+ */
+static std::string resin_result_file_name(const Biz::ResinProfile::ResinImportResult& result)
+{
+    const std::string name = fs::path(result.file).filename().string();
+    return name.empty() ? result.file : name;
+}
+
+/**
+ * @brief Imports foreign resin profiles as user resin presets of the selected printer
+ * (--import-resin-profile), optionally reporting only (--dry-run) and optionally writing a JSON
+ * report (--report).
+ *
+ * The target is the selected project and its selected printer, so 'printer-profile' decides which
+ * printer the presets are made for; the interactor refuses a target that is not the selected one
+ * instead of writing them somewhere the user did not ask for. A file the reader does not recognize
+ * only fails its own result: a folder is imported in full and every file has a line in the report.
+ *
+ * @return True when every file imported, which is what the exit code of the command line is.
+ */
+static bool perform_resin_profile_import(
+    CLIRuntime& runtime,
+    const std::string& source,
+    bool dry_run,
+    const std::optional<std::string>& report_path
+)
+{
+    Biz::ResinProfile::ResinProfileImportInteractor importer(runtime.project_interactor());
+
+    // A default target is the selected project, printer and resin slot, which is where the user
+    // expects the presets to end up.
+    const Biz::ResinProfile::ResinImportTarget target{};
+
+    std::vector<Biz::ResinProfile::ResinImportResult> results;
+    const fs::path path{source};
+    boost::system::error_code ec;
+    if (boost::filesystem::is_directory(path, ec)) {
+        results = importer.import_folder(path, target, dry_run);
+    } else {
+        // A path that is not a folder is a file, and a path that is neither is an error the
+        // interactor reports as the result of that one file, like any other unimportable file.
+        results.push_back(importer.import_file(path, target, dry_run));
+    }
+
+    bool all_ok = true;
+    for (const Biz::ResinProfile::ResinImportResult& result : results) {
+        const std::string file = resin_result_file_name(result);
+        if (result.ok) {
+            boost::nowide::cout
+                << (dry_run ? "would import " : "imported ") << file << " as \"" << result.preset_name
+                << "\" (base \"" << result.base_preset << "\")" << std::endl;
+        } else {
+            all_ok = false;
+            boost::nowide::cout << "failed to import " << file << ": " << result.error << std::endl;
+        }
+    }
+    if (results.empty()) {
+        boost::nowide::cout << "no resin profile in " << source << std::endl;
+    }
+
+    if (report_path.has_value()) {
+        boost::nowide::ofstream report_file;
+        report_file.open(report_path.value(), std::ios::out | std::ios::trunc);
+        if (!report_file.is_open()) {
+            boost::nowide::cerr << "Cannot open file " << report_path.value() << " for writing"
+                                << std::endl;
+            return false;
+        }
+        report_file << Biz::ResinProfile::resin_import_report_json(results) << std::endl;
+        report_file.close();
+        boost::nowide::cout << "Import report written to " << report_path.value() << std::endl;
+    }
+
+    return all_ok;
+}
+
+/**
  * @brief Exports the model of every project (--export-stl/--export-obj/--export-3mf).
  */
 static bool perform_model_exports(
@@ -825,6 +905,17 @@ bool process_actions(
 
     const ActionParams& action = init_params.action;
     const MiscParams& misc     = init_params.misc;
+
+    if (action.import_resin_profile.has_value()) {
+        // Its own action: it does not need a project or a model, and what it does to the preset
+        // bundle is the whole result, so it is not combined with the other actions.
+        return perform_resin_profile_import(
+            runtime,
+            action.import_resin_profile.value(),
+            action.import_resin_profile_dry_run,
+            action.import_resin_profile_report
+        );
+    }
 
     if (action.model_info) {
         if (!perform_model_info(runtime, project_ids)) {
