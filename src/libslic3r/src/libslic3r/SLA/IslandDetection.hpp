@@ -9,6 +9,11 @@
 
 namespace Slic3r::SLA {
 
+/// Below this an area is a speck of the slicing and not a finding [in mm2]. The smallest area
+/// detect_islands() reports, and the line the support point generator uses to tell a floating
+/// speck that needs a support point from one too small to bother with (M4.4a).
+inline constexpr double min_island_area_mm2 = 0.05;
+
 /// A region of a layer that has nothing solid below it and can therefore fall off the build.
 struct IslandHit
 {

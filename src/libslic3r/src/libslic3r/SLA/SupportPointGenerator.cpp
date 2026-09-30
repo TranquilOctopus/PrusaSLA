@@ -13,6 +13,8 @@
 #include "Slic3r/Biz/Algorithms/BoundingBox.hpp"
 #include "Slic3r/Biz/Algorithms/ExPolygon.hpp"
 #include "Slic3r/Biz/Algorithms/Point.hpp"
+#include "Slic3r/Biz/Algorithms/Scaling.hpp"
+#include "libslic3r/SLA/IslandDetection.hpp" // the area an island has to reach to be reported
 
 #include <cmath>
 #include <map>
@@ -978,6 +980,27 @@ std::optional<SmallPart> create_small_part(
 }
 
 /// <summary>
+/// Is a small part big enough that the island rule of M4.8d reports it?
+///
+/// The erase below drops the model parts that cannot be printed from a support head, whole, so a
+/// speck that floats in the air (a droplet the mesh carries along, a chip broken off a helmet)
+/// gets no support point at all. The app reports the same speck as an island (M4.8b) and tells
+/// the user that it can fall off, so a small part the island rule reports keeps its support
+/// point: both rules read one area threshold now.
+/// </summary>
+bool is_reportable_island(const Layers &layers, const SmallPart &small_part) {
+    const double sf_sq = sqr(Biz::Algorithms::Scaling::SCALING_FACTOR); // [in mm2 per scaled unit2]
+    for (const LayerPartIndex &id : small_part) {
+        const LayerPart &part = layers[id.layer_index].parts[id.part_index];
+        if (!part.prev_parts.empty())
+            continue; // the island rule counts the regions with nothing below them only
+        if (Algorithms::ExPolygon::area(*part.shape) * sf_sq >= SLA::min_island_area_mm2)
+            return true;
+    }
+    return false;
+}
+
+/// <summary>
 /// Detection of small parts of support
 /// </summary>
 SmallParts get_small_parts(const Layers &layers, float radius_in_mm) {
@@ -1144,6 +1167,11 @@ SupportPointGeneratorData Slic3r::sla::prepare_generator_data(
 
     // erase unsupportable model parts
     SmallParts small_parts = get_small_parts(result.layers, config.minimal_bounding_sphere_radius);
+    // A small part the island rule reports stays: the user is told that it can fall off, so it
+    // needs a support point like any other island (M4.4a).
+    std::erase_if(small_parts, [&layers = result.layers](const SmallPart &small_part) {
+        return !is_reportable_island(layers, small_part);
+    });
     if(!small_parts.empty()) ::erase(small_parts, result.layers);
 
     // Sample overhangs part of island

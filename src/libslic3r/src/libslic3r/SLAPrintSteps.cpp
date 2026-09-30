@@ -1634,13 +1634,12 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
 
     // Detect islands: connected regions in layer N that have no overlap with layer N-1.
     // Layer 0 never produces islands.
-    constexpr double MIN_ISLAND_AREA_MM2 = 0.05; // Minimum area to report as island (mm²).
     std::vector<ExPolygons> all_layer_polygons;
     all_layer_polygons.reserve(printer_input.size());
     for (const PrintLayer& layer : printer_input) {
         all_layer_polygons.push_back(layer.transformed_slices());
     }
-    std::vector<SLA::IslandHit> island_hits = SLA::detect_islands(all_layer_polygons, MIN_ISLAND_AREA_MM2);
+    std::vector<SLA::IslandHit> island_hits = SLA::detect_islands(all_layer_polygons, SLA::min_island_area_mm2);
 
     // The thickness of each layer in mm, for the volumes of the cavities detected below (M4.8e).
     std::vector<float> layer_thicknesses_mm;
