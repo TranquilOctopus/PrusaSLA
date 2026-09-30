@@ -365,6 +365,7 @@ bool DefaultSupportTree::create_ground_pillar(const Junction &hjp,
 {
     double base_height_override = 0.;
     double base_radius_override = 0.;
+    double full_pillar_radius = m_sm.cfg.head_back_radius_mm;
     [[maybe_unused]] uint8_t stem_sides = 0;   // see note below: not yet honoured
     [[maybe_unused]] double stem_taper = 0.;   // see note below: not yet honoured
     if (head_id >= 0 && size_t(head_id) < m_sm.pts->size()) {
@@ -373,6 +374,7 @@ bool DefaultSupportTree::create_ground_pillar(const Junction &hjp,
         if (sp.base_diameter > 0.f) base_radius_override = double(sp.base_diameter) * 0.5;
         if (sp.stem_sides != 0) stem_sides = sp.stem_sides;
         if (sp.stem_taper > 0.f) stem_taper = double(sp.stem_taper);
+        full_pillar_radius = head_back_radius(m_sm, sp);
     }
 
     auto [ret, pillar_id] = sla::create_ground_pillar(suptree_ex_policy,
@@ -384,7 +386,8 @@ bool DefaultSupportTree::create_ground_pillar(const Junction &hjp,
                                                       hjp.r,
                                                       head_id,
                                                       base_height_override,
-                                                      base_radius_override);
+                                                      base_radius_override,
+                                                      full_pillar_radius);
     // stem_sides and stem_taper are stored on the point but not yet used: the pillar mesh
     // builder only makes round, untapered pillars. Honouring them needs a mesh-builder change.
 
@@ -464,14 +467,14 @@ void DefaultSupportTree::add_pinheads()
         const Domain::SLA::SupportPoint &sp = m_sm.pts->at(fidx);
         double lmin = sp.tip_length > 0.f ? double(sp.tip_length) : m_sm.cfg.head_width_mm;
         double lmax = lmin;
+        double pen = sp.contact_depth > 0.f ? double(sp.contact_depth) : m_sm.cfg.head_penetration_mm;
 
         if (back_r < m_sm.cfg.head_back_radius_mm) {
-            lmin = 0., lmax = (sp.contact_depth > 0.f ? double(sp.contact_depth) : m_sm.cfg.head_penetration_mm);
+            lmin = 0., lmax = pen;
         }
 
         // The distance needed for a pinhead to not collide with model.
-        double w = lmin + 2 * back_r + 2 * m_sm.cfg.head_front_radius_mm -
-                   (sp.contact_depth > 0.f ? double(sp.contact_depth) : m_sm.cfg.head_penetration_mm);
+        double w = lmin + 2 * back_r + 2 * double(sp.head_front_radius) - pen;
 
         double pin_r = double(sp.head_front_radius);
 
@@ -530,12 +533,7 @@ void DefaultSupportTree::add_pinheads()
         suptree_ex_policy, size_t(0), filtered_indices.size(),
         [this, &filterfn, &filtered_indices](size_t i) {
             unsigned sp_idx = filtered_indices[i];
-            double back_r = m_sm.cfg.head_back_radius_mm;
-            const Domain::SLA::SupportPoint &sp = m_sm.pts->at(sp_idx);
-            if (sp.pillar_diameter > 0.f) {
-                back_r = double(sp.pillar_diameter) * 0.5;
-            }
-            filterfn(sp_idx, i, back_r);
+            filterfn(sp_idx, i, head_back_radius(m_sm, m_sm.pts->at(sp_idx)));
         },
         execution::max_concurrency(suptree_ex_policy));
 
