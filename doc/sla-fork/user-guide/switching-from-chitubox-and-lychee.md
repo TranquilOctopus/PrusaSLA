@@ -179,9 +179,9 @@ the four almost every datasheet gives are marked *yes*, the rest are optional.
 | Normal exposure (s) | yes | a number greater than zero |
 | Bottom exposure (s) | yes | a number greater than zero |
 | Number of bottom layers | yes | a whole number greater than zero |
-| Light-off delay (s) | no | a number of zero or more; empty means the datasheet does not state it |
+| Light-off delay (s) | no | a number of zero or more, up to the 30 s the setting takes; empty means the datasheet does not state it |
 | Price of a bottle | no | a number of zero or more |
-| Bottle volume (ml) | no | a number greater than zero; without it a 1 litre bottle is assumed |
+| Bottle volume (ml) | no | from the 50 ml the setting takes up; without a bottle size a 1 litre bottle is assumed |
 | Lift distance (mm) | no | a number greater than zero; the lift height of a printer that separates layers by lifting |
 | Lift speed (mm/min) | no | a number greater than zero; converted to the mm/s the settings hold |
 | Retract speed (mm/min) | no | a number greater than zero; the speed the plate drops back down at |
@@ -192,6 +192,11 @@ empty one means the datasheet does not state it. Speeds are asked in mm/min, the
 and the imported profiles both state them in, and the mapper converts them like it converts a
 `.cfg`. A printer that separates layers by tilting has no lift, so those rows arrive as *Not
 applicable* and a transition layer count instead.
+
+Every field is also checked against the range its resin setting declares, and a number outside it is
+refused with a message that names the field and the limit, so nothing is carried into the review
+that the setting would not take. The limit is the one of the setting itself, in the unit the setting
+holds, so a speed is compared as the mm/s it becomes.
 
 **Next** checks the fields and hands them to the same review dialog, where **Save** or
 **Save & select** finishes the job. A value the datasheet does not state is left out of the profile

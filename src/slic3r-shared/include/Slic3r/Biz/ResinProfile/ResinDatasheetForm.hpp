@@ -60,12 +60,16 @@ struct ResinDatasheet
 /**
  * @brief Why the form cannot be turned into a resin profile, empty when it can.
  *
- * A number that is missing, not a number, or not in the range its setting accepts is refused, so
- * the mapper is only ever handed values it can write; a name that is blank is refused, because it
- * is what the preset is saved under. The message is user visible and already translated.
+ * A number that is missing or not a number is refused, a name that is blank is refused because it
+ * is what the preset is saved under, a count has to be a whole number, and a value outside the
+ * <min, max> its own resin setting declares is refused with a message that names the field and the
+ * limit, so a datasheet is never written and shown in the review table as something the setting
+ * does not take. A limit is read from the option the value is written to, in the unit that option
+ * holds, so a speed asked in mm/min is compared as the mm/s it becomes. The messages are user
+ * visible and already translated.
  *
- * Pure: it reads the form and nothing else, so what the form accepts can be tested without a
- * window, and the dialog shows exactly what the test checked.
+ * Pure: it reads the form and the option definitions and nothing else, so what the form accepts can
+ * be tested without a window, and the dialog shows exactly what the test checked.
  */
 std::string validate_datasheet(const ResinDatasheet& datasheet);
 
