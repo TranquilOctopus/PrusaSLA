@@ -46,9 +46,10 @@ struct Interior {
     indexed_triangle_set mesh;
     VoxelGridPtr gridptr;
 
-    double iso_surface = 0.;
-    double thickness = 0.;
-    double full_narrowb = 2.;
+    double iso_surface = 0.;   // world units (mm)
+    double thickness = 0.;     // world units (mm)
+    double full_narrowb = 2.;  // world units (mm)
+    double voxel_scale = 1.;   // voxels per world unit, see generate_interior
 
     void reset_accessor() const  // This resets the accessor and its cache
     // Not a thread safe call!
@@ -87,10 +88,16 @@ InteriorPtr generate_interior(const VoxelGrid       &vgrid,
                               const HollowingConfig &hc,
                               const JobController   &ctl)
 {
-    double voxsc    = get_voxel_scale(vgrid);
-    double offset   = hc.min_thickness;              // world units
-    double D        = hc.closing_distance;           // world units
-    float  in_range = 1.1f * float(offset + D);      // world units
+    // mesh_to_grid() voxelizes a mesh scaled up by the voxel scale and scales the
+    // grid transform back afterwards, so the distance values in the grid are
+    // counted in voxels, not in world units: a voxel is 1/voxsc mm wide, but the
+    // value stored in it is a distance in voxel counts. Everything handed over
+    // to the grid (isovalues, band widths) is converted to voxel units here, and
+    // the values kept in the Interior are converted back to world units.
+    double voxsc    = get_voxel_scale(vgrid);      // voxels per world unit
+    double offset   = hc.min_thickness * voxsc;    // voxel units
+    double D        = hc.closing_distance * voxsc; // voxel units
+    float  in_range = 1.1f * float(offset + D) / float(voxsc); // world units
     float  out_range = 1.f / voxsc; // world units
     auto   narrowb  = 1.f;  // voxel units (voxel count)
 
@@ -103,12 +110,12 @@ InteriorPtr generate_interior(const VoxelGrid       &vgrid,
     else ctl.statuscb(30, _u8L("Hollowing"));
 
     double iso_surface = D;
-    if (D > EPSILON) {
-        gridptr = redistance_grid(*gridptr, -(offset + D), narrowb, narrowb);
+    if (hc.closing_distance > EPSILON) {
+        gridptr = redistance_grid(*gridptr, -float(offset + D), narrowb, narrowb);
 
-        gridptr = dilate_grid(*gridptr, 1.1 * std::ceil(iso_surface), 0.f);
+        gridptr = dilate_grid(*gridptr, 1.1 * std::ceil(iso_surface) / voxsc, 0.f);
 
-        out_range = iso_surface;
+        out_range = iso_surface / voxsc;
         in_range  = narrowb / voxsc;
     } else {
         iso_surface = -offset;
@@ -126,9 +133,10 @@ InteriorPtr generate_interior(const VoxelGrid       &vgrid,
     if (ctl.stopcondition()) return {};
     else ctl.statuscb(100, _u8L("Hollowing"));
 
-    interior->iso_surface = iso_surface;
-    interior->thickness   = offset;
+    interior->iso_surface = iso_surface / voxsc;
+    interior->thickness   = offset / voxsc;
     interior->full_narrowb = (out_range + in_range) / 2.;
+    interior->voxel_scale = voxsc;
 
     return interior;
 }
@@ -207,14 +215,15 @@ void hollow_mesh(indexed_triangle_set &mesh, const Interior &interior, int flags
     Domain::its_merge(mesh, interi);
 }
 
-// Get the distance of p to the interior's zero iso_surface. Interior should
-// have its zero isosurface positioned at offset + closing_distance inwards form
-// the model surface.
+// Get the distance of p to the interior's zero iso_surface in world units.
+// Interior should have its zero isosurface positioned at offset +
+// closing_distance inwards from the model surface.
 static double get_distance_raw(const Vec3f &p, const Interior &interior)
 {
     assert(interior.gridptr);
 
-    return Slic3r::get_distance_raw(p, *interior.gridptr);
+    // The raw grid value counts voxels, everything here is in world units.
+    return Slic3r::get_distance_raw(p, *interior.gridptr) / interior.voxel_scale;
 }
 
 struct TriangleBubble { Vec3f center; double R; };

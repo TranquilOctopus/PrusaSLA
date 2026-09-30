@@ -24,6 +24,7 @@ add_executable(${_TEST_NAME}_tests ${_TEST_NAME}_tests_main.cpp
     sla_support_preset_tests.cpp
     sla_benchmark_tests.cpp
     sla_support_brace_tests.cpp
+    sla_hollowing_tests.cpp
     sla_robustness_tests.cpp)
 
 # mold linker for successful linking needs also to link TBB library and link it before libslic3r.
