@@ -152,7 +152,9 @@ std::string summary_line(const std::vector<MappingRow>& rows)
 std::string source_summary(const ResinImportResult& result)
 {
     const std::string file_name = boost::filesystem::path{result.file}.filename().string();
-    if (file_name.empty()) {
+    // A profile typed into the "New resin from datasheet" form has no file behind it, so the format
+    // it was built as and the resin it names are all there is to say. Nothing read yet, nothing said.
+    if (file_name.empty() && result.source_format.empty()) {
         return {};
     }
     return join_parts({file_name, result.source_format, result.resin_name, result.resin_vendor});

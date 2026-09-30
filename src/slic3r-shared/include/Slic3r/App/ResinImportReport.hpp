@@ -81,8 +81,10 @@ BadgeCounts count_badges(const std::vector<MappingRow>& rows);
 std::string summary_line(const std::vector<MappingRow>& rows);
 
 /// @brief The one line that says where the profile comes from: the file, the format its reader
-/// recognized, and the resin and vendor it names. What the file does not say is left out, so the
-/// line never shows an empty field. Empty when the file has not been read yet.
+/// recognized, and the resin and vendor it names. A profile that was built without a file (the
+/// "New resin from datasheet" form) has no file to name, so the line says the format and the resin
+/// alone. What the profile does not say is left out, so the line never shows an empty field. Empty
+/// when there is nothing to say yet.
 std::string source_summary(const Biz::ResinProfile::ResinImportResult& result);
 
 /// @brief The longest preset name the importer can save. The name of a user preset is a file name,

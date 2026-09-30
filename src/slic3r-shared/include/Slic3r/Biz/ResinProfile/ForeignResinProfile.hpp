@@ -3,9 +3,17 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace Slic3r::Biz::ResinProfile {
+
+/**
+ * @brief The format id of a resin profile that no reader read: the "New resin from datasheet" form
+ * (M3.11) builds one out of what the user typed off a vendor datasheet, so there is no file and no
+ * reader behind it. The rest of the import is the same as for a file, which is the point of it.
+ */
+inline constexpr std::string_view SOURCE_FORMAT_DATASHEET{"datasheet"};
 
 /**
  * @brief The material settings a reader could map out of a foreign file.

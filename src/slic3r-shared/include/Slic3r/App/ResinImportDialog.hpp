@@ -8,6 +8,7 @@
 #include <boost/filesystem/path.hpp>
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -57,6 +58,16 @@ public:
      */
     void open(const boost::filesystem::path& path);
 
+    /**
+     * @brief Fill the dialog for a profile that was built without a file and open it.
+     *
+     * This is the entry point of the "New resin from datasheet" form (M3.11): the form builds a
+     * ForeignResinProfile out of what the user typed and hands it over here, so the review table,
+     * the base picker and both buttons are the ones of a file import. The dry run and the save
+     * behind them are import_profile() of the interactor, which is import_file() without the read.
+     */
+    void open(const Biz::ResinProfile::ForeignResinProfile& profile);
+
     /// @brief Name of the preset the last save created, empty before that.
     const std::string& imported_preset_name() const
     {
@@ -81,8 +92,21 @@ private:
     /// @brief Read the name the picker holds, empty when it holds no resin.
     std::string base_preset_id() const;
 
-    void fill_base_combo();
+    /// @brief Empty the dialog and fill it for whatever this dialog was opened for: a file, or a
+    /// profile that was built without one. Both go on to the same report, the same table and the
+    /// same save.
+    void fill_for_review();
 
+    /// @brief The import of what this dialog holds, as a dry run or for real. A profile that was
+    /// built without a file is already read and goes to import_profile(), a file goes through the
+    /// registry in import_file(); everything after that is the same code.
+    Biz::ResinProfile::ResinImportResult run_import(
+        bool dry_run,
+        const std::string& base_id,
+        const std::string& preset_name
+    );
+
+    void fill_base_combo();
     void build_table();
     void clear_table();
     void update_source_line();
@@ -106,6 +130,10 @@ private:
     Biz::ResinProfile::ResinProfileImportInteractor m_importer;
 
     boost::filesystem::path m_file;
+    /// The profile this dialog reviews when it was opened for one that was built without a file,
+    /// which is how the "New resin from datasheet" form of M3.11 hands its values over. Empty while
+    /// the dialog reviews a file.
+    std::optional<Biz::ResinProfile::ForeignResinProfile> m_profile;
     Biz::ResinProfile::ResinImportResult m_result;
     std::vector<MappingRow> m_rows;
     /// Ids of the resins in the base picker, in the same order as its items.

@@ -118,6 +118,21 @@ std::string source_app_name(const std::string& format_id)
     return format_id;
 }
 
+/// @brief The material_source_note of an imported profile: what it came from and when. A profile
+/// typed into the "New resin from datasheet" form has no file behind it, so the note says the
+/// datasheet instead of naming a file that does not exist.
+std::string source_note(const ForeignResinProfile& profile, const std::string& date)
+{
+    if (profile.source_format == SOURCE_FORMAT_DATASHEET)
+        return fmt::format("Datasheet, entered {}", date);
+    return fmt::format(
+        "{} {}, imported {}",
+        source_app_name(profile.source_format),
+        boost::filesystem::path{profile.source_path}.filename().string(),
+        date
+    );
+}
+
 /// @brief The resin name the profile carries, which is also what the mapper suggests as the preset
 /// name. Read here rather than from the mapping report because the base material has to be picked
 /// before the mapping, and the mapping needs the printer class that base decides.
@@ -427,6 +442,32 @@ std::string unique_preset_name(
     return name;
 }
 
+/// @brief The container, the printer and the slot an import writes into, or why it cannot. An import
+/// into a printer the user is not looking at is refused rather than done somewhere else, so both
+/// entry points ask this before either reads a file or writes a preset.
+std::string check_import_target(Biz::ProjectInteractor& project, const ResinImportTarget& target)
+{
+    const Domain::SelectionId project_id =
+        target.project_id == Domain::INVALID_ID ? project.selected_project_id() : target.project_id;
+    const Domain::SelectionId container_id = target.config_container_id == Domain::INVALID_ID ?
+        project.selected_config_container_id() :
+        target.config_container_id;
+    if (project_id != project.selected_project_id()
+        || container_id != project.selected_config_container_id())
+    {
+        return "the target printer is not the selected one; select it before importing";
+    }
+
+    const Domain::Preset::SelectedPreset& selected =
+        project.preset_interactor().selected_printer_preset();
+    if (selected.technology() != Domain::PrinterTechnology::SLA)
+        return "the selected printer is not an SLA printer";
+    if (target.material_slot >= selected.materials.size())
+        return "the selected printer has no resin slot " + std::to_string(target.material_slot);
+
+    return {};
+}
+
 } // namespace
 
 std::vector<std::pair<std::string, std::string>>
@@ -481,66 +522,103 @@ ResinImportResult ResinProfileImportInteractor::import_file(
     ResinImportResult result;
     result.file = path.string();
 
-    Biz::ProjectInteractor& project = m_project_interactor;
-    Preset::PresetInteractor& presets = project.preset_interactor();
-
-    const Domain::SelectionId project_id =
-        target.project_id == Domain::INVALID_ID ? project.selected_project_id() : target.project_id;
-    const Domain::SelectionId container_id = target.config_container_id == Domain::INVALID_ID ?
-                                                project.selected_config_container_id() :
-                                                target.config_container_id;
-    if (project_id != project.selected_project_id()
-        || container_id != project.selected_config_container_id())
+    if (const std::string error = check_import_target(m_project_interactor, target); !error.empty())
     {
-        result.error = "the target printer is not the selected one; select it before importing";
-        return result;
-    }
-
-    const Domain::Preset::SelectedPreset& selected = presets.selected_printer_preset();
-    if (selected.technology() != Domain::PrinterTechnology::SLA) {
-        result.error = "the selected printer is not an SLA printer";
-        return result;
-    }
-    if (target.material_slot >= selected.materials.size()) {
-        result.error = "the selected printer has no resin slot " + std::to_string(target.material_slot);
+        result.error = error;
         return result;
     }
 
     // Reading is where untrusted input is bounded: the registry caps the file size, and a reader only
-    // parses, it never evaluates what it reads (no G-code is run, ever).
+    // parses, it never evaluates what it reads (no G-code is run, ever). From here on a file and a
+    // profile that came from no file are the same import.
     const tl::expected<ForeignResinProfile, std::string> profile = m_registry.read_file(path);
     if (!profile) {
         result.error = profile.error();
         return result;
     }
 
-    // What the file says about itself, for the source summary of the import dialog and for the
-    // report the CLI writes. The format and the resin names are copies: the profile is local.
-    result.source_format = profile->source_format;
-    result.resin_name     = resin_name_hint(*profile);
-    result.resin_vendor   = profile->material.material_vendor.value_or(std::string{});
+    result = import_read_profile(*profile, target, dry_run, base_preset_id, wanted_preset_name);
+    // The result names the file it was asked about, whether or not the profile behind it knows its
+    // own path, so a report of a folder import always has one.
+    result.file = path.string();
+    return result;
+}
+
+ResinImportResult ResinProfileImportInteractor::import_profile(
+    const ForeignResinProfile& profile,
+    const ResinImportTarget& target,
+    bool dry_run,
+    const std::string& base_preset_id,
+    const std::string& wanted_preset_name
+)
+{
+    if (const std::string error = check_import_target(m_project_interactor, target); !error.empty())
+    {
+        // What the profile says about itself still comes back, so the review dialog shows what it
+        // would have imported and says why it cannot.
+        ResinImportResult result;
+        result.file          = profile.source_path;
+        result.source_format = profile.source_format;
+        result.resin_name    = resin_name_hint(profile);
+        result.resin_vendor  = profile.material.material_vendor.value_or(std::string{});
+        result.error         = error;
+        return result;
+    }
+
+    return import_read_profile(profile, target, dry_run, base_preset_id, wanted_preset_name);
+}
+
+ResinImportResult ResinProfileImportInteractor::import_read_profile(
+    const ForeignResinProfile& profile,
+    const ResinImportTarget& target,
+    bool dry_run,
+    const std::string& base_preset_id,
+    const std::string& wanted_preset_name
+)
+{
+    ResinImportResult result;
+    result.file = profile.source_path;
+
+    Biz::ProjectInteractor& project   = m_project_interactor;
+    Preset::PresetInteractor& presets = project.preset_interactor();
+
+    const Domain::SelectionId project_id = project.selected_project_id();
+
+    // What the profile says about itself, for the source summary of the import dialog and for the
+    // report the CLI writes. The format and the resin names are copies: the profile may be local.
+    result.source_format = profile.source_format;
+    result.resin_name    = resin_name_hint(profile);
+    result.resin_vendor  = profile.material.material_vendor.value_or(std::string{});
 
     // The base comes before the mapping: it is the system resin of this printer, and its own
     // settings say how the printer separates layers, which is what picks the mapping table. Both
     // the base and the printer model are read out as copies, because everything below this point
     // mutates the preset collections they live in.
     const std::optional<BaseMaterial> base = pick_base_material(
-        presets, project_id, selected, target.material_slot, result.resin_name, base_preset_id);
+        presets,
+        project_id,
+        presets.selected_printer_preset(),
+        target.material_slot,
+        result.resin_name,
+        base_preset_id
+    );
     if (!base) {
         result.error = "no system resin preset is available for this printer";
         return result;
     }
     const std::string printer_model =
-        string_value(selected.printer.config_box(), "printer_model").value_or(std::string{});
+        string_value(presets.selected_printer_preset().printer.config_box(), "printer_model")
+            .value_or(std::string{});
 
-    result.mapping = map_resin_profile(*profile, printer_class_of(printer_model, base->use_tilt));
+    result.mapping = map_resin_profile(profile, printer_class_of(printer_model, base->use_tilt));
     result.base_preset    = base->name;
     result.base_preset_id = base->id;
     // A name the caller picked wins over the one the profile suggests, but it is made unique the
     // same way, so typing a name that is taken still adds a preset instead of replacing one.
     std::string wanted_name = sanitize_preset_name(wanted_preset_name);
     if (wanted_name.empty())
-        wanted_name = derived_preset_name(result.mapping, path);
+        wanted_name =
+            derived_preset_name(result.mapping, boost::filesystem::path{profile.source_path});
     result.preset_name =
         unique_preset_name(presets, Domain::Preset::PresetKind::SlaMaterial, wanted_name);
     if (dry_run) {
@@ -551,15 +629,14 @@ ResinImportResult ResinProfileImportInteractor::import_file(
     // Everything the rest of the import needs is a copy by now (the base id, the values to write,
     // the name to save under), so the mutations below cannot leave this function reading a preset
     // that the save has already replaced. In particular the save reloads the vendor bundle, which
-    // is what a second import of the same file runs into.
+    // is what a second import of the same profile runs into.
     // Inherit from the base: select it, write the mapped values on top of it, then save the
     // container's material preset as a new user preset, which is what the material settings dialog
     // does. A failure past this point leaves the container showing the base preset.
     presets.select_material_preset(target.material_slot, base->id, false);
 
     std::map<std::string, std::string> values = result.mapping.material_values;
-    values["material_source_note"] = fmt::format(
-        "{} {}, imported {}", source_app_name(profile->source_format), path.filename().string(), m_date_provider());
+    values["material_source_note"]            = source_note(profile, m_date_provider());
     for (const auto& [key, text] : values) {
         std::string error;
         if (!set_material_value(presets, target.material_slot, key, text, error)) {

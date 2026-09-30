@@ -29,6 +29,7 @@ namespace Slic3r::App {
 
 class Navigator;
 class MaterialSettingsDialog;
+class ResinDatasheetDialog;
 class ResinImportDialog;
 
 class MaterialSelectionDialog :
@@ -65,7 +66,17 @@ public:
      */
     void open_resin_import(const boost::filesystem::path& path);
 
+    /**
+     * @brief Open the "New resin from datasheet" form, which reviews what it built in the same
+     * dialog a profile read from a file is reviewed in.
+     */
+    void open_resin_datasheet();
+
     ResinImportDialog& resin_import_dialog();
+
+    /// @brief The "New resin from datasheet" form, which the render modules register in the dialog
+    /// navigation as a child of this dialog.
+    ResinDatasheetDialog& resin_datasheet_dialog();
 
     void on_app_config_changed(const std::string &key) override;
 
@@ -118,10 +129,12 @@ private:
     Yoga::InputText* m_input_text_search                 = nullptr;
     Yoga::LayoutButton* m_only_favorites_button          = nullptr;
     Yoga::LayoutButton* m_import_resin_profile_button    = nullptr;
+    Yoga::LayoutButton* m_new_datasheet_resin_button     = nullptr;
     SelectionRowListView* m_selection_row_list_view      = nullptr;
     Biz::Preset::PresetItemObservableList* m_preset_list = nullptr;
     MaterialSettingsDialog* m_material_settings_dialog   = nullptr;
     ResinImportDialog* m_resin_import_dialog             = nullptr;
+    ResinDatasheetDialog* m_datasheet_dialog             = nullptr;
 
     struct ProjectContext
     {

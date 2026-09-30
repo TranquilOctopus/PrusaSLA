@@ -847,6 +847,16 @@ void PlaterRenderModule::init_dialog_navigation()
         &m_sidebar_bed->material_selection_dialog().material_settings_dialog(),
         &m_sidebar_bed->material_selection_dialog()
     );
+    // The resin import review dialog of M3.10 and the "New resin from datasheet" form that opens it
+    // (M3.11) are children of the material dialog, so opening one opens the sidebar behind it.
+    m_dialog_navigation.insert_dialog(
+        &m_sidebar_bed->material_selection_dialog().resin_import_dialog(),
+        &m_sidebar_bed->material_selection_dialog()
+    );
+    m_dialog_navigation.insert_dialog(
+        &m_sidebar_bed->material_selection_dialog().resin_datasheet_dialog(),
+        &m_sidebar_bed->material_selection_dialog()
+    );
 
     m_dialog_navigation.insert_dialog(&m_sidebar_print->print_settings_dialog());
     m_dialog_navigation.insert_dialog(&m_sidebar_print->sla_print_settings_dialog());

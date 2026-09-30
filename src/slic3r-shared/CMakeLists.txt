@@ -313,6 +313,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/ResinImportReport.cpp
         include/Slic3r/App/ResinImportDialog.hpp
         src/Slic3r/App/ResinImportDialog.cpp
+        include/Slic3r/App/ResinDatasheetDialog.hpp
+        src/Slic3r/App/ResinDatasheetDialog.cpp
         include/Slic3r/App/MaterialSelectionRow.hpp
         src/Slic3r/App/MaterialSelectionRow.cpp
         include/Slic3r/App/Search.hpp
@@ -1108,6 +1110,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/Biz/ResinProfile/ResinProfileMapper.cpp
         include/Slic3r/Biz/ResinProfile/ResinProfileImportInteractor.hpp
         src/Slic3r/Biz/ResinProfile/ResinProfileImportInteractor.cpp
+        include/Slic3r/Biz/ResinProfile/ResinDatasheetForm.hpp
+        src/Slic3r/Biz/ResinProfile/ResinDatasheetForm.cpp
         include/Slic3r/Biz/ResinProfile/ResinImportReport.hpp
         src/Slic3r/Biz/ResinProfile/ResinImportReport.cpp
         include/Slic3r/Biz/ResinEconomics.hpp
@@ -1705,6 +1709,7 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/Biz/ResinProfile/ResinProfileImportTestFixture.hpp
             test/Slic3r/Biz/ResinProfile/ResinProfileImportInteractorTests.cpp
             test/Slic3r/Biz/ResinProfile/ResinImportReportTests.cpp
+            test/Slic3r/Biz/ResinProfile/ResinDatasheetFormTests.cpp
             test/Slic3r/Biz/ResinEconomicsTests.cpp
             test/Slic3r/Biz/ResinEconomicsInteractorTests.cpp
             test/Slic3r/Biz/Scene/SceneInteractorTests.cpp

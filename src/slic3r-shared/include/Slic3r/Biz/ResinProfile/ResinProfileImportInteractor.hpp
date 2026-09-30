@@ -119,6 +119,20 @@ public:
                                   const std::string& base_preset_id = {},
                                   const std::string& preset_name = {});
 
+    /**
+     * @brief Import a resin profile that has already been read, with @ref import_file's mapping,
+     * base and save, so a profile that came from no file goes through the same review table and ends
+     * up as the same user preset. This is what the "New resin from datasheet" form (M3.11) hands
+     * over: it builds a ForeignResinProfile out of what the user typed and reads nothing.
+     * @param dry_run Report what the import would do without touching a preset.
+     * @param base_preset_id, preset_name As in import_file.
+     */
+    ResinImportResult import_profile(const ForeignResinProfile& profile,
+                                     const ResinImportTarget& target = {},
+                                     bool dry_run = false,
+                                     const std::string& base_preset_id = {},
+                                     const std::string& preset_name = {});
+
     /// @brief Import every regular file in @p folder, sorted by name. One result per file, errors
     /// collected: a file the registry does not recognise, or that fails, never stops the batch.
     std::vector<ResinImportResult> import_folder(const boost::filesystem::path& folder,
@@ -129,6 +143,14 @@ public:
     static constexpr std::size_t MAX_BATCH_FILES = 1000;
 
 private:
+    /// @brief What import_file and import_profile do with a profile they hold, from picking the base
+    /// to saving the preset. @p target is expected to be checked already.
+    ResinImportResult import_read_profile(const ForeignResinProfile& profile,
+                                          const ResinImportTarget& target,
+                                          bool dry_run,
+                                          const std::string& base_preset_id,
+                                          const std::string& preset_name);
+
     Biz::ProjectInteractor& m_project_interactor;
     ResinProfileReaderRegistry m_registry;
     DateProvider m_date_provider;

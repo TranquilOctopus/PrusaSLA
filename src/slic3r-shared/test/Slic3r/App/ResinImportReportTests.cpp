@@ -181,6 +181,18 @@ TEST_CASE("source_summary says what the file is", "[resin_import][report]")
         CHECK(Slic3r::App::source_summary(result) == "resin.cfg  \xC2\xB7  chitubox-cfg");
     }
 
+    SECTION("a profile that was typed into a form has no file to name")
+    {
+        ResinImportResult result;
+        result.source_format = "datasheet";
+        result.resin_name    = "Grey resin";
+        result.resin_vendor  = "Anycubic";
+        // The format and the resin are all there is to say, and the line says both of them.
+        CHECK(
+            Slic3r::App::source_summary(result) == "datasheet  \xC2\xB7  Grey resin  \xC2\xB7  Anycubic"
+        );
+    }
+
     SECTION("a file that has not been read yet")
     {
         CHECK(Slic3r::App::source_summary(ResinImportResult{}).empty());
