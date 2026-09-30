@@ -4,8 +4,6 @@
 #include "Slic3r/App/Plater/SlaSupportPointsGizmo.hpp"
 #include "Slic3r/App/Preview/PreviewRenderModule.hpp"
 #include "Slic3r/App/Platform/AbstractRenderCanvas.hpp"
-#include "Slic3r/App/SidebarBed.hpp"
-#include "Slic3r/App/MaterialSelectionDialog.hpp"
 #include "Slic3r/App/AppServices.hpp"
 #include "Slic3r/App/AppConfigInteractor.hpp"
 #include "Slic3r/App/IsSlaActive.hpp"
@@ -86,10 +84,19 @@ void Navigator::open_resin_import(const boost::filesystem::path& path)
     if (!has_modules()) {
         return;
     }
-    // The review dialog belongs to the bed sidebar of a module, and only the module being looked
-    // at can show the dialog it holds, so the import opens in Prepare.
-    set_render_module_type(Render::ModuleType::Plater);
-    m_plater_module->sidebar_bed().material_selection_dialog().open_resin_import(path);
+    // The review dialog is a dialog of a module, and only the module that is on the screen can show
+    // the dialog it holds, so the import opens in whichever module is being looked at. Dropping a
+    // profile while Preview is shown must not throw the user out of Preview to get there.
+    switch (m_project_contexts->selected().type) {
+    case Render::ModuleType::Plater:
+        m_plater_module->open_resin_import(path);
+        break;
+    case Render::ModuleType::Preview:
+        m_preview_module->open_resin_import(path);
+        break;
+    case Render::ModuleType::Undef:
+        break;
+    }
 }
 
 void Navigator::activate_plater_tool(Scene::ToolType tool)

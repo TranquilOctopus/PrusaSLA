@@ -199,6 +199,15 @@ void PlaterRenderModule::open_invalid_data_dialog()
     }
 }
 
+void PlaterRenderModule::open_resin_import(const boost::filesystem::path& path)
+{
+    // The review dialog hangs off the material selection dialog of the bed sidebar, which owns the
+    // print settings of this project.
+    if (m_sidebar_bed.get()) {
+        m_sidebar_bed->material_selection_dialog().open_resin_import(path);
+    }
+}
+
 void PlaterRenderModule::set_object_list_collapsed(bool collapsed)
 {
     if (m_object_list.get()) {

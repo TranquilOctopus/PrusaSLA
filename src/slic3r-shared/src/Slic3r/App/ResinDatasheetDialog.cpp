@@ -105,8 +105,9 @@ ResinDatasheetDialog::ResinDatasheetDialog(Navigator& navigator) :
     // The rest only exists for the resins whose datasheet states it. Said once here rather than in
     // every label, so an empty field reads as "not stated" and not as "forgotten".
     Text* optional_note = content()->emplace_back<Text>(Biz::_u8L(
-        "Optional: leave a field empty if the datasheet does not state it. A light-off delay and a "
-        "price are only asked for because the resin settings have a key for them."
+        "Optional: leave a field empty if the datasheet does not state it. The delay, the price, "
+        "the bottle and the layer separation are only asked for because the resin settings have a "
+        "key for them."
     ));
     optional_note->set_width_percent(full_width_percent);
     optional_note->set_text_color(
@@ -118,6 +119,21 @@ ResinDatasheetDialog::ResinDatasheetDialog(Navigator& navigator) :
     m_light_off_delay_input = add_field(Biz::_u8L("Light-off delay (s)"));
     m_price_input           = add_field(Biz::_u8L("Price of a bottle"));
     m_bottle_volume_input   = add_field(Biz::_u8L("Bottle volume (ml)"));
+
+    // How a printer that lifts the build plate separates a layer. Speeds in mm/min, the unit the
+    // datasheets and the imported profiles both state them in, which the mapping table converts to
+    // the mm/s the settings hold.
+    m_lift_distance_input = add_field(Biz::_u8L("Lift distance (mm)"));
+    m_lift_speed_input    = add_field(Biz::_u8L("Lift speed (mm/min)"));
+    m_retract_speed_input = add_field(Biz::_u8L("Retract speed (mm/min)"));
+
+    m_transition_layers_input = add_field(Biz::_u8L("Number of transition layers"));
+    m_transition_layers_input->set_tooltip(
+        Biz::_u8L(
+            "The number of layers the exposure is faded over. A tilt printer has no block of "
+            "bottom layers and fades instead."
+        )
+    );
 
     content()->emplace_back<Separator>(Orientation::Horizontal);
 
@@ -162,15 +178,19 @@ void ResinDatasheetDialog::close_action()
 Biz::ResinProfile::ResinDatasheet ResinDatasheetDialog::typed_datasheet() const
 {
     Biz::ResinProfile::ResinDatasheet datasheet;
-    datasheet.resin_name         = m_name_input->text();
-    datasheet.vendor             = m_vendor_input->text();
-    datasheet.layer_height_mm    = m_layer_height_input->text();
-    datasheet.normal_exposure_s  = m_normal_exposure_input->text();
-    datasheet.bottom_exposure_s  = m_bottom_exposure_input->text();
-    datasheet.bottom_layer_count = m_bottom_layers_input->text();
-    datasheet.light_off_delay_s  = m_light_off_delay_input->text();
-    datasheet.price_per_bottle   = m_price_input->text();
-    datasheet.bottle_volume_ml   = m_bottle_volume_input->text();
+    datasheet.resin_name             = m_name_input->text();
+    datasheet.vendor                 = m_vendor_input->text();
+    datasheet.layer_height_mm        = m_layer_height_input->text();
+    datasheet.normal_exposure_s      = m_normal_exposure_input->text();
+    datasheet.bottom_exposure_s      = m_bottom_exposure_input->text();
+    datasheet.bottom_layer_count     = m_bottom_layers_input->text();
+    datasheet.light_off_delay_s      = m_light_off_delay_input->text();
+    datasheet.price_per_bottle       = m_price_input->text();
+    datasheet.bottle_volume_ml       = m_bottle_volume_input->text();
+    datasheet.lift_distance_mm       = m_lift_distance_input->text();
+    datasheet.lift_speed_mm_min      = m_lift_speed_input->text();
+    datasheet.retract_speed_mm_min   = m_retract_speed_input->text();
+    datasheet.transition_layer_count = m_transition_layers_input->text();
     return datasheet;
 }
 
