@@ -4,6 +4,7 @@ This repository is a fork of PrusaSlicer 3.0 (alpha) that is being turned into a
 
 ## Where the work is
 - **Todo list (source of truth):** `doc/sla-fork/ROADMAP.md`. Work on exactly one todo per session.
+- **Architecture map:** `doc/sla-fork/ARCHITECTURE-SLA.md`. Where the SLA code is, by layer and by subsystem: config, supports, slicing, export, resin import, tests.
 - **Background and rules:** `doc/sla-fork/PLAN.md`. Read section 1 (codebase map), 2.1 (color palette), 3.3 (hotspot files) and 3.5 (definition of done).
 - **Build notes:** `doc/sla-fork/BUILD.md` (created by todo M0.1). Until it exists, follow `doc/Build.md`.
 
