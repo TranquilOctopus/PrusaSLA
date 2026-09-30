@@ -15,6 +15,9 @@
 #include "Slic3r/App/Scene/InstancedMeshRenderNodeComponent.hpp"
 #include "Slic3r/App/Scene/MeshRenderNodeComponent.hpp"
 #include "Slic3r/App/Scene/ScenePresenterProjectContext.hpp"
+#include "Slic3r/App/AppServices.hpp"
+#include "Slic3r/App/Theme.hpp"
+#include "Slic3r/App/ThemeTypes.hpp"
 
 #include "Slic3r/Domain/ObjectID.hpp"
 #include "libslic3r/SLAResult.hpp"
@@ -207,11 +210,26 @@ void SlaViewer::load_layers(const std::vector<float>& layers_zs, const std::vect
     }
 }
 
-static const std::unordered_map<SlaMeshType, ColorRGBA> SLA_MESH_COLORS = {
-    {SlaMeshType::Object, {1, 0.5f, 0, 1}},
-    {SlaMeshType::Supports, {0.5f, 0.5f, 0.5f, 1}},
-    {SlaMeshType::Pad, {0.6f, 0.2f, 1.0f, 1}},
-};
+// The model, the support tree and the raft are told apart by their own theme tokens, never by a
+// colour written here (PLAN 2.1): the tokens resolve in both themes and the palette lives in
+// Theme.cpp only. The material tint of the resin is applied on top of SlaModelResin, see M2.9b.
+static Platform::Color sla_mesh_color_token(SlaMeshType type)
+{
+    switch (type) {
+    case SlaMeshType::Supports:
+        return Platform::Color::SlaSupport;
+    case SlaMeshType::Pad:
+        return Platform::Color::SlaPad;
+    default:
+    case SlaMeshType::Object:
+        return Platform::Color::SlaModelResin;
+    }
+}
+
+static ColorRGBA sla_mesh_color(SlaMeshType type)
+{
+    return AppServices::instance().theme().color(sla_mesh_color_token(type), Platform::ColorGroup::Default);
+}
 
 void SlaViewer::build_sla_object_mesh(
     size_t object_id,
@@ -242,11 +260,7 @@ void SlaViewer::build_sla_object_mesh(
     const auto* geom = geom_mgr.get_or_create(id, [&]() {
         return Render::geometry_from_triangle_mesh(*m_device, trimesh->triangles());
         });
-    ColorRGBA color = ColorRGBA{ 1.0f, 1.0f, 1.0f, 1.0f };
-
-    auto color_it = SLA_MESH_COLORS.find(type);
-    if (color_it != SLA_MESH_COLORS.end())
-        color = color_it->second;
+    const ColorRGBA color = sla_mesh_color(type);
 
     auto material = Render::Material{}
         .set_shader(m_device->context().shader_manager().shader("gouraud_light"))
@@ -518,7 +532,7 @@ void SlaViewer::update_preview_range(size_t min_layer_id, size_t max_layer_id)
         SlaObjectNodeTag* tag = n.tag_of_type<SlaObjectNodeTag>();
         if (tag != nullptr) {
             if (tag->type != SlaMeshType::Undefined && !tag->is_clip()) {
-                ColorRGBA color = SLA_MESH_COLORS.find(tag->type)->second;
+                const ColorRGBA color = sla_mesh_color(tag->type);
 
                 auto material = Render::Material{}
                     .set_shader(m_device->context().shader_manager().shader("gouraud_light_double_z_clip"))

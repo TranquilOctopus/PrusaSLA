@@ -198,9 +198,17 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
   Split into three sub-items, PLAN F3: the support and raft materials (M2.9a), the resin tint and
   translucency of the model (M2.9b), and the overlay styling of the point glyphs, island markers and
   clipping caps (M2.9c).
-  - [ ] **M2.9a** Support tree and raft drawn in their own theme colours instead of the model colour: in Prepare by `SlaSupportPreviewService` (M2.21) and in Preview by the SLA viewer, both reading the `SlaSupport` / `SlaPad` tokens, readable in the light and the dark theme. · M · needs M0.5, M1.3
+  - [x] **M2.9a** Support tree and raft drawn in their own theme colours instead of the model colour: in Prepare by `SlaSupportPreviewService` (M2.21) and in Preview by the SLA viewer, both reading the `SlaSupport` / `SlaPad` tokens, readable in the light and the dark theme. · M · needs M0.5, M1.3
   - [ ] **M2.9b** Resin tint and translucency: the model follows the material's `material_colour` (PLAN 2.1 rule 4) and a translucent resin reads as translucent. · M · needs M2.9a
   - [ ] **M2.9c** Overlay styling: support point glyphs, island markers and the clipping-cap (hollow and drain hole) previews get their own tokens in Prepare and Preview. · M · needs M2.9a
+    Result: the two tokens were already reserved and mapped (PLAN 2.1), so no palette edit was needed:
+    `SlaSupport` is Sage100 on dark and Slate700 on light, `SlaPad` is Teal500 in both, and both
+    differ from `SlaModelResin` (Sage300) in both themes and in a grayscale render, which the new
+    ThemeTests case checks. `SlaSupportPreviewService` draws the tree with `SlaSupport` and the raft
+    with `SlaPad` instead of the model colour, and the SLA viewer in Preview replaced the hard-coded
+    orange / grey / purple of its mesh table with the three tokens, so the preview model is the
+    resin colour as well (the material tint on top of it is M2.9b). NOT BUILT (no build in this
+    session). Not checked in a running app.
 - [x] **M2.10** Lychee support option list: the parity target is **every** Lychee support option, in [supports/lychee-features.md](supports/lychee-features.md). · S · needs —
   Result: 21 options in 7 groups (presets, tip, stem incl. geometry, base, bracing, raft, placement), compiled from public knowledge and marked unverified. M2.11 works from this list; wrong names get fixed when someone compares against the Lychee UI.
 - [x] **M2.11** Parity table `doc/sla-fork/supports/lychee-parity.md`: map every M2.10 option onto existing SLA keys and mark it covered, partial or missing. Existing keys: `support_head_front_diameter`, `support_head_penetration`, `support_head_width`, `support_pillar_diameter`, `support_small_pillar_diameter_percent`, `support_base_diameter`, `support_base_height`, `support_pillar_connection_mode`, `support_max_bridge_length`, `support_critical_angle`, `support_object_elevation`, `support_tree_type`, and the `pad_*` family. Split every gap into its own todo below. · S · needs M2.10
