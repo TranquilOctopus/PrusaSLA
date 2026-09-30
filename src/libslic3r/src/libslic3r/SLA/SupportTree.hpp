@@ -46,6 +46,18 @@ struct SupportTreeConfig
     // How to connect pillars
     Domain::sla::PillarConnectionMode pillar_connection_mode = Domain::sla::PillarConnectionMode::dynamic;
 
+    // Whether neighbouring pillars may be linked to each other at all. With bracing off
+    // every pillar has to reach the ground on its own.
+    bool brace_enable = true;
+
+    // Diameter of a brace between two pillars in mm. Zero means a brace is as thick as the
+    // pillar it hangs on, which is what the tree has always built.
+    double brace_diameter_mm = 0.;
+
+    // The lowest height above the plate a brace between two pillars may reach. Zero means
+    // as low as the pillar bases allow.
+    double brace_start_height_mm = 0.;
+
     // Only generate pillars that can be routed to ground
     bool ground_facing_only = false;
 
@@ -144,6 +156,20 @@ inline double ground_level(const SupportableMesh &sm)
                   bool(sm.pad_cfg.embed_object) * sm.pad_cfg.wall_thickness_mm;
 
     return lvl;
+}
+
+// Radius of a brace between two pillars. A zero brace diameter means the brace is as thick
+// as the pillar it belongs to.
+inline double brace_radius(const SupportTreeConfig &cfg, double pillar_radius)
+{
+    return cfg.brace_diameter_mm > 0. ? 0.5 * cfg.brace_diameter_mm : pillar_radius;
+}
+
+// The lowest z a brace between two pillars may reach: the taller of the pillar base and the
+// configured brace start height, both measured from the plate.
+inline double brace_start_z(const SupportableMesh &sm)
+{
+    return ground_level(sm) + std::max(sm.cfg.base_height_mm, sm.cfg.brace_start_height_mm);
 }
 
 indexed_triangle_set create_support_tree(const SupportableMesh &mesh,

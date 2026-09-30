@@ -144,6 +144,9 @@ sla::SupportTreeConfig make_support_cfg(const SLAPrintObjectConfigView& c)
         scfg.max_bridge_length_mm = c.get<double>("support_max_bridge_length");
         scfg.max_pillar_link_distance_mm = c.get<double>("support_max_pillar_link_distance");
         scfg.pillar_connection_mode = c.get<Domain::sla::PillarConnectionMode>("support_pillar_connection_mode");
+        scfg.brace_enable = c.get<bool>("support_brace_enable");
+        scfg.brace_diameter_mm = c.get<double>("support_brace_diameter");
+        scfg.brace_start_height_mm = c.get<double>("support_brace_start_height");
         scfg.ground_facing_only = c.get<bool>("support_buildplate_only");
         scfg.pillar_widening_factor = c.get<double>("support_pillar_widening_factor");
         scfg.base_radius_mm = 0.5*c.get<double>("support_base_diameter");
@@ -714,6 +717,9 @@ const std::map<std::string, std::vector<Step>> invalidated_by{
     {"support_base_diameter", steps({propagate(slaposSupportTree)})},
     {"support_base_height", steps({propagate(slaposSupportTree)})},
     {"support_base_safety_distance", steps({propagate(slaposSupportTree)})},
+    {"support_brace_diameter", steps({propagate(slaposSupportTree)})},
+    {"support_brace_enable", steps({propagate(slaposSupportTree)})},
+    {"support_brace_start_height", steps({propagate(slaposSupportTree)})},
     {"support_buildplate_only", steps({propagate(slaposSupportTree)})},
     {"support_critical_angle", steps({propagate(slaposSupportTree)})},
     {"support_enforcers_only", steps({propagate(slaposSupportPoints)})},

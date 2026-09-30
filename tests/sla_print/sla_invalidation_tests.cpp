@@ -112,6 +112,9 @@ std::vector<std::string> get_all_sla_config_keys() {
     keys.push_back("support_base_diameter");
     keys.push_back("support_base_height");
     keys.push_back("support_base_safety_distance");
+    keys.push_back("support_brace_diameter");
+    keys.push_back("support_brace_enable");
+    keys.push_back("support_brace_start_height");
     keys.push_back("support_buildplate_only");
     keys.push_back("support_critical_angle");
     keys.push_back("support_enforcers_only");
@@ -306,6 +309,7 @@ TEST_CASE("SLAInvalidation: table-driven expected steps for representative keys"
         {"resin_faded_layers", steps({propagate(slaposObjectSlice)})},
         {"resin_layer_height", steps({propagate(slaposObjectSlice)})},
         {"support_base_diameter", steps({propagate(slaposSupportTree)})},
+        {"support_brace_enable", steps({propagate(slaposSupportTree)})},
         {"support_object_elevation", steps({propagate(slaposObjectSlice)})},
         {"support_points_density_relative", steps({propagate(slaposSupportPoints)})},
         {"support_tree_type", steps({propagate(slaposObjectSlice)})},

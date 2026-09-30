@@ -19,7 +19,7 @@ Generated from `lychee-features.md` (21 rows in 7 groups). Each row maps a Lyche
 | 13 | **Base: Base (foot) diameter** — diameter where stem meets raft/plate | `support_base_diameter` | partial | ConfigDefsSLA.cpp:1423 | Global/per-object config only; no per-point override in config. |
 | 14 | **Base: Base height and shape** — cone or cylinder foot, and its height | `support_base_height` | partial | ConfigDefsSLA.cpp:1437 | Height covered. Shape is always a cone; no cylinder/flat option. |
 | 15 | **Bracing: Braces / cross-braces** — automatic links between stems | `support_pillar_connection_mode` (zigzag/cross/dynamic) | covered | ConfigDefsSLA.cpp:1376 | Cross/zigzag modes create automatic cross-bracing between nearby pillars. |
-| 16 | **Bracing: Brace diameter, spacing, angle, pattern** — brace size and layout | Pattern: `support_pillar_connection_mode`; Angle: `support_critical_angle`; Spacing: `support_max_bridge_length`; Diameter: uses `support_pillar_diameter` | partial | ConfigDefsSLA.cpp:1376,1467,1481,1314 | Pattern/angle/spacing covered. Brace diameter is not independent (uses pillar diameter). |
+| 16 | **Bracing: Brace diameter, spacing, angle, pattern** — brace size and layout | Pattern: `support_pillar_connection_mode`; Angle: `support_critical_angle`; Spacing: `support_max_pillar_link_distance`; Diameter: `support_brace_diameter` (0 = as thick as the pillar) | covered | ConfigDefsSLA.cpp:1432,1462,1561,1591; DefaultSupportTree.cpp:206,256 | All four covered. Since M2.15 the brace diameter is a setting of its own, next to `support_brace_enable` and `support_brace_start_height`. |
 | 17 | **Raft: Raft type** — standard, skate, grid/honeycomb, none | Pad system (`pad_enable`, `pad_wall_thickness`, `pad_wall_height`, `pad_brim_size`, `pad_wall_slope`) | partial | ConfigDefsSLA.cpp:562-652 | Pad is a solid base with optional cavity walls. No "skate", "grid", or "honeycomb" type selection. `pad_enable=false` ≈ "none". |
 | 18 | **Raft: Raft thickness, margin/offset, chamfer/slope** | Thickness: `pad_wall_thickness` (conflated with wall); Margin: `pad_brim_size`; Chamfer/slope: `pad_wall_slope` | partial | ConfigDefsSLA.cpp:572,602,640 | Margin and slope covered. "Thickness" is the wall thickness; no separate raft-floor thickness parameter. |
 | 19 | **Placement: Model elevation (Z lift)** | `support_object_elevation`; `pad_around_object` / `pad_around_object_everywhere` | covered | ConfigDefsSLA.cpp:1511,654,664 | Elevation config exists. Pad-around-object modes modify behavior. |
@@ -32,8 +32,8 @@ Generated from `lychee-features.md` (21 rows in 7 groups). Each row maps a Lyche
 
 | Status | Count |
 |---|---|
-| **covered** | 3 (rows 12, 15, 19) |
-| **partial** | 11 (rows 3, 4, 5, 8, 11, 13, 14, 16, 17, 18, 20, 21) |
+| **covered** | 4 (rows 12, 15, 16, 19) |
+| **partial** | 10 (rows 3, 4, 5, 8, 11, 13, 14, 17, 18, 20, 21) |
 | **missing** | 7 (rows 1, 2, 6, 7, 9, 10, 11*) |
 
 *Row 11 counted as partial because related configs exist.
@@ -51,7 +51,7 @@ Generated from `lychee-features.md` (21 rows in 7 groups). Each row maps a Lyche
 7. **Stem taper (variable diameter along length)** → **M2.16 stem geometry**
 8. **Per-point "support on model" toggle** → **M2.12 per-point sizes** (or no todo yet)
 9. **Base shape choice (cone vs. cylinder)** → **M2.14 rafts** (base is part of pillar, but raft todo may cover)
-10. **Independent brace diameter** (separate from pillar diameter) → **M2.15 bracing**
+10. **Independent brace diameter** (separate from pillar diameter) → **M2.15 bracing** (closed: `support_brace_diameter`)
 11. **Raft type selection (standard/skate/grid/honeycomb/none)** → **M2.14 rafts**
 12. **Separate raft floor thickness** (distinct from wall thickness) → **M2.14 rafts**
 13. **Minimum distance between auto-support points** → **M2.12 per-point sizes** (placement density)
@@ -62,6 +62,5 @@ Generated from `lychee-features.md` (21 rows in 7 groups). Each row maps a Lyche
 ## Uncertain items
 
 - **Row 11 (Support on model)**: `support_max_weight_on_model` and `support_buildplate_only` exist but work differently from Lychee's per-point "start on model" concept. The branching algorithm decides algorithmically; user cannot force a specific pillar to start on model vs. raft.
-- **Row 16 (Brace diameter)**: Our braces are pillar-to-pillar connections using the same diameter as pillars. Lychee allows thinner braces. No config separates them.
 - **Row 17/18 (Raft)**: Our "pad" is architecturally different from Lychee's "raft" (pad is a print-bed adhesion base with cavity; raft in Lychee is a disposable interface layer). The parity is approximate.
 - **Row 21 (Overhang angle)**: `support_critical_angle` governs stick/junction angles, not the overhang detection threshold. The auto-generation overhang threshold appears to be hard-coded or not exposed.
