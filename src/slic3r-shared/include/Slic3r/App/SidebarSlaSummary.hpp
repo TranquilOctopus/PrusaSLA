@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Slic3r/App/SlaIssueRows.hpp"
 #include "Slic3r/App/Yoga/Window.hpp"
 #include "Slic3r/Biz/Platform/ListenerScope.hpp"
 #include "Slic3r/Biz/ISelectedConfigContainerChangedListener.hpp"
@@ -8,6 +9,7 @@
 #include "Slic3r/Biz/Slicing/SlicingInteractor.hpp"
 #include "Slic3r/Biz/ResinEconomicsInteractor.hpp"
 #include "Slic3r/Domain/SelectionId.hpp"
+#include "Slic3r/Domain/SlicingId.hpp"
 
 namespace Slic3r::Biz {
 class ProjectInteractor;
@@ -37,6 +39,8 @@ private:
     void refresh();
     void update_visibility();
     void clear_rows();
+    // The W4 issues list under the figures, one link per issue into the layer image window.
+    void add_issue_rows(const SlaIssueRows& issue_rows);
 
     Biz::ProjectInteractor& m_project_interactor;
     Biz::ListenerScope<Biz::ISelectedConfigContainerChangedListener, Biz::ProjectInteractor, SidebarSlaSummary> m_config_container_listener_scope;
@@ -47,6 +51,8 @@ private:
     Domain::SelectionId m_current_bed_instance_id{Domain::INVALID_ID};
     Domain::SelectionId m_current_project_id{Domain::INVALID_ID};
     Domain::SelectionId m_current_config_container_id{Domain::INVALID_ID};
+    // The bed the rows were built for, so a click jumps to a layer of the bed that is on screen.
+    Domain::SlicingId m_current_slicing_id{};
     Yoga::Item* m_rows_container{nullptr};
 };
 
