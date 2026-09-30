@@ -1,6 +1,9 @@
 #pragma once
 
 #include "Slic3r/App/Plater/GizmoWindow.hpp"
+#include "Slic3r/App/Plater/SlaSupportGeometry.hpp"
+
+#include <optional>
 
 namespace Slic3r::App::Yoga {
 class SliderWithInput;
@@ -8,6 +11,7 @@ class LayoutButton;
 class Text;
 class ToggleButton;
 class CollapsibleWindow;
+class ComboBox;
 } // namespace Slic3r::App::Yoga
 
 namespace Slic3r::App::Plater {
@@ -27,6 +31,11 @@ public:
         std::function<void(double)> pillar_diameter_changed = [](double) {};
         std::function<void(double)> base_diameter_changed = [](double) {};
         std::function<void(double)> base_height_changed = [](double) {};
+        std::function<void(Domain::SLA::SupportPoint::TipShape)> tip_shape_changed = [](
+            Domain::SLA::SupportPoint::TipShape) {};
+        std::function<void(double)> knot_diameter_changed = [](double) {};
+        std::function<void(double)> stem_sides_changed = [](double) {};
+        std::function<void(double)> stem_taper_changed = [](double) {};
         std::function<void(bool)> head_diameter_use_global_changed = [](bool) {};
         std::function<void(bool)> pillar_diameter_use_global_changed = [](bool) {};
         std::function<void(bool)> base_diameter_use_global_changed = [](bool) {};
@@ -55,6 +64,11 @@ public:
     void set_pillar_diameter_use_global(bool use_global);
     void set_base_diameter_use_global(bool use_global);
     void set_base_height_use_global(bool use_global);
+
+    /// Shows the tip shape, knot, stem cross-section and stem taper of the selected points (M2.16c).
+    /// An empty @p geometry means nothing is selected or the points disagree on one of the values:
+    /// the fields are then left empty instead of showing a value only some of the points have.
+    void set_support_geometry(const std::optional<SlaSupportGeometry>& geometry);
     void set_clipping_plane_position(double pos);
     void set_lock_island_supports(bool locked);
     void set_active_preset(int index);
@@ -74,6 +88,12 @@ private:
     Yoga::ToggleButton* m_pillar_diameter_use_global_checkbox = nullptr;
     Yoga::ToggleButton* m_base_diameter_use_global_checkbox = nullptr;
     Yoga::ToggleButton* m_base_height_use_global_checkbox = nullptr;
+    // The per-point support geometry (M2.16c), the section the tip shape and the knot belong to and
+    // the stem the side count and the taper.
+    Yoga::ComboBox* m_tip_shape_combo = nullptr;
+    Yoga::SliderWithInput* m_knot_diameter_slider = nullptr;
+    Yoga::SliderWithInput* m_stem_sides_slider = nullptr;
+    Yoga::SliderWithInput* m_stem_taper_slider = nullptr;
     Yoga::LayoutButton* m_generate_button = nullptr;
     Yoga::LayoutButton* m_auto_support_all_button = nullptr;
     Yoga::LayoutButton* m_apply_button = nullptr;

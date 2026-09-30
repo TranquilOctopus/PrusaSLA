@@ -122,6 +122,7 @@ std::vector<std::string> get_all_sla_config_keys() {
     keys.push_back("support_head_front_diameter");
     keys.push_back("support_head_penetration");
     keys.push_back("support_head_width");
+    keys.push_back("support_knot_diameter");
     keys.push_back("support_max_bridge_length");
     keys.push_back("support_max_bridges_on_pillar");
     keys.push_back("support_max_pillar_link_distance");
@@ -132,6 +133,9 @@ std::vector<std::string> get_all_sla_config_keys() {
     keys.push_back("support_pillar_widening_factor");
     keys.push_back("support_points_density_relative");
     keys.push_back("support_small_pillar_diameter_percent");
+    keys.push_back("support_stem_sides");
+    keys.push_back("support_stem_taper");
+    keys.push_back("support_tip_shape");
     keys.push_back("support_tree_type");
     keys.push_back("supports_enable");
     keys.push_back("thumbnails");

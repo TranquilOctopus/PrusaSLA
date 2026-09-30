@@ -2,6 +2,7 @@
 
 #include "Slic3r/App/Yoga/SliderWithInput.hpp"
 #include "Slic3r/App/Yoga/LayoutButton.hpp"
+#include "Slic3r/App/Yoga/ComboBox.hpp"
 #include "Slic3r/App/Yoga/Text.hpp"
 #include "Slic3r/App/Yoga/Item.hpp"
 #include "Slic3r/App/Yoga/ToggleButton.hpp"
@@ -116,6 +117,65 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     m_base_height_use_global_checkbox = settings->emplace_back<ToggleButton>(_u8L("Use global base height"));
     m_base_height_use_global_checkbox->callbacks().checked_changed = [this](bool value)
     { m_callbacks.base_height_use_global_changed(value); };
+
+    // The per-point support geometry (M2.16c): the tip shape and the knot around the tip, then the
+    // cross-section and the taper of the stem. They take no global override, they are the values a
+    // new point is placed with.
+    this->add_separator(settings);
+
+    add_row_with_combo_box(_u8L("Tip shape"), settings, &m_tip_shape_combo);
+    m_tip_shape_combo->set_items({_u8L("Default"), _u8L("Cone"), _u8L("Ball")});
+    m_tip_shape_combo->callbacks().selection_changed = [this](int index)
+    {
+        switch (index) {
+        case 1:
+            m_callbacks.tip_shape_changed(Domain::SLA::SupportPoint::TipShape::Cone);
+            break;
+        case 2:
+            m_callbacks.tip_shape_changed(Domain::SLA::SupportPoint::TipShape::Ball);
+            break;
+        default:
+            m_callbacks.tip_shape_changed(Domain::SLA::SupportPoint::TipShape::Default);
+            break;
+        }
+    };
+
+    add_row_with_slider(
+        settings,
+        &m_knot_diameter_slider,
+        _u8L("Knot diameter"),
+        _u8L("mm")
+    );
+    m_knot_diameter_slider->set_begin_value(0);
+    m_knot_diameter_slider->set_end_value(20.0);
+    m_knot_diameter_slider->set_step(0.1);
+    m_knot_diameter_slider->set_validator_precision(1);
+    m_knot_diameter_slider->callbacks().value_changed = [this](double value)
+    { m_callbacks.knot_diameter_changed(value); };
+
+    add_row_with_slider(
+        settings,
+        &m_stem_sides_slider,
+        _u8L("Stem sides")
+    );
+    m_stem_sides_slider->set_begin_value(0);
+    m_stem_sides_slider->set_end_value(64);
+    m_stem_sides_slider->set_step(1);
+    m_stem_sides_slider->set_validator_precision(0);
+    m_stem_sides_slider->callbacks().value_changed = [this](double value)
+    { m_callbacks.stem_sides_changed(value); };
+
+    add_row_with_slider(
+        settings,
+        &m_stem_taper_slider,
+        _u8L("Stem taper")
+    );
+    m_stem_taper_slider->set_begin_value(0.);
+    m_stem_taper_slider->set_end_value(1.);
+    m_stem_taper_slider->set_step(0.01);
+    m_stem_taper_slider->set_validator_precision(2);
+    m_stem_taper_slider->callbacks().value_changed = [this](double value)
+    { m_callbacks.stem_taper_changed(value); };
 
     add_row_with_slider(
         content(),
@@ -281,6 +341,37 @@ void SlaSupportPointsDialog::set_base_height_use_global(bool use_global)
 {
     m_base_height_use_global_checkbox->set_checked(use_global);
     m_base_height_slider->set_enabled(!use_global);
+}
+
+void SlaSupportPointsDialog::set_support_geometry(const std::optional<SlaSupportGeometry>& geometry)
+{
+    if (!geometry.has_value()) {
+        // Nothing is selected, or the selected points disagree on one of the values: the fields
+        // show no value, so the user is never shown a value only some of the points have. A
+        // dropdown has no empty state of its own, so it says the one word the app uses for this.
+        m_tip_shape_combo->set_override_label(_u8L("Mixed"));
+        m_knot_diameter_slider->set_undef_value();
+        m_stem_sides_slider->set_undef_value();
+        m_stem_taper_slider->set_undef_value();
+        return;
+    }
+
+    m_tip_shape_combo->set_override_label(std::string());
+    switch (geometry->tip_shape) {
+    case Domain::SLA::SupportPoint::TipShape::Cone:
+        m_tip_shape_combo->set_current_index(1);
+        break;
+    case Domain::SLA::SupportPoint::TipShape::Ball:
+        m_tip_shape_combo->set_current_index(2);
+        break;
+    case Domain::SLA::SupportPoint::TipShape::Default:
+    default:
+        m_tip_shape_combo->set_current_index(0);
+        break;
+    }
+    m_knot_diameter_slider->set_value(geometry->knot_diameter_mm);
+    m_stem_sides_slider->set_value(geometry->stem_sides);
+    m_stem_taper_slider->set_value(geometry->stem_taper);
 }
 
 void SlaSupportPointsDialog::set_active_preset(int index)

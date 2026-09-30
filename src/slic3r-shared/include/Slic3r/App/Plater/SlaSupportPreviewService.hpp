@@ -63,7 +63,9 @@ struct SlaSupportPreviewKey
     bool operator==(const SlaSupportPreviewKey& rhs) const = default;
 };
 
-/// @brief Hash of the support point positions and head radii, in the order the points are stored.
+/// @brief Hash of the support points and every per-point dimension the support tree is built from
+/// (the head, the pillar and the base sizes, the tip and the stem geometry), in the order the
+/// points are stored.
 std::uint64_t hash_support_points(const Domain::SLA::SupportPoints& points);
 
 SlaSupportPreviewKey make_sla_support_preview_key(

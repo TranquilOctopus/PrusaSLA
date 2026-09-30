@@ -63,6 +63,8 @@ public:
 
 private:
     void Create();
+    /// Writes @p value into the input field, formatted the way the validator wants it.
+    void update_input_text(double value);
 
 private:
     Slider* m_slider = nullptr;

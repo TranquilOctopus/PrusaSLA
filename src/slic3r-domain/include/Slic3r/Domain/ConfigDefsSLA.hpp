@@ -15,6 +15,10 @@ namespace sla {
     enum class SupportTreeType { Default, Branching, Organic };
     enum class PillarConnectionMode { zigzag, cross, dynamic };
     enum class RaftType { None, Full, AroundObject, Skate };
+    // The shape of a support tip where it touches the model, as support_tip_shape stores it. The
+    // same three values live on the point itself (SLA::SupportPoint::TipShape), which is where the
+    // value is used once it is placed.
+    enum class SupportTipShape { Default, Cone, Ball };
 }
 
 enum TowerSpeeds : int {
