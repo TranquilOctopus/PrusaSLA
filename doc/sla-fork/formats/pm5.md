@@ -1,5 +1,10 @@
 # Anycubic Photon Workshop `.pm5` (format version 517)
 
+The Photon Mono M5s (`.pm5s`) and the M7 Pro (`.pm7`) use the same container, written by the same
+writer with a different printer name and format version: see *The `.pm5s` variant* and *The `.pm7`
+variant* at the end. Everything below describes the `.pm5`, the one variant a real file has been
+read from.
+
 Observed from one file sliced for the **Anycubic Photon Mono M5** in Photon Workshop (its own
 metadata says version 4.2.0, 2026-08-31), provided by the maintainer on 2026-09-22 and kept in the
 git-ignored `local-samples/anycubic-photon-mono-m5/`. The sample itself is not committed; this
@@ -27,7 +32,8 @@ file; a writer should fill each slot with the right block's offset.
 
 Physical order of the blocks in the file (confirmed): HEADER, PREVIEW, colour table, LAYERDEF,
 EXTRA, MACHINE, software block, MODEL, then the layer images. Write them in this order.
-`doc/sla-fork/tools/pm5_layout.py --compare` checks it, along with the other layout constants.
+`doc/sla-fork/tools/pm5_layout.py --compare` checks it, along with the other layout constants; the
+script reads whichever variant of the container it is given.
 
 ## Named sections
 
@@ -154,3 +160,74 @@ mounted the other way; that would have produced correctly sized, transposed imag
 
 **Not yet known:** mirroring. The sample's model sits in the middle of the plate, so it cannot show
 whether the image is mirrored in X or Y. Settle it with an asymmetric test print (M5.4).
+
+## The `.pm5s` variant (Anycubic Photon Mono M5s)
+
+**No file has been read from a Photon Mono M5s, so everything in this section is unverified.** The
+writer writes the `.pm5` container of this document unchanged, with the per-printer fields below,
+which is what the published community descriptions of the Photon Workshop formats support: they
+describe one container for the Photon Mono M5 family with the printer named in MACHINE, and nothing
+that a newer printer adds a block or changes an encoding.
+
+Field by field, against the `.pm5` sections above:
+
+| Field | `.pm5` (confirmed) | `.pm5s` (unverified) | Written from |
+|---|---|---|---|
+| File mark 0x0C, format version | 517 | 517 | the variant table, same number as the sample |
+| Area count 0x10 | 9 | 9 | fixed |
+| The nine address table slots | HEADER, software, PREVIEW, colour table, LAYERDEF, EXTRA, MACHINE, first layer image, MODEL | same | fixed |
+| HEADER pixel size +0 | 19.0 um | 19.0 um | the printer profile: 218.88 mm / 11520 px |
+| HEADER resolution +44/+48 | 11520 x 5120 | 11520 x 5120 | the printer profile (`display_pixels_x/y`), the same 12K panel as the M5 |
+| HEADER grey levels +40 | 16 | 16 | the PW0 encoder, whatever `gamma_correction` is (M4.13b) |
+| PREVIEW | 224 x 168, DPI field 120, RGB565 | same | fixed; the thumbnail is written from the slicing result |
+| Colour table | 16 entries `0F 1F … FF` | same | fixed |
+| LAYERDEF | 4 + 32 bytes per layer | same | fixed, one entry per layer |
+| EXTRA | the sample's 56 bytes | same | copied from the sample, meaning still unknown |
+| MACHINE +0, printer name (96 bytes) | `Anycubic Photon Mono M5` | `Anycubic Photon Mono M5s` | the variant table; Photon Workshop's own spelling, which no file confirms |
+| MACHINE +96, layer image format (16 bytes) | `pw0Img` | `pw0Img` | the encoder that wrote the layers; a printer wanting another name would need it |
+| MACHINE +112/+116 | 16, 7 | 16, 7 | copied from the sample, meaning unknown |
+| MACHINE display width, height, max Z | 218.88, 122.88, 200.0 mm | same numbers | the printer profile |
+| MACHINE +132, version | 517 | 517 | the variant table, same number as the sample |
+| Software block | our own identity, same 164 bytes | same | fixed |
+| MODEL | 48 bytes, zeros for the bounding box | same | fixed |
+| Layer images | PW0 runs, landscape 11520-pixel rows | same | the rasterizer, from the profile's display |
+
+**A real `.pm5s` file has to settle, in this order:** the format version (it is in two places, the
+file mark at 0x0C and MACHINE at body +132, and 517 is the M5 sample's number); the printer name
+string, which a printer may check and may refuse; the layer image format name; whether the M5s
+panel really is 11520 x 5120 with a 19 um pixel; and whether Photon Workshop writes any block for
+the M5s that the M5 does not have. Until one of those files exists, the export is experimental.
+
+## The `.pm7` variant (Anycubic Photon Mono M7 Pro)
+
+**No file has been read from a Photon Mono M7 Pro either, so everything in this section is
+unverified**, and it is the variant where a wrong guess is most likely: the panel is a different
+size from the M5's, so the resolution, the pixel size and the run-length layer images are all
+larger, and a printer may reject a file whose resolution is not its own.
+
+| Field | `.pm5` (confirmed) | `.pm7` (unverified) | Written from |
+|---|---|---|---|
+| File mark 0x0C, format version | 517 | 517 | the variant table, same number as the sample |
+| Everything but the fields below | as above | identical block order, declared lengths, encoder, PREVIEW, colour table, EXTRA, software block, MODEL | fixed |
+| HEADER pixel size +0 | 19.0 um | 17.0 um | the printer profile: 226.44 mm / 13320 px |
+| HEADER resolution +44/+48 | 11520 x 5120 | 13320 x 5120 | the printer profile, the 14K panel |
+| MACHINE +0, printer name (96 bytes) | `Anycubic Photon Mono M5` | `Anycubic Photon Mono M7 Pro` | the variant table; no file confirms the spelling |
+| MACHINE +96, layer image format (16 bytes) | `pw0Img` | `pw0Img` | the encoder; a 13320-pixel row is longer than 4095, so it still needs the 12-bit runs of grey 0x0 and 0xF, which the encoder writes |
+| MACHINE display width, height, max Z | 218.88, 122.88, 200.0 mm | 226.44, 122.88, 230.0 mm | the printer profile |
+| Layer images | PW0 runs, landscape rows of `display_pixels_x` pixels | same | the rasterizer |
+
+**A real `.pm7` file has to settle:** the format version; the printer name; whether the panel is
+13320 x 5120 with a 17 x 24 um pixel (the vendor page and the shipped preset both say so, and
+neither is a spec sheet); whether the M7 Pro needs a block the M5 does not have; and whether its
+layer encoding is still PW0 or a newer scheme with more grey levels. The last one is the risk worth
+naming: the `.pm5` container's colour table is 16 bytes wide, and a newer printer panel that wanted
+more levels would need a wider table, which the sample says nothing about.
+
+## Encryption
+
+Nothing in this fork writes an encrypted file, and nothing here approaches one. The `.pm5` sample is
+plain text throughout, and the published community descriptions of the Photon Workshop formats
+(`pm5`/`.pm5s`/`.pm7`) describe the same unencrypted container, so no version of it is known to this
+work to be encrypted and none is written. This is unlike Chitubox `.ctb`, whose v4 and v5 containers
+are encrypted and are not written either (see `ctb.md`). If a printer turns out to want an encrypted
+file, that is a decision for the person running the project, not something to work around.

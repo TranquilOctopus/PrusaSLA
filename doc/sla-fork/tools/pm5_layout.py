@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Structural summary of a Photon Workshop .pm5 file, and a layout comparison of two files.
+"""Structural summary of a Photon Workshop container (.pm5, .pm5s or .pm7), and a layout
+comparison of two files.
 
     python doc/sla-fork/tools/pm5_layout.py FILE
     python doc/sla-fork/tools/pm5_layout.py --compare REFERENCE CANDIDATE
 
 The summary covers layout only: block order, declared lengths, field types and the constants that
-should match between any two .pm5 files. Values that legitimately differ between prints (resolution
-when not an M5, layer count, layer data, exposure, the model's bounding box) are reported but not
-compared. See doc/sla-fork/formats/pm5.md for what each field means.
+should match between any two files of the family. Values that legitimately differ between prints
+(resolution when not an M5, layer count, layer data, exposure, the printer name, the model's
+bounding box) are reported but not compared. See doc/sla-fork/formats/pm5.md for what each field
+means.
 
 Exit status for --compare: 0 when the layouts match, 1 when they differ.
 """

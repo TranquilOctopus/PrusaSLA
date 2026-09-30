@@ -69,7 +69,8 @@ Everything below is merged on `sla/main`; the open todos are in the progress tab
 ### Export
 
 - **Formats.** Every registered archive writer, the printer's own format first: `.sl1`/`.sl1s` and `.sl1svg` (Prusa),
-  `.goo` (Elegoo), `.pwmo`, `.pwmx`, `.pwms` (Photon), `.pm5` (M5) and `.ctb` (experimental).
+  `.goo` (Elegoo), `.pwmo`, `.pwmx`, `.pwms` (Photon), `.pm5`, `.pm5s` and `.pm7` (Photon Mono M5 family, the
+  latter two experimental) and `.ctb` (experimental).
 - **Destinations.** Local drive, removable drive (with **Eject** on the finished-export notification) and upload to a
   print host. A host only gets the file when it can read the plate's format: PrusaLink and Prusa Connect take the SL1
   format, the FFF servers take G-code, and anything else is refused by name instead of being uploaded.
@@ -86,8 +87,8 @@ Prusa SLA profiles ship in [`resources/presets/prusa-research-sla/`](resources/p
 | Printer | Resolution | Export format |
 |---|---|---|
 | Anycubic Photon Mono M5 | 11520 x 5120 (12K) | `.pm5` |
-| Anycubic Photon Mono M5s | 11520 x 5120 (12K) | `.pm5s`, no writer yet |
-| Anycubic Photon Mono M7 Pro | 13320 x 5120 (14K) | `.pm7`, no writer yet |
+| Anycubic Photon Mono M5s | 11520 x 5120 (12K) | `.pm5s`, experimental, unverified |
+| Anycubic Photon Mono M7 Pro | 13320 x 5120 (14K) | `.pm7`, experimental, unverified |
 | Elegoo Saturn 4 Ultra 12K | 11520 x 5120 (12K) | `.goo` |
 | Elegoo Saturn 4 Ultra 16K | 15120 x 6230 (16K) | `.goo` |
 | Elegoo Mars 5 Ultra | 8520 x 4320 (9K) | `.goo` |
@@ -104,8 +105,9 @@ profile if the F comes out mirrored.
   were never inspected against a real file, and this fork will not break an encryption. Use a sliced archive.
 - **`.ctb` is experimental.** The unencrypted v3 container round-trips through its own reader, but no sample and no
   printer has read one, so the layer-definition units are a guess. The encrypted v4/v5 container is not touched.
-- **`.pm5` is unverified, and `.pm5s` and `.pm7` have no writer.** The `.pm5` layout was written from one Photon
-  Workshop file; the field-by-field comparison and the mirroring check are waiting on a build, and nothing has been
+- **`.pm5`, `.pm5s` and `.pm7` are unverified.** The `.pm5` layout was written from one Photon Workshop
+  file; the other two are the same container with an unconfirmed printer name and format version.
+  The field-by-field comparison and the mirroring check are waiting on a build, and nothing has been
   printed.
 - **The hollowing wall thickness fix is unverified.** The offset was read in voxels and compared against millimetres,
   so the wall came out set by the quality and closing distance. The fix and its tests are written but not built.
@@ -137,7 +139,7 @@ branch, one commit, the box ticked in the same commit.
 
 ## Progress
 
-**197 of 238 todos done (83%)** · updated 2026-09-30 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**198 of 239 todos done (83%)** · updated 2026-09-30 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
@@ -146,7 +148,7 @@ branch, one commit, the box ticked in the same commit.
 | M2: SLA editing tools (porting the legacy gizmos) | 64/68 | `███████████░` 94% |
 | M3: Resin profile import (Chitubox, Lychee and others) | 16/20 | `██████████░░` 80% |
 | M4: Engine quality (measure first; every PR includes before/after metrics) | 18/27 | `████████░░░░` 67% |
-| M5: Formats and inspection | 32/35 | `███████████░` 91% |
+| M5: Formats and inspection | 33/36 | `███████████░` 92% |
 | M6: Quality gates and release | 9/14 | `████████░░░░` 64% |
 | M7: Excellent auto-supports *(parked)* | 5/17 | `████░░░░░░░░` 29% |
 

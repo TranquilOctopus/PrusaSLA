@@ -15,6 +15,7 @@
 // when another transform matches instead, the test names it, and the mirroring is what is wrong.
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 #include "Slic3r/App/Platform/StdMainThreadDispatcher.hpp"
 #include "Slic3r/Biz/Algorithms/ModelObject.hpp"
@@ -25,11 +26,13 @@
 #include "Slic3r/Biz/ResultExport/SLA/SlaArchiveFormat.hpp"
 #include "Slic3r/Biz/ResultExport/SLA/SlaLayerDecoders.hpp"
 #include "Slic3r/Biz/SlaFixture.hpp"
+#include "Slic3r/Biz/Slicing/TestUtils.hpp"
 #include "Slic3r/Directories.hpp"
 #include "Slic3r/Domain/BoundingBox.hpp"
 #include "Slic3r/Domain/Config.hpp"
 #include "Slic3r/Domain/ConfigContainer.hpp"
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
+#include "Slic3r/Domain/ConfigPack.hpp"
 #include "Slic3r/Domain/Model.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
 #include "Slic3r/Domain/Preset/SelectedPreset.hpp"
@@ -38,12 +41,14 @@
 #include "Slic3r/Domain/Types.hpp"
 #include "Slic3r/Domain/Workbench.hpp"
 #include "Slic3r/TestUtils/TestData.hpp"
+#include "Slic3r/TestUtils/TestTempDir.hpp"
 #include "libslic3r/SLAResult.hpp"
 
 #include <boost/filesystem.hpp>
 #include <boost/nowide/filesystem.hpp>
 #include <boost/nowide/fstream.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -79,9 +84,17 @@ namespace {
 
 // ---------------------------------------------------------------------------
 // The .pm5 container, read the way doc/sla-fork/formats/pm5.md describes it: the address table in
-// the file mark, the HEADER resolution, and the LAYERDEF entry per layer. The layer images stay on
-// disk, one is pulled in when a layer is compared, so a whole file is never in memory.
+// the file mark, the HEADER resolution, the LAYERDEF entry per layer and the MACHINE printer name.
+// The layer images stay on disk, one is pulled in when a layer is compared, so a whole file is
+// never in memory. The reader covers the whole Photon Workshop family (.pm5, .pm5s, .pm7), which
+// is one container with a machine name and a format version per printer; the version each file has
+// to carry is passed in, so a variant that changes the number fails here rather than being read
+// as the wrong format.
 // ---------------------------------------------------------------------------
+
+// The one format version a real Photon Workshop file carried (the .pm5 sample). The .pm5s and .pm7
+// writers write the same number, which is unverified: pm5.md, sections ".pm5s" and ".pm7".
+constexpr std::uint32_t photon_workshop_version = 517u;
 
 // Catch2's INFO takes a single streamed expression, so the longer messages are built here first:
 // that keeps them readable in the source and in the failure output.
@@ -120,12 +133,13 @@ struct Pm5Layer
     size_t offset    = 0;
     size_t size      = 0;
     double height_mm = 0.;
+    uint32_t lit     = 0; // the lit pixel count LAYERDEF carries, at +24
 };
 
 class Pm5Archive
 {
 public:
-    void open(const fs::path& path)
+    void open(const fs::path& path, std::uint32_t expected_version = photon_workshop_version)
     {
         m_file.open(path.string(), std::ios::binary);
         REQUIRE(m_file.is_open());
@@ -135,7 +149,7 @@ public:
         std::array<uint8_t, 20 + 9 * 4> intro{};
         read_at(0, intro.data(), intro.size());
         REQUIRE(is_tag(intro.data(), "ANYCUBIC\0\0\0\0"));
-        REQUIRE(read_le32(intro.data() + 12) == 517u);
+        REQUIRE(read_le32(intro.data() + 12) == expected_version);
         REQUIRE(read_le32(intro.data() + 16) == 9u);
         const size_t addresses[9] = {
             read_le32(intro.data() + 20),
@@ -148,6 +162,8 @@ public:
             read_le32(intro.data() + 48),
             read_le32(intro.data() + 52)
         };
+        m_header_offset = addresses[0];
+        m_machine_offset = addresses[6];
 
         // HEADER: a 12-byte name, a u32 length, then the resolution at +44 and +48 of the body.
         std::array<uint8_t, 16 + 52> header{};
@@ -155,6 +171,9 @@ public:
         REQUIRE(is_tag(header.data(), "HEADER\0\0\0\0\0\0"));
         m_res_x = read_le32(header.data() + 16 + 44);
         m_res_y = read_le32(header.data() + 16 + 48);
+        // The pixel size in um at +0 and the grey level count at +40.
+        m_pixel_um = read_le_float(header.data() + 16);
+        m_levels   = read_le32(header.data() + 16 + 40);
 
         // LAYERDEF: a 12-byte name, a u32 length, the layer count, then 32 bytes per layer, of
         // which +0 is where the image starts, +4 how long it is, and +20 how thick the layer is.
@@ -171,6 +190,7 @@ public:
             layer.offset    = read_le32(table.data() + i * 32);
             layer.size      = read_le32(table.data() + i * 32 + 4);
             layer.height_mm = read_le_float(table.data() + i * 32 + 20);
+            layer.lit       = read_le32(table.data() + i * 32 + 24);
             m_layers.push_back(layer);
         }
     }
@@ -183,6 +203,53 @@ public:
     uint32_t res_y() const
     {
         return m_res_y;
+    }
+
+    float pixel_um() const
+    {
+        return m_pixel_um;
+    }
+
+    uint32_t levels() const
+    {
+        return m_levels;
+    }
+
+    // MACHINE: the 96-byte printer name, the 16-byte layer image format name, the display width,
+    // height and maximum Z in mm, and the format version the file mark also carries.
+    std::string machine_name() const
+    {
+        return read_padded_string(m_machine_offset + 16, 96);
+    }
+
+    std::string machine_image_format() const
+    {
+        return read_padded_string(m_machine_offset + 16 + 96, 16);
+    }
+
+    float machine_display_width_mm() const
+    {
+        return read_le_float_at(m_machine_offset + 16 + 120);
+    }
+
+    float machine_display_height_mm() const
+    {
+        return read_le_float_at(m_machine_offset + 16 + 124);
+    }
+
+    float machine_max_z_mm() const
+    {
+        return read_le_float_at(m_machine_offset + 16 + 128);
+    }
+
+    uint32_t machine_version() const
+    {
+        return read_le32_at(m_machine_offset + 16 + 132);
+    }
+
+    uint32_t header_declared_length() const
+    {
+        return read_le32_at(m_header_offset + 12);
     }
 
     const std::vector<Pm5Layer>& layers() const
@@ -208,9 +275,37 @@ private:
         REQUIRE(static_cast<size_t>(m_file.gcount()) == size);
     }
 
+    uint32_t read_le32_at(size_t offset) const
+    {
+        std::array<uint8_t, 4> word{};
+        read_at(offset, word.data(), word.size());
+        return read_le32(word.data());
+    }
+
+    float read_le_float_at(size_t offset) const
+    {
+        const uint32_t bits = read_le32_at(offset);
+        float value         = 0.f;
+        std::memcpy(&value, &bits, sizeof(value));
+        return value;
+    }
+
+    // A NUL-padded name: the bytes up to the first NUL, so a field's padding is not part of it.
+    std::string read_padded_string(size_t offset, size_t size) const
+    {
+        std::vector<uint8_t> bytes(size);
+        read_at(offset, bytes.data(), bytes.size());
+        const size_t end = std::find(bytes.begin(), bytes.end(), uint8_t{0}) - bytes.begin();
+        return std::string(reinterpret_cast<const char*>(bytes.data()), end);
+    }
+
     mutable boost::nowide::ifstream m_file;
-    uint32_t m_res_x = 0;
-    uint32_t m_res_y = 0;
+    size_t m_header_offset   = 0;
+    size_t m_machine_offset  = 0;
+    uint32_t m_res_x         = 0;
+    uint32_t m_res_y         = 0;
+    float m_pixel_um         = 0.f;
+    uint32_t m_levels        = 0;
     std::vector<Pm5Layer> m_layers;
 };
 
@@ -823,5 +918,153 @@ TEST_CASE(
         }
 
         CHECK(best == Turn::identity);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The .pm5s and .pm7 variants: the same container as .pm5, so the same reader reads them back.
+// ---------------------------------------------------------------------------
+
+// One printer of the family as the writer is registered for it: the name, the extension the
+// registry answers to, the file data type the engine's raster path keys on, and the name MACHINE is
+// expected to carry. The display is a small one on purpose - what the test is about is the fields
+// that follow from the profile, not the cost of a 11520 x 5120 raster.
+struct PmWorkshopCase
+{
+    const char* extension;      // the printer's sla_archive_format
+    FileDataType type;
+    const char* machine_name;   // MACHINE's printer name
+    int pixels_x;
+    int pixels_y;
+    double display_width_mm;
+    double display_height_mm;
+    double max_z_mm;
+};
+
+static const std::array<PmWorkshopCase, 3> PM_WORKSHOP_CASES{{
+    {"pm5",
+     FileDataType::pm5,
+     "Anycubic Photon Mono M5",
+     2560,
+     1440,
+     120.96,
+     68.04,
+     200.},
+    {"pm5s",
+     FileDataType::pm5s,
+     "Anycubic Photon Mono M5s",
+     1280,
+     720,
+     100.8,
+     56.7,
+     200.},
+    {"pm7",
+     FileDataType::pm7,
+     "Anycubic Photon Mono M7 Pro",
+     960,
+     540,
+     90.0,
+     50.625,
+     230.},
+}};
+
+TEST_CASE(
+    "Every Photon Workshop variant round-trips through the pm5 reader",
+    "[export][sla][pm5][pm5s][pm7]"
+)
+{
+    register_sla_archive_formats();
+    auto& registry = SlaArchiveFormatRegistry::instance();
+
+    Tests::TestTempDir temp_dir;
+
+    for (const PmWorkshopCase& printer : PM_WORKSHOP_CASES) {
+        INFO(message("archive format: " << printer.extension));
+        // The engine picks the raster path from the archive format and the export from the file
+        // data type, so the two registry lookups together are what picks this writer.
+        Slic3r::Test::SlaSlicingFixture fixture;
+        auto model = Slic3r::Test::generate_cubes(1, 5);
+        auto config = Slic3r::Domain::ConfigPackSLA{};
+
+        config.sla_printer_settings.items.opt("sla_archive_format").set(std::string(printer.extension));
+        config.sla_printer_settings.items.opt("display_pixels_x").set(printer.pixels_x);
+        config.sla_printer_settings.items.opt("display_pixels_y").set(printer.pixels_y);
+        config.sla_printer_settings.items.opt("display_width").set(printer.display_width_mm);
+        config.sla_printer_settings.items.opt("display_height").set(printer.display_height_mm);
+        config.sla_printer_settings.items.opt("max_print_height").set(printer.max_z_mm);
+        config.sla_printer_settings.items.opt("display_orientation").set(
+            Slic3r::Domain::SLADisplayOrientation::sladoLandscape);
+        config.sla_printer_settings.items.opt("gamma_correction").set(1.0);
+        // A thick layer keeps the print short: 40 layers of a 20 mm cube, three times over.
+        config.sla_print_settings.items.opt("layer_height").set(0.5);
+        config.sla_material_settings.items.opt("initial_layer_height").set(0.5);
+        config.sla_material_settings.items.opt("exposure_time").set(6.0);
+        config.sla_material_settings.items.opt("initial_exposure_time").set(35.0);
+        config.sla_print_settings.items.opt("faded_layers").set(10);
+        config.sla_print_settings.items.opt("supports_enable").set(false);
+        config.sla_print_settings.items.opt("pad_enable").set(false);
+        config.sla_print_settings.items.opt("raft_type").set(Slic3r::Domain::sla::RaftType::None);
+
+        const auto sla_result = fixture.slice_sla_model(model, config);
+        REQUIRE(sla_result != nullptr);
+        REQUIRE(sla_result->files.type == printer.type);
+
+        const std::unique_ptr<Slic3r::Biz::PrintHost::Sla::ISlaArchiveFormat> format =
+            registry.find_by_file_data_type(printer.type);
+        REQUIRE(format != nullptr);
+        const fs::path out_path = temp_dir.path() / ("out." + printer.extension);
+        REQUIRE_NOTHROW(format->store(out_path.string(), *sla_result));
+
+        // The container read back, which the reader's open() checks the magic, the version and the
+        // address count of while it collects the layers.
+        Pm5Archive archive;
+        archive.open(out_path);
+        INFO(message(
+            "wrote "
+                << out_path.filename().string() << ": " << archive.res_x() << " x " << archive.res_y()
+                << " px, " << archive.layers().size() << " layers"
+        ));
+        REQUIRE(archive.res_x() == uint32_t(printer.pixels_x));
+        REQUIRE(archive.res_y() == uint32_t(printer.pixels_y));
+        REQUIRE(archive.layers().size() == sla_result->files.data.size());
+        REQUIRE(archive.header_declared_length() == 92u);
+        // HEADER +0 is the pixel size in um, which the writer derives from the profile's display
+        // width, and +40 the grey level count of the PW0 encoding, which is 16 whatever the gamma
+        // is (M4.13b).
+        REQUIRE(archive.pixel_um() == Catch::Approx(float(printer.display_width_mm * 1000. / printer.pixels_x)));
+        REQUIRE(archive.levels() == 16u);
+
+        // MACHINE names the printer and the layer image format, and repeats the version the file
+        // mark carries; its three floats are the printer profile's display and build volume.
+        REQUIRE(archive.machine_name() == std::string(printer.machine_name));
+        REQUIRE(archive.machine_image_format() == "pw0Img");
+        REQUIRE(archive.machine_display_width_mm() == Catch::Approx(float(printer.display_width_mm)));
+        REQUIRE(archive.machine_display_height_mm() == Catch::Approx(float(printer.display_height_mm)));
+        REQUIRE(archive.machine_max_z_mm() == Catch::Approx(float(printer.max_z_mm)));
+        REQUIRE(archive.machine_version() == photon_workshop_version);
+
+        // Every layer's entry points at its own image, the entry's lit pixel count is what the
+        // image decodes to, and the image decodes to the display's pixel count: the round trip
+        // through the writer and back.
+        const size_t pixels = size_t(printer.pixels_x) * size_t(printer.pixels_y);
+        for (size_t i = 0; i < archive.layers().size(); ++i) {
+            INFO(message("layer " << i));
+            const Pm5Layer& layer = archive.layers()[i];
+            const std::vector<uint8_t> image = archive.layer_image(i);
+            REQUIRE(layer.size == image.size());
+            REQUIRE(std::equal(sla_result->files.data[i].begin(), sla_result->files.data[i].end(), image.begin()));
+            const std::vector<uint8_t> decoded = decode_pw0_layer(image, pixels);
+            REQUIRE(decoded.size() == pixels);
+            // LAYERDEF's +24 is the number of pixels a run in this layer lights, which the writer
+            // counts over the PW0 bytes as every run whose grey is not 0, so it is every decoded
+            // pixel above 0 and not the half-lit threshold the two images are compared with above.
+            const size_t lit = size_t(std::count_if(
+                decoded.begin(),
+                decoded.end(),
+                [](uint8_t v) { return v > 0; }
+            ));
+            REQUIRE(lit == layer.lit);
+            REQUIRE(lit > 0u);
+        }
     }
 }

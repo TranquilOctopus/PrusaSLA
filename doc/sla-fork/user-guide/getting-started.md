@@ -14,9 +14,10 @@ block gives you *Show info about printer* and *Show extruder settings*; the cog 
 same dialog on its settings page. The sheet and nozzle options are hidden for a resin printer.
 
 Bundled resin printers: **Anycubic Photon Mono M5**, Photon Mono M5s, Photon Mono M7 Pro, **Elegoo
-Saturn 4 Ultra 12K / 16K**, **Elegoo Mars 5 Ultra**, and the Original Prusa SL1. Today only the
-Photon Mono M5 (`.pm5`) and the Elegoo (`.goo`) presets have an export format the code can write;
-selecting the M5s or M7 Pro fails at the end of the slice with *Unsupported output format.*
+Saturn 4 Ultra 12K / 16K**, **Elegoo Mars 5 Ultra**, and the Original Prusa SL1. Every one of them
+has an export format the code can write: the Photon Mono M5 writes `.pm5`, the M5s `.pm5s` and the
+M7 Pro `.pm7`, the Elegoos `.goo` and the Original Prusa SL1 `.sl1`. The two newer Anycubic files
+are experimental and unverified, the same as `.ctb` below.
 
 **Resin.** One row per material slot, each showing the name of the resin preset. Click a row to
 open the picker; type filter buttons above it narrow the list to **Tough**, **Flexible**,
@@ -261,18 +262,20 @@ reads **Slice** again. If you reach the export path some other way with an unfin
 *Export failed* and *The plate is not fully sliced yet. Press Slice, wait until it finishes, then
 export again.*
 
-The file format follows the printer preset. The Anycubic Photon Mono M5 writes `.pm5`, the Elegoo
-Saturn and Mars write `.goo`, and the Original Prusa SL1 writes `.sl1`. The **Export as** dialog
-pre-selects the printer's own format, with the other supported formats (`pwmo`, `pwmx`, `pwms`,
-`goo`, `ctb`, `sl1`, `sl1s`, `sl1svg`) available in the filter dropdown. Choosing an extension that
-does not match the printer you sliced for opens a *Different file type* warning and sends you back
-to choose a name.
+The file format follows the printer preset. The Anycubic Photon Mono M5 writes `.pm5`, the M5s
+`.pm5s` and the M7 Pro `.pm7`, the Elegoo Saturn and Mars write `.goo`, and the Original Prusa SL1
+writes `.sl1`. The **Export as** dialog pre-selects the printer's own format, with the other
+supported formats (`pwmo`, `pwmx`, `pwms`, `pm5`, `pm5s`, `pm7`, `goo`, `ctb`, `sl1`, `sl1s`,
+`sl1svg`) available in the filter dropdown. Choosing an extension that does not match the printer
+you sliced for opens a *Different file type* warning and sends you back to choose a name.
 
-**`ctb` is the experimental one.** It is the unencrypted Chitubox v3 container: it round-trips
-through this app's own reader, but no printer has read a file written here and no Chitubox-sliced
-sample has been compared against, so its layer-definition units are still a guess. No printer preset
-selects it, so it is a choice in the filter dropdown and nowhere else, and the encrypted v4/v5
-container is neither written nor read.
+**`ctb`, `pm5s` and `pm7` are the experimental ones.** `.ctb` is the unencrypted Chitubox v3
+container: it round-trips through this app's own reader, but no printer has read a file written here
+and no Chitubox-sliced sample has been compared against, so its layer-definition units are still a
+guess, and the encrypted v4/v5 container is neither written nor read. `.pm5s` and `.pm7` are the
+Photon Workshop container `.pm5` is, written for the Photon Mono M5s and the M7 Pro: no file either
+printer's own slicer wrote has been compared against, so the printer name and the format version in
+the file are unverified, and no printer has read one.
 
 **Select Destination**, just above the button, chooses where it goes: **Local Drive**,
 **Removable Drive**, **Prusa Connect**, or a print host of yours. *Removable Drive* only appears in

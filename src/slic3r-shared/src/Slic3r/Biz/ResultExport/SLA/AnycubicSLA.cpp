@@ -529,12 +529,48 @@ static void write_string_padded(std::ofstream& out, const std::string& str, size
     }
 }
 
+// What the printers of the Photon Mono M5 family are known to differ in. Everything else - the
+// block order, the declared lengths, the resolution, the pixel size and the build volume - is the
+// same container, written from the printer profile. Only the M5 entry is confirmed: it is the one
+// a real Photon Workshop file was read from (doc/sla-fork/formats/pm5.md). The two newer printers
+// have no file to compare with, so their machine name and their format version are unverified; the
+// version is written as the only one known (517, in the file mark at 0x0C and again in MACHINE at
+// body +132) and a real file of either printer is what settles it. Nothing here is encrypted, and
+// no encrypted version of this container is written.
+struct PmWorkshopVariant
+{
+    const char* extension;    // the file extension the registry and the picker name it by
+    const char* machine_name; // MACHINE's 96-byte printer name
+    std::uint32_t format_version;
+};
+
+constexpr PmWorkshopVariant pm_workshop_variant(PmWorkshopFormat format)
+{
+    PmWorkshopVariant variant{"pm5", "Anycubic Photon Mono M5", PM5_FORMAT_VERSION};
+    switch (format) {
+    case PmWorkshopFormat::pm5s:
+        // Same 12K panel as the M5 (11520 x 5120, 19 x 24 um); unverified.
+        variant = {"pm5s", "Anycubic Photon Mono M5s", PM5_FORMAT_VERSION};
+        break;
+    case PmWorkshopFormat::pm7:
+        // The 14K panel, 13320 x 5120; the resolution and the pixel size come from the profile.
+        variant = {"pm7", "Anycubic Photon Mono M7 Pro", PM5_FORMAT_VERSION};
+        break;
+    case PmWorkshopFormat::pm5:
+        break;
+    }
+
+    return variant;
+}
+
 } // namespace
 
-void store_pm5(const std::string& file_path, const Biz::Slicing::SLAResultData& data)
+void store_pm_workshop(const std::string& file_path, const Biz::Slicing::SLAResultData& data, PmWorkshopFormat format)
 {
+    const PmWorkshopVariant variant = pm_workshop_variant(format);
     if (!data.print_statistics.has_value()) {
-        throw std::runtime_error("Cannot write a .pm5 file: the slicing result has no print statistics.");
+        throw std::runtime_error("Cannot write a ." + std::string(variant.extension)
+                                 + " file: the slicing result has no print statistics.");
     }
     const auto& stats = *data.print_statistics;
     const Domain::ConfigView& cfg = data.config;
@@ -641,7 +677,7 @@ void store_pm5(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     // Write intro (placeholder, will seek back to fill)
     std::streamoff intro_pos = out.tellp();
     out.write(PM5_TAG_INTRO, 12);
-    anycubicsla_write_int32(out, PM5_FORMAT_VERSION);
+    anycubicsla_write_int32(out, variant.format_version);
     anycubicsla_write_int32(out, PM5_AREA_NUM);
     // 9 addresses - write zeros for now
     for (int i = 0; i < 9; ++i) {
@@ -795,18 +831,21 @@ void store_pm5(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     addr_machine = static_cast<std::streamoff>(out.tellp());
     out.write(PM5_TAG_MACHINE, 12);
     anycubicsla_write_int32(out, PM5_MACHINE_DECLARED_SIZE);
-    // Printer name (96 bytes)
-    write_string_padded(out, "Anycubic Photon Mono M5", 96);
+    // Printer name (96 bytes). Photon Workshop writes the name it knows the printer by, and the
+    // printer may check it, so the one variant of this table that a file confirms is not reused
+    // for the other two (doc/sla-fork/formats/pm5.md, MACHINE).
+    write_string_padded(out, variant.machine_name, 96);
     // Image format name (16 bytes). The zeros that follow "pw0Img" in the sample are this field's
     // padding, not separate fields; MACHINE's body is 140 bytes, and the software block starts
-    // right after it.
+    // right after it. Every printer of the family names the same run-length encoding, which is the
+    // one the PW0 rasterizer writes; unverified for the two printers with no sample.
     write_string_padded(out, "pw0Img", 16);
     anycubicsla_write_int32(out, 16);
     anycubicsla_write_int32(out, 7);
     anycubicsla_write_float(out, display_width_mm);
     anycubicsla_write_float(out, display_height_mm);
     anycubicsla_write_float(out, max_print_height_mm);
-    anycubicsla_write_int32(out, PM5_FORMAT_VERSION);
+    anycubicsla_write_int32(out, variant.format_version);
     // 4 bytes: 01 47 63 00
     std::array<uint8_t, 4> machine_unknown = {0x01, 0x47, 0x63, 0x00};
     out.write(reinterpret_cast<const char*>(machine_unknown.data()), 4);

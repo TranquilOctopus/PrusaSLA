@@ -1851,6 +1851,10 @@ Sla::FileDataType get_output_type(const SLAPrintConfigView& cfg)
         return Sla::FileDataType::ctb;
     } else if (archive_format == "pm5") { // Anycubic PM5
         return Sla::FileDataType::pm5;
+    } else if (archive_format == "pm5s") { // Anycubic Photon Mono M5s, same container as PM5
+        return Sla::FileDataType::pm5s;
+    } else if (archive_format == "pm7") { // Anycubic Photon Mono M7 Pro, same container as PM5
+        return Sla::FileDataType::pm7;
     } else {
         return Sla::FileDataType::other;
     }
@@ -1898,7 +1902,9 @@ void SLAPrint::Steps::rasterize()
         case FileDataType::sl1_png: rasterizer_ptr = create_sl1_rasterizer(printer_config); break;
         case FileDataType::sl1_svg: rasterizer_ptr = create_sl1_svg_rasterizer(printer_config); break;
         case FileDataType::anycubic: rasterizer_ptr = create_anycubic_rasterizer(printer_config); break;
-        case FileDataType::pm5: // pm5 layer encoding is unconfirmed; reusing Anycubic rasterizer for now
+        case FileDataType::pm5: // the Photon Workshop container encodes its layers as PW0 runs
+        case FileDataType::pm5s:
+        case FileDataType::pm7:
             rasterizer_ptr = create_anycubic_rasterizer(printer_config); break;
         case FileDataType::goo: rasterizer_ptr = create_goo_rasterizer(printer_config); break;
         case FileDataType::ctb: rasterizer_ptr = create_ctb_rasterizer(printer_config); break;
