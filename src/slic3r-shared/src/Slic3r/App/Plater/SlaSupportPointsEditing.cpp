@@ -36,6 +36,9 @@ void SlaSupportPointsEditing::add_point(const Domain::Vec3d& mesh_pos)
     if (!base_height_use_global) {
         new_point.base_height = static_cast<float>(base_height_mm);
     }
+    // A new point takes the tip shape, knot, stem cross-section and stem taper of the settings
+    // (M2.16c), the same way it takes the head and the pillar sizes above.
+    apply_support_geometry(new_point, support_geometry);
     new_point.type = Domain::SLA::SupportPointType::manual_add;
     points.push_back(new_point);
 }
@@ -173,6 +176,15 @@ void SlaSupportPointsEditing::apply_base_height_to_selected()
     for (size_t idx : selected_point_indices) {
         if (idx < points.size()) {
             points[idx].base_height = new_height;
+        }
+    }
+}
+
+void SlaSupportPointsEditing::apply_support_geometry_to_selected(SupportGeometryField field)
+{
+    for (size_t idx : selected_point_indices) {
+        if (idx < points.size()) {
+            apply_support_geometry(points[idx], support_geometry, field);
         }
     }
 }

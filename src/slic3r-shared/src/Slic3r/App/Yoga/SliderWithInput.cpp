@@ -36,6 +36,10 @@ void SliderWithInput::Create()
     m_input->callbacks().text_edited = [this]() {
         const std::string& input_value = m_input->text();
 
+        // An emptied field carries no value to convert.
+        if (input_value.empty())
+            return;
+
         if (DoubleValidator* double_validator = dynamic_cast<DoubleValidator*>(m_input->validator());
             double_validator && double_validator->precision())
         {
@@ -58,16 +62,21 @@ void SliderWithInput::Create()
     m_slider = emplace_back<Slider>();
     m_slider->set_flex_grow(1);
     m_slider->callbacks().value_changed = [this](double value) {
-        if (DoubleValidator* double_validator = dynamic_cast<DoubleValidator*>(m_input->validator());
-            double_validator && double_validator->precision())
-        {
-            m_input->set_text(fmt::format("{1:.{0}f}", double_validator->precision().value(), value));
-        } else {
-            m_input->set_text(fmt::format("{:.10g}", value));
-        }
+        update_input_text(value);
         if (callbacks().value_changed)
             callbacks().value_changed(value);
     };
+}
+
+void SliderWithInput::update_input_text(double value)
+{
+    if (DoubleValidator* double_validator = dynamic_cast<DoubleValidator*>(m_input->validator());
+        double_validator && double_validator->precision())
+    {
+        m_input->set_text(fmt::format("{1:.{0}f}", double_validator->precision().value(), value));
+    } else {
+        m_input->set_text(fmt::format("{:.10g}", value));
+    }
 }
 
 void SliderWithInput::set_input_width(double width)
@@ -88,6 +97,9 @@ double SliderWithInput::value() const
 void SliderWithInput::set_value(const double value)
 {
     m_slider->set_value(value);
+    // The slider only reports a value it actually changed, so a field that is already at this
+    // value (a blank one, or the same value set twice) would keep the text it had.
+    update_input_text(m_slider->value());
 }
 
 double SliderWithInput::begin() const
@@ -191,7 +203,9 @@ void SliderWithInput::reset()
 
 void SliderWithInput::set_undef_value()
 {
-    // ToDo! set empty value and don't process the value_changed
+    // No value: an empty field, neither a number nor a promise of one. The slider keeps the value
+    // it has, so the next edit of the field starts from it, and value_changed is not fired.
+    m_input->set_text(std::string());
 }
 
 const std::string& SliderWithInput::unit() const

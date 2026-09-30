@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Slic3r/App/Plater/SlaSupportGeometry.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
 #include "Slic3r/Domain/Types.hpp"
 
@@ -23,6 +24,11 @@ struct SlaSupportPointsEditing
     std::unordered_set<size_t> selected_point_indices;
     bool lock_island_supports = false;
 
+    // The tip shape, knot, stem cross-section and stem taper a point takes (M2.16c). Filled from
+    // the Supports & raft settings, so a new point gets the geometry the user configured, and
+    // apply_support_geometry_to_selected(field) writes one of them on the points that are selected.
+    SlaSupportGeometry support_geometry;
+
     // Core editing operations
     std::optional<size_t> find_nearest_point(const Domain::Vec3d& mesh_pos, double max_distance_mm) const;
     void add_point(const Domain::Vec3d& mesh_pos);
@@ -40,6 +46,14 @@ struct SlaSupportPointsEditing
     void apply_pillar_diameter_to_selected();
     void apply_base_diameter_to_selected();
     void apply_base_height_to_selected();
+    void apply_support_geometry_to_selected(SupportGeometryField field);
+
+    /// The geometry the current selection is shown with, empty when nothing is selected or the
+    /// selected points disagree on it.
+    std::optional<SlaSupportGeometry> selected_support_geometry() const
+    {
+        return selection_support_geometry(points, selected_point_indices);
+    }
 
     // Rectangle selection (works on pre-projected screen positions)
     static std::vector<size_t> points_in_rectangle(

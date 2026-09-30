@@ -1731,6 +1731,67 @@ def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : 
         def->init_fn = init_with(5.);
     }
 
+    // Per-point support geometry, and the defaults a new support point takes (M2.16c). Each value
+    // is stored on the point itself (SLA::SupportPoint) and edited per point in the support tool;
+    // these four keys are what a point placed by hand or generated starts from. Default, zero and
+    // zero are the geometry the support tree has always built, so a print preset that never sets
+    // them keeps today's supports.
+    def = defs.add("support_tip_shape", typeid(EnumWrapper));
+    def->location = Print;
+    def->overrides_in = Locations{ Object };
+    def->label = L("Tip shape");
+    def->row_group = L("Tip shape");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportHead;
+    def->category = ConfigItemDef::Category::Print_Supports;
+    def->gui_type = ConfigItemDef::GUIType::combobox;
+    def->tooltip = L("Shape of the tip where a support touches the model. Default keeps the standard pinhead, Cone a pointed tip and Ball a rounded one.");
+    def->init_fn = init_with(
+        sla::SupportTipShape::Default,
+        {{int(sla::SupportTipShape::Default), "default", L("Default")},
+         {int(sla::SupportTipShape::Cone), "cone", L("Cone")},
+         {int(sla::SupportTipShape::Ball), "ball", L("Ball")}}
+    );
+
+    def = defs.add("support_knot_diameter", typeid(double));
+    def->location = Print;
+    def->overrides_in = Locations{ Object };
+    def->label = L("Knot diameter");
+    def->row_group = L("Knot diameter");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportHead;
+    def->category = ConfigItemDef::Category::Print_Supports;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Diameter of a ball in the joint between the tip and the stem, which takes the stress off a support that ends on the model. Zero prints no knot.");
+    def->units = {L("mm")};
+    def->min = 0;
+    def->max = 20;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("support_stem_sides", typeid(int));
+    def->location = Print;
+    def->overrides_in = Locations{ Object };
+    def->label = L("Stem sides");
+    def->row_group = L("Stem sides");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
+    def->category = ConfigItemDef::Category::Print_Supports;
+    def->gui_type = ConfigItemDef::GUIType::spinbox;
+    def->tooltip = L("Number of sides of the stem (pillar) cross-section. Zero prints round stems, 4 a square, 6 a hexagon, and any larger number a polygon.");
+    def->min = 0;
+    def->max = 64;
+    def->init_fn = init_with(0);
+
+    def = defs.add("support_stem_taper", typeid(double));
+    def->location = Print;
+    def->overrides_in = Locations{ Object };
+    def->label = L("Stem taper");
+    def->row_group = L("Stem taper");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
+    def->category = ConfigItemDef::Category::Print_Supports;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("How much of the stem diameter is lost from its base to its tip, as a fraction: 0.25 makes a stem that is a quarter narrower at the tip. Zero prints stems of one diameter.");
+    def->min = 0;
+    def->max = 1;
+    def->init_fn = init_with(0.);
+
     // Support presets for the SLA Support Points tool (Mini, Light, Medium, Heavy)
     // Each preset has 4 dimensions: head_diameter, pillar_diameter, base_diameter, base_height
     struct SupportPreset {

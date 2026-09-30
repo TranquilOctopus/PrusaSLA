@@ -197,6 +197,50 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
         }
     };
     m_dialog->callbacks().preset_mini = [this]() { this->apply_preset_mini(); };
+    // The per-point support geometry (M2.16c). Every one of them is a value of its own, so unlike
+    // the sizes above there is no "use global" checkbox: the value is written on the points that
+    // are selected, and the one the fields show is the one those points carry. One field at a time,
+    // so setting the tip shape keeps the knot, the cross-section and the taper a point has.
+    m_dialog->callbacks().tip_shape_changed = [this](Domain::SLA::SupportPoint::TipShape shape)
+    {
+        if (m_syncing_dialog) {
+            return;
+        }
+        if (m_edit_state.has_value()) {
+            m_edit_state->editing.support_geometry.tip_shape = shape;
+            this->apply_support_geometry_to_selected(SupportGeometryField::TipShape);
+        }
+    };
+    m_dialog->callbacks().knot_diameter_changed = [this](double value)
+    {
+        if (m_syncing_dialog) {
+            return;
+        }
+        if (m_edit_state.has_value()) {
+            m_edit_state->editing.support_geometry.knot_diameter_mm = value;
+            this->apply_support_geometry_to_selected(SupportGeometryField::KnotDiameter);
+        }
+    };
+    m_dialog->callbacks().stem_sides_changed = [this](double value)
+    {
+        if (m_syncing_dialog) {
+            return;
+        }
+        if (m_edit_state.has_value()) {
+            m_edit_state->editing.support_geometry.stem_sides = static_cast<int>(value);
+            this->apply_support_geometry_to_selected(SupportGeometryField::StemSides);
+        }
+    };
+    m_dialog->callbacks().stem_taper_changed = [this](double value)
+    {
+        if (m_syncing_dialog) {
+            return;
+        }
+        if (m_edit_state.has_value()) {
+            m_edit_state->editing.support_geometry.stem_taper = value;
+            this->apply_support_geometry_to_selected(SupportGeometryField::StemTaper);
+        }
+    };
     m_dialog->callbacks().preset_light = [this]() { this->apply_preset_light(); };
     m_dialog->callbacks().preset_medium = [this]() { this->apply_preset_medium(); };
     m_dialog->callbacks().preset_heavy = [this]() { this->apply_preset_heavy(); };
@@ -565,6 +609,14 @@ void SlaSupportPointsGizmo::on_generation_completed(std::optional<Domain::SLA::S
     m_points_job_running = false;
 
     if (support_points.has_value() && !support_points->empty()) {
+        // The generator only fills the position and the head diameter, so a generated point takes
+        // the tip shape, knot, stem cross-section and stem taper of the settings as well (M2.16c).
+        const SlaSupportGeometry geometry = support_geometry_defaults(
+            m_project_interactor.selected_project().find_object_by_id(m_selected_object_id.id)
+        );
+        for (Domain::SLA::SupportPoint& point : *support_points) {
+            apply_support_geometry(point, geometry);
+        }
         m_generated_support_points = *support_points;
         m_has_generated_points = true;
 
@@ -792,6 +844,13 @@ void SlaSupportPointsGizmo::on_auto_support_completed(Domain::ObjectID obj_id, s
         if (model_object) {
             m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SlaSupportPointsApply);
 
+            // A generated point takes the tip shape, knot, stem cross-section and stem taper of the
+            // settings of its own model, like a point placed by hand (M2.16c).
+            const SlaSupportGeometry geometry = support_geometry_defaults(model_object);
+            for (Domain::SLA::SupportPoint& point : *support_points) {
+                apply_support_geometry(point, geometry);
+            }
+
             // Find a printable instance on a bed for this object to get instance_id
             Domain::SelectionId instance_id = 0;
             for (const Domain::ModelInstance* inst : model_object->instances) {
@@ -884,6 +943,11 @@ void SlaSupportPointsGizmo::begin_editing()
     m_edit_state->editing.base_height_use_global = true;
     m_dialog->set_base_height(base_height);
     m_dialog->set_base_height_use_global(true);
+
+    // The tip shape, knot, stem cross-section and stem taper a new point takes (M2.16c). The
+    // fields show the selection, which is empty while the tool opens.
+    m_edit_state->editing.support_geometry = support_geometry_defaults(model_object);
+    update_selected_support_geometry();
 
     m_dialog->set_head_diameter_use_global(true);
     m_dialog->set_lock_island_supports(false);
@@ -1468,6 +1532,7 @@ void SlaSupportPointsGizmo::select_point(size_t idx, bool add_to_selection)
         return;
     }
     m_edit_state->editing.select_point(idx, add_to_selection);
+    update_selected_support_geometry();
 }
 
 void SlaSupportPointsGizmo::deselect_point(size_t idx)
@@ -1476,6 +1541,7 @@ void SlaSupportPointsGizmo::deselect_point(size_t idx)
         return;
     }
     m_edit_state->editing.deselect_point(idx);
+    update_selected_support_geometry();
 }
 
 void SlaSupportPointsGizmo::select_all_points()
@@ -1485,6 +1551,7 @@ void SlaSupportPointsGizmo::select_all_points()
     }
     m_edit_state->editing.select_all_points();
     update_point_visuals();
+    update_selected_support_geometry();
 }
 
 void SlaSupportPointsGizmo::clear_selection()
@@ -1494,6 +1561,7 @@ void SlaSupportPointsGizmo::clear_selection()
     }
     m_edit_state->editing.clear_selection();
     update_point_visuals();
+    update_selected_support_geometry();
 }
 
 void SlaSupportPointsGizmo::delete_selected_points()
@@ -1509,6 +1577,7 @@ void SlaSupportPointsGizmo::delete_selected_points()
         m_dialog->set_point_count(m_edit_state->editing.points.size());
         take_undo_snapshot();
         update_point_visuals();
+        update_selected_support_geometry();
         commit_edited_points_live();
     }
 }
@@ -1562,6 +1631,52 @@ void SlaSupportPointsGizmo::apply_preset_mini()
     const auto [head_diameter, pillar_diameter, base_diameter, base_height] = get_support_preset_values("mini");
     apply_support_preset(static_cast<float>(head_diameter), static_cast<float>(pillar_diameter),
                          static_cast<float>(base_diameter), static_cast<float>(base_height), 0);
+}
+
+void SlaSupportPointsGizmo::apply_support_geometry_to_selected(SupportGeometryField field)
+{
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+    take_undo_snapshot();
+    m_edit_state->editing.apply_support_geometry_to_selected(field);
+    // The points now carry the new value, so the fields keep showing it.
+    update_selected_support_geometry();
+    update_point_visuals();
+    commit_edited_points_live();
+}
+
+void SlaSupportPointsGizmo::update_selected_support_geometry()
+{
+    DialogSyncGuard guard(*this);
+    m_dialog->set_support_geometry(
+        m_edit_state.has_value() ? m_edit_state->editing.selected_support_geometry() : std::nullopt
+    );
+}
+
+SlaSupportGeometry SlaSupportPointsGizmo::support_geometry_defaults(const Domain::ModelObject* model_object) const
+{
+    SlaSupportGeometry geometry;
+    if (!model_object) {
+        return geometry;
+    }
+
+    const auto& settings = model_object->object_settings_sla;
+
+    if (auto result = settings.find("support_tip_shape"); result.item != nullptr) {
+        geometry.tip_shape = support_tip_shape_of(result.item->get<Domain::sla::SupportTipShape>());
+    }
+    if (auto result = settings.find("support_knot_diameter"); result.item != nullptr) {
+        geometry.knot_diameter_mm = result.item->get<double>();
+    }
+    if (auto result = settings.find("support_stem_sides"); result.item != nullptr) {
+        geometry.stem_sides = result.item->get<int>();
+    }
+    if (auto result = settings.find("support_stem_taper"); result.item != nullptr) {
+        geometry.stem_taper = result.item->get<double>();
+    }
+
+    return geometry;
 }
 
 void SlaSupportPointsGizmo::apply_preset_light()
@@ -1703,6 +1818,7 @@ void SlaSupportPointsGizmo::finish_rectangle_selection()
 
     m_edit_state->rect_select_active = false;
     update_point_visuals();
+    update_selected_support_geometry();
 }
 
 void SlaSupportPointsGizmo::project_points_to_screen(std::vector<Domain::Vec2d>& out_screen_positions) const

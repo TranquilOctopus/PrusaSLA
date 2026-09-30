@@ -777,6 +777,9 @@ const std::map<std::string, std::vector<Step>> invalidated_by{
     {"support_head_front_diameter", steps({propagate(slaposSupportTree)})},
     {"support_head_penetration", steps({propagate(slaposSupportTree)})},
     {"support_head_width", steps({propagate(slaposSupportTree)})},
+    // M2.16c: the per-point support geometry. Nothing in the engine reads these yet (M2.16b builds
+    // them), so like the preset keys they invalidate no step.
+    {"support_knot_diameter", steps({})},
     {"support_max_bridge_length", steps({propagate(slaposSupportTree)})},
     {"support_max_bridges_on_pillar", steps({propagate(slaposSupportTree)})},
     {"support_max_pillar_link_distance", steps({propagate(slaposSupportTree)})},
@@ -805,6 +808,9 @@ const std::map<std::string, std::vector<Step>> invalidated_by{
     {"support_preset_mini_head_diameter", steps({})},
     {"support_preset_mini_pillar_diameter", steps({})},
     {"support_small_pillar_diameter_percent", steps({propagate(slaposSupportTree)})},
+    {"support_stem_sides", steps({})},
+    {"support_stem_taper", steps({})},
+    {"support_tip_shape", steps({})},
     {"support_tree_type", steps({propagate(slaposObjectSlice)})},
     {"supports_enable", steps({propagate(slaposObjectSlice)})},
     {"thumbnails", steps({})},

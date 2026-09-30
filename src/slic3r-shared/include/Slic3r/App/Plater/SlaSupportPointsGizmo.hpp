@@ -182,6 +182,13 @@ private:
     void apply_base_diameter_to_selected();
     void apply_base_height_to_selected();
     void apply_preset_mini();
+    void apply_support_geometry_to_selected(SupportGeometryField field);
+    // Shows the tip shape, knot, stem cross-section and stem taper of the selected points, empty
+    // when nothing is selected or the points disagree on one of them (M2.16c).
+    void update_selected_support_geometry();
+    // The tip shape, knot, stem cross-section and stem taper a new point takes, from the Supports &
+    // raft settings of @p model_object.
+    SlaSupportGeometry support_geometry_defaults(const Domain::ModelObject* model_object) const;
     void apply_preset_light();
     void apply_preset_medium();
     void apply_preset_heavy();

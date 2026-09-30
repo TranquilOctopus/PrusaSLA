@@ -17,6 +17,10 @@ namespace sla {
     enum class RaftType { None, Full, AroundObject, Skate };
     // What the inside of the raft is filled with between the top skin and the build plate.
     enum class RaftInfillType { None, Grid, Honeycomb };
+    // The shape of a support tip where it touches the model, as support_tip_shape stores it. The
+    // same three values live on the point itself (SLA::SupportPoint::TipShape), which is where the
+    // value is used once it is placed.
+    enum class SupportTipShape { Default, Cone, Ball };
 }
 
 enum TowerSpeeds : int {
