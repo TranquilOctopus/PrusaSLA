@@ -207,10 +207,10 @@ TEST_CASE("LayerStats: every film gives finite positive coefficients", "[SLA][La
         const SLA::PeelForceCoefficients k = SLA::peel_force_coefficients(film);
         INFO("Film " << int(film));
         CHECK(std::isfinite(k.area_coefficient_n_per_mm2));
-        CHECK(std::isfinite(k.perimeter_coefficient_n_per_mm2));
+        CHECK(std::isfinite(k.perimeter_coefficient_n_per_mm));
         CHECK(std::isfinite(k.suction_coefficient_n_per_mm2));
         CHECK(k.area_coefficient_n_per_mm2 > 0.);
-        CHECK(k.perimeter_coefficient_n_per_mm2 > 0.);
+        CHECK(k.perimeter_coefficient_n_per_mm > 0.);
         CHECK(k.suction_coefficient_n_per_mm2 > 0.);
         CHECK(k.warning_n > 0.);
 
@@ -229,7 +229,7 @@ TEST_CASE("LayerStats: the default settings are FEP with the film coefficients",
     const SLA::PeelForceCoefficients fep =
         SLA::peel_force_coefficients(Domain::sla::VatFilmType::FEP);
     CHECK(k.area_coefficient_n_per_mm2 == Approx(fep.area_coefficient_n_per_mm2));
-    CHECK(k.perimeter_coefficient_n_per_mm2 == Approx(fep.perimeter_coefficient_n_per_mm2));
+    CHECK(k.perimeter_coefficient_n_per_mm == Approx(fep.perimeter_coefficient_n_per_mm));
     CHECK(k.suction_coefficient_n_per_mm2 == Approx(fep.suction_coefficient_n_per_mm2));
     // A negative setting takes the default of the film.
     CHECK(SLA::peel_force_warning_n(-1., k) == Approx(fep.warning_n));
@@ -246,7 +246,7 @@ TEST_CASE("LayerStats: an override replaces only the coefficient it names", "[SL
         SLA::peel_force_coefficients(Domain::sla::VatFilmType::ACF);
     const SLA::PeelForceCoefficients k = settings.coefficients();
     CHECK(k.area_coefficient_n_per_mm2 == Approx(0.5));
-    CHECK(k.perimeter_coefficient_n_per_mm2 == Approx(acf.perimeter_coefficient_n_per_mm2));
+    CHECK(k.perimeter_coefficient_n_per_mm == Approx(acf.perimeter_coefficient_n_per_mm));
     CHECK(k.suction_coefficient_n_per_mm2 == Approx(acf.suction_coefficient_n_per_mm2));
 
     // The warning is a setting of its own, so a coefficient says nothing about it.

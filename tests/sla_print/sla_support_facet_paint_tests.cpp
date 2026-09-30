@@ -88,7 +88,7 @@ struct PaintedModel
     /// (see TriangleSelector::decode_leaf_state).
     void paint_faces_above(double min_normal_z, TriangleStateType state)
     {
-        const Slic3r::Domain::indexed_triangle_set &its = volume->mesh().its;
+        const indexed_triangle_set &its = volume->mesh().its;
         const char *state_code = state == TriangleStateType::ENFORCER ? "1" : "2";
         for (size_t facet = 0; facet < its.indices.size(); ++facet) {
             if (triangle_mesh::its_face_normal(its, int(facet)).z() < min_normal_z)

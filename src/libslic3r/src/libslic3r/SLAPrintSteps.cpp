@@ -300,10 +300,12 @@ static std::vector<ExPolygons> slice_volumes(
 // it honours the enforcer and blocker modifier volumes. The painting lives on the volumes of the
 // model and the points are generated on the assembled mesh, so the regions are the projection of the
 // painted facets, the same way PrintObject::project_and_append_custom_facets does it for FFF.
-static sla::SupportFacetPaint facet_paint_of(SLAPrintObject &po, const sla::ThrowOnCancel &cancel)
+static sla::SupportFacetPaint facet_paint_of(SLAPrintObject             &po,
+                                             const std::vector<float> &heights,
+                                             const sla::ThrowOnCancel &cancel)
 {
     return sla::support_facet_paint(sla::support_tool_model_mesh(*po.model_object()), po.trafo(),
-                                    po.m_model_height_levels, cancel);
+                                    heights, cancel);
 }
 
 template<class T> T level(const SliceRecord &sr)
@@ -684,7 +686,7 @@ void SLAPrint::Steps::prepare_for_generate_supports(SLAPrintObject &po) {
     };
     po.m_support_point_generator_data =
         prepare_generator_data(std::move(slices), heights, prepare_cfg, cancel, status,
-                               facet_paint_of(po, cancel));
+                               facet_paint_of(po, heights, cancel));
 }
 
 // The slicing will be performed on an imaginary 1D grid which starts from
@@ -1479,7 +1481,7 @@ static std::vector<SLA::ObjectLayer> object_layers_of(const SLAPrint::PrintLayer
         );
         if (it == out.end()) {
             out.push_back(
-                SLA::ObjectLayer{object_id, po->model_object()->name(), union_ex(polygons)}
+                SLA::ObjectLayer{object_id, po->model_object()->name, union_ex(polygons)}
             );
         } else {
             for (ExPolygon& poly : polygons)
@@ -1522,7 +1524,7 @@ object_slice_accumulators(const PrintObjects& objects,
             continue;
         ObjectSliceAccumulator accumulator;
         accumulator.object_id          = po->model_object()->id();
-        accumulator.name               = po->model_object()->name();
+        accumulator.name               = po->model_object()->name;
         accumulator.hollowed           = po->config().get<bool>("hollowing_enable");
         accumulator.layer_area_mm2     .assign(layer_count, 0.);
         accumulator.layer_perimeter_mm .assign(layer_count, 0.);

@@ -677,9 +677,10 @@ Points filter_steep_overhangs(
     result.reserve(part.samples.size());
     for (const Point &p : part.samples) {
         size_t line_idx = std::numeric_limits<size_t>::max();
+        const Vec2d point_d = p.cast<double>();
         Vec2d hit_point;
         const double distance_sq = AABBTreeLines::squared_distance_to_indexed_lines(
-            lines, tree, p.cast<double>(), line_idx, hit_point);
+            lines, tree, point_d, line_idx, hit_point);
         // run * tan(angle) < height is the same as atan2(height, run) > angle
         const double run = unscale<double>(std::sqrt(distance_sq));
         if (run * max_angle_tangent < layer_height)

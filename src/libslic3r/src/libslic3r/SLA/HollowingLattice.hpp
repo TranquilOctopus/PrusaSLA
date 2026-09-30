@@ -4,6 +4,7 @@
 #include "Slic3r/Domain/BoundingBox.hpp"
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/Domain/Types.hpp"
+#include "admesh/stl.h"
 #include "libslic3r/SLA/JobController.hpp"
 
 #include <vector>

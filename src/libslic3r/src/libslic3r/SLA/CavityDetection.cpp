@@ -54,7 +54,9 @@ Vec2d centroid_mm(const ExPolygons& regions)
         sum += Vec2d(unscaled<double>(centre.x()), unscaled<double>(centre.y())) * area;
         total += area;
     }
-    return total > 0. ? sum / total : Vec2d::Zero();
+    if (total > 0.)
+        return Vec2d(sum / total);
+    return Vec2d::Zero();
 }
 
 /// The empty regions of a layer: every hole of every ExPolygon, less the solid of the ExPolygons
@@ -293,7 +295,7 @@ CavityAnalysis detect_cavities(const std::vector<ExPolygons>& layers,
         for (size_t t = 0; t < tracks.size(); ++t)
             for (size_t h = 0; h < holes.size(); ++h)
                 if (may_collide(tracks[t].bounds, hole_bounds[h])
-                    && overlaps(tracks[t].region, holes[h]))
+                    && overlaps(tracks[t].region, ExPolygons{holes[h]}))
                     sets.unite(t, tracks.size() + h);
 
         std::map<size_t, Group> groups;
@@ -313,9 +315,9 @@ CavityAnalysis detect_cavities(const std::vector<ExPolygons>& layers,
                 continue;
             }
 
-            ExPolygons region = holes[group.holes.front()];
-            for (const size_t h : std::next(group.holes.begin(), group.holes.end()))
-                region = union_ex(region, holes[h]);
+            ExPolygons region = {holes[group.holes.front()]};
+            for (size_t i = 1; i < group.holes.size(); ++i)
+                region = union_ex(region, holes[group.holes[i]]);
 
             RegionTrack track = group.tracks.empty() ?
                 start_track(region, layer_idx, layers) :
