@@ -156,7 +156,11 @@ SlaSupportPreviewService::SlaSupportPreviewService(
     m_selection_scope(project_interactor.scene_interactor(), *this),
     m_bed_selection_scope(project_interactor.scene_interactor(), *this),
     m_project_scope(project_interactor, *this),
-    m_config_container_scope(project_interactor, *this)
+    m_config_container_scope(project_interactor, *this),
+    m_debounce_timer(SlaSupportPreviewSchedule::platform_timer()),
+    m_schedule(*m_debounce_timer, [this](const SlaSupportPreviewSchedule::Request& request) {
+        start_due_build(request);
+    })
 {
     refresh();
 }
@@ -164,6 +168,9 @@ SlaSupportPreviewService::SlaSupportPreviewService(
 SlaSupportPreviewService::~SlaSupportPreviewService()
 {
     m_alive->store(false);
+    // The schedule asks the worker to stop before the destructor joins it below.
+    m_schedule.clear();
+    m_pending.clear();
     cancel_worker();
     drop_main_node();
     m_scene_presenter.clear_sla_lifts();
@@ -364,20 +371,20 @@ void SlaSupportPreviewService::refresh()
             continue;
         }
 
-        Job job;
-        job.cloned_object   = std::unique_ptr<Domain::ModelObject>(Domain::ModelObject::new_clone(*it->model_object));
-        job.instance_matrix = it->instance->get_matrix();
-        job.points          = it->model_object->sla_support_points;
-        job.full_config     = it->config.full;
-        job.object_config   = it->config.object;
-        job.bed_trafo       = bed_trafo;
-        job.elevation       = it->elevation;
-        job.object_id       = object_id;
-        job.generation      = ++m_generations[object_id.id];
+        // The mesh is not cloned here: a burst of edits of this object keeps one build (the
+        // debounce of SlaSupportPreviewSchedule), so the clone is taken once the burst is over.
+        // Everything below it is cheap enough to take on every edit.
+        Pending pending;
+        pending.object_id       = object_id;
+        pending.instance_matrix = it->instance->get_matrix();
+        pending.points          = it->model_object->sla_support_points;
+        pending.full_config     = it->config.full;
+        pending.object_config   = it->config.object;
+        pending.bed_trafo       = bed_trafo;
+        pending.elevation       = it->elevation;
 
-        // A tree that is still queued for this object is stale the moment a new key arrives.
-        std::erase_if(m_queue, [&](const Job& queued) { return queued.object_id == object_id; });
-        m_queue.push_back(std::move(job));
+        m_pending[object_id.id] = std::move(pending);
+        m_schedule.request({object_id, ++m_signatures[object_id.id]});
     }
 
     start_next_job();
@@ -389,15 +396,15 @@ void SlaSupportPreviewService::clear()
         m_scene_presenter.set_sla_lift(ObjectID{entry.first}, 0.);
     }
     m_previews.clear();
-    m_generations.clear();
+    m_pending.clear();
+    // Asks the running build to stop, then cancel_worker() below joins it.
+    m_schedule.clear();
     cancel_worker();
     drop_main_node();
 }
 
 void SlaSupportPreviewService::drop_object(ObjectID object_id)
 {
-    ++m_generations[object_id.id];
-
     const auto it = m_previews.find(object_id.id);
     if (it != m_previews.end()) {
         if (it->second.node != nullptr) {
@@ -416,8 +423,9 @@ void SlaSupportPreviewService::drop_object(ObjectID object_id)
 
     m_scene_presenter.set_sla_lift(object_id, 0.);
 
-    // Whatever is still running or queued for this object is not wanted anymore.
-    std::erase_if(m_queue, [&](const Job& queued) { return queued.object_id == object_id; });
+    // Whatever is waiting for or building this object is not wanted anymore.
+    m_pending.erase(object_id.id);
+    m_schedule.forget(object_id);
 }
 
 void SlaSupportPreviewService::drop_main_node()
@@ -441,11 +449,54 @@ void SlaSupportPreviewService::cancel_worker()
         m_worker.join();
     }
     m_worker_running = false;
+    // The worker is gone without a result of its own (the project changed, or the service is
+    // going), so the schedule must not wait for one either.
+    m_schedule.finish_build();
+}
+
+void SlaSupportPreviewService::start_due_build(const SlaSupportPreviewSchedule::Request& request)
+{
+    const auto pending = m_pending.find(request.object_id.id);
+    if (pending == m_pending.end() || pending->second.object_id != request.object_id) {
+        return; // the object lost its preview while its window ran
+    }
+
+    Pending snapshot = std::move(pending->second);
+    m_pending.erase(pending);
+
+    if (!m_schedule.is_current(request)) {
+        return; // a newer key took over this object, its own request is waiting
+    }
+
+    // The object may be gone by now; the request only remembers what it was built from.
+    const Domain::SelectionId project_id = m_project_interactor.selected_project_id();
+    if (!m_project_interactor.project_exists(project_id)) {
+        return;
+    }
+    const Domain::ModelObject* model_object = m_project_interactor.project(project_id).find_object_by_id(request.object_id.id);
+    if (model_object == nullptr || model_object->id() != request.object_id) {
+        return;
+    }
+
+    Job job;
+    job.request       = request;
+    job.pending       = std::move(snapshot);
+    job.cloned_object = std::unique_ptr<Domain::ModelObject>(Domain::ModelObject::new_clone(*model_object));
+    m_queue.push_back(std::move(job));
+
+    start_next_job();
 }
 
 void SlaSupportPreviewService::start_next_job()
 {
-    if (!m_alive->load() || m_worker_running || m_queue.empty()) {
+    if (!m_alive->load() || m_worker_running) {
+        return;
+    }
+
+    // A job whose key changed again while it waited is stale: it is dropped, not built. A burst of
+    // edits therefore costs the build of its final state only.
+    std::erase_if(m_queue, [this](const Job& job) { return !m_schedule.is_current(job.request); });
+    if (m_queue.empty()) {
         return;
     }
 
@@ -457,29 +508,37 @@ void SlaSupportPreviewService::start_next_job()
     m_queue.pop_front();
     m_worker_running = true;
 
+    // The stop of the worker thread is the stop SlaSupportTool accepts: a newer key for this
+    // object ends the build instead of letting it finish into the bin.
+    m_schedule.begin_build(job.request, [this]() {
+        if (m_worker.joinable()) {
+            m_worker.request_stop();
+        }
+    });
+
     m_worker = Biz::JThread::JThread(
         [this](Biz::JThread::StopToken stop_token, Job worker_job) mutable {
             const Slic3r::sla::SupportToolStop stop = [&stop_token]() { return stop_token.stop_requested(); };
 
             Slic3r::sla::SupportToolTree tree = sla::build_support_tree_for_tool(
                 *worker_job.cloned_object,
-                worker_job.instance_matrix,
-                worker_job.points,
-                worker_job.full_config,
-                worker_job.object_config,
+                worker_job.pending.instance_matrix,
+                worker_job.pending.points,
+                worker_job.pending.full_config,
+                worker_job.pending.object_config,
                 stop
             );
             const bool cancelled = stop_token.stop_requested();
 
-            const ObjectID object_id                          = worker_job.object_id;
-            const std::size_t generation                      = worker_job.generation;
-            const double elevation                           = worker_job.elevation;
-            const Transform3d bed_trafo                       = worker_job.bed_trafo;
-            const std::shared_ptr<std::atomic<bool>> alive    = m_alive;
+            const SlaSupportPreviewSchedule::Request request = worker_job.request;
+            const ObjectID object_id                        = worker_job.request.object_id;
+            const double elevation                          = worker_job.pending.elevation;
+            const Transform3d bed_trafo                     = worker_job.pending.bed_trafo;
+            const std::shared_ptr<std::atomic<bool>> alive   = m_alive;
 
             const bool dispatched = Biz::Platform::PlatformServices::instance()
                                        .main_thread_dispatcher()
-                                       .dispatch_on_main_thread([this, alive, object_id, generation, elevation, bed_trafo, tree = std::move(tree), cancelled]() mutable {
+                                       .dispatch_on_main_thread([this, alive, request, object_id, elevation, bed_trafo, tree = std::move(tree), cancelled]() mutable {
                     if (!alive->load()) {
                         return; // the service is gone, its destructor joined the worker already
                     }
@@ -491,18 +550,18 @@ void SlaSupportPreviewService::start_next_job()
                     }
                     m_worker_running = false;
 
-                    if (!cancelled) {
-                        const auto generation_it = m_generations.find(object_id.id);
-                        if (generation_it != m_generations.end() && generation_it->second == generation) {
-                            build_nodes(object_id, bed_trafo, elevation, tree);
-                        }
+                    // A result of a key an edit has replaced since is thrown away, never shown.
+                    if (!cancelled && m_schedule.is_current(request)) {
+                        build_nodes(object_id, bed_trafo, elevation, tree);
                     }
+                    m_schedule.finish_build();
                     start_next_job();
                 });
 
             if (!dispatched) {
                 // Nobody will ever run the callback, free the slot so the main thread can go on.
                 m_worker_running = false;
+                m_schedule.finish_build();
             }
         },
         std::move(job)
@@ -532,7 +591,9 @@ void SlaSupportPreviewService::build_nodes(
         m_main_node_project_id = m_project_interactor.selected_project_id();
     }
 
-    // The old geometry of this object goes first, the node referencing it has to go with it.
+    // The mesh and the geometry of the previous tree of this object are freed here, before the new
+    // ones are installed: the node referencing them has to go first, and an object never holds
+    // more than the tree and the raft it shows (a stale result never reaches this point).
     if (it->second.node != nullptr) {
         scene.remove_child(it->second.node);
         it->second.node = nullptr;

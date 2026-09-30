@@ -114,6 +114,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Plater/SlaSupportPointsGizmo.cpp
         include/Slic3r/App/Plater/SlaSupportPreviewService.hpp
         src/Slic3r/App/Plater/SlaSupportPreviewService.cpp
+        include/Slic3r/App/Plater/SlaSupportPreviewSchedule.hpp
+        src/Slic3r/App/Plater/SlaSupportPreviewSchedule.cpp
         include/Slic3r/App/Plater/SlaSupportPointsEditing.hpp
         src/Slic3r/App/Plater/SlaSupportPointsEditing.cpp
         include/Slic3r/App/Plater/SlaSupportGeometry.hpp
@@ -1685,6 +1687,8 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/App/Plater/SlaSupportOnModelTests.cpp
 
             test/Slic3r/App/Plater/SlaSupportPreviewServiceTests.cpp
+
+            test/Slic3r/App/Plater/SlaSupportPreviewScheduleTests.cpp
 
             test/Slic3r/App/Plater/SlaDrainHolesEditingTests.cpp
 
