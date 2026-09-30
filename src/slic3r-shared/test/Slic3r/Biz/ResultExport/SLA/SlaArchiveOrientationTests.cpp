@@ -86,9 +86,9 @@ static Slic3r::Domain::Model make_pattern_model()
 // landscape, both         : column = width - x, row = y    -> top right
 // portrait, no mirroring  : column = width - y, row = height - x -> bottom right
 // portrait, mirror_x      : column = y, row = height - x   -> bottom left
-// The two portrait rows with display_mirror_y are not sliced: each flag moves the pattern across
-// exactly one image axis (SlaRasterOrientationTests.cpp), so they follow from these six -
-// portrait with display_mirror_y is top right, and with both flags top left.
+// portrait, mirror_y      : column = width - y, row = x    -> top right
+// portrait, both          : column = y, row = x             -> top left
+// All eight are sliced: a preset can carry any of them, so every one of them has a pinned corner.
 // -------------------------------------------------------------------------
 struct DisplayCase
 {
@@ -98,13 +98,15 @@ struct DisplayCase
     const char* corner;
 };
 
-static const std::array<DisplayCase, 6> DISPLAY_CASES{{
+static const std::array<DisplayCase, 8> DISPLAY_CASES{{
     {false, false, false, "bottom_left"}, // what a landscape screen wants, if it is not mirrored
     {false, true, false, "bottom_right"}, // the shipped community-sla profiles: display_mirror_x
     {false, false, true, "top_left"},
     {false, true, true, "top_right"},
     {true, false, false, "bottom_right"},
     {true, true, false, "bottom_left"}, // the Original Prusa SL1 and SL1S profiles
+    {true, false, true, "top_right"},
+    {true, true, true, "top_left"},
 }};
 
 enum class Corner

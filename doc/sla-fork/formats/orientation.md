@@ -57,9 +57,8 @@ For a pattern flush with that plate corner:
 | portrait | off | on | `width - y` / `x` | **top right** |
 | portrait | on | on | `y` / `x` | **top left** |
 
-The first six rows are sliced and checked against the written bytes; the last two are not sliced
-(`SlaRasterOrientationTests.cpp` shows that each flag moves the pattern across exactly one image
-axis, so they follow from the rows above).
+All eight rows are sliced and checked against the written bytes, for every registered format: a
+preset can carry any of the eight settings, so each one of them has a pinned corner.
 
 Landscape writes an image as wide as the display, portrait as tall as it. That is asserted too,
 because a transposed image is what a wrongly set `display_orientation` produced (the `.pm5`
@@ -84,8 +83,32 @@ printing it and compare. "Result" says what the test asserts for the bytes we wr
 | `.sl1svg` | none | - | - | as the row above | asserted; no profile writes it |
 | `.pwmo`, `.pwmx`, `.pwms` (PW0 RLE) | none | - | - | follows the table above | asserted; no profile writes it |
 | `.pm5` (PW0 RLE) | `photon_mono_m5` Anycubic Photon Mono M5 | landscape | on (default) / off | bottom right | asserted; printer **Left** |
+| `.pm5s` (PW0 RLE) | `photon_mono_m5s` Anycubic Photon Mono M5s | landscape | on (default) / off | bottom right | asserted; printer **Left** |
+| `.pm7` (PW0 RLE) | `photon_mono_m7_pro` Anycubic Photon Mono M7 Pro | landscape | on (default) / off | bottom right | asserted; printer **Left** |
 | `.goo` (goo RLE) | `saturn_4_ultra_12k`, `saturn_4_ultra_16k` Elegoo Saturn 4 Ultra | landscape | on (default) / off | bottom right | asserted; printer **Left** |
 | `.goo` (goo RLE) | `mars_5_ultra` Elegoo Mars 5 Ultra | landscape | on (default) / off | bottom right | asserted; printer **Left** |
+| `.ctb` (CTB RLE) | none | - | - | follows the table above | asserted; no profile writes it |
+
+### Every display setting, per format
+
+The grid the test slices for each writer: one column per display setting, one row per registered
+`ISlaArchiveFormat`. The corner is the same in every row, because all the raster paths build one
+transform from the profile, but the table is per format so a writer that takes a different path
+(SVG does not use the pixel grid) is pinned in its own row rather than by assumption.
+
+| Format | L / off / off | L / on / off | L / off / on | L / on / on | P / off / off | P / on / off | P / off / on | P / on / on |
+|---|---|---|---|---|---|---|---|---|
+| `.sl1`, `.sl1s` (PNG) | bottom left | bottom right | top left | top right | bottom right | bottom left | top right | top left |
+| `.sl1svg` | bottom left | bottom right | top left | top right | bottom right | bottom left | top right | top left |
+| `.pwmo`, `.pwmx`, `.pwms` (PW0) | bottom left | bottom right | top left | top right | bottom right | bottom left | top right | top left |
+| `.pm5`, `.pm5s`, `.pm7` (PW0) | bottom left | bottom right | top left | top right | bottom right | bottom left | top right | top left |
+| `.goo` (goo) | bottom left | bottom right | top left | top right | bottom right | bottom left | top right | top left |
+| `.ctb` (CTB) | bottom left | bottom right | top left | top right | bottom right | bottom left | top right | top left |
+
+`L` is landscape and `P` portrait; the two letters after are `display_mirror_x` and
+`display_mirror_y`. No printer profile in the repo ships the four portrait settings or either
+`display_mirror_y` setting, so those columns are what a profile would get if someone turned the
+flags on, not what any shipped profile writes today.
 
 Notes:
 
