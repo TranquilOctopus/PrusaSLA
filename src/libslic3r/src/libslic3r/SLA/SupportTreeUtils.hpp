@@ -339,6 +339,38 @@ inline double head_back_radius(const SupportableMesh            &sm,
     return std::clamp(0.5 * double(sp.pillar_diameter), lo, hi);
 }
 
+// How deep the head of this support point sinks into the model. Points with a
+// per point contact depth (the support presets) get their own value, the others
+// the globally configured one.
+inline double head_penetration(const SupportableMesh            &sm,
+                               const Domain::SLA::SupportPoint &sp)
+{
+    return sp.contact_depth > 0.f ? double(sp.contact_depth)
+                                   : sm.cfg.head_penetration_mm;
+}
+
+// The base (pedestal) a pillar gets where it reaches the ground: the support
+// point's own diameter and height when it carries a per point size (the
+// support presets), the global config otherwise.
+struct BaseSize
+{
+    double radius = 0.;
+    double height = 0.;
+};
+
+inline BaseSize base_size(const SupportableMesh            &sm,
+                          const Domain::SLA::SupportPoint *sp)
+{
+    BaseSize ret{sm.cfg.base_radius_mm, sm.cfg.base_height_mm};
+
+    if (sp != nullptr) {
+        if (sp->base_diameter > 0.f) ret.radius = 0.5 * double(sp->base_diameter);
+        if (sp->base_height > 0.f) ret.height = double(sp->base_height);
+    }
+
+    return ret;
+}
+
 template<class Ex>
 bool optimize_pinhead_placement(Ex                     policy,
                                 const SupportableMesh &m,
@@ -446,7 +478,7 @@ std::optional<Head> calculate_pinhead_placement(Ex                     policy,
         head_back_radius(sm, sp),
         sp.head_front_radius,
         0.,
-        sm.cfg.head_penetration_mm,
+        head_penetration(sm, sp),
         Vec3d::Zero(),        // dir
         sp.pos.cast<double>() // displacement
     };
@@ -470,8 +502,20 @@ struct GroundConnection {
     boost::container::small_vector<Junction, MaxExpectedJunctions> path;
     std::optional<Pedestal> pillar_base;
 
+    // The radius at which the pillar of this connection counts as a full one:
+    // it reaches the pad and may carry a base. A support point with a per point
+    // pillar diameter (the support presets) brings its own, zero means the
+    // globally configured one. See head_back_radius().
+    double full_radius = 0.;
+
     operator bool() const { return pillar_base.has_value() && !path.empty(); }
 };
+
+// The radius a connection's pillar counts as full at.
+inline double full_radius(const SupportableMesh &sm, const GroundConnection &conn)
+{
+    return conn.full_radius > 0. ? conn.full_radius : sm.cfg.head_back_radius_mm;
+}
 
 inline long build_ground_connection(SupportTreeBuilder &builder,
                                     const SupportableMesh &sm,
@@ -495,7 +539,9 @@ inline long build_ground_connection(SupportTreeBuilder &builder,
     gp.z() = ground_level(sm);
     double h = conn.path.back().pos.z() - gp.z();
 
-    if (conn.pillar_base->r_top < sm.cfg.head_back_radius_mm) {
+    const double full_r = full_radius(sm, conn);
+
+    if (conn.pillar_base->r_top < full_r) {
         h += sm.pad_cfg.wall_thickness_mm;
         gp.z() -= sm.pad_cfg.wall_thickness_mm;
     }
@@ -509,7 +555,7 @@ inline long build_ground_connection(SupportTreeBuilder &builder,
 
     ret = builder.add_pillar(gp, h, conn.path.back().r, conn.pillar_base->r_top);
 
-    if (conn.pillar_base->r_top >= sm.cfg.head_back_radius_mm)
+    if (conn.pillar_base->r_top >= full_r)
         builder.add_pillar_base(ret, conn.pillar_base->height, conn.pillar_base->r_bottom);
 
     return ret;
@@ -610,15 +656,20 @@ Vec3d check_ground_route(
 
 // Searching a ground connection from an arbitrary source point.
 // Currently, the result will contain one avoidance bridge (at most) and a
-// pillar to the ground, if it's feasible
+// pillar to the ground, if it's feasible.
+// 'sp' is the support point the connection starts from, or nullptr when it
+// starts from somewhere the per point sizes (the support presets) do not
+// apply. It gives the base its own size and tells the builder which radius
+// counts as a full pillar.
 template<class Ex, class WideningFn,
          class = std::enable_if_t<IsWideningFn<WideningFn>> >
 GroundConnection deepsearch_ground_connection(
-    Ex                     policy,
-    const SupportableMesh &sm,
-    const Junction        &source,
-    WideningFn            &&wideningfn,
-    const Vec3d           &init_dir = DOWN)
+    Ex                              policy,
+    const SupportableMesh          &sm,
+    const Junction                 &source,
+    WideningFn                     &&wideningfn,
+    const Vec3d                    &init_dir = DOWN,
+    const Domain::SLA::SupportPoint *sp       = nullptr)
 {
     constexpr unsigned MaxIterationsGlobal = 5000;
     constexpr unsigned MaxIterationsLocal  = 100;
@@ -717,10 +768,12 @@ GroundConnection deepsearch_ground_connection(
     Vec3d bridge_end = source.pos + bridge_l * n;
     Vec3d gp{bridge_end.x(), bridge_end.y(), gndlvl};
 
+    const BaseSize base = base_size(sm, sp);
+
     double bridge_r = wideningfn(Ball{source.pos, source.r}, n, bridge_l);
     double down_l = bridge_end.z() - gndlvl;
     double end_radius = wideningfn(Ball{bridge_end, bridge_r}, DOWN, down_l);
-    double base_r = std::max(sm.cfg.base_radius_mm, end_radius);
+    double base_r = std::max(base.radius, end_radius);
 
     // Even if the search was not succesful, the result is populated by the
     // source and the last best result of the optimization.
@@ -730,20 +783,22 @@ GroundConnection deepsearch_ground_connection(
 
     // The resulting ground connection is only valid if the pillar base is set.
     // At this point it will only be set if the search was succesful.
-    if (z_fn(Biz::Algorithms::Optimize::Input<3>({plr, azm, bridge_l})) <= gndlvl)
-        conn.pillar_base =
-            Pedestal{gp, sm.cfg.base_height_mm, base_r, end_radius};
+    if (z_fn(Biz::Algorithms::Optimize::Input<3>({plr, azm, bridge_l})) <= gndlvl) {
+        conn.pillar_base = Pedestal{gp, base.height, base_r, end_radius};
+        conn.full_radius = sp != nullptr ? head_back_radius(sm, *sp) : 0.;
+    }
 
     return conn;
 }
 
 // Ground route search with a predefined end radius
 template<class Ex>
-GroundConnection deepsearch_ground_connection(Ex policy,
-                                              const SupportableMesh &sm,
-                                              const Junction &source,
-                                              double end_radius,
-                                              const Vec3d &init_dir = DOWN)
+GroundConnection deepsearch_ground_connection(Ex                              policy,
+                                              const SupportableMesh          &sm,
+                                              const Junction                 &source,
+                                              double                          end_radius,
+                                              const Vec3d                    &init_dir = DOWN,
+                                              const Domain::SLA::SupportPoint *sp       = nullptr)
 {
     double gndlvl = ground_level(sm);
     auto wfn = [end_radius, gndlvl](const Ball &src, const Vec3d &dir, double len) {
@@ -761,7 +816,7 @@ GroundConnection deepsearch_ground_connection(Ex policy,
 
     static_assert(IsWideningFn<decltype(wfn)>, "Not a widening function");
 
-    return deepsearch_ground_connection(policy, sm, source, wfn, init_dir);
+    return deepsearch_ground_connection(policy, sm, source, wfn, init_dir, sp);
 }
 
 struct DefaultWideningModel {

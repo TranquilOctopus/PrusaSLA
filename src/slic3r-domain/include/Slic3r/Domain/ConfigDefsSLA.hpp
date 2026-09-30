@@ -15,6 +15,8 @@ namespace sla {
     enum class SupportTreeType { Default, Branching, Organic };
     enum class PillarConnectionMode { zigzag, cross, dynamic };
     enum class RaftType { None, Full, AroundObject, Skate };
+    // What the inside of the raft is filled with between the top skin and the build plate.
+    enum class RaftInfillType { None, Grid, Honeycomb };
 }
 
 enum TowerSpeeds : int {

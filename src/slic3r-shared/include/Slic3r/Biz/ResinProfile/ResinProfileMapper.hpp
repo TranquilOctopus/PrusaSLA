@@ -27,17 +27,30 @@ std::string to_string(MappingStatus status);
 
 /**
  * @brief One row of the mapping report: what became of one source key.
- * target_key and value are empty when nothing is written to the material preset; the status and
- * the note still say why, so a value is never lost silently.
+ * A row carries the value on both sides: the one the file had and the one that is written. That is
+ * what makes a converted or an approximated value auditable without reading the note. target_key and
+ * value are empty when nothing is written to the material preset; the status and the note still say
+ * why, so a value is never lost silently.
  */
 struct MappedField
 {
     /// @brief The foreign key this row is about, verbatim as it appeared in the file.
     std::string source_key;
+    /// @brief The value as the file had it, verbatim: the value every conversion, every rejection
+    /// and every clamp below is about.
+    std::string source_value;
+    /// @brief The unit @ref source_value is in, as the mapping table states it. Empty when the key
+    /// is not a quantity (a name, G-code, a setting of the preview) or when the unit is not settled
+    /// yet, which is never spelled out as a guess. The spellings are the ones ConfigDefsSLA.cpp
+    /// gives the same quantity, untranslated so that a report does not change with the language.
+    std::string source_unit;
     /// @brief The PrusaSLA material (resin) preset key the value is written to, if any.
     std::string target_key;
     /// @brief The value as it is written to the material preset, if any.
     std::string value;
+    /// @brief The unit @ref value is written in, empty for the same reason as @ref source_unit and
+    /// always empty when nothing is written.
+    std::string target_unit;
     MappingStatus status{MappingStatus::Unknown};
     /// @brief Human readable reason, caveats ("verify" in the ROADMAP table) and dropped values.
     std::string note;

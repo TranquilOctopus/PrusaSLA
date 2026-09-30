@@ -94,6 +94,10 @@ std::vector<std::string> get_all_sla_config_keys() {
     keys.push_back("pad_wall_slope");
     keys.push_back("pad_wall_thickness");
     keys.push_back("raft_edge_taper");
+    keys.push_back("raft_infill");
+    keys.push_back("raft_infill_spacing");
+    keys.push_back("raft_infill_wall");
+    keys.push_back("raft_infill_skin");
     keys.push_back("raft_type");
     keys.push_back("printer_model");
     keys.push_back("printer_notes");
@@ -131,6 +135,24 @@ std::vector<std::string> get_all_sla_config_keys() {
     keys.push_back("support_pillar_diameter");
     keys.push_back("support_pillar_widening_factor");
     keys.push_back("support_points_density_relative");
+    keys.push_back("support_points_minimal_distance");
+    keys.push_back("support_points_overhang_angle");
+    keys.push_back("support_preset_heavy_base_diameter");
+    keys.push_back("support_preset_heavy_base_height");
+    keys.push_back("support_preset_heavy_head_diameter");
+    keys.push_back("support_preset_heavy_pillar_diameter");
+    keys.push_back("support_preset_light_base_diameter");
+    keys.push_back("support_preset_light_base_height");
+    keys.push_back("support_preset_light_head_diameter");
+    keys.push_back("support_preset_light_pillar_diameter");
+    keys.push_back("support_preset_medium_base_diameter");
+    keys.push_back("support_preset_medium_base_height");
+    keys.push_back("support_preset_medium_head_diameter");
+    keys.push_back("support_preset_medium_pillar_diameter");
+    keys.push_back("support_preset_mini_base_diameter");
+    keys.push_back("support_preset_mini_base_height");
+    keys.push_back("support_preset_mini_head_diameter");
+    keys.push_back("support_preset_mini_pillar_diameter");
     keys.push_back("support_small_pillar_diameter_percent");
     keys.push_back("support_tree_type");
     keys.push_back("supports_enable");
@@ -313,6 +335,8 @@ TEST_CASE("SLAInvalidation: table-driven expected steps for representative keys"
         {"support_brace_enable", steps({propagate(slaposSupportTree)})},
         {"support_object_elevation", steps({propagate(slaposObjectSlice)})},
         {"support_points_density_relative", steps({propagate(slaposSupportPoints)})},
+        {"support_points_minimal_distance", steps({propagate(slaposSupportPoints)})},
+        {"support_points_overhang_angle", steps({propagate(slaposSupportPoints)})},
         {"support_tree_type", steps({propagate(slaposObjectSlice)})},
         {"supports_enable", steps({propagate(slaposObjectSlice)})},
         {"tilt_down_cycles", steps({propagate(slapsMergeSlicesAndEval)})},

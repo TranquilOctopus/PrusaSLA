@@ -2,6 +2,7 @@
 #define AGGRASTER_HPP
 
 #include <libslic3r/SLA/RasterBase.hpp>
+#include <libslic3r/SLA/RasterMemory.hpp>
 #include "libslic3r/ExPolygon.hpp"
 
 // For rasterizing
@@ -46,6 +47,13 @@ protected:
     
     Resolution m_resolution;
     PixelDim m_pxdim_scaled;    // used for scaled coordinate polygons
+    
+    // Counts this raster as one live full-resolution buffer for as long as m_buf exists. Declared
+    // before m_buf so that it is destroyed after it. The budget in RasterMemory.hpp is expressed
+    // in bytes per pixel, which only holds while the pixel really is one byte wide.
+    RawRasterGuard m_live_guard;
+    static_assert(sizeof(TPixel) == raw_raster_bytes_per_pixel(),
+                  "The raster memory budget assumes a one byte pixel, see RasterMemory.hpp");
     
     std::vector<TPixel> m_buf;
     agg::rendering_buffer m_rbuf;

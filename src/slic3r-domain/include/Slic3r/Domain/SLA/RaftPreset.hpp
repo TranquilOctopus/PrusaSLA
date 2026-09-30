@@ -7,6 +7,17 @@
 
 namespace Slic3r::Domain::SLA {
 
+/// What the inside of the raft is filled with. The raft keeps a solid skin under its top face and
+/// a solid rim as thick as the wall, so the object never rests on a hole and the raft stays
+/// printable. A default built raft has no infill, which is the solid slab.
+struct RaftInfill
+{
+    sla::RaftInfillType type      = sla::RaftInfillType::None;
+    double              spacing_mm = 2.0;
+    double              wall_mm    = 0.4;
+    double              skin_mm    = 0.5;
+};
+
 struct RaftPadValues
 {
     bool pad_enable              = true;
@@ -17,6 +28,7 @@ struct RaftPadValues
     double pad_wall_slope_deg    = 90.0;
     double pad_object_gap_mm     = 1.0;
     double raft_edge_taper_mm    = 0.0;
+    RaftInfill raft_infill       = {};
 };
 
 /// Map a raft type and shared knobs to the pad configuration values.
@@ -27,6 +39,8 @@ struct RaftPadValues
 /// @param slope_deg User-specified wall slope in degrees (45-90).
 /// @param object_gap_mm Gap between object bottom and pad in zero-elevation mode.
 /// @param edge_taper_mm How far the top edge of the raft is bevelled in, 0 for a sharp edge.
+/// @param infill What the inside of the raft is filled with. No raft type replaces it, the user
+/// picks the pattern and the raft type only decides whether a raft is printed at all.
 /// @return RaftPadValues to be applied to the pad generator.
 RaftPadValues raft_preset_to_pad_values(
     sla::RaftType type,
@@ -35,7 +49,8 @@ RaftPadValues raft_preset_to_pad_values(
     double expansion_mm,
     double slope_deg,
     double object_gap_mm,
-    double edge_taper_mm
+    double edge_taper_mm,
+    RaftInfill infill
 );
 
 /// The raft settings the given raft type actually reads, in the order they should be shown:

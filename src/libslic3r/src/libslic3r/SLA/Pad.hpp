@@ -6,6 +6,7 @@
 #include <cmath>
 #include <string>
 
+#include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/Domain/ExPolygon.hpp"
 
 struct indexed_triangle_set;
@@ -37,6 +38,23 @@ struct PadConfig {
     // How far the top edge of the outer wall is bevelled in, so the pad has a thin lip that can
     // be pried off the build plate. Zero keeps the sharp edge. The bevel is as deep as it is wide.
     double edge_taper_mm = 0.;
+
+    /// What the inside of the raft is filled with between the top skin and the build plate. The
+    /// pattern is cut out of the slab, but the rim around it is as thick as the material between
+    /// two cells and a solid skin is left under the top face, so the object never rests on a hole
+    /// and the raft stays printable. None is the solid slab the generator has always built.
+    struct Infill {
+        Domain::sla::RaftInfillType type = Domain::sla::RaftInfillType::None;
+        // Clear size of one open cell, the gap between two neighbouring ribs, in mm.
+        double spacing_mm = 2.;
+        // Thickness of the material between two cells in mm, which is also the width of the
+        // solid rim that keeps the pattern inside the raft wall.
+        double wall_mm = 0.4;
+        // How much solid material is left under the top face of the raft in mm.
+        double skin_mm = 0.5;
+
+        operator bool() const { return type != Domain::sla::RaftInfillType::None; }
+    } infill;
 
     struct EmbedObject {
         double object_gap_mm = 1.;

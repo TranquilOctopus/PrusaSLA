@@ -69,6 +69,10 @@ struct ActionParams
     bool import_resin_profile_dry_run = false;
     /// File the import report is written to as JSON (--report).
     std::optional<std::string> import_resin_profile_report;
+    /// Name of a resin preset of the selected printer to write out as a Chitubox .cfg
+    /// (--export-resin-profile). The file it is written to is --output. The mapping of M3.5/M3.6
+    /// runs in reverse, so what the file states is what that preset says.
+    std::optional<std::string> export_resin_profile;
     std::variant<
         PluginInitActionParams,
         PluginKeygenActionParams,
@@ -101,6 +105,7 @@ struct ActionParams
             || dump_json_model
             || generate_preset_cache
             || import_resin_profile.has_value()
+            || export_resin_profile.has_value()
             || !std::holds_alternative<std::monostate>(subcommand_action);
     }
 

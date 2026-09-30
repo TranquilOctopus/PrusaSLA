@@ -13,6 +13,7 @@
 #include "Slic3r/Biz/IMessageDialogProvider.hpp"
 #include "Slic3r/Biz/UserAccount/ConnectUtils.hpp"
 #include "Slic3r/Biz/Platform/JobManager/JobManager.hpp"
+#include "Slic3r/Biz/PrintHost/PrintHostFormats.hpp"
 #include "Slic3r/Biz/FileLoadingLogic.hpp"
 #include "Slic3r/Biz/Scene/BedFactory.hpp"
 #include "Slic3r/Biz/Algorithms/Point.hpp"
@@ -949,6 +950,20 @@ void ProjectInteractor::do_result_upload(
     const PhysicalPrinter::PhysicalPrinterConfig& print_host_config
 )
 {
+    // A host that cannot read the printer's file type would only leave an unprintable file in its
+    // storage, so it says so instead (e.g. "OctoPrint does not accept .pm5 files"). The extension
+    // is the printer's own one, the same the upload dialog offers.
+    if (const std::string error = PrintHost::destination_rejects_extension_message(
+            print_host_config,
+            boost::filesystem::path(filename).extension().string()
+        );
+        !error.empty())
+    {
+        SPDLOG_ERROR("Upload to print host refused: {}", error);
+        m_result_export_interactor.report_failure(error);
+        return;
+    }
+
     set_output_extension(id.project_id, boost::filesystem::path(filename).extension().string());
     PhysicalPrinter::PhysicalPrinterConfig config {print_host_config};
     boost::filesystem::path dest_path(filename);
@@ -982,6 +997,18 @@ void ProjectInteractor::do_result_upload_connect(
 
     if (!filename_override.empty()) {
         filename = filename_override;
+    }
+
+    // The printer on Connect prints what its own host takes, so the same rule holds here.
+    if (const std::string error = PrintHost::destination_rejects_extension_message(
+            config,
+            boost::filesystem::path(filename).extension().string()
+        );
+        !error.empty())
+    {
+        SPDLOG_ERROR("Upload to Connect refused: {}", error);
+        m_result_export_interactor.report_failure(error);
+        return;
     }
 
     set_output_extension(id.project_id, boost::filesystem::path(filename).extension().string());

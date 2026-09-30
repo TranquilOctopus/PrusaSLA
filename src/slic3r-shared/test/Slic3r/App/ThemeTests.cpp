@@ -4,6 +4,7 @@
 #include <Slic3r/App/ThemeTypes.hpp>
 #include <Slic3r/Domain/Color.hpp>
 #include <cmath>
+#include <iterator>
 
 using namespace Slic3r::App;
 
@@ -48,6 +49,8 @@ TEST_CASE("[Theme] Every Platform::Color has an entry in both themes")
             Platform::Color::SlaPad,
             Platform::Color::SlaSupportPointAuto,
             Platform::Color::SlaSupportPointManual,
+            Platform::Color::SlaSupportPointHovered,
+            Platform::Color::SlaSupportPointSelected,
             Platform::Color::SlaIslandWarning,
             Platform::Color::SlaDrainHole,
             Platform::Color::SlaHollowInterior,
@@ -364,7 +367,7 @@ TEST_CASE("[Theme] The SLA support and pad tokens are their own colours in both 
         return u8(0.299f * color.r() + 0.587f * color.g() + 0.114f * color.b());
     };
 
-    const auto verify_theme = [](const Theme& theme, const char* theme_name) {
+    const auto verify_theme = [&](const Theme& theme, const char* theme_name) {
         const Domain::ColorRGBA& model = theme.color(Platform::Color::SlaModelResin);
         const Domain::ColorRGBA& tree  = theme.color(Platform::Color::SlaSupport);
         const Domain::ColorRGBA& raft  = theme.color(Platform::Color::SlaPad);
@@ -376,6 +379,67 @@ TEST_CASE("[Theme] The SLA support and pad tokens are their own colours in both 
         CHECK(grayscale(tree) != grayscale(model));
         CHECK(grayscale(raft) != grayscale(model));
         CHECK(grayscale(tree) != grayscale(raft));
+    };
+
+    verify_theme(dark_theme, "Dark");
+    verify_theme(light_theme, "Light");
+}
+
+TEST_CASE("[Theme] The SLA overlay glyph states are separate colours in both themes")
+{
+    // M2.9c: the support point glyphs are drawn with one token per state (auto, manual, island,
+    // hovered, selected), the island markers with SlaIslandWarning, the drain hole previews with
+    // SlaDrainHole and the hollowing preview with SlaHollowInterior. Every one of them has to
+    // resolve in both themes, and the five glyph states have to stay apart in a grayscale render
+    // too (PLAN 2.1).
+    Theme dark_theme(Theme::Style::Dark);
+    Theme light_theme(Theme::Style::Light);
+
+    const auto grayscale = [](const Domain::ColorRGBA& color) {
+        return u8(0.299f * color.r() + 0.587f * color.g() + 0.114f * color.b());
+    };
+
+    const auto verify_theme = [&](const Theme& theme, const char* theme_name) {
+        struct GlyphState
+        {
+            const char* state;
+            Platform::Color color;
+        };
+
+        const GlyphState states[] = {
+            {"auto",     Platform::Color::SlaSupportPointAuto},
+            {"manual",   Platform::Color::SlaSupportPointManual},
+            {"island",   Platform::Color::SlaIslandWarning},
+            {"hovered",  Platform::Color::SlaSupportPointHovered},
+            {"selected", Platform::Color::SlaSupportPointSelected},
+        };
+        // The clipping-cap previews are not glyph states, but they are drawn by the same tools, so
+        // they have to resolve as well.
+        const Platform::Color previews[] = {
+            Platform::Color::SlaDrainHole,
+            Platform::Color::SlaHollowInterior,
+        };
+
+        for (const GlyphState& entry : states) {
+            INFO("Theme: " << theme_name << ", state: " << entry.state);
+            REQUIRE_NOTHROW(theme.color(entry.color));
+            REQUIRE_NOTHROW(theme.color_imgui(entry.color));
+        }
+
+        for (Platform::Color preview : previews) {
+            INFO("Theme: " << theme_name << ", preview: " << static_cast<int>(preview));
+            REQUIRE_NOTHROW(theme.color(preview));
+            REQUIRE_NOTHROW(theme.color_imgui(preview));
+        }
+
+        // Every pair of states has to differ in grayscale; the closest pair is auto against island
+        // (Teal500 and warning amber in the light theme), which PLAN 2.1 pins.
+        for (size_t i = 0; i < std::size(states); ++i) {
+            for (size_t j = i + 1; j < std::size(states); ++j) {
+                CAPTURE(theme_name, states[i].state, states[j].state);
+                CHECK(grayscale(theme.color(states[i].color)) != grayscale(theme.color(states[j].color)));
+            }
+        }
     };
 
     verify_theme(dark_theme, "Dark");

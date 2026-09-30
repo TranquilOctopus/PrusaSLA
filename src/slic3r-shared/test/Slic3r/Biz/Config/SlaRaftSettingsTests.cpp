@@ -112,6 +112,54 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         CHECK(def->order < merge->order);
     }
 
+    // Check raft_infill and the three knobs that shape the pattern it cuts out of the raft
+    {
+        const ConfigItemDef* def = find_def("raft_infill");
+        REQUIRE(def != nullptr);
+        CHECK(def->category == ConfigItemDef::Category::Print_Pad);
+        CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
+        CHECK(def->label == "Raft infill");
+        CHECK(def->gui_type == ConfigItemDef::GUIType::combobox);
+        CHECK(def->tooltip.find("never rests on a hole") != std::string::npos);
+
+        // The pattern and its three knobs come after the edge taper, which is the last of the knobs
+        // that shape the raft itself.
+        const ConfigItemDef* taper = find_def("raft_edge_taper");
+        REQUIRE(taper != nullptr);
+        CHECK(taper->order < def->order);
+
+        for (const std::string& key : {"raft_infill_spacing",
+                                       "raft_infill_wall",
+                                       "raft_infill_skin"}) {
+            INFO("setting " << key);
+            const ConfigItemDef* knob = find_def(key);
+            REQUIRE(knob != nullptr);
+            CHECK(knob->category == ConfigItemDef::Category::Print_Pad);
+            CHECK(knob->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
+            CHECK(knob->gui_type == ConfigItemDef::GUIType::textfield);
+            CHECK(knob->units.size() == 1);
+        }
+
+        const ConfigItemDef* spacing = find_def("raft_infill_spacing");
+        const ConfigItemDef* wall    = find_def("raft_infill_wall");
+        const ConfigItemDef* skin    = find_def("raft_infill_skin");
+        REQUIRE(spacing != nullptr);
+        REQUIRE(wall != nullptr);
+        REQUIRE(skin != nullptr);
+
+        // The cell size and the material between two cells may not be zero: without a cell the
+        // raft would be filled back up to solid and without material between two cells it would
+        // be full of holes.
+        CHECK(spacing->min.value() > 0.);
+        CHECK(wall->min.value() > 0.);
+
+        // The knobs read in the order the raft needs them: the cells, the material between them
+        // and the skin that is left under the top face.
+        CHECK(def->order < spacing->order);
+        CHECK(spacing->order < wall->order);
+        CHECK(wall->order < skin->order);
+    }
+
     // Check pad_object_gap (now "Raft gap to object")
     {
         const ConfigItemDef* def = find_def("pad_object_gap");
@@ -211,6 +259,10 @@ TEST_CASE("The raft type decides which raft settings are shown", "[Config][SLA][
                                        "pad_brim_size",
                                        "pad_wall_slope",
                                        "raft_edge_taper",
+                                       "raft_infill",
+                                       "raft_infill_spacing",
+                                       "raft_infill_wall",
+                                       "raft_infill_skin",
                                        "pad_max_merge_distance",
                                        "pad_object_gap",
                                        "pad_around_object_everywhere",
@@ -230,6 +282,10 @@ TEST_CASE("The raft type decides which raft settings are shown", "[Config][SLA][
                                        "pad_brim_size",
                                        "pad_wall_slope",
                                        "raft_edge_taper",
+                                       "raft_infill",
+                                       "raft_infill_spacing",
+                                       "raft_infill_wall",
+                                       "raft_infill_skin",
                                        "pad_max_merge_distance"}) {
             INFO("setting " << key);
             CHECK(raft_type_uses_setting(RaftType::Full, key));
@@ -252,6 +308,10 @@ TEST_CASE("The raft type decides which raft settings are shown", "[Config][SLA][
                                        "pad_brim_size",
                                        "pad_wall_slope",
                                        "raft_edge_taper",
+                                       "raft_infill",
+                                       "raft_infill_spacing",
+                                       "raft_infill_wall",
+                                       "raft_infill_skin",
                                        "pad_max_merge_distance",
                                        "pad_object_gap",
                                        "pad_around_object_everywhere",
@@ -268,6 +328,10 @@ TEST_CASE("The raft type decides which raft settings are shown", "[Config][SLA][
         for (const std::string& key : {"pad_wall_height",
                                        "pad_wall_thickness",
                                        "raft_edge_taper",
+                                       "raft_infill",
+                                       "raft_infill_spacing",
+                                       "raft_infill_wall",
+                                       "raft_infill_skin",
                                        "pad_max_merge_distance",
                                        "pad_object_gap",
                                        "pad_around_object_everywhere",

@@ -375,7 +375,6 @@ void store_anycubic(const std::string& file_path, const Biz::Slicing::SLAResultD
     anycubicsla_format_preview       preview = {};
     anycubicsla_format_layers_header layers_header = {};
     anycubicsla_format_misc          misc = {};
-    std::vector<uint8_t>      layer_images;
 
     constexpr std::uint16_t ANYCUBIC_SLA_FORMAT_VERSION_1 = 1;
     intro.version             = ANYCUBIC_SLA_FORMAT_VERSION_1;
@@ -405,11 +404,17 @@ void store_anycubic(const std::string& file_path, const Biz::Slicing::SLAResultD
         layers_header.layer_count = layer_count;
         anycubicsla_write_layers_header(out, layers_header);
 
-        layer_images.reserve(layer_count * 32768);
+        // Every layer definition carries the offset of its image in the image block that follows
+        // the definitions, so the definitions have to be known before that block starts. Collect
+        // them first: that costs sizeof(anycubicsla_format_layer) per layer, where concatenating
+        // the encoded layers into a second buffer to write them in one go cost the whole encoded
+        // print twice - the writer already holds that in the result cache, so the export peak was
+        // twice the size of the image data. See doc/sla-fork/profiling/raster-memory.md.
+        std::vector<anycubicsla_format_layer> layer_defs(layer_count);
         std::uint32_t image_offset = intro.image_data_offset;
         
         for (std::uint32_t i = 0; i < layer_count; ++i) {
-            anycubicsla_format_layer l = {};
+            anycubicsla_format_layer& l = layer_defs[i];
             l.image_offset = image_offset;
             l.image_size = static_cast<std::uint32_t>(data.files.data[i].size());
             
@@ -428,15 +433,15 @@ void store_anycubic(const std::string& file_path, const Biz::Slicing::SLAResultD
             l.layer48 = 0.0f;
             
             image_offset += l.image_size;
-            anycubicsla_write_layer(out, l);
-            
-            const char* img_start = reinterpret_cast<const char*>(data.files.data[i].data());
-            const char* img_end = img_start + data.files.data[i].size();
-            std::copy(img_start, img_end, std::back_inserter(layer_images));
         }
         
-        const char* img_buffer = reinterpret_cast<const char*>(layer_images.data());
-        out.write(img_buffer, layer_images.size());
+        for (anycubicsla_format_layer& l : layer_defs)
+            anycubicsla_write_layer(out, l);
+        
+        for (std::uint32_t i = 0; i < layer_count; ++i) {
+            out.write(reinterpret_cast<const char*>(data.files.data[i].data()),
+                      static_cast<std::streamsize>(data.files.data[i].size()));
+        }
         out.close();
     } catch(std::exception& e) {
         SPDLOG_ERROR("Anycubic export failed: {}", e.what());

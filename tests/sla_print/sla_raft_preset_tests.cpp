@@ -18,7 +18,8 @@ TEST_CASE("RaftPreset: None disables pad", "[SLA][RaftPreset]")
         1.6,   // expansion_mm
         90.0,  // slope_deg
         1.0,   // object_gap_mm
-        0.0    // edge_taper_mm
+        0.0,   // edge_taper_mm
+        {},    // infill
     );
 
     CHECK(vals.pad_enable == false);
@@ -40,7 +41,8 @@ TEST_CASE("RaftPreset: Full enables plate-wide pad", "[SLA][RaftPreset]")
         1.6,   // expansion_mm
         90.0,  // slope_deg
         1.0,   // object_gap_mm
-        0.0    // edge_taper_mm
+        0.0,   // edge_taper_mm
+        {},    // infill
     );
 
     CHECK(vals.pad_enable == true);
@@ -61,7 +63,8 @@ TEST_CASE("RaftPreset: AroundObject sets pad_around_object flag", "[SLA][RaftPre
         1.6,   // expansion_mm
         90.0,  // slope_deg
         1.0,   // object_gap_mm
-        0.0    // edge_taper_mm
+        0.0,   // edge_taper_mm
+        {},    // infill
     );
 
     CHECK(vals.pad_enable == true);
@@ -82,7 +85,8 @@ TEST_CASE("RaftPreset: Skate differs from AroundObject in brim and slope", "[SLA
         1.6,   // expansion_mm
         90.0,  // slope_deg
         1.0,   // object_gap_mm
-        0.0    // edge_taper_mm
+        0.0,   // edge_taper_mm
+        {},    // infill
     );
 
     RaftPadValues vals_skate = raft_preset_to_pad_values(
@@ -92,7 +96,8 @@ TEST_CASE("RaftPreset: Skate differs from AroundObject in brim and slope", "[SLA
         1.6,   // expansion_mm
         90.0,  // slope_deg
         1.0,   // object_gap_mm
-        0.0    // edge_taper_mm
+        0.0,   // edge_taper_mm
+        {},    // infill
     );
 
     CHECK(vals_skate.pad_enable == true);
@@ -119,7 +124,8 @@ TEST_CASE("RaftPreset: Shared knobs pass through unchanged for Full", "[SLA][Raf
         2.0,   // expansion_mm
         80.0,  // slope_deg
         1.5,   // object_gap_mm
-        0.0    // edge_taper_mm
+        0.0,   // edge_taper_mm
+        {},    // infill
     );
 
     CHECK(vals.pad_wall_height_mm == Approx(3.5));
@@ -138,7 +144,8 @@ TEST_CASE("RaftPreset: Shared knobs pass through unchanged for AroundObject", "[
         2.0,   // expansion_mm
         80.0,  // slope_deg
         1.5,   // object_gap_mm
-        0.0    // edge_taper_mm
+        0.0,   // edge_taper_mm
+        {},    // infill
     );
 
     CHECK(vals.pad_wall_height_mm == Approx(3.5));
@@ -157,7 +164,8 @@ TEST_CASE("RaftPreset: Shared knobs pass through for Skate (except brim/slope)",
         2.0,   // expansion_mm
         80.0,  // slope_deg
         1.5,   // object_gap_mm
-        0.0    // edge_taper_mm
+        0.0,   // edge_taper_mm
+        {},    // infill
     );
 
     CHECK(vals.pad_wall_height_mm == Approx(3.5));
@@ -185,9 +193,61 @@ TEST_CASE("RaftPreset: the edge taper is a shared knob, no type replaces it", "[
             1.6,   // expansion_mm
             90.0,  // slope_deg
             1.0,   // object_gap_mm
-            1.2    // edge_taper_mm
+            1.2,   // edge_taper_mm
+            {},    // infill
         );
 
         CHECK(vals.raft_edge_taper_mm == Approx(1.2));
     }
+}
+
+TEST_CASE("RaftPreset: the infill is a shared knob, no type replaces it", "[SLA][RaftPreset]")
+{
+    // Which pattern goes into the raft is a tuning question against Lychee and Chitubox, like the
+    // skate expansion and slope, so no raft type brings its own.
+    RaftInfill grid;
+    grid.type = sla::RaftInfillType::Grid;
+    grid.spacing_mm = 3.;
+    grid.wall_mm = 0.6;
+    grid.skin_mm = 0.8;
+
+    for (const sla::RaftType type : {sla::RaftType::None,
+                                     sla::RaftType::Full,
+                                     sla::RaftType::AroundObject,
+                                     sla::RaftType::Skate}) {
+        INFO("raft type " << static_cast<int>(type));
+        RaftPadValues vals = raft_preset_to_pad_values(
+            type,
+            0.0,   // wall_height_mm
+            2.0,   // wall_thickness_mm
+            1.6,   // expansion_mm
+            90.0,  // slope_deg
+            1.0,   // object_gap_mm
+            0.0,   // edge_taper_mm
+            grid   // infill
+        );
+
+        CHECK(vals.raft_infill.type == sla::RaftInfillType::Grid);
+        CHECK(vals.raft_infill.spacing_mm == Approx(3.0));
+        CHECK(vals.raft_infill.wall_mm == Approx(0.6));
+        CHECK(vals.raft_infill.skin_mm == Approx(0.8));
+    }
+}
+
+TEST_CASE("RaftPreset: no infill is the solid raft of today", "[SLA][RaftPreset]")
+{
+    // Nothing asked for a pattern, so there is none: the raft stays the solid slab the
+    // generator has always built.
+    RaftPadValues vals = raft_preset_to_pad_values(
+        sla::RaftType::Full,
+        0.0,   // wall_height_mm
+        2.0,   // wall_thickness_mm
+        1.6,   // expansion_mm
+        90.0,  // slope_deg
+        1.0,   // object_gap_mm
+        0.0,   // edge_taper_mm
+        {}     // infill
+    );
+
+    CHECK(vals.raft_infill.type == sla::RaftInfillType::None);
 }

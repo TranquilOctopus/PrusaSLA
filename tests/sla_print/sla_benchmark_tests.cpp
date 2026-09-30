@@ -75,12 +75,8 @@
 #define SLA_BENCH_HAS_WORKING_SET 1
 #endif
 
-#include "Slic3r/Biz/Algorithms/BoundingBox.hpp"
 #include "Slic3r/Biz/Algorithms/ModelObject.hpp"
-#include "Slic3r/Biz/Format/OBJ.hpp"
-#include "Slic3r/Biz/Format/STL.hpp"
 #include "Slic3r/Biz/Slicing/BackgroundProcess.hpp"
-#include "Slic3r/Biz/Yaml/Yaml.hpp"
 #include "Slic3r/Domain/Bed.hpp"
 #include "Slic3r/Domain/BedInstance.hpp"
 #include "Slic3r/Domain/ConfigPack.hpp"
@@ -101,35 +97,25 @@
 #include "libslic3r/SLASupportTool.hpp"
 #include "libslic3r/SLA/IslandDetection.hpp"
 
+// The model list, the manifest reader and the plate placement live in sla_bench_manifest.hpp, so
+// the local island coverage test (M4.3c) reads the same corpus the same way.
+#include "sla_bench_manifest.hpp"
 #include "test_utils.hpp"
-
-namespace Bench {
-
-// The manifest is optional per field, so a model without a category is still runnable. `id` and
-// `file` are required: an id is what the JSON calls the model and a file is what gets loaded.
-struct ManifestEntry
-{
-    std::string                id;
-    std::string                file;
-    std::optional<std::string> category;
-};
-
-struct Manifest
-{
-    std::vector<ManifestEntry> models;
-};
-
-} // namespace Bench
-
-STRUCT_DESC_SIMPLE(Bench::ManifestEntry, id, file, category);
-STRUCT_DESC_SIMPLE(Bench::Manifest, models);
 
 namespace {
 
 using Slic3r::SLAPrint;
 using Slic3r::SLAPrintObject;
 using Slic3r::sla::SupportToolTree;
-namespace BB = Slic3r::Biz::Algorithms::BoundingBox;
+
+using Bench::ModelSpec;
+using Bench::centre_on_plate;
+using Bench::describe_error;
+using Bench::load_model_file;
+using Bench::lower;
+using Bench::lower_extension;
+using Bench::read_manifest;
+using Bench::trim;
 
 // The only setting the benchmark changes, everything else is the default SLA config. 0.05 mm is
 // what the tests and the fixtures slice at; the SLA default (0.3 mm) is coarse enough to change
@@ -156,17 +142,6 @@ constexpr const char* BENCH_MODELS_CATEGORY = "testdata";
 // all, the start log line maps the run index to the file so a local run stays usable.
 constexpr const char* CORPUS_CATEGORY = "corpus";
 constexpr const char* MANIFEST_FILE = "manifest.yaml";
-
-/// One model to benchmark. file_name and folder stay inside the harness: only id and category
-/// reach the JSON.
-struct ModelSpec
-{
-    std::string id;
-    std::string category;
-    std::string file_name;
-    std::string folder;
-    bool        from_test_data = false;
-};
 
 /// A JSON value with a fixed key order. Just enough for the metrics file, and it keeps the key
 /// order of two runs identical, which is the whole point of the file.
@@ -372,36 +347,6 @@ std::string to_hex(uint64_t value)
     for (int shift = 60; shift >= 0; shift -= 4)
         out += digits[size_t((value >> shift) & 0xfu)];
     return out;
-}
-
-std::string trim(const std::string& text)
-{
-    const auto is_space = [](unsigned char c) { return std::isspace(c) != 0; };
-    auto       first    = text.begin();
-    while (first != text.end() && is_space(*first)) ++first;
-    auto last = text.end();
-    while (last != first && is_space(*(last - 1))) --last;
-    return std::string(first, last);
-}
-
-std::string lower(std::string text)
-{
-    std::transform(text.begin(), text.end(), text.begin(),
-                   [](unsigned char c) { return char(std::tolower(c)); });
-    return text;
-}
-
-std::string lower_extension(const std::filesystem::path& path)
-{
-    return lower(path.extension().string());
-}
-
-/// The models are benchmarked as loaded, so the only placement is onto the plate.
-void centre_on_plate(Slic3r::Domain::TriangleMesh& mesh)
-{
-    const auto bb = mesh.bounding_box();
-    const auto c  = BB::center(bb);
-    mesh.translate(Slic3r::Domain::Vec3f(float(-c.x()), float(-c.y()), float(-bb.min.z())));
 }
 
 Slic3r::Domain::ConfigPackSLA make_config()
@@ -662,39 +607,6 @@ std::vector<std::filesystem::path> models_in(const std::filesystem::path& dir)
     return paths;
 }
 
-/// The models of a manifest.yaml, in the order of the file. Ids have to be unique, they are what
-/// the JSON and bench_diff.py key on.
-std::vector<ModelSpec> read_manifest(const std::filesystem::path& path, const std::string& folder)
-{
-    namespace Yaml = Slic3r::Biz::Yaml;
-
-    Bench::Manifest manifest;
-    try {
-        const Yaml::YamlAdapter::Document doc = Yaml::parse_file(path.string().c_str());
-        manifest                              = Yaml::parse_struct_unwrap<Bench::Manifest>(doc);
-    } catch (const std::exception& e) {
-        FAIL("SLA_BENCH_DIR/" << MANIFEST_FILE << ": " << e.what());
-    }
-
-    std::vector<ModelSpec> models;
-    models.reserve(manifest.models.size());
-    for (const Bench::ManifestEntry& entry : manifest.models) {
-        ModelSpec spec;
-        spec.id        = trim(entry.id);
-        spec.category  = entry.category ? trim(*entry.category) : std::string{};
-        spec.file_name = trim(entry.file);
-        spec.folder    = folder;
-        if (spec.category.empty()) spec.category = "uncategorized";
-
-        // Catch2 has no && and no || inside an assertion, so one check per line.
-        REQUIRE_FALSE(spec.id.empty());
-        REQUIRE_FALSE(spec.file_name.empty());
-        models.push_back(std::move(spec));
-    }
-
-    return models;
-}
-
 /// The committed test models. They are in the repository, so unlike the corpus they are named by
 /// their file name.
 std::vector<ModelSpec> builtin_models()
@@ -731,23 +643,6 @@ std::vector<ModelSpec> models_without_manifest(const std::filesystem::path& dir)
     return models;
 }
 
-Slic3r::Domain::TriangleMesh load_model_file(const std::filesystem::path& path)
-{
-    Slic3r::Domain::TriangleMesh mesh;
-    if (lower_extension(path) == ".stl") {
-        auto loaded = Slic3r::Biz::load_stl(path.string());
-        if (!loaded) throw std::runtime_error(loaded.error());
-        mesh = std::move(*loaded);
-    } else {
-        auto loaded = Slic3r::Biz::load_obj(path.string());
-        if (!loaded) throw std::runtime_error(loaded.error());
-        mesh = std::move(*loaded);
-    }
-
-    if (mesh.empty()) throw std::runtime_error("the mesh is empty");
-    return mesh;
-}
-
 /// The ids and categories SLA_BENCH_FILTER selects, lower cased so the comparison is forgiving.
 std::set<std::string> read_filter()
 {
@@ -763,20 +658,6 @@ std::set<std::string> read_filter()
     }
 
     return filter;
-}
-
-/// The error text goes into the JSON, so the file name and the folder are replaced by the id: a
-/// loader that quotes the path in its message must not leak the corpus into a committed baseline.
-std::string describe_error(const std::string& message, const ModelSpec& spec)
-{
-    std::string text = message;
-    for (const std::string& secret : {spec.folder, spec.file_name}) {
-        if (secret.empty()) continue;
-        for (size_t pos = text.find(secret); pos != std::string::npos;
-             pos          = text.find(secret, pos + spec.id.size()))
-            text.replace(pos, secret.size(), spec.id);
-    }
-    return text;
 }
 
 } // namespace

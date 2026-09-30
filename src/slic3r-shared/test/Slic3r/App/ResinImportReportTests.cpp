@@ -15,14 +15,20 @@ using Slic3r::Biz::ResinProfile::ResinImportResult;
 
 namespace {
 
-MappedField
-make_field(std::string source_key, std::string target_key, std::string value, MappingStatus status)
+MappedField make_field(
+    std::string source_key,
+    std::string source_value,
+    std::string target_key,
+    std::string value,
+    MappingStatus status
+)
 {
     MappedField field;
-    field.source_key = std::move(source_key);
-    field.target_key = std::move(target_key);
-    field.value      = std::move(value);
-    field.status     = status;
+    field.source_key   = std::move(source_key);
+    field.source_value = std::move(source_value);
+    field.target_key   = std::move(target_key);
+    field.value        = std::move(value);
+    field.status       = status;
     return field;
 }
 
@@ -57,10 +63,16 @@ TEST_CASE("build_mapping_rows turns a result into one row per key", "[resin_impo
     {
         ResinImportResult result;
         result.mapping.report = {
-            make_field("normalExposureTime", "exposure_time", "2.5", MappingStatus::Exact),
-            make_field("bottomLayerCount", "resin_faded_layers", "20", MappingStatus::Approximated),
-            make_field("normalLayerLiftHeight", "", "", MappingStatus::NotApplicable),
-            make_field("custom_key_xyz", "", "", MappingStatus::Unknown),
+            make_field("normalExposureTime", "2.5", "exposure_time", "2.5", MappingStatus::Exact),
+            make_field(
+                "bottomLayerCount",
+                "40",
+                "resin_faded_layers",
+                "20",
+                MappingStatus::Approximated
+            ),
+            make_field("normalLayerLiftHeight", "5", "", "", MappingStatus::NotApplicable),
+            make_field("custom_key_xyz", "42", "", "", MappingStatus::Unknown),
         };
 
         const std::vector<MappingRow> rows = Slic3r::App::build_mapping_rows(result);
@@ -76,21 +88,31 @@ TEST_CASE("build_mapping_rows turns a result into one row per key", "[resin_impo
 
         CHECK(rows[1].badge == MappingBadge::Approximated);
         CHECK(rows[1].writes_value());
+        // A value the file had is on the row as well, so a clamp is readable off the row.
+        CHECK(rows[1].source_value == "40");
+        CHECK(rows[1].value == "20");
 
         // Nothing is written for the last two, and nothing is lost either: the row is still there
-        // with the status that says why.
+        // with the value it had and the status that says why.
         CHECK_FALSE(rows[2].writes_value());
         CHECK(rows[2].target_key.empty());
+        CHECK(rows[2].source_value == "5");
         CHECK(rows[2].badge == MappingBadge::NotApplicable);
         CHECK(rows[3].badge == MappingBadge::Unknown);
         CHECK(rows[3].source_key == "custom_key_xyz");
+        CHECK(rows[3].source_value == "42");
     }
 
     SECTION("the note of a row is carried over")
     {
         ResinImportResult result;
-        MappedField clamped =
-            make_field("bottomLayerCount", "resin_faded_layers", "20", MappingStatus::Approximated);
+        MappedField clamped = make_field(
+            "bottomLayerCount",
+            "40",
+            "resin_faded_layers",
+            "20",
+            MappingStatus::Approximated
+        );
         clamped.note = "40 layers, clamped to 3-20";
         result.mapping.report.push_back(clamped);
 
@@ -108,20 +130,97 @@ TEST_CASE("build_mapping_rows turns a result into one row per key", "[resin_impo
     }
 }
 
+TEST_CASE("source_as and target_as say what a row does", "[resin_import][report]")
+{
+    SECTION("a value copied as it is, with its unit on both sides")
+    {
+        ResinImportResult result;
+        MappedField exposure =
+            make_field("normalExposureTime", "2.5", "exposure_time", "2.5", MappingStatus::Exact);
+        exposure.source_unit = "s";
+        exposure.target_unit = "s";
+        result.mapping.report.push_back(exposure);
+
+        const std::vector<MappingRow> rows = Slic3r::App::build_mapping_rows(result);
+        REQUIRE(rows.size() == 1);
+        CHECK(Slic3r::App::source_as(rows[0]) == "normalExposureTime = 2.5 s");
+        CHECK(Slic3r::App::target_as(rows[0]) == "exposure_time = 2.5 s");
+    }
+
+    SECTION("a converted value shows what the file had next to what is written")
+    {
+        ResinImportResult result;
+        MappedField speed = make_field(
+            "normalLayerLiftSpeed",
+            "150",
+            "lift_speed",
+            "2.5",
+            MappingStatus::Converted
+        );
+        speed.source_unit = "mm/min";
+        speed.target_unit = "mm/s";
+        result.mapping.report.push_back(speed);
+
+        const std::vector<MappingRow> rows = Slic3r::App::build_mapping_rows(result);
+        REQUIRE(rows.size() == 1);
+        CHECK(Slic3r::App::source_as(rows[0]) == "normalLayerLiftSpeed = 150 mm/min");
+        CHECK(Slic3r::App::target_as(rows[0]) == "lift_speed = 2.5 mm/s");
+    }
+
+    SECTION("a value with no unit of its own is shown as it is")
+    {
+        ResinImportResult result;
+        result.mapping.report = {
+            make_field("bottomLayerCount", "8", "bottom_layer_count", "8", MappingStatus::Exact),
+        };
+
+        const std::vector<MappingRow> rows = Slic3r::App::build_mapping_rows(result);
+        REQUIRE(rows.size() == 1);
+        CHECK(Slic3r::App::source_as(rows[0]) == "bottomLayerCount = 8");
+        CHECK(Slic3r::App::target_as(rows[0]) == "bottom_layer_count = 8");
+    }
+
+    SECTION("a key the file gives no value for is named alone")
+    {
+        ResinImportResult result;
+        result.mapping.report = {
+            make_field("startGcode", "", "", "", MappingStatus::NotApplicable)
+        };
+
+        const std::vector<MappingRow> rows = Slic3r::App::build_mapping_rows(result);
+        REQUIRE(rows.size() == 1);
+        CHECK(Slic3r::App::source_as(rows[0]) == "startGcode");
+    }
+
+    SECTION("a row that writes nothing has no target side to show")
+    {
+        ResinImportResult result;
+        MappedField lift =
+            make_field("normalLayerLiftHeight", "5", "", "", MappingStatus::NotApplicable);
+        lift.source_unit = "mm";
+        result.mapping.report.push_back(lift);
+
+        const std::vector<MappingRow> rows = Slic3r::App::build_mapping_rows(result);
+        REQUIRE(rows.size() == 1);
+        CHECK(Slic3r::App::source_as(rows[0]) == "normalLayerLiftHeight = 5 mm");
+        CHECK(Slic3r::App::target_as(rows[0]).empty());
+    }
+}
+
 TEST_CASE("count_badges counts every kind of row", "[resin_import][report]")
 {
     SECTION("a report with rows of every kind")
     {
         ResinImportResult result;
         result.mapping.report = {
-            make_field("a", "k", "1", MappingStatus::Exact),
-            make_field("b", "k", "1", MappingStatus::Exact),
-            make_field("c", "k", "1", MappingStatus::Converted),
-            make_field("d", "k", "1", MappingStatus::Approximated),
-            make_field("e", "", "", MappingStatus::NotApplicable),
-            make_field("f", "", "", MappingStatus::NotApplicable),
-            make_field("g", "", "", MappingStatus::NotApplicable),
-            make_field("h", "", "", MappingStatus::Unknown),
+            make_field("a", "1", "k", "1", MappingStatus::Exact),
+            make_field("b", "1", "k", "1", MappingStatus::Exact),
+            make_field("c", "1", "k", "1", MappingStatus::Converted),
+            make_field("d", "1", "k", "1", MappingStatus::Approximated),
+            make_field("e", "1", "", "", MappingStatus::NotApplicable),
+            make_field("f", "1", "", "", MappingStatus::NotApplicable),
+            make_field("g", "1", "", "", MappingStatus::NotApplicable),
+            make_field("h", "1", "", "", MappingStatus::Unknown),
         };
 
         const Slic3r::App::BadgeCounts counts =

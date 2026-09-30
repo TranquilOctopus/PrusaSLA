@@ -1,6 +1,8 @@
 #include "SplashScreen.hpp"
 #include "MainFrame.hpp"
 
+#include <Slic3r/App/AppServices.hpp>
+#include <Slic3r/App/Theme.hpp>
 #include <Slic3r/App/WX/BitmapCache.hpp>
 #include <Slic3r/App/WX/WidgetsConfig.hpp>
 #include "Slic3r/App/WX/StringConversions.hpp"
@@ -35,11 +37,30 @@ float get_display_scale_factor(const wxPoint& pos)
     return scale;
 }
 
+// The splash is drawn on its own dark banner, so its text colours come from theme tokens rather than
+// from RGB literals: no palette hex value lives outside Theme.cpp. DesktopApp sets the theme up
+// before it creates the splash, so a token is always available here.
+static wxColour theme_color(Platform::Color color_id)
+{
+    const Domain::ColorRGBA& color = AppServices::instance().theme().color(color_id);
+    return wxColour(color.r_uchar(), color.g_uchar(), color.b_uchar());
+}
+
 // This function is responsible for creating a bitmap correctly scaled for the target display.
 static wxBitmap make_bitmap(bool is_editor, double scale)
 {
     // 1. Load the base 1x resolution bitmap from the JPEG file.
-    wxBitmap bmp_1x = wxBitmap(WX::from_u8(var(is_editor ? "splashscreen.jpg" : "splashscreen-gcodepreview.jpg")), wxBITMAP_TYPE_JPEG);
+    wxBitmap bmp_1x;
+    if (is_editor) {
+        bmp_1x = wxBitmap(WX::from_u8(var("splashscreen.jpg")), wxBITMAP_TYPE_JPEG);
+    } else {
+        bmp_1x = wxBitmap(WX::from_u8(var("splashscreen-gcodepreview.jpg")), wxBITMAP_TYPE_JPEG);
+        if (!bmp_1x.IsOk()) {
+            // The G-code viewer splash JPEG is not shipped in this tree, so the viewer shows the
+            // editor splash rather than dropping through to the bundled icon below.
+            bmp_1x = wxBitmap(WX::from_u8(var("splashscreen.jpg")), wxBITMAP_TYPE_JPEG);
+        }
+    }
 
     if (!bmp_1x.IsOk()) {
         // Fallback to a bundled bitmap if the JPEG fails to load.
@@ -112,7 +133,7 @@ SplashScreen::SplashScreen(bool is_editor, wxPoint pos) :
     wxNO_BORDER | wxFRAME_NO_TASKBAR),
     m_is_editor(is_editor),
     m_text_color(wxColour(255, 255, 255)),
-    m_highlighted_text_color(wxColour(237, 107, 33)),
+    m_highlighted_text_color(theme_color(Platform::Color::AccentPrimary)),
     m_scale(get_display_scale_factor(pos)) // Initialize member variable for scale factor.
 {
 #ifndef __WXMSW__
@@ -204,17 +225,19 @@ void SplashScreen::Decorate(wxBitmap& bmp)
     wxRect banner_rect(wxPoint(0, logo_size + margin), wxPoint(width, bmp.GetLogicalHeight()));
     banner_rect.Deflate(margin, 2 * margin);
 
-    wxString strPrusa  = WX::from_u8("Prusa");
-    wxString strSlicer = WX::from_u8("Slicer");
+    // The wordmark: this application's name, drawn in the two-tone layout the logotype has, the
+    // first word in the plain text colour and the second in the accent.
+    wxString strResin  = WX::from_u8(Biz::_u8L("Resin"));
+    wxString strSlicer = WX::from_u8(Biz::_u8L("Slicer"));
 
     memDc.SetFont(m_constant_text.title_font);
-    int widthPrusa    = memDc.GetTextExtent(strPrusa).GetWidth();
+    int widthResin    = memDc.GetTextExtent(strResin).GetWidth();
     int widthSlicer   = memDc.GetTextExtent(strSlicer).GetWidth();
-    int widthCombined = memDc.GetTextExtent(strPrusa + strSlicer).GetWidth();
-    int kerning       = widthCombined - (widthPrusa + widthSlicer);
+    int widthCombined = memDc.GetTextExtent(strResin + strSlicer).GetWidth();
+    int kerning       = widthCombined - (widthResin + widthSlicer);
 
     int banner_h_center = static_cast<int>((width - kerning) * 0.5);
-    wxRect banner_rect_Prusa(
+    wxRect banner_rect_Resin(
         banner_rect.GetLeftTop(),
         wxPoint(banner_h_center, banner_rect.GetBottom())
     );
@@ -227,7 +250,7 @@ void SplashScreen::Decorate(wxBitmap& bmp)
     // draw the (white) labels inside of our black box (at the left of the splashscreen)
     memDc.SetTextForeground(m_text_color);
 
-    memDc.DrawLabel(strPrusa, banner_rect_Prusa, wxALIGN_TOP | wxALIGN_RIGHT);
+    memDc.DrawLabel(strResin, banner_rect_Resin, wxALIGN_TOP | wxALIGN_RIGHT);
     memDc.SetTextForeground(m_highlighted_text_color);
     memDc.DrawLabel(strSlicer, banner_rect_Slicer, wxALIGN_TOP | wxALIGN_LEFT);
     memDc.SetTextForeground(m_text_color);
@@ -243,7 +266,7 @@ void SplashScreen::Decorate(wxBitmap& bmp)
     // save remained place for the text with application state
     m_state_text_rect = banner_rect;
 
-    banner_rect.SetBottom(banner_rect_Prusa.GetBottom());
+    banner_rect.SetBottom(banner_rect_Resin.GetBottom());
     memDc.SetFont(m_constant_text.credits_font);
     memDc.DrawLabel(
         m_constant_text.credits,
@@ -293,7 +316,7 @@ void SplashScreen::ConstantText::init(const wxFont& init_font, bool is_editor, i
             ),
             SLIC3R_APP_NAME
         ),
-        Biz::_u8L("Developed by Prusa Research."),
+        Biz::_u8L("PrusaSlicer by Prusa Research."),
         Biz::_u8L("Licensed under GNU AGPLv3.")
     );
     credits = from_u8(credits_str);

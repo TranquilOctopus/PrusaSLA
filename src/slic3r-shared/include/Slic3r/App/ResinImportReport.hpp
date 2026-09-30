@@ -32,12 +32,20 @@ struct MappingRow
 {
     /// The foreign key this row is about, as it appeared in the file.
     std::string source_key;
+    /// The value the file had, as it appeared in it, before any conversion or clamp.
+    std::string source_value;
+    /// The unit @ref source_value is in, empty when the key is not a quantity or the unit is not
+    /// settled yet. Never translated: a table has to read the same in every language.
+    std::string source_unit;
     /// The resin preset key the value is written to, empty when nothing is written.
     std::string target_key;
     /// The value as it is written, empty when nothing is written.
     std::string value;
+    /// The unit @ref value is written in, empty for the same reason as @ref source_unit.
+    std::string target_unit;
     MappingBadge badge{MappingBadge::Unknown};
-    /// Human readable reason, caveats and dropped values.
+    /// Human readable reason, caveats and dropped values. Long: the table shows it on one line and
+    /// the whole of it as the tooltip of that line.
     std::string note;
 
     /// @brief Whether the row carries a value into the material preset.
@@ -71,6 +79,19 @@ std::string badge_label(MappingBadge badge);
 /// @brief One row per key of @p result, in the order the mapper reports them: the recognized keys
 /// first, the unknown ones last. A result of a failed import has no rows.
 std::vector<MappingRow> build_mapping_rows(const Biz::ResinProfile::ResinImportResult& result);
+
+/**
+ * @brief What the file said about @p row, for the first column of the table:
+ * "normalExposureTime = 3.5 s". A key the file gives no value for is named alone, so the column
+ * never shows an empty value that looks like one.
+ */
+std::string source_as(const MappingRow& row);
+
+/**
+ * @brief What becomes of @p row, for the second column: "exposure_time = 3.5 s". Empty for a row
+ * that writes nothing, which the badge beside it and the note under it say why.
+ */
+std::string target_as(const MappingRow& row);
 
 /// @brief How many rows of @p rows carry each badge.
 BadgeCounts count_badges(const std::vector<MappingRow>& rows);

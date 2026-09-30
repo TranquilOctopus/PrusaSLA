@@ -32,6 +32,7 @@ namespace Slic3r::Biz::ResinProfile {
  *         {
  *           "key": "normalExposureTime",     // the key as it appeared in the file
  *           "target_key": "exposure_time",   // the resin preset key, empty when nothing is written
+ *           "source_value": "3.5",           // the value as the file had it, before any conversion
  *           "value": "3.5",                  // the value written to it, empty when none is
  *           "status": "Exact",               // see MappingStatus, written out by to_string()
  *           "note": "Both in seconds, no conversion."

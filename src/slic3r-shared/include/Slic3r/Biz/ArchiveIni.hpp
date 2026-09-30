@@ -79,7 +79,11 @@ private:
 };
 
 /// @brief Read one entry of an open archive into memory.
+/// @param max_bytes Largest uncompressed size accepted, 0 for no limit. The size is the one
+/// the central directory declares, so an entry that claims more is refused before anything
+/// is allocated for it, which is what an entry of a zip bomb is for.
 tl::expected<std::string, std::string> read_zip_entry(mz_zip_archive                 &arch,
-                                                      const mz_zip_archive_file_stat &stat);
+                                                      const mz_zip_archive_file_stat &stat,
+                                                      std::size_t                     max_bytes = 0);
 
 } // namespace Slic3r::Biz

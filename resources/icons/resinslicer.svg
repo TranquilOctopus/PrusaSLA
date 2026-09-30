@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ResinSlicer application icon.
+     Vector source for PrusaSlicer.ico, PrusaSlicer.icns and PrusaSlicer_128px.png;
+     doc/sla-fork/tools/render_icons.py rasterises it. See doc/sla-fork/branding.md.
+
+     Grid is 128x128, so one unit is one pixel of PrusaSlicer_128px.png and the shapes are
+     sized to survive 16 px: the drop is 48 units (6 px) across and the plate is 96 x 20
+     (12 x 2.5 px). Only rect, circle and polygon are used, so a reviewer can read the mark
+     without an SVG renderer. Fork palette only (#CAD2C5 #84A98C #52796F #354F52 #2F3E46),
+     see doc/sla-fork/PLAN.md 2.1. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Icon field. Full bleed with rounded corners, so the .ico has no white box. -->
+  <rect x="0" y="0" width="128" height="128" rx="26" ry="26" fill="#2F3E46"/>
+
+  <!-- Resin drop: a circle for the body, a triangle for the tip. -->
+  <polygon points="64,20 86,48 42,48" fill="#CAD2C5"/>
+  <circle cx="64" cy="58" r="24" fill="#CAD2C5"/>
+
+  <!-- Build plate: the top face catches the light, the body is the mid teal. -->
+  <rect x="16" y="92" width="96" height="20" rx="6" ry="6" fill="#52796F"/>
+  <rect x="16" y="92" width="96" height="8" rx="4" ry="4" fill="#84A98C"/>
+</svg>

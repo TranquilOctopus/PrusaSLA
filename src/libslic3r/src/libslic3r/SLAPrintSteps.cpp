@@ -61,6 +61,7 @@
 #include "libslic3r/SLA/Hollowing.hpp"
 #include "libslic3r/SLA/JobController.hpp"
 #include "libslic3r/SLA/RasterBase.hpp"
+#include "libslic3r/SLA/RasterMemory.hpp"
 #include "libslic3r/SLA/SupportTreeStrategies.hpp"
 #include "libslic3r/SLA/SupportIslands/SampleConfigFactory.hpp"
 #include "libslic3r/SLAPrint.hpp"
@@ -69,6 +70,7 @@
 #include "libslic3r/Format/SL1_SVG.hpp"
 #include "libslic3r/Format/AnycubicSLA.hpp"
 #include "libslic3r/Format/GooSLA.hpp"
+#include "libslic3r/Format/CtbSLA.hpp"
 #include "Slic3r/Biz/Algorithms/BoundingBox.hpp"
 
 using namespace Slic3r::Biz;
@@ -639,10 +641,11 @@ void SLAPrint::Steps::prepare_for_generate_supports(SLAPrintObject &po) {
     std::vector<ExPolygons> slices = po.get_model_slices(); // copy
     const std::vector<float> &heights = po.m_model_height_levels;
 #ifdef USE_ISLAND_GUI_FOR_SETTINGS
-    const PrepareSupportConfig &prepare_cfg = SampleConfigFactory::get_sample_config(po.config().support_head_front_diameter).prepare_config; // use configuration edited by GUI
+    PrepareSupportConfig prepare_cfg = SampleConfigFactory::get_sample_config(po.config().support_head_front_diameter).prepare_config; // use configuration edited by GUI
 #else // USE_ISLAND_GUI_FOR_SETTINGS
-    const PrepareSupportConfig prepare_cfg; // use Default values of the configuration
+    PrepareSupportConfig prepare_cfg; // use Default values of the configuration
 #endif // USE_ISLAND_GUI_FOR_SETTINGS
+    prepare_cfg.overhang_angle_threshold = po.config().get<double>("support_points_overhang_angle");
     ThrowOnCancel cancel = [this]() { throw_if_canceled(); };
 
     // scaling for the sub operations
@@ -1685,6 +1688,8 @@ Sla::FileDataType get_output_type(const SLAPrintConfigView& cfg)
         return Sla::FileDataType::anycubic;
     } else if (archive_format == "goo") { // Elegoo GOO
         return Sla::FileDataType::goo;
+    } else if (archive_format == "ctb") { // Chitubox CTB, unencrypted v2/v3 only
+        return Sla::FileDataType::ctb;
     } else if (archive_format == "pm5") { // Anycubic PM5
         return Sla::FileDataType::pm5;
     } else {
@@ -1737,6 +1742,7 @@ void SLAPrint::Steps::rasterize()
         case FileDataType::pm5: // pm5 layer encoding is unconfirmed; reusing Anycubic rasterizer for now
             rasterizer_ptr = create_anycubic_rasterizer(printer_config); break;
         case FileDataType::goo: rasterizer_ptr = create_goo_rasterizer(printer_config); break;
+        case FileDataType::ctb: rasterizer_ptr = create_ctb_rasterizer(printer_config); break;
         default:
             throw Biz::Slicing::Exception{
                 Biz::Slicing::Error{Biz::Slicing::ErrorCode::UnsupportedOutputFormat}
@@ -1744,17 +1750,33 @@ void SLAPrint::Steps::rasterize()
     }
 
     FilesData files(layers.size());
-    execution::for_each(execution::ex_tbb, size_t(0), layers.size(),
-    [&layers, &files, &cancel_fn, &status_fn, &rasterizer = *rasterizer_ptr](size_t idx) {
+    // Window the layers instead of rasterizing all of them at once. Every layer in flight holds
+    // one full-resolution raw raster, which is display sized: 59 MB on a 11520 x 5120 screen.
+    // create_file() encodes the layer and drops the raster before it returns, so nothing but the
+    // parallelism multiplied the buffers, and the previous single unbounded parallel_for
+    // (granularity 1, no concurrency cap) made that multiplier the core count. The batch makes
+    // the peak a function of the budget in RasterMemory.hpp instead. See
+    // doc/sla-fork/profiling/raster-memory.md.
+    const size_t batch = raw_raster_batch_size(rasterizer_ptr->raw_raster_bytes(),
+                                               layers.size(),
+                                               execution::max_concurrency(execution::ex_tbb));
+    for (size_t first = 0; first < layers.size(); first += batch) {
         if (cancel_fn())
-            return;
+            break;
 
-        const ExPolygons& slice_polygons = layers[idx].transformed_slices();
-        files[idx] = rasterizer.create_file(slice_polygons);
+        const size_t last = std::min(first + batch, layers.size());
+        execution::for_each(execution::ex_tbb, first, last,
+        [&layers, &files, &cancel_fn, &status_fn, &rasterizer = *rasterizer_ptr](size_t idx) {
+            if (cancel_fn())
+                return;
 
-        // Status indication guarded with the spinlock
-        status_fn();
-    });
+            const ExPolygons& slice_polygons = layers[idx].transformed_slices();
+            files[idx] = rasterizer.create_file(slice_polygons);
+
+            // Status indication guarded with the spinlock
+            status_fn();
+        });
+    }
 
     // Send encoded files to frontend for export files for printer    
     m_print->m_on_sla_result(SLAResult{

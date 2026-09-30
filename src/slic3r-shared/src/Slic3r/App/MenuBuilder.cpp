@@ -136,7 +136,7 @@ std::string MenuBuilder::item_name_translated(UniversalMenuItemName menu_item_na
                 case MenuItemName::ReportAnIssue:
                     return Biz::_u8L("Report PrusaSlicer Issue");
                 case MenuItemName::About:
-                    return Biz::_u8L("About PrusaSlicer");
+                    return Biz::_u8L("About ResinSlicer");
                 case MenuItemName::TipOfTheDay:
                     return Biz::_u8L("Show Tip of the Day");
                 case MenuItemName::KeyboardShortcutsDialog:

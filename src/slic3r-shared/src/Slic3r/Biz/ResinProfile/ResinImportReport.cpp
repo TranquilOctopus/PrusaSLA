@@ -30,9 +30,12 @@ nlohmann::ordered_json mapping_entry_json(const MappedField& field)
     nlohmann::ordered_json entry;
     entry["key"]        = field.source_key;
     entry["target_key"] = field.target_key;
-    entry["value"]      = field.value;
-    entry["status"]     = to_string(field.status);
-    entry["note"]       = field.note;
+    // The value as the file had it, next to the value that is written to it, so the two can be read
+    // against each other (a unit conversion, a clamp) without the note.
+    entry["source_value"] = field.source_value;
+    entry["value"]        = field.value;
+    entry["status"]       = to_string(field.status);
+    entry["note"]         = field.note;
     return entry;
 }
 

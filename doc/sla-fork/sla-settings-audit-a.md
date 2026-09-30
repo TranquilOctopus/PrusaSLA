@@ -55,6 +55,10 @@
 | pad_object_connector_penetration | Pad object connector penetration | Print_Pad | keep | Connector penetration |
 | raft_type | Raft type | Print_Pad | keep | Raft type selection |
 | raft_edge_taper | Raft edge taper | Print_Pad | keep | Bevel on the top edge of the raft |
+| raft_infill | Raft infill | Print_Pad | keep | Pattern inside the raft: none, grid, honeycomb |
+| raft_infill_spacing | Raft infill spacing | Print_Pad | keep | Clear size of one infill cell |
+| raft_infill_wall | Raft infill wall | Print_Pad | keep | Material between two cells and the rim |
+| raft_infill_skin | Raft infill skin | Print_Pad | keep | Solid material under the top face |
 | hollowing_enable | Enable hollowing | Print_Hollowing | keep | Hollowing enable |
 | hollowing_min_thickness | Wall thickness | Print_Hollowing | keep | Hollow wall thickness |
 | hollowing_quality | Accuracy | Print_Hollowing | keep | Hollowing accuracy |

@@ -1,7 +1,7 @@
 // M4.13: does every writer describe the anti-aliasing it actually rasterized with?
 //
 // One slice of a 20 mm cube per format, with gamma_correction 0 (thresholded, AA off) and 1
-// (anti-aliased), exported to each of the four rasterized containers. The rasterizer is the same
+// (anti-aliased), exported to each of the five rasterized containers. The rasterizer is the same
 // for all of them (sla::create_raster_grayscale_aa, keyed off gamma_correction), so the interesting
 // part is what each header says and what each encoder did to the 8-bit raster afterwards.
 //
@@ -34,9 +34,10 @@
 
 namespace fs = boost::filesystem;
 
+using Slic3r::Test::Sla::decode_ctb_layer;
 using Slic3r::Test::Sla::decode_goo_layer;
+using Slic3r::Test::Sla::decode_png_layer;
 using Slic3r::Test::Sla::decode_pw0_layer;
-using Slic3r::Test::Sla::decode_sl1_png_layer;
 using Slic3r::Test::Sla::distinct_greys;
 using Slic3r::Test::Sla::on_quantization_grid;
 
@@ -58,6 +59,18 @@ constexpr size_t PM5_LEVELS_OFFSET      = 40; // u32 grey level count
 constexpr size_t ANYCUBIC_AA_OFFSET    = 40; // u32 antialiasing flag
 constexpr size_t GOO_AA_OFFSET         = 188; // int16 big endian
 constexpr size_t GOO_GREY_LEVEL_OFFSET = 190; // int16 big endian
+
+// The .ctb container has no tag or address table, so its anti-aliasing flag sits at a constant
+// offset from the first byte of the file (store_ctb, CtbSLA.cpp): three words of version and
+// padding, the two 25-byte software strings with 7 bytes of padding each, a 20-byte time stamp
+// with 4 bytes of padding, a 32-byte printer name with 4 bytes of padding, then seven words of
+// resolution, mirroring and preview count. What follows is the two fixed-size previews and the
+// 27 print parameters, with the 8-byte price unit as the last of them.
+constexpr size_t CTB_HEADER_BYTES  = 12 + (25 + 7) + (25 + 7) + (20 + 4) + (32 + 4) + 7 * 4;
+constexpr size_t CTB_PREVIEW_WORDS = 6; // the sub-header write_preview puts in front of the pixels
+constexpr size_t CTB_PARAM_WORDS  = 29;
+constexpr size_t CTB_AA_OFFSET    = CTB_HEADER_BYTES + 2 * CTB_PREVIEW_WORDS * 4 + 800 * 600 * 3
+                        + 400 * 300 + CTB_PARAM_WORDS * 4;
 
 std::vector<uint8_t> read_file_binary(const fs::path& path)
 {
@@ -96,9 +109,9 @@ struct ExportedCube {
     std::set<uint8_t>    greys; // its distinct values
 };
 
-/// The (step, top) of the grid the format's encoder can produce. The two RLE encoders quantize
-/// differently: pw0 spreads 16 levels over the whole range in steps of 17, goo steps by 16 and
-/// writes the top nibble as 255. An sl1 layer is a greyscale PNG and carries its own bit depth, so
+/// The (step, top) of the grid the format's encoder can produce. The two RLE encoders that
+/// quantize differ: pw0 spreads 16 levels over the whole range in steps of 17, goo steps by 16 and
+/// writes the top nibble as 255. A .ctb or .sl1 layer keeps the rasterizer's own 8 bits, so
 /// anything goes.
 std::pair<int, int> quantization_grid(FileDataType type)
 {
@@ -106,6 +119,8 @@ std::pair<int, int> quantization_grid(FileDataType type)
     case FileDataType::anycubic:
     case FileDataType::pm5: return {17, 255};
     case FileDataType::goo: return {16, 255};
+    case FileDataType::ctb:
+    case FileDataType::sl1_png:
     default: return {1, 255};
     }
 }
@@ -162,8 +177,10 @@ ExportedCube export_cube(const std::string& format, double gamma_correction)
         out.layer = decode_goo_layer(middle, LAYER_PIXELS);
     } else if (out.type == FileDataType::anycubic || out.type == FileDataType::pm5) {
         out.layer = decode_pw0_layer(middle, LAYER_PIXELS);
+    } else if (out.type == FileDataType::ctb) {
+        out.layer = decode_ctb_layer(middle, LAYER_PIXELS);
     } else {
-        out.layer = decode_sl1_png_layer(middle);
+        out.layer = decode_png_layer(middle).pixels;
     }
     out.greys = distinct_greys(out.layer);
     return out;
@@ -198,7 +215,7 @@ size_t header_body(const ExportedCube& cube)
 TEST_CASE("A thresholded layer is binary and an anti-aliased one is not", "[export][sla][aa]")
 {
     const std::string format = GENERATE(std::string("sl1"), std::string("pwmx"), std::string("pm5"),
-                                        std::string("goo"));
+                                        std::string("goo"), std::string("ctb"));
     const bool        aa_on = GENERATE(false, true);
     CAPTURE(format, aa_on);
 
@@ -273,6 +290,23 @@ TEST_CASE("The goo header level count is smaller than what the encoder writes",
     require_whole_layer(thresholded);
     CHECK(read_be16(thresholded.bytes, GOO_AA_OFFSET) == 1);
     CHECK(read_be16(thresholded.bytes, GOO_GREY_LEVEL_OFFSET) == 4);
+    require_binary(thresholded.greys);
+}
+
+TEST_CASE("The ctb antialiasing flag does not follow gamma_correction either", "[export][sla][aa][ctb]")
+{
+    // store_ctb writes the flag as 1 unconditionally (CtbSLA.cpp:320), the same finding as .pwmx
+    // above, and there is no level-count field next to it to check the encoder against: the .ctb
+    // layer image is a run-length encoding of the 8-bit raster as it is (CtbSLARasterEncoder), so
+    // the pixels below are the only statement the file makes about the levels.
+    const ExportedCube aa = export_cube("ctb", 1.0);
+    require_whole_layer(aa);
+    REQUIRE(read_le32(aa.bytes, CTB_AA_OFFSET) == 1u);
+    REQUIRE(aa.greys.size() > 2);
+
+    const ExportedCube thresholded = export_cube("ctb", 0.0);
+    require_whole_layer(thresholded);
+    CHECK(read_le32(thresholded.bytes, CTB_AA_OFFSET) == 1u);
     require_binary(thresholded.greys);
 }
 

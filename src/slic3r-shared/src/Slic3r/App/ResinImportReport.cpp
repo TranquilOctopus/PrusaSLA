@@ -43,6 +43,25 @@ std::string join_parts(const std::vector<std::string>& parts)
     return out;
 }
 
+/// @brief A value and the unit it is in, "3.5 s". A value with no unit is the value alone, and a
+/// unit without a value is left out: there is nothing to attach it to.
+std::string value_with_unit(const std::string& value, const std::string& unit)
+{
+    if (unit.empty() || value.empty()) {
+        return value;
+    }
+    return value + " " + unit;
+}
+
+/// @brief "key = value", or the key alone when there is no value to put behind it.
+std::string assignment(const std::string& key, const std::string& value, const std::string& unit)
+{
+    if (value.empty()) {
+        return key;
+    }
+    return key + " = " + value_with_unit(value, unit);
+}
+
 } // namespace
 
 MappingBadge badge_of(MappingStatus status)
@@ -87,14 +106,30 @@ std::vector<MappingRow> build_mapping_rows(const ResinImportResult& result)
     rows.reserve(result.mapping.report.size());
     for (const MappedField& field : result.mapping.report) {
         MappingRow row;
-        row.source_key = field.source_key;
-        row.target_key = field.target_key;
-        row.value      = field.value;
-        row.badge      = badge_of(field.status);
-        row.note       = field.note;
+        row.source_key   = field.source_key;
+        row.source_value = field.source_value;
+        row.source_unit  = field.source_unit;
+        row.target_key   = field.target_key;
+        row.value        = field.value;
+        row.target_unit  = field.target_unit;
+        row.badge        = badge_of(field.status);
+        row.note         = field.note;
         rows.push_back(std::move(row));
     }
     return rows;
+}
+
+std::string source_as(const MappingRow& row)
+{
+    return assignment(row.source_key, row.source_value, row.source_unit);
+}
+
+std::string target_as(const MappingRow& row)
+{
+    if (!row.writes_value()) {
+        return {};
+    }
+    return assignment(row.target_key, row.value, row.target_unit);
 }
 
 std::size_t BadgeCounts::total() const

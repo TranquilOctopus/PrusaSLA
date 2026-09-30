@@ -14,6 +14,10 @@
 #include "Slic3r/Biz/Algorithms/ExPolygon.hpp"
 #include "Slic3r/Biz/Algorithms/Point.hpp"
 
+#include <cmath>
+#include <map>
+#include <utility>
+
 using namespace Slic3r;
 using namespace Slic3r::Biz;
 using namespace Slic3r::sla;
@@ -251,6 +255,63 @@ NearPoints create_near_points(
 }
 
 /// <summary>
+/// Keep the minimal distance between the overhang support points of a whole run. The points are
+/// spread over the model, so they are collected in a grid of cells as big as the distance instead
+/// of being searched in the layer part that is being sampled. A distance of zero (the default)
+/// turns the filter off, it then never refuses a point.
+/// </summary>
+class PointSpacing
+{
+    /// The points created in one cell of the grid.
+    using Cell = std::vector<Point>;
+
+    coord_t m_cell_size = 0; // [in scaled mm], zero when the filter is off
+    double  m_min_distance_sq = 0.; // [in squared scaled mm]
+    std::map<std::pair<coord_t, coord_t>, Cell> m_cells;
+
+    /// Index of the cell of the given coordinate, also for the negative ones.
+    coord_t cell_index(coord_t coor) const {
+        return static_cast<coord_t>(std::floor(coor / static_cast<double>(m_cell_size)));
+    }
+
+public:
+    explicit PointSpacing(double min_distance_in_mm)
+    {
+        if (min_distance_in_mm <= 0.)
+            return; // no limit
+        m_min_distance_sq = sqr(scale_(min_distance_in_mm));
+        m_cell_size = static_cast<coord_t>(std::ceil(std::sqrt(m_min_distance_sq)));
+    }
+
+    /// True when the point is nearer to an already created point than the minimal distance.
+    bool too_close(const Point &point) const
+    {
+        if (m_cell_size == 0)
+            return false; // no limit
+        const coord_t cell_x = cell_index(point.x());
+        const coord_t cell_y = cell_index(point.y());
+        for (long dx = -1; dx <= 1; ++dx)
+            for (long dy = -1; dy <= 1; ++dy) {
+                const auto it = m_cells.find({cell_x + dx, cell_y + dy});
+                if (it == m_cells.end())
+                    continue; // nothing created around
+                for (const Point &created : it->second)
+                    if ((created - point).cast<double>().squaredNorm() < m_min_distance_sq)
+                        return true;
+            }
+        return false;
+    }
+
+    /// Remember the point, so that the points created later on keep the distance from it.
+    void add(const Point &point)
+    {
+        if (m_cell_size == 0)
+            return;
+        m_cells[{cell_index(point.x()), cell_index(point.y())}].push_back(point);
+    }
+};
+
+/// <summary>
 /// Add support point to near_points when it is neccessary
 /// </summary>
 /// <param name="part">Current part - keep samples</param>
@@ -258,12 +319,14 @@ NearPoints create_near_points(
 /// <param name="near_points">Keep previous sampled suppport points</param>
 /// <param name="part_z">current z coordinate of part</param>
 /// <param name="maximal_radius">Max distance to seach support for sample</param>
+/// <param name="spacing">Minimal distance between the created points</param>
 void support_part_overhangs(
     const LayerPart &part,
     const SupportPointGeneratorConfig &config,
     NearPoints &near_points,
     float part_z,
-    coord_t maximal_radius
+    coord_t maximal_radius,
+    PointSpacing &spacing
 ) {
     NearPoints::CheckFnc is_supported = []
     (const LayerSupportPoint &support_point, const Point &p) -> bool {
@@ -278,24 +341,30 @@ void support_part_overhangs(
     };
 
     for (const Point &p : part.samples) {
-        if (!near_points.exist_true_in_radius(p, maximal_radius, is_supported)) {
-            // not supported sample, soo create new support point
-            near_points.add(LayerSupportPoint{
-                SupportPoint{
-                    Vec3f{unscale<float>(p.x()), unscale<float>(p.y()), part_z},
-                    /* head_front_radius */ config.head_diameter / 2,
-                    SupportPointType::slope
-                },
-                /* position_on_layer */ p,
-                /* radius_curve_index */ 0,
-                /* current_radius */ static_cast<coord_t>(scale_(config.support_curve.front().x()))
-                });
-        }    
+        if (near_points.exist_true_in_radius(p, maximal_radius, is_supported))
+            continue; // supported by a point of a lower layer
+        if (spacing.too_close(p))
+            continue; // nearer to another overhang point than allowed
+
+        // not supported sample, soo create new support point
+        near_points.add(LayerSupportPoint{
+            SupportPoint{
+                Vec3f{unscale<float>(p.x()), unscale<float>(p.y()), part_z},
+                /* head_front_radius */ config.head_diameter / 2,
+
+                SupportPointType::slope
+            },
+            /* position_on_layer */ p,
+            /* radius_curve_index */ 0,
+            /* current_radius */ static_cast<coord_t>(scale_(config.support_curve.front().x()))
+            });
+        spacing.add(p);
     }
 }
 
 /// <summary>
 /// Sample part as Island
+
 /// Result store to grid
 /// </summary>
 /// <param name="part">Island to support</param>
@@ -488,6 +557,41 @@ Points sample_overhangs(const LayerPart& part, double dist2) {
         }
     }
     return samples;
+}
+
+/// <summary>
+/// Keep only the overhang samples of a surface that is not steeper than the given angle from
+/// horizontal. The horizontal run of the surface is the distance of the sample from the outline
+/// of the layer below, the vertical run is the distance between the two layers, so the steeper
+/// the surface is, the shorter that run gets. A wall (no horizontal run at all) is 90 degrees.
+/// </summary>
+/// <param name="part">Part with the sampled overhangs</param>
+/// <param name="layer_height">Vertical run between the part and the layer below</param>
+/// <param name="max_angle">Maximal angle of the surface from horizontal [in degrees]</param>
+/// <returns>Samples of the surfaces that are flat enough to be supported</returns>
+Points filter_steep_overhangs(
+    const LayerPart &part, double layer_height, double max_angle
+) {
+    const ExPolygons below_shapes = get_shapes(part.prev_parts);
+    Linesf lines = Algorithms::ExPolygon::to_linesf(below_shapes);
+    AABBTreeIndirect::Tree<2, double> tree =
+        AABBTreeLines::build_aabb_tree_over_indexed_lines(lines);
+
+    const double max_angle_tangent = std::tan(max_angle * M_PI / 180.);
+    Points result;
+    result.reserve(part.samples.size());
+    for (const Point &p : part.samples) {
+        size_t line_idx = std::numeric_limits<size_t>::max();
+        Vec2d hit_point;
+        const double distance_sq = AABBTreeLines::squared_distance_to_indexed_lines(
+            lines, tree, p.cast<double>(), line_idx, hit_point);
+        // run * tan(angle) < height is the same as atan2(height, run) > angle
+        const double run = unscale<double>(std::sqrt(distance_sq));
+        if (run * max_angle_tangent < layer_height)
+            continue; // steeper than allowed
+        result.push_back(p);
+    }
+    return result;
 }
 
 coord_t calc_influence_radius(float z_distance, const SupportPointGeneratorConfig &config) { 
@@ -1045,11 +1149,15 @@ SupportPointGeneratorData Slic3r::sla::prepare_generator_data(
     // Sample overhangs part of island
     double sample_distance_in_um = scale_(config.discretize_overhang_step);
     double sample_distance_in_um2 = sample_distance_in_um * sample_distance_in_um;
+    // Surfaces steeper than the configured angle from horizontal get no sample. The default
+    // (90 degrees, a wall) is not steeper than anything, so it keeps every overhang.
+    const bool drop_steep_overhangs = config.overhang_angle_threshold < 90.;
     execution::for_each(execution::ex_tbb, size_t(1), result.layers.size(),
-    [&result, sample_distance_in_um2, throw_on_cancel](size_t layer_id) {
+    [&result, &heights, &config, sample_distance_in_um2, drop_steep_overhangs, throw_on_cancel](size_t layer_id) {
         if ((layer_id % 32) == 0)
             throw_on_cancel();
 
+        const double layer_height = static_cast<double>(heights[layer_id] - heights[layer_id - 1]);
         LayerParts &parts = result.layers[layer_id].parts;
         for (auto it_part = parts.begin(); it_part < parts.end(); ++it_part) {
             if (it_part->prev_parts.empty())
@@ -1060,6 +1168,9 @@ SupportPointGeneratorData Slic3r::sla::prepare_generator_data(
             // information Get inspiration at
             // https://github.com/Prusa-Development/PrusaSlicerPrivate/blob/e00c46f070ec3d6fc325640b0dd10511f8acf5f7/src/libslic3r/PerimeterGenerator.cpp#L399
             it_part->samples = sample_overhangs(*it_part, sample_distance_in_um2);
+            if (drop_steep_overhangs)
+                it_part->samples = filter_steep_overhangs(
+                    *it_part, layer_height, config.overhang_angle_threshold);
         }
     }, 8 /* gransize */);
 
@@ -1500,6 +1611,9 @@ LayerSupportPoints generate_support_points(
     // Storage for support points used by grid
     LayerSupportPoints result;
 
+    // Minimal distance between the created overhang points, off when it is not positive
+    PointSpacing spacing(config.minimal_point_distance);
+
     // Index into data.permanent_supports
     size_t permanent_index = 0;
     PermanentSupports permanent_supports =
@@ -1545,7 +1659,7 @@ LayerSupportPoints generate_support_points(
                 near_points, permanent_supports, permanent_index, layer.print_z, layer_id, part_id,
                 config
             );
-            support_part_overhangs(part, config, near_points, layer.print_z, maximal_radius);
+            support_part_overhangs(part, config, near_points, layer.print_z, maximal_radius, spacing);
             grids.push_back(std::move(near_points));
         }
         prev_grids = std::move(grids);
