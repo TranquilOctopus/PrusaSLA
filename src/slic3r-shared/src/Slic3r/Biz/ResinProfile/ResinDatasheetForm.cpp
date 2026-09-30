@@ -1,6 +1,7 @@
 #include "Slic3r/Biz/ResinProfile/ResinDatasheetForm.hpp"
 
 #include "Slic3r/Biz/I18N/I18N.hpp"
+#include "Slic3r/Domain/ConfigDefsSLA.hpp"
 
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/lexical_cast.hpp>
@@ -18,7 +19,9 @@ namespace Slic3r::Biz::ResinProfile {
 namespace {
 
 /// @brief One field of the form and what it is allowed to hold. The key is the one of the mapping
-/// table of the M3.6 mapper, so the review table names the field the way the datasheet does.
+/// table of the M3.6 mapper, so the review table names the field the way the datasheet does, and
+/// the option is the resin setting the mapping table writes that key to, whose own <min, max> is
+/// the range the value is checked against.
 struct FieldRule
 {
     const char* key;
@@ -34,79 +37,116 @@ struct FieldRule
     /// and a bottle that came free are, an exposure of zero seconds and a bottle of no resin are
     /// not, and neither of those is a number the mapper can write.
     bool allow_zero;
+    /// The `sla_material_settings` key the value ends up in.
+    const char* option;
+    /// How many units of @ref option one unit of the form is worth: the speeds are asked in mm/min
+    /// and the setting holds mm/s, and everything else is one.
+    double to_option_unit;
 };
+
+/// The unit the mapping table converts a mm/min speed from. The same number the mapper divides by,
+/// spelled here rather than included from the mapper so the form does not have to reach into it.
+constexpr double MM_PER_MIN_IN_MM_PER_S = 60.;
 
 const std::vector<FieldRule>& field_rules()
 {
     static const std::vector<FieldRule> rules{
-        {.key        = "layerHeight",
-         .label      = "Layer height",
-         .value      = &ResinDatasheet::layer_height_mm,
-         .required   = true,
-         .whole      = false,
-         .allow_zero = false},
-        {.key        = "normalExposureTime",
-         .label      = "Normal exposure time",
-         .value      = &ResinDatasheet::normal_exposure_s,
-         .required   = true,
-         .whole      = false,
-         .allow_zero = false},
-        {.key        = "bottomLayerExposureTime",
-         .label      = "Bottom layer exposure time",
-         .value      = &ResinDatasheet::bottom_exposure_s,
-         .required   = true,
-         .whole      = false,
-         .allow_zero = false},
-        {.key        = "bottomLayerCount",
-         .label      = "Number of bottom layers",
-         .value      = &ResinDatasheet::bottom_layer_count,
-         .required   = true,
-         .whole      = true,
-         .allow_zero = false},
-        {.key        = "lightOffTime",
-         .label      = "Light-off delay",
-         .value      = &ResinDatasheet::light_off_delay_s,
-         .required   = false,
-         .whole      = false,
-         .allow_zero = true},
-        {.key        = "resinPrice",
-         .label      = "Price of a bottle",
-         .value      = &ResinDatasheet::price_per_bottle,
-         .required   = false,
-         .whole      = false,
-         .allow_zero = true},
-        {.key        = "bottleVolume",
-         .label      = "Bottle volume",
-         .value      = &ResinDatasheet::bottle_volume_ml,
-         .required   = false,
-         .whole      = false,
-         .allow_zero = false},
+        {.key            = "layerHeight",
+         .label          = "Layer height",
+         .value          = &ResinDatasheet::layer_height_mm,
+         .required       = true,
+         .whole          = false,
+         .allow_zero     = false,
+         .option         = "resin_layer_height",
+         .to_option_unit = 1.},
+        {.key            = "normalExposureTime",
+         .label          = "Normal exposure time",
+         .value          = &ResinDatasheet::normal_exposure_s,
+         .required       = true,
+         .whole          = false,
+         .allow_zero     = false,
+         .option         = "exposure_time",
+         .to_option_unit = 1.},
+        {.key            = "bottomLayerExposureTime",
+         .label          = "Bottom layer exposure time",
+         .value          = &ResinDatasheet::bottom_exposure_s,
+         .required       = true,
+         .whole          = false,
+         .allow_zero     = false,
+         .option         = "initial_exposure_time",
+         .to_option_unit = 1.},
+        // A tilt printer takes this count as the number of layers the exposure is faded over and
+        // clamps it into its own range, which the mapper does and the note of that row says; the
+        // option checked here is the one a printer that lifts the build plate keeps the count in.
+        {.key            = "bottomLayerCount",
+         .label          = "Number of bottom layers",
+         .value          = &ResinDatasheet::bottom_layer_count,
+         .required       = true,
+         .whole          = true,
+         .allow_zero     = false,
+         .option         = "bottom_layer_count",
+         .to_option_unit = 1.},
+        {.key            = "lightOffTime",
+         .label          = "Light-off delay",
+         .value          = &ResinDatasheet::light_off_delay_s,
+         .required       = false,
+         .whole          = false,
+         .allow_zero     = true,
+         .option         = "delay_before_exposure",
+         .to_option_unit = 1.},
+        {.key            = "resinPrice",
+         .label          = "Price of a bottle",
+         .value          = &ResinDatasheet::price_per_bottle,
+         .required       = false,
+         .whole          = false,
+         .allow_zero     = true,
+         .option         = "bottle_cost",
+         .to_option_unit = 1.},
+        // The mapping table only reads a bottle volume to turn a per-litre price into a bottle
+        // cost, and writes none of its own; the option is the one that holds a bottle's size, and
+        // it is the range a bottle of that size has to be in either way.
+        {.key            = "bottleVolume",
+         .label          = "Bottle volume",
+         .value          = &ResinDatasheet::bottle_volume_ml,
+         .required       = false,
+         .whole          = false,
+         .allow_zero     = false,
+         .option         = "bottle_volume",
+         .to_option_unit = 1.},
         // The layer separation of a printer that lifts the build plate, under the keys the .cfg of
         // the foreign slicer states them with, so the mapper maps them as it maps a file's.
-        {.key        = "normalLayerLiftHeight",
-         .label      = "Lift distance",
-         .value      = &ResinDatasheet::lift_distance_mm,
-         .required   = false,
-         .whole      = false,
-         .allow_zero = false},
-        {.key        = "normalLayerLiftSpeed",
-         .label      = "Lift speed",
-         .value      = &ResinDatasheet::lift_speed_mm_min,
-         .required   = false,
-         .whole      = false,
-         .allow_zero = false},
-        {.key        = "normalDropSpeed",
-         .label      = "Retract speed",
-         .value      = &ResinDatasheet::retract_speed_mm_min,
-         .required   = false,
-         .whole      = false,
-         .allow_zero = false},
-        {.key        = "transitionLayers",
-         .label      = "Number of transition layers",
-         .value      = &ResinDatasheet::transition_layer_count,
-         .required   = false,
-         .whole      = true,
-         .allow_zero = false},
+        {.key            = "normalLayerLiftHeight",
+         .label          = "Lift distance",
+         .value          = &ResinDatasheet::lift_distance_mm,
+         .required       = false,
+         .whole          = false,
+         .allow_zero     = false,
+         .option         = "lift_height",
+         .to_option_unit = 1.},
+        {.key            = "normalLayerLiftSpeed",
+         .label          = "Lift speed",
+         .value          = &ResinDatasheet::lift_speed_mm_min,
+         .required       = false,
+         .whole          = false,
+         .allow_zero     = false,
+         .option         = "lift_speed",
+         .to_option_unit = 1. / MM_PER_MIN_IN_MM_PER_S},
+        {.key            = "normalDropSpeed",
+         .label          = "Retract speed",
+         .value          = &ResinDatasheet::retract_speed_mm_min,
+         .required       = false,
+         .whole          = false,
+         .allow_zero     = false,
+         .option         = "retract_speed",
+         .to_option_unit = 1. / MM_PER_MIN_IN_MM_PER_S},
+        {.key            = "transitionLayers",
+         .label          = "Number of transition layers",
+         .value          = &ResinDatasheet::transition_layer_count,
+         .required       = false,
+         .whole          = true,
+         .allow_zero     = false,
+         .option         = "resin_faded_layers",
+         .to_option_unit = 1.},
     };
     return rules;
 }
@@ -164,6 +204,60 @@ std::string format_number(double value)
     return fmt::format("{:g}", value);
 }
 
+/// @brief The definition of @p name, or nothing when this build has no such option. The rules name
+/// the option each field is written to, and a name that is not there is a rule that checks nothing:
+/// the test that walks every field against the defs is what notices.
+const Domain::ConfigItemDef* option_def(const char* name)
+{
+    for (const Domain::ConfigItemDef& def : Domain::get_defs_sla().defs())
+        if (def.name == name)
+            return &def;
+    return nullptr;
+}
+
+/// @brief A limit of an option the way a message names it: "50 ml", or the number alone when the
+/// option carries no unit. The unit is the option's own text, already translated by the config.
+std::string limit_text(double value, const std::string& unit)
+{
+    const std::string number = format_number(value);
+    return unit.empty() ? number : number + " " + unit;
+}
+
+/// @brief The message for a value that is a number, but not one the option @p rule is written to
+/// accepts, empty when it is one it does. It names the field the way the form does and the limit
+/// that was broken, so the user knows which number to change and by how much; the unit is the
+/// option's own text and is already translated by the config.
+std::string range_message(const FieldRule& rule, double number)
+{
+    const Domain::ConfigItemDef* def = option_def(rule.option);
+    // An option this build does not have, or one that declares no limit, accepts anything.
+    if (!def)
+        return {};
+    const double in_option_unit = number * rule.to_option_unit;
+    const std::string unit      = def->units.empty() ? std::string{} : def->units.front();
+    // The value is below the minimum or above the maximum, never both, so asking about the minimum
+    // first tells the two apart.
+    if (def->min && in_option_unit < *def->min) {
+        // TRN: A number of the "New resin from datasheet" form is below what the resin setting
+        // accepts. {0} is the name of the field, {1} the smallest value the setting takes.
+        return fmt::format(
+            fmt::runtime(_u8L("{0} must be {1} or more.")),
+            _u8L(rule.label),
+            limit_text(*def->min, unit)
+        );
+    }
+    if (def->max && in_option_unit > *def->max) {
+        // TRN: A number of the "New resin from datasheet" form is above what the resin setting
+        // accepts. {0} is the name of the field, {1} the largest value the setting takes.
+        return fmt::format(
+            fmt::runtime(_u8L("{0} must be {1} or less.")),
+            _u8L(rule.label),
+            limit_text(*def->max, unit)
+        );
+    }
+    return {};
+}
+
 /// @brief @p value under @p key, or nothing at all when it is not a number. A field that is empty
 /// is a setting the datasheet does not state, and a setting that is not stated is left out of the
 /// profile rather than written as a zero.
@@ -175,10 +269,6 @@ void put_number(ForeignResinProfile& profile, const char* key, const std::string
     if (parse_number(text))
         profile.raw_values[key] = text;
 }
-
-// The bottle the mapper assumes when a profile states no bottle size, the same 1 litre bottle it
-// assumes for a Chitubox price per litre.
-constexpr double ASSUMED_BOTTLE_VOLUME_ML = 1000.;
 
 // The two keys the price block writes, which go in together rather than one field at a time.
 constexpr std::string_view PRICE_KEY{"resinPrice"};
@@ -206,9 +296,15 @@ std::string validate_datasheet(const ResinDatasheet& datasheet)
             return value_message(rule);
         if (rule.whole && *number != std::round(*number))
             return value_message(rule);
-        const bool out_of_range = rule.allow_zero ? *number < 0. : *number <= 0.;
-        if (out_of_range)
+        const bool not_a_number_the_field_takes = rule.allow_zero ? *number < 0. : *number <= 0.;
+        if (not_a_number_the_field_takes)
             return value_message(rule);
+        // A number can be a perfectly good number and still be one the setting it is written to
+        // does not take: a 45 s light-off delay, or a bottle of 10 ml. Refusing it here is what
+        // keeps such a datasheet from being written and shown in the review table.
+        const std::string out_of_the_setting_range = range_message(rule, *number);
+        if (!out_of_the_setting_range.empty())
+            return out_of_the_setting_range;
     }
 
     return {};
@@ -240,23 +336,20 @@ ForeignResinProfile datasheet_to_profile(const ResinDatasheet& datasheet)
         put_number(profile, rule.key, datasheet.*(rule.value));
     }
 
-    // The mapping table only turns a per-litre price into a bottle cost, and a datasheet states a
-    // price per bottle. So the price is written as the per-litre price of that same bottle:
-    // bottle_cost = price x volume / 1000, and with the price written as the per-litre price of the
-    // bottle the volume came in, that is the price of the bottle again. Both numbers are in the
-    // mapping report, so the arithmetic stays auditable in the review table.
-    const std::optional<double> price = parse_number(trim(datasheet.price_per_bottle));
+    // A datasheet states a price per bottle, which is what bottle_cost holds, so the price goes in as
+    // it is and the unit says so. The mapping table writes it unchanged and puts the per-litre
+    // equivalent of that bottle in the note of the row, so the review table shows the number that
+    // was typed instead of one this form had to invent, and the conversion is still auditable.
+    const std::optional<double> price  = parse_number(trim(datasheet.price_per_bottle));
     const std::optional<double> volume = parse_number(trim(datasheet.bottle_volume_ml));
-    // A datasheet that states no bottle size gets the mapper's own assumption, which is what it
-    // would assume for a file that states none. A bottle of no resin is not a bottle, so it is never
-    // turned into a per-litre price either.
-    const double volume_ml = volume && *volume > 0. ? *volume : ASSUMED_BOTTLE_VOLUME_ML;
     if (price) {
-        profile.raw_values[std::string(PRICE_KEY)] = format_number(*price * 1000. / volume_ml);
-        // The unit says how the price is counted, and it is what tells the mapping table that this
-        // is a price it can turn into a bottle cost at all.
-        profile.raw_values["resinUnit"] = "/L";
+        profile.raw_values[std::string(PRICE_KEY)] = format_number(*price);
+        // The unit is what tells the mapping table how the price is counted, and a per-bottle price
+        // is one it can use as it is.
+        profile.raw_values["resinUnit"] = "/bottle";
     }
+    // The bottle size does not change the price any more, but it is what the per-litre equivalent in
+    // the note is counted for, and it is a setting a resin preset holds of its own.
     if (volume && *volume > 0.)
         profile.raw_values[std::string(VOLUME_KEY)] = format_number(*volume);
 

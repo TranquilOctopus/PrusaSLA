@@ -3,9 +3,13 @@
 #include "Slic3r/Biz/ResinProfile/ResinDatasheetForm.hpp"
 #include "Slic3r/Biz/ResinProfile/ResinProfileImportInteractor.hpp"
 #include "Slic3r/Biz/ResinProfile/ResinProfileImportTestFixture.hpp"
+#include "Slic3r/Biz/ResinProfile/ResinProfileMapper.hpp"
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
 
+#include <fmt/format.h>
+
 #include <algorithm>
+#include <map>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -23,6 +27,156 @@ struct NamedField
     const char* name;
     std::string ResinDatasheet::* value;
 };
+
+/// @brief A number field of the form, the key the mapping table reads it under, and the resin
+/// setting it is written to. The mirror of the rules in ResinDatasheetForm.cpp, so a rule that
+/// names a setting that does not exist, or not the one the mapping table writes, is a failing case.
+struct OptionField
+{
+    const char* label;
+    const char* key;
+    const char* option;
+    /// How many units of @ref option one unit of the form is worth: the speeds are asked in mm/min
+    /// and the setting holds mm/s, everything else is one.
+    double to_option_unit;
+    /// Whether the mapping table writes the setting, or only reads the value with another one. A
+    /// bottle volume is the latter: it turns a per-litre price into a bottle cost and is written
+    /// nowhere of its own.
+    bool written;
+    /// A key the mapping table reads together with @ref key, where the value only means something
+    /// next to it: a price is only a bottle cost when the unit says it is a per-litre price.
+    const char* companion_key;
+    const char* companion_value;
+    std::string ResinDatasheet::* value;
+};
+
+/// @brief Every number field of the form, with the setting the mapping table writes it to.
+const std::vector<OptionField>& option_fields()
+{
+    static const std::vector<OptionField> fields{
+        {"Layer height",
+         "layerHeight",
+         "resin_layer_height",
+         1.,
+         true,
+         nullptr,
+         nullptr,
+         &ResinDatasheet::layer_height_mm},
+        {"Normal exposure time",
+         "normalExposureTime",
+         "exposure_time",
+         1.,
+         true,
+         nullptr,
+         nullptr,
+         &ResinDatasheet::normal_exposure_s},
+        {"Bottom layer exposure time",
+         "bottomLayerExposureTime",
+         "initial_exposure_time",
+         1.,
+         true,
+         nullptr,
+         nullptr,
+         &ResinDatasheet::bottom_exposure_s},
+        {"Number of bottom layers",
+         "bottomLayerCount",
+         "bottom_layer_count",
+         1.,
+         true,
+         nullptr,
+         nullptr,
+         &ResinDatasheet::bottom_layer_count},
+        {"Light-off delay",
+         "lightOffTime",
+         "delay_before_exposure",
+         1.,
+         true,
+         nullptr,
+         nullptr,
+         &ResinDatasheet::light_off_delay_s},
+        // A price is a bottle cost only when the unit says how it is counted, so the unit comes
+        // along: without it the mapping table writes nothing and the row has no target. The one the
+        // form writes is "/bottle" (M3.11c), a per-litre one lands in the same setting.
+        {"Price of a bottle",
+         "resinPrice",
+         "bottle_cost",
+         1.,
+         true,
+         "resinUnit",
+         "/bottle",
+         &ResinDatasheet::price_per_bottle},
+        {"Bottle volume",
+         "bottleVolume",
+         "bottle_volume",
+         1.,
+         false,
+         nullptr,
+         nullptr,
+         &ResinDatasheet::bottle_volume_ml},
+        {"Lift distance",
+         "normalLayerLiftHeight",
+         "lift_height",
+         1.,
+         true,
+         nullptr,
+         nullptr,
+         &ResinDatasheet::lift_distance_mm},
+        // The speeds are asked in mm/min and written in mm/s, so the limit of the setting is
+        // compared against the converted number, not against what was typed.
+        {"Lift speed",
+         "normalLayerLiftSpeed",
+         "lift_speed",
+         1. / 60.,
+         true,
+         nullptr,
+         nullptr,
+         &ResinDatasheet::lift_speed_mm_min},
+        {"Retract speed",
+         "normalDropSpeed",
+         "retract_speed",
+         1. / 60.,
+         true,
+         nullptr,
+         nullptr,
+         &ResinDatasheet::retract_speed_mm_min},
+        {"Number of transition layers",
+         "transitionLayers",
+         "resin_faded_layers",
+         1.,
+         true,
+         nullptr,
+         nullptr,
+         &ResinDatasheet::transition_layer_count},
+    };
+    return fields;
+}
+
+/// @brief The definition of a resin setting of this build, so a case reads the limits out of the
+/// config rather than repeating numbers that ConfigDefsSLA.cpp could change. Nothing when this build
+/// has no such setting, which is what the test that walks the fields reports.
+const Domain::ConfigItemDef* option_of(const char* name)
+{
+    for (const Domain::ConfigItemDef& def : Domain::get_defs_sla().defs())
+        if (def.name == name)
+            return &def;
+    return nullptr;
+}
+
+/// @brief A profile written by hand from a key/value map, the way a reader would hand it over.
+ForeignResinProfile profile_of(std::map<std::string, std::string> values)
+{
+    ForeignResinProfile profile;
+    profile.source_format = "chitubox-cfg";
+    profile.raw_values    = std::move(values);
+    return profile;
+}
+
+/// @brief A number the way the config and the message spell it: six significant digits, no trailing
+/// zeros.
+std::string as_number(double value)
+{
+    return fmt::format("{:g}", value);
+}
 
 /// @brief The four settings of the form a datasheet cannot leave out.
 const std::vector<NamedField>& required_fields()
@@ -224,6 +378,119 @@ TEST_CASE(
     }
 }
 
+TEST_CASE(
+    "every field of the form is written to a resin setting that declares a range",
+    "[resin_datasheet]"
+)
+{
+    // A rule that named a setting this build does not have would check nothing, and a value outside
+    // what the setting takes would then be written and shown in the review table. Walking the fields
+    // is what keeps that from being silent.
+    for (const OptionField& field : option_fields()) {
+        INFO("field " << field.label);
+        const Domain::ConfigItemDef* def = option_of(field.option);
+        REQUIRE(def != nullptr);
+        // A setting of a resin preset, never a printer or a print one.
+        CHECK(Domain::get_location_name(def->location) == "sla_material_settings");
+        // A setting with no minimum would be a field nothing checks on the low side.
+        CHECK(def->min.has_value());
+    }
+}
+
+TEST_CASE(
+    "every field of the form is checked against the setting the mapping table writes it to",
+    "[resin_datasheet][mapper]"
+)
+{
+    // The limits are only the right ones if they are read off the setting the value really lands
+    // in, so the mapping table is asked where each key of the form goes and has to agree with what
+    // the rule says. The mapping runs for a generic MSLA printer, which is the one that takes the
+    // layer separation; a tilt printer writes none of those, which its own rows say.
+    for (const OptionField& field : option_fields()) {
+        INFO("field " << field.label);
+        // A value the setting takes, so the row is written rather than refused for its content, and
+        // the speeds are the other way round: one unit of the setting is what the form asks in.
+        std::map<std::string, std::string> values{{field.key, as_number(1. / field.to_option_unit)}};
+        if (field.companion_key != nullptr)
+            values[field.companion_key] = field.companion_value;
+
+        const MappingResult mapping =
+            map_resin_profile(profile_of(std::move(values)), TargetPrinterClass::GenericMsla);
+
+        const MappedField* row = nullptr;
+        for (const MappedField& candidate : mapping.report)
+            if (candidate.source_key == field.key)
+                row = &candidate;
+        REQUIRE(row != nullptr);
+
+        if (field.written) {
+            CHECK(row->target_key == field.option);
+        } else {
+            // A bottle volume is read with the price and written nowhere of its own, so the setting
+            // it is checked against is the one a resin preset holds a bottle's size in rather than
+            // the one its row names.
+            CHECK(row->target_key.empty());
+        }
+    }
+}
+
+TEST_CASE(
+    "validate_datasheet refuses a number the setting it is written to does not take",
+    "[resin_datasheet]"
+)
+{
+    // The form used to ask only whether a number was a positive number, so a datasheet outside the
+    // range of its setting was written and shown. The range comes from the option itself, and the
+    // message names the field and the limit, so the user knows which number to change.
+    for (const OptionField& field : option_fields()) {
+        const Domain::ConfigItemDef* def = option_of(field.option);
+        REQUIRE(def != nullptr);
+        if (!def->max)
+            continue;
+
+        INFO("field " << field.label);
+        // The limit of the setting is in the unit the setting holds, so the value that breaks it is
+        // that limit typed in the unit of the form.
+        const double typed_max   = *def->max / field.to_option_unit;
+        const std::string limit  = as_number(*def->max);
+        const std::string unit   = def->units.empty() ? std::string{} : def->units.front();
+        const std::string number = unit.empty() ? limit : limit + " " + unit;
+
+        ResinDatasheet datasheet = full_datasheet();
+        datasheet.*(field.value) = as_number(typed_max * 2.);
+        const std::string error  = validate_datasheet(datasheet);
+        CHECK_FALSE(error.empty());
+        // The message names the field the way the form calls it, and the limit that was broken.
+        CHECK(error.find(field.label) != std::string::npos);
+        CHECK(error.find(number) != std::string::npos);
+
+        // The limit itself is inside the range, so a datasheet that states exactly what the setting
+        // takes is accepted.
+        datasheet.*(field.value) = as_number(typed_max);
+        CHECK(validate_datasheet(datasheet).empty());
+    }
+}
+
+TEST_CASE("validate_datasheet refuses a bottle smaller than the setting takes", "[resin_datasheet]")
+{
+    // The other half of a range: bottle_volume has a minimum and no maximum, so the message is the
+    // one that names the smallest bottle there is.
+    const Domain::ConfigItemDef* def = option_of("bottle_volume");
+    REQUIRE(def != nullptr);
+    REQUIRE(def->min.has_value());
+
+    ResinDatasheet datasheet   = full_datasheet();
+    datasheet.bottle_volume_ml = as_number(*def->min / 2.);
+    const std::string error    = validate_datasheet(datasheet);
+    CHECK_FALSE(error.empty());
+    CHECK(error.find("Bottle volume") != std::string::npos);
+    CHECK(error.find(as_number(*def->min)) != std::string::npos);
+
+    // A bottle of exactly the smallest size is what the setting takes, so it is accepted.
+    datasheet.bottle_volume_ml = as_number(*def->min);
+    CHECK(validate_datasheet(datasheet).empty());
+}
+
 TEST_CASE("datasheet_to_profile writes the values the mapping table reads", "[resin_datasheet]")
 {
     SECTION("the format says where the values came from")
@@ -247,10 +514,11 @@ TEST_CASE("datasheet_to_profile writes the values the mapping table reads", "[re
         // The name is written the way a Chitubox file writes it, so the mapper suggests the preset
         // name from it and the importer looks for a resin of that name to use as the base.
         CHECK(profile.raw_values.at("currProfile") == "Grey resin");
-        // The price of a bottle is written as the per-litre price of that bottle, because that is
-        // the only price the mapping table turns into a bottle cost. 25 for 500 ml is 50 per litre.
-        CHECK(profile.raw_values.at("resinPrice") == "50");
-        CHECK(profile.raw_values.at("resinUnit") == "/L");
+        // The price of a bottle goes in as the price of a bottle, which is what bottle_cost holds,
+        // so the review table shows the number that was typed rather than one the form had to make
+        // up. 25 for a 500 ml bottle is 50 per litre, and that is what the note of the row carries.
+        CHECK(profile.raw_values.at("resinPrice") == "25");
+        CHECK(profile.raw_values.at("resinUnit") == "/bottle");
         CHECK(profile.raw_values.at("bottleVolume") == "500");
         // The layer separation goes in under the keys a foreign .cfg states it with, and the speeds
         // in the unit that file uses, so the mapper converts them the way it converts a file's.
@@ -277,14 +545,55 @@ TEST_CASE("datasheet_to_profile writes the values the mapping table reads", "[re
         CHECK(profile.raw_values.count("machineName") == 0);
     }
 
-    SECTION("a price without a bottle size is the per-litre price of the assumed litre")
+    SECTION("a price without a bottle size is still the price of a bottle")
     {
         ResinDatasheet datasheet          = full_datasheet();
         datasheet.bottle_volume_ml        = "";
         const ForeignResinProfile profile = datasheet_to_profile(datasheet);
+        // The price no longer depends on the bottle at all, so nothing about the price changes with
+        // it; the per-litre equivalent the note gives is the assumed 1 litre bottle, as it is for a
+        // file that states no bottle size either.
         CHECK(profile.raw_values.at("resinPrice") == "25");
+        CHECK(profile.raw_values.at("resinUnit") == "/bottle");
         CHECK(profile.raw_values.count("bottleVolume") == 0);
     }
+}
+
+TEST_CASE(
+    "the review row of the price shows the price the datasheet stated",
+    "[resin_datasheet][mapper]"
+)
+{
+    // The row used to name a per-litre price the form had computed, so the number on the left was
+    // not the one that was typed. It is now the price as stated, and the conversion is in the note.
+    const MappingResult mapping =
+        map_resin_profile(datasheet_to_profile(full_datasheet()), TargetPrinterClass::GenericMsla);
+
+    const MappedField* price_row = nullptr;
+    for (const MappedField& row : mapping.report)
+        if (row.source_key == "resinPrice")
+            price_row = &row;
+    REQUIRE(price_row != nullptr);
+
+    // What the datasheet said: 25 for a 500 ml bottle.
+    CHECK(price_row->source_value == "25");
+    // What is written is the same number, because a price per bottle is what bottle_cost holds.
+    CHECK(price_row->target_key == "bottle_cost");
+    CHECK(price_row->value == "25");
+    // The per-litre equivalent the row does not show any more is in its note, so the conversion
+    // stays auditable.
+    CHECK(price_row->note.find("50") != std::string::npos);
+    CHECK(price_row->note.find("per litre") != std::string::npos);
+    CHECK(price_row->note.find("500") != std::string::npos);
+
+    // A price per bottle is a price this preset already holds, so the unit says so rather than
+    // naming a per-litre price the source never gave.
+    const MappedField* unit_row = nullptr;
+    for (const MappedField& row : mapping.report)
+        if (row.source_key == "resinUnit")
+            unit_row = &row;
+    REQUIRE(unit_row != nullptr);
+    CHECK(unit_row->source_value == "/bottle");
 }
 
 TEST_CASE(

@@ -13,9 +13,11 @@ namespace Slic3r::Biz::ResinProfile {
  *
  * Every key is kept verbatim in ForeignResinProfile::raw_values and the settings this fork maps are
  * filled into its material, the rest is left to the mapper. There is no vendor or brand key among
- * them: nothing in the reader's key table or in the mapping table names one, and the format notes of
- * M3.2 (doc/sla-fork/formats/chitubox-cfg.md) do not exist yet, so a .cfg is read without a vendor
- * and ResinMaterialSettings::material_vendor stays empty rather than guessing at a spelling.
+ * them: nothing in the reader's key table or in the mapping table names one, and no Chitubox-sliced
+ * file has been read yet (M3.1), so the format notes in doc/sla-fork/formats/chitubox-cfg.md have
+ * none to name either (M3.2). A .cfg is therefore read without a vendor and
+ * ResinMaterialSettings::material_vendor stays empty rather than guessing at a spelling; the notes
+ * say what a real file would have to carry for the reader to read one.
  */
 class ChituboxCfgReader : public IResinProfileReader
 {

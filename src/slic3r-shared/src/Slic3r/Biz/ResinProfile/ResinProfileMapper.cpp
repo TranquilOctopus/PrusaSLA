@@ -111,9 +111,9 @@ std::string format_int(int value)
     return std::to_string(value);
 }
 
-/// Does a resin unit name a litre? The exact spellings Chitubox writes are settled by M3.1/M3.2,
-/// so this accepts the usual ways of writing "per litre" and nothing else.
-bool is_per_litre(const std::string& unit)
+/// @brief A resin unit reduced to what says what it counts: lower case, and without the spaces,
+/// dots and underscores a writer may or may not put in it. Empty when nothing is left.
+std::string normalized_unit(const std::string& unit)
 {
     std::string text = boost::to_lower_copy(trim(unit));
     text.erase(
@@ -124,6 +124,14 @@ bool is_per_litre(const std::string& unit)
         ),
         text.end()
     );
+    return text;
+}
+
+/// Does a resin unit name a litre? The exact spellings Chitubox writes are settled by M3.1/M3.2,
+/// so this accepts the usual ways of writing "per litre" and nothing else.
+bool is_per_litre(const std::string& unit)
+{
+    std::string text = normalized_unit(unit);
     if (text.empty())
         return false;
     for (const std::string& per_litre : {"/l", "perliter", "perliters", "perlitre", "perlitres"})
@@ -131,6 +139,24 @@ bool is_per_litre(const std::string& unit)
             return true;
     for (const std::string& litre : {"l", "1l", "liter", "liters", "litre", "litres"})
         if (text == litre)
+            return true;
+    return false;
+}
+
+/// @brief Does a resin unit name a bottle? A price per bottle is what `bottle_cost` holds already,
+/// so such a price is written as it is and needs no volume to be turned into anything. The spellings
+/// are the usual ways of writing "per bottle", unverified for the same reason the litre ones are
+/// (M3.1/M3.2), and the "New resin from datasheet" form writes one of them itself.
+bool is_per_bottle(const std::string& unit)
+{
+    const std::string text = normalized_unit(unit);
+    if (text.empty())
+        return false;
+    for (const std::string& per_bottle : {"/bottle", "perbottle", "perbottles"})
+        if (text.ends_with(per_bottle))
+            return true;
+    for (const std::string& bottle : {"bottle", "bottles", "1bottle"})
+        if (text == bottle)
             return true;
     return false;
 }
@@ -270,12 +296,6 @@ Applied apply(
         const std::string unit = profile.raw_values.count("resinUnit") ?
             profile.raw_values.at("resinUnit") :
             std::string{};
-        if (!is_per_litre(unit)) {
-            applied.note += unit.empty() ?
-                " Nothing written: the profile does not say the price is per litre." :
-                " Nothing written: \"" + unit + "\" is not a per-litre price.";
-            return applied;
-        }
         double bottle_volume_ml = ASSUMED_BOTTLE_VOLUME_ML;
         for (const std::string& key : {"bottleVolume", "bottle_volume"}) {
             const std::optional<double> volume = parse_number(
@@ -283,6 +303,25 @@ Applied apply(
             );
             if (volume && *volume > 0.)
                 bottle_volume_ml = *volume;
+        }
+        // A price per bottle is what the setting holds, so it is written as it is and the bottle
+        // size only says what that price works out to per litre, which the note carries. The row
+        // shows the number the source gave rather than one this fork made up.
+        if (is_per_bottle(unit)) {
+            applied.value = format_number(*price);
+            applied.note += fmt::format(
+                " A price per bottle, so it is the cost of that bottle as it is, which is {:.6g} per "
+                "litre for a {:.6g} ml bottle.",
+                *price * 1000. / bottle_volume_ml,
+                bottle_volume_ml
+            );
+            break;
+        }
+        if (!is_per_litre(unit)) {
+            applied.note += unit.empty() ?
+                " Nothing written: the profile does not say the price is per litre." :
+                " Nothing written: \"" + unit + "\" is not a per-litre price.";
+            return applied;
         }
         applied.value = format_number(*price * bottle_volume_ml / 1000.);
         applied.note += fmt::format(
@@ -354,24 +393,30 @@ const std::vector<Rule>& mapping_table()
          .source_unit = UNIT_G_PER_ML,
          .note        = "Both in g/ml, no conversion."},
 
-        {.sources = {"resinPrice"},
-         .tilt    = {Transform::BottleCost, "bottle_cost", MappingStatus::Converted},
-         .generic = {Transform::BottleCost, "bottle_cost", MappingStatus::Converted},
-         .note =
-             "bottle_cost = price x bottle volume / 1000, and only for a per-litre price. The currency is not converted."},
+        {
+            .sources = {"resinPrice"},
+            .tilt    = {Transform::BottleCost, "bottle_cost", MappingStatus::Converted},
+            .generic = {Transform::BottleCost, "bottle_cost", MappingStatus::Converted},
+            .note =
+                "A price per bottle is the cost of that bottle and is written as it is; a per-litre price becomes bottle_cost = price x bottle volume / 1000. The currency is not converted."
+        },
 
-        {.sources = {"resinUnit"},
-         .tilt    = {Transform::None, "", MappingStatus::Converted},
-         .generic = {Transform::None, "", MappingStatus::Converted},
-         .note =
-             "Read together with resinPrice: a per-litre price becomes a bottle cost, any other unit does not."},
+        {
+            .sources = {"resinUnit"},
+            .tilt    = {Transform::None, "", MappingStatus::Converted},
+            .generic = {Transform::None, "", MappingStatus::Converted},
+            .note =
+                "Read together with resinPrice: a per-litre price becomes a bottle cost, a per-bottle price is one already, any other unit is not a price this preset holds."
+        },
 
-        {.sources     = {"bottleVolume", "bottle_volume"},
-         .tilt        = {Transform::None, "", MappingStatus::Converted},
-         .generic     = {Transform::None, "", MappingStatus::Converted},
-         .source_unit = UNIT_ML,
-         .note =
-             "The bottle size resinPrice is turned into a bottle cost with; without it a 1 litre bottle is assumed."},
+        {
+            .sources     = {"bottleVolume", "bottle_volume"},
+            .tilt        = {Transform::None, "", MappingStatus::Converted},
+            .generic     = {Transform::None, "", MappingStatus::Converted},
+            .source_unit = UNIT_ML,
+            .note =
+                "The size of the bottle a per-litre price is turned into a bottle cost with, and the bottle a per-bottle price is worked out to a litre with; without it a 1 litre bottle is assumed."
+        },
 
         {.sources = {"lightOffTime", "bottomLightOffTime"},
          .tilt =

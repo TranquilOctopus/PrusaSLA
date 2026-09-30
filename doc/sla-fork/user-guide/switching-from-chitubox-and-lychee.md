@@ -136,14 +136,16 @@ The report is one object with a `results` array, one entry per file that was tri
 included:
 
 ```json
-{"results":[{"file":"grey.cfg","ok":true,"error":"","preset_name":"Grey resin","base_preset":"Generic Fast Resin","mapping":[{"key":"normalExposureTime","target_key":"exposure_time","source_value":"2.5","value":"2.5","status":"Exact","note":"Both in seconds, no conversion."}]}]}
+{"results":[{"file":"grey.cfg","ok":true,"error":"","preset_name":"Grey resin","base_preset":"Generic Fast Resin","mapping":[{"key":"normalExposureTime","target_key":"exposure_time","source_value":"2.5","source_unit":"s","value":"2.5","target_unit":"s","status":"Exact","note":"Both in seconds, no conversion."}]}]}
 ```
 
 Each `mapping` row is one key of the file: the key as it appeared (`key`), the resin setting it
-becomes (`target_key`, empty when nothing is written), the value the file had (`source_value`), the
-value written to it (`value`, empty when none is), the `status` and the `note` that says why. A
-converted value is therefore readable on its own: `150` as the file had it next to the `2.5` that
-goes into the preset.
+becomes (`target_key`, empty when nothing is written), the value the file had (`source_value`) and
+the unit it was in (`source_unit`), the value written to it (`value`, empty when none is) and the
+unit of that (`target_unit`), then the `status` and the `note` that says why. A converted value is
+therefore readable on its own: `150` in `mm/min` as the file had it next to the `2.5` in `mm/s` that
+goes into the preset. A key that is not a quantity, such as a layer count or the profile name, has no
+unit on either side rather than a guessed one, so read it as the plain number it is.
 
 ### Writing a profile back out
 
@@ -183,9 +185,9 @@ the four almost every datasheet gives are marked *yes*, the rest are optional.
 | Normal exposure (s) | yes | a number greater than zero |
 | Bottom exposure (s) | yes | a number greater than zero |
 | Number of bottom layers | yes | a whole number greater than zero |
-| Light-off delay (s) | no | a number of zero or more; empty means the datasheet does not state it |
+| Light-off delay (s) | no | a number of zero or more, up to the 30 s the setting takes; empty means the datasheet does not state it |
 | Price of a bottle | no | a number of zero or more |
-| Bottle volume (ml) | no | a number greater than zero; without it a 1 litre bottle is assumed |
+| Bottle volume (ml) | no | from the 50 ml the setting takes up; without a bottle size a 1 litre bottle is assumed |
 | Lift distance (mm) | no | a number greater than zero; the lift height of a printer that separates layers by lifting |
 | Lift speed (mm/min) | no | a number greater than zero; converted to the mm/s the settings hold |
 | Retract speed (mm/min) | no | a number greater than zero; the speed the plate drops back down at |
@@ -197,11 +199,16 @@ and the imported profiles both state them in, and the mapper converts them like 
 `.cfg`. A printer that separates layers by tilting has no lift, so those rows arrive as *Not
 applicable* and a transition layer count instead.
 
+Every field is also checked against the range its resin setting declares, and a number outside it is
+refused with a message that names the field and the limit, so nothing is carried into the review
+that the setting would not take. The limit is the one of the setting itself, in the unit the setting
+holds, so a speed is compared as the mm/s it becomes.
+
 **Next** checks the fields and hands them to the same review dialog, where **Save** or
 **Save & select** finishes the job. A value the datasheet does not state is left out of the profile
 altogether instead of being written as a zero, so it does not appear in the review table either. A
-datasheet gives a price per bottle, so it is turned into a per-litre price of that same bottle, and
-the bottle cost in the review is the price the datasheet stated, with both numbers in the note.
+datasheet gives a price per bottle, which is what the resin preset holds, so the row shows the price
+as it was typed and the note says what it works out to per litre.
 
 ![TODO screenshot: the New resin from datasheet form filled in from a vendor datasheet]()
 
@@ -277,7 +284,7 @@ by the printer you import into.
 | `bottomLayerCount`, `bottomLayCount` | SL1: `resin_faded_layers`; MSLA: `bottom_layer_count` | count, clamped to 3-20 on tilt | Approximated | Exact |
 | `layerHeight` | `resin_layer_height` | mm to mm | Exact | Exact |
 | `resinDensity` | `material_density` | g/ml to g/ml | Exact | Exact |
-| `resinPrice` with `resinUnit` | `bottle_cost` | price per litre x bottle volume / 1000 | Converted | Converted |
+| `resinPrice` with `resinUnit` | `bottle_cost` | per bottle as it is; per litre x bottle volume / 1000 | Converted | Converted |
 | `bottleVolume`, `bottle_volume` | read with `resinPrice`, writes nothing of its own | ml | Converted | Converted |
 | `lightOffTime`, `bottomLightOffTime` | `delay_before_exposure` | s, written twice as `v,v` | Approximated | Approximated |
 | `resetTimeBeforeLift` | SL1: `delay_after_exposure`; MSLA: `wait_before_lift` | s, `v,v` on tilt | Approximated | Exact |
@@ -325,10 +332,12 @@ not use yet, so they arrive as *Unknown* rather than silently:
   so every converted speed is divided by 60. The note on each of those rows says so, because the
   unit is not confirmed against a real file yet. If a lift speed looks far too slow or too fast
   after an import, this is the first thing to check.
-- **A price only becomes a bottle cost when the file says it is per litre.** A per-kilo price, or a
-  file with no unit, is reported and nothing is written. The currency is never converted, so the
-  cost estimate stays in the currency of the source profile. Without a `bottleVolume` in the file a
-  1 litre bottle is assumed, and the note says so.
+- **A price becomes a bottle cost when the file says how it is counted.** A per-litre price is
+  multiplied by the bottle volume and divided by 1000; a per-bottle price already is the cost of one
+  bottle and is written as it is, with the per-litre equivalent of that bottle in the note. A
+  per-kilo price, or a file with no unit, is reported and nothing is written. The currency is never
+  converted, so the cost estimate stays in the currency of the source profile. Without a
+  `bottleVolume` in the file a 1 litre bottle is assumed, and the note says so.
 - **On a tilt printer the bottom layer count becomes the transition layer count**, clamped to the
   3 to 20 layers a tilt printer fades the exposure over, because a tilt printer has no block of
   bottom layers. If the file states a transition layer count as well, that one is what lands in
@@ -345,8 +354,10 @@ not use yet, so they arrive as *Unknown* rather than silently:
 - The note under a row is a sentence or two, and the table shows it on one line, elided. Hovering
   the line shows all of it.
 - A `.cfg` names no vendor, so the vendor is empty in the source line. The resin name comes from the
-  profile name key, `currProfile`, and it is that name the base material is matched against. No
-  vendor or brand key of the `.cfg` format is known yet, so nothing is guessed at one.
+  profile name key, `currProfile`, and it is that name the base material is matched against. The
+  format notes in [chitubox-cfg.md](../formats/chitubox-cfg.md) record that no key of the format
+  that has been seen names a vendor or a brand, so nothing is guessed at one. A key that did would
+  be kept and shown in the table as *Unknown* rather than dropped, which is how it would be found.
 - There is no printer picker in the review dialog. Pick the printer in the sidebar first; the
   import goes into the selected one or it does not happen.
 - There is no button for writing a profile back out; that is the `--export-resin-profile` command

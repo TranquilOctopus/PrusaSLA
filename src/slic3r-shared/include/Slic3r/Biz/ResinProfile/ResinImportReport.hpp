@@ -18,7 +18,11 @@ namespace Slic3r::Biz::ResinProfile {
  * same report. The document is written compact, without a trailing newline, like the other JSON
  * the command line writes.
  *
- * Every file that was tried has an entry, a failed one included:
+ * Every file that was tried has an entry, a failed one included. A mapping row carries the unit of
+ * the value on each side of it, so a script does not have to know the unit of a key from the mapping
+ * table; the units are the ones ConfigDefsSLA.cpp gives the same quantity and are never translated,
+ * because a report has to read the same in every language. A key that is not a quantity, or one whose
+ * unit is not settled yet, carries none rather than a guess.
  * @code
  * {
  *   "results": [
@@ -33,7 +37,9 @@ namespace Slic3r::Biz::ResinProfile {
  *           "key": "normalExposureTime",     // the key as it appeared in the file
  *           "target_key": "exposure_time",   // the resin preset key, empty when nothing is written
  *           "source_value": "3.5",           // the value as the file had it, before any conversion
+ *           "source_unit": "s",              // its unit, empty when the key is not a quantity
  *           "value": "3.5",                  // the value written to it, empty when none is
+ *           "target_unit": "s",              // the unit of the written value, empty when none is
  *           "status": "Exact",               // see MappingStatus, written out by to_string()
  *           "note": "Both in seconds, no conversion."
  *         }
