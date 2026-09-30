@@ -151,6 +151,17 @@ struct ResinImportFixture
     ResinImportFixture(const ResinImportFixture&) = delete;
     ResinImportFixture& operator=(const ResinImportFixture&) = delete;
 
+    /// @brief Runs the main thread work the imports posted, while the interactor, the preset bundle
+    /// and the scratch tree are all still alive. The imports change presets and the selection, and
+    /// the slicing side answers by posting extruder candidate updates, which the app runs on its
+    /// next idle: that is the read of the saved configuration which must not be left dangling. The
+    /// fixture drains the queue in its destructor too, but a read that breaks belongs to the test
+    /// that caused it, not to whatever the runner tears down next.
+    void drain_main_thread_queue()
+    {
+        dispatcher.dispatch_enqueued();
+    }
+
     void select_printer(std::string_view hw_config_name)
     {
         const Preset::PresetItemObservableList& printers =
@@ -278,6 +289,11 @@ TEST_CASE(
     CHECK(first.preset_name == "Grey resin");
     // Saving under a name that is taken would replace that preset instead of adding one.
     CHECK(second.preset_name == "Grey resin (2)");
+
+    // Both saves reloaded the vendor presets, which freed the config boxes the print tool settings
+    // read, so the extruder candidate updates the two imports posted are delivered against the
+    // re-resolved ones. In the app this happens on the next idle, after the import has returned.
+    fx.drain_main_thread_queue();
 }
 
 TEST_CASE(
