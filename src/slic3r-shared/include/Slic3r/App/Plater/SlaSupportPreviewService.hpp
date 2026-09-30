@@ -190,7 +190,7 @@ private:
         // The worker's view of the model: the meshes of its MODEL PART volumes, shared with the
         // model instead of copied (M2.21c), so the main thread stays O(volumes) however big the
         // figure is, and the worker reads data the main thread cannot change under it.
-        sla::SupportToolModelMesh         model_mesh;
+        Slic3r::sla::SupportToolModelMesh model_mesh;
     };
 
     struct ObjectPreview

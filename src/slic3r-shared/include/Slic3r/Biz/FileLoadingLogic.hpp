@@ -236,13 +236,14 @@ std::vector<SlaArchiveImport> read_sla_archives(
 
 /**
  * @brief read_sla_archives() as the JobManager wants a job function: a stop token and a progress
- * tracker. This is the function the import job is created with.
+ * tracker, then the archives. This is the function the import job is created with, so it takes
+ * exactly the arguments that job is created with: the paths by value, the way every other job
+ * function takes its data, so the job owns them on its worker thread.
  */
 std::vector<SlaArchiveImport> import_sla_archives_local(
     Biz::JThread::StopToken stop_token,
     Biz::Platform::JobManager::ProgressTracker progress,
-    const std::vector<boost::filesystem::path>& paths,
-    SlaArchiveRead read = {});
+    std::vector<boost::filesystem::path> paths);
 
 /**
  * @brief Put one archive mesh on the build plate, as import_files_and_add_to_scene() does for a

@@ -1,4 +1,5 @@
 #include "Slic3r/App/Plater/ThumbnailImageGenerator.hpp"
+#include "Slic3r/App/Platform/CameraSynchData.hpp"
 #include "Slic3r/Biz/Platform/PlatformServices.hpp"
 #include "Slic3r/Domain/Project.hpp"
 #include "Slic3r/Domain/Workbench.hpp"

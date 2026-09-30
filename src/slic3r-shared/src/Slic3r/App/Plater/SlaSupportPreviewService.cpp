@@ -326,7 +326,8 @@ void SlaSupportPreviewService::refresh()
                     config->object->hash(),
                     supports_enabled
                 );
-                candidate.elevation = sla::support_tool_elevation(config->full, config->object);
+                candidate.elevation =
+                    Slic3r::sla::support_tool_elevation(config->full, config->object);
                 candidate.config    = *config;
             }
 
@@ -484,7 +485,7 @@ void SlaSupportPreviewService::start_due_build(const SlaSupportPreviewSchedule::
     // The only thing read out of the model for the worker: one shared pointer and one matrix per
     // volume. Not a vertex, and no config or facet either, so a 50-100 MB figure does not stall the
     // UI here (M2.21c); the worker copies what it needs, and only what it needs, on its own thread.
-    job.model_mesh = sla::support_tool_model_mesh(*model_object);
+    job.model_mesh = Slic3r::sla::support_tool_model_mesh(*model_object);
     m_queue.push_back(std::move(job));
 
     start_next_job();
@@ -523,7 +524,7 @@ void SlaSupportPreviewService::start_next_job()
         [this](Biz::JThread::StopToken stop_token, Job worker_job) mutable {
             const Slic3r::sla::SupportToolStop stop = [&stop_token]() { return stop_token.stop_requested(); };
 
-            Slic3r::sla::SupportToolTree tree = sla::build_support_tree_for_tool(
+            Slic3r::sla::SupportToolTree tree = Slic3r::sla::build_support_tree_for_tool(
                 worker_job.model_mesh,
                 worker_job.pending.instance_matrix,
                 worker_job.pending.points,

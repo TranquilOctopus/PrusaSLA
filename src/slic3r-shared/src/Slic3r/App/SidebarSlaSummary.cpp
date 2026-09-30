@@ -547,7 +547,7 @@ std::string format_print_time(std::optional<double> seconds)
         return "—";
     }
     const double whole_minutes = std::floor(*seconds / 60.);
-    const std::ostringstream ss;
+    std::ostringstream ss;
     ss << static_cast<long long>(whole_minutes / 60.) << ':' << std::setfill('0') << std::setw(2)
        << static_cast<long long>(whole_minutes) % 60;
     return ss.str();
