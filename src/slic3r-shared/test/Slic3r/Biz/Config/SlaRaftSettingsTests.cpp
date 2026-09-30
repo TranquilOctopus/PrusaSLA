@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "Slic3r/Domain/ConfigBoxesSLA.hpp"
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/Domain/SLA/RaftPreset.hpp"
 
@@ -356,13 +357,154 @@ TEST_CASE("The raft type decides which raft settings are shown", "[Config][SLA][
         CHECK_FALSE(Slic3r::Domain::SLA::is_raft_setting("support_pillar_diameter"));
         CHECK(Slic3r::Domain::SLA::is_raft_setting("raft_type"));
         CHECK(Slic3r::Domain::SLA::is_raft_setting("pad_object_gap"));
+        // The three knobs that shape the pattern are raft settings, so the filter looks at them,
+        // even though a solid raft hides them.
+        CHECK(Slic3r::Domain::SLA::is_raft_setting("raft_infill_spacing"));
+        CHECK(Slic3r::Domain::SLA::is_raft_setting("raft_infill_wall"));
+        CHECK(Slic3r::Domain::SLA::is_raft_setting("raft_infill_skin"));
     }
+}
+
+TEST_CASE("The raft infill pattern decides the three knobs that shape it", "[Config][SLA][Raft]")
+{
+    using Slic3r::Domain::sla::RaftInfillType;
+    using Slic3r::Domain::SLA::raft_infill_uses_setting;
+    using Slic3r::Domain::SLA::raft_infill_visible_settings;
+
+    const std::vector<std::string> knobs{"raft_infill_spacing",
+                                         "raft_infill_wall",
+                                         "raft_infill_skin"};
+
+    SECTION("a solid raft reads none of them")
+    {
+        for (const std::string& key : knobs) {
+            INFO("setting " << key);
+            CHECK_FALSE(raft_infill_uses_setting(RaftInfillType::None, key));
+        }
+        CHECK(raft_infill_visible_settings(RaftInfillType::None).empty());
+    }
+
+    SECTION("grid and honeycomb read all three")
+    {
+        for (const RaftInfillType infill : {RaftInfillType::Grid, RaftInfillType::Honeycomb}) {
+            INFO("raft infill " << static_cast<int>(infill));
+            for (const std::string& key : knobs) {
+                INFO("setting " << key);
+                CHECK(raft_infill_uses_setting(infill, key));
+            }
+            // The pattern is picked where it is shown, so it is not one of its own knobs.
+            CHECK_FALSE(raft_infill_uses_setting(infill, "raft_infill"));
+            CHECK_FALSE(raft_infill_uses_setting(infill, "layer_height"));
+        }
+    }
+}
+
+TEST_CASE("The raft type and the raft infill pattern together decide the raft rows",
+          "[Config][SLA][Raft]")
+{
+    using Slic3r::Domain::sla::RaftInfillType;
+    using Slic3r::Domain::sla::RaftType;
+    using Slic3r::Domain::SLA::raft_uses_setting;
+    using Slic3r::Domain::SLA::raft_visible_settings;
+
+    const std::vector<RaftType> types{
+        RaftType::None, RaftType::Full, RaftType::AroundObject, RaftType::Skate
+    };
+    const std::vector<RaftInfillType> infills{
+        RaftInfillType::None, RaftInfillType::Grid, RaftInfillType::Honeycomb
+    };
+    const std::vector<std::string> infill_knobs{
+        "raft_infill_spacing", "raft_infill_wall", "raft_infill_skin"
+    };
+
+    for (const RaftType type : types) {
+        for (const RaftInfillType infill : infills) {
+            INFO("raft type " << static_cast<int>(type) << ", raft infill "
+                             << static_cast<int>(infill));
+
+            // The dropdowns are always there: without raft_type there is no raft to change and
+            // without raft_infill there is no way to cut a pattern.
+            CHECK(raft_uses_setting(type, infill, "raft_type"));
+            CHECK(raft_visible_settings(type, infill).front() == "raft_type");
+
+            // A solid raft prints no raft at all, so the edge taper and the whole infill block,
+            // the pattern and its three knobs, change nothing.
+            const bool raft_printed = type != RaftType::None;
+            CHECK(raft_uses_setting(type, infill, "raft_edge_taper") == raft_printed);
+            CHECK(raft_uses_setting(type, infill, "raft_infill") == raft_printed);
+
+            // A printed raft with no pattern cuts no cells, so the three knobs are hidden. Grid
+            // and honeycomb cut cells, so all three are shown.
+            const bool pattern_cut = raft_printed && infill != RaftInfillType::None;
+            for (const std::string& key : infill_knobs) {
+                INFO("setting " << key);
+                CHECK(raft_uses_setting(type, infill, key) == pattern_cut);
+            }
+
+            // The knobs that shape the raft itself follow the raft type, not the pattern.
+            CHECK(raft_uses_setting(type, infill, "pad_wall_height") == raft_printed);
+            CHECK(raft_uses_setting(type, infill, "pad_wall_thickness") == raft_printed);
+            CHECK(raft_uses_setting(type, infill, "pad_max_merge_distance") == raft_printed);
+            // Skate brings its own expansion and slope (SKATE_BRIM_FACTOR, SKATE_SLOPE_DEG).
+            const bool skate = type == RaftType::Skate;
+            CHECK(raft_uses_setting(type, infill, "pad_brim_size") != skate);
+            CHECK(raft_uses_setting(type, infill, "pad_wall_slope") != skate);
+
+            // Only a raft around the object reads the object gap and the connectors.
+            const bool around_object = type == RaftType::AroundObject || type == RaftType::Skate;
+            CHECK(raft_uses_setting(type, infill, "pad_object_gap") == around_object);
+            CHECK(raft_uses_setting(type, infill, "pad_around_object_everywhere") == around_object);
+            CHECK(raft_uses_setting(type, infill, "pad_object_connector_stride") == around_object);
+            CHECK(raft_uses_setting(type, infill, "pad_object_connector_width") == around_object);
+            CHECK(
+                raft_uses_setting(type, infill, "pad_object_connector_penetration")
+                == around_object
+            );
+
+            // A setting that is not a raft knob is never filtered.
+            CHECK_FALSE(raft_uses_setting(type, infill, "layer_height"));
+            CHECK_FALSE(raft_uses_setting(type, infill, "support_pillar_diameter"));
+
+            // A raft None leaves the two dropdowns and nothing else.
+            if (!raft_printed) {
+                CHECK(raft_visible_settings(type, infill).size() == 1);
+            }
+        }
+    }
+}
+
+TEST_CASE("The raft infill defaults are the named tuning constants", "[Config][SLA][Raft]")
+{
+    using Slic3r::Domain::sla::RaftInfillType;
+    using Slic3r::Domain::SLA::RAFT_INFILL_SKIN_MM;
+    using Slic3r::Domain::SLA::RAFT_INFILL_SPACING_MM;
+    using Slic3r::Domain::SLA::RAFT_INFILL_WALL_MM;
+    using Slic3r::Domain::SLA::RaftInfill;
+
+    // The tuning pass M2.14b2b asks for: the cell size and the wall are named constants in
+    // RaftPreset.hpp, so the values there and the ones ConfigDefsSLA.cpp puts into a built config
+    // cannot drift apart. 2 mm cells with 0.4 mm of material between them and half a millimetre
+    // of skin under the top face is the starting point, still to be validated against Lychee and
+    // Chitubox.
+    const Slic3r::Domain::SLAPrintSettings settings;
+    CHECK(settings.items.find("raft_infill")->get<RaftInfillType>() == RaftInfillType::None);
+    CHECK(settings.items.find("raft_infill_spacing")->get<double>() == RAFT_INFILL_SPACING_MM);
+    CHECK(settings.items.find("raft_infill_wall")->get<double>() == RAFT_INFILL_WALL_MM);
+    CHECK(settings.items.find("raft_infill_skin")->get<double>() == RAFT_INFILL_SKIN_MM);
+
+    // The values the engine falls back to when a config has no raft_infill at all are the same.
+    const RaftInfill fallback;
+    CHECK(fallback.type == RaftInfillType::None);
+    CHECK(fallback.spacing_mm == RAFT_INFILL_SPACING_MM);
+    CHECK(fallback.wall_mm == RAFT_INFILL_WALL_MM);
+    CHECK(fallback.skin_mm == RAFT_INFILL_SKIN_MM);
 }
 
 TEST_CASE("Every shown raft setting is a real setting in the Raft group", "[Config][SLA][Raft]")
 {
+    using Slic3r::Domain::sla::RaftInfillType;
     using Slic3r::Domain::sla::RaftType;
-    using Slic3r::Domain::SLA::raft_type_visible_settings;
+    using Slic3r::Domain::SLA::raft_visible_settings;
 
     const auto& defs = Slic3r::Domain::get_defs_sla();
     auto find_def = [&defs](const std::string& name) -> const ConfigItemDef* {
@@ -377,21 +519,28 @@ TEST_CASE("Every shown raft setting is a real setting in the Raft group", "[Conf
                                 RaftType::Full,
                                 RaftType::AroundObject,
                                 RaftType::Skate}) {
-        for (const std::string& key : raft_type_visible_settings(type)) {
-            INFO("raft type " << static_cast<int>(type) << ", setting " << key);
-            const ConfigItemDef* def = find_def(key);
-            REQUIRE(def != nullptr);
-            // Nothing the raft type can show may be hidden or live outside the Raft group,
-            // or the knob would silently disappear for good.
-            CHECK(def->category == ConfigItemDef::Category::Print_Pad);
-            CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
+        for (const RaftInfillType infill :
+             {RaftInfillType::None, RaftInfillType::Grid, RaftInfillType::Honeycomb}) {
+            INFO("raft type " << static_cast<int>(type) << ", raft infill "
+                             << static_cast<int>(infill));
+            for (const std::string& key : raft_visible_settings(type, infill)) {
+                INFO("setting " << key);
+                const ConfigItemDef* def = find_def(key);
+                REQUIRE(def != nullptr);
+                // Nothing the raft type and the pattern can show may be hidden or live outside
+                // the Raft group, or the knob would silently disappear for good.
+                CHECK(def->category == ConfigItemDef::Category::Print_Pad);
+                CHECK(def->option_group == ConfigItemDef::OptionGroup::Print_Pad_Pad);
+            }
         }
     }
 }
 
 TEST_CASE("The Raft group is shown in the order the raft type lists it", "[Config][SLA][Raft]")
 {
-    using Slic3r::Domain::SLA::raft_type_visible_settings;
+    using Slic3r::Domain::sla::RaftInfillType;
+    using Slic3r::Domain::sla::RaftType;
+    using Slic3r::Domain::SLA::raft_visible_settings;
 
     const auto& defs = Slic3r::Domain::get_defs_sla();
     auto find_def = [&defs](const std::string& name) -> const ConfigItemDef* {
@@ -403,16 +552,21 @@ TEST_CASE("The Raft group is shown in the order the raft type lists it", "[Confi
     };
 
     // The dialog sorts the rows of a group by ConfigItemDef::order, so the order values have to
-    // agree with raft_type_visible_settings, which is the order the raft type was designed for.
-    const std::vector<std::string>& settings =
-        raft_type_visible_settings(Slic3r::Domain::sla::RaftType::AroundObject);
-    for (size_t i = 1; i < settings.size(); ++i) {
-        INFO("after " << settings.at(i - 1) << " comes " << settings.at(i));
-        const ConfigItemDef* previous = find_def(settings.at(i - 1));
-        const ConfigItemDef* current = find_def(settings.at(i));
-        REQUIRE(previous != nullptr);
-        REQUIRE(current != nullptr);
-        CHECK(previous->order < current->order);
+    // agree with raft_visible_settings, which is the order the raft type was designed for. A
+    // pattern that is cut gives the longest list, so all three patterns are checked.
+    for (const RaftInfillType infill :
+         {RaftInfillType::None, RaftInfillType::Grid, RaftInfillType::Honeycomb}) {
+        const std::vector<std::string>& settings =
+            raft_visible_settings(RaftType::AroundObject, infill);
+        for (size_t i = 1; i < settings.size(); ++i) {
+            INFO("raft infill " << static_cast<int>(infill) << ", after " << settings.at(i - 1)
+                                << " comes " << settings.at(i));
+            const ConfigItemDef* previous = find_def(settings.at(i - 1));
+            const ConfigItemDef* current  = find_def(settings.at(i));
+            REQUIRE(previous != nullptr);
+            REQUIRE(current != nullptr);
+            CHECK(previous->order < current->order);
+        }
     }
 }
 

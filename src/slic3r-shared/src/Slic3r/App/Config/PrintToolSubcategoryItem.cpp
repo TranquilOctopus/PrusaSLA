@@ -47,7 +47,9 @@ PrintToolSubcategoryItem::PrintToolSubcategoryItem(
         {
             return item.print_item->def().option_group == m_option_group
                 && item.print_item->def().category == m_category
-                // The raft type decides which raft knobs apply; the rest are not raft settings.
+                // The raft type and the raft infill pattern decide which raft knobs apply; the
+                // rest are not raft settings. Changing either notifies the list this filter
+                // observes, so the rows re-filter themselves.
                 && raft_setting_visible(m_project_interactor, item.name);
         }
     );
