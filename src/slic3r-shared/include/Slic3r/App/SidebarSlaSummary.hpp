@@ -39,8 +39,12 @@ private:
     void refresh();
     void update_visibility();
     void clear_rows();
-    // The W4 issues list under the figures, one link per issue into the layer image window.
+    // The W4 issues list under the figures, one link per issue into the layer image window, and
+    // for the two kinds of cavity a button that adds the drain hole the issue suggests.
     void add_issue_rows(const SlaIssueRows& issue_rows);
+    // Add the drain hole the issue of this row suggests to the model it lands on. Nothing is
+    // sliced here: the plate is marked as modified and the user re-slices with the Slice button.
+    void add_suggested_drain_hole(const SlaIssueRow& issue_row);
 
     Biz::ProjectInteractor& m_project_interactor;
     Biz::ListenerScope<Biz::ISelectedConfigContainerChangedListener, Biz::ProjectInteractor, SidebarSlaSummary> m_config_container_listener_scope;

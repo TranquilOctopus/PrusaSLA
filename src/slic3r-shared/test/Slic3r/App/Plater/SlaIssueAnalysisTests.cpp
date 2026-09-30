@@ -53,10 +53,13 @@ TEST_CASE("SlaIssueAnalysis - analyze_sla_issues_for_notification", "[SlaIssueAn
 
         REQUIRE(result.island_count == 0);
         REQUIRE(result.lowest_layer == 0);
+        REQUIRE(result.cup_count == 0);
+        REQUIRE(result.trapped_resin_count == 0);
         REQUIRE(result.message.empty());
+        REQUIRE(result.empty());
     }
 
-    SECTION("Single island returns count 1 and correct layer")
+    SECTION("A single island returns count 1 and correct layer")
     {
         std::vector<SlaIssue> issues = { make_island(42) };
         SlaIssueAnalysis result = analyze_sla_issues_for_notification(issues);
@@ -76,24 +79,59 @@ TEST_CASE("SlaIssueAnalysis - analyze_sla_issues_for_notification", "[SlaIssueAn
         REQUIRE(result.message == "3 islands found, first on layer 5. They can fall off during printing.");
     }
 
-    SECTION("Non-island issues are ignored")
+    SECTION("Cups are reported with their count and their lowest layer")
     {
-        std::vector<SlaIssue> issues = { make_cup(3), make_trapped_resin(7), make_cup(1) };
+        std::vector<SlaIssue> issues = { make_cup(30), make_cup(12) };
         SlaIssueAnalysis result = analyze_sla_issues_for_notification(issues);
 
         REQUIRE(result.island_count == 0);
-        REQUIRE(result.lowest_layer == 0);
-        REQUIRE(result.message.empty());
+        REQUIRE(result.cup_count == 2);
+        REQUIRE(result.cup_lowest_layer == 12);
+        REQUIRE(result.message == "2 cups found, first on layer 12. They can hold a vacuum against the film on every peel.");
     }
 
-    SECTION("Mixed issues - only islands counted")
+    SECTION("Trapped resin is reported with its count and its lowest layer")
     {
-        std::vector<SlaIssue> issues = { make_island(15), make_cup(3), make_island(8), make_trapped_resin(12) };
+        std::vector<SlaIssue> issues = { make_trapped_resin(9), make_trapped_resin(4) };
+        SlaIssueAnalysis result = analyze_sla_issues_for_notification(issues);
+
+        REQUIRE(result.trapped_resin_count == 2);
+        REQUIRE(result.trapped_resin_lowest_layer == 4);
+        REQUIRE(result.message == "2 trapped resin pockets found, first on layer 4. The resin in it cannot drain.");
+    }
+
+    SECTION("Every kind found is named, the most harmful first")
+    {
+        std::vector<SlaIssue> issues = {
+            make_trapped_resin(12), make_cup(3), make_island(15), make_island(8)
+        };
         SlaIssueAnalysis result = analyze_sla_issues_for_notification(issues);
 
         REQUIRE(result.island_count == 2);
-        REQUIRE(result.lowest_layer == 8);
-        REQUIRE(result.message == "2 islands found, first on layer 8. They can fall off during printing.");
+        REQUIRE(result.cup_count == 1);
+        REQUIRE(result.trapped_resin_count == 1);
+        REQUIRE(
+            result.message
+            == "2 islands found, first on layer 8. They can fall off during printing. "
+               "1 cup found, first on layer 3. They can hold a vacuum against the film on every peel. "
+               "1 trapped resin pocket found, first on layer 12. The resin in it cannot drain."
+        );
+    }
+
+    SECTION("Kinds the notification has no name for are ignored")
+    {
+        SlaIssue unknown;
+        unknown.kind  = SlaIssue::Kind::Other;
+        unknown.layer = 5;
+        std::vector<SlaIssue> issues = { unknown };
+
+        SlaIssueAnalysis result = analyze_sla_issues_for_notification(issues);
+
+        REQUIRE(result.island_count == 0);
+        REQUIRE(result.cup_count == 0);
+        REQUIRE(result.trapped_resin_count == 0);
+        REQUIRE(result.message.empty());
+        REQUIRE(result.empty());
     }
 
     SECTION("Islands on layer 0")

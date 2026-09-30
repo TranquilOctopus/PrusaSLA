@@ -10,6 +10,7 @@
 using Slic3r::App::build_sla_issue_rows;
 using Slic3r::App::sla_issue_area_mm2;
 using Slic3r::App::sla_issue_row_text;
+using Slic3r::App::sla_issue_volume_mm3;
 using Slic3r::App::SlaIssueRow;
 using Slic3r::App::SlaIssueRows;
 using Slic3r::Biz::Slicing::Sla::SlaIssue;
@@ -42,6 +43,19 @@ SlaIssue make_cup(size_t layer, double area = 0.)
     return make_issue(SlaIssue::Kind::Cup, layer, "cup, " + std::to_string(area) + " mm2");
 }
 
+SlaIssue make_trapped_resin(size_t layer, double volume = 0.)
+{
+    if (volume <= 0.) {
+        return make_issue(SlaIssue::Kind::TrappedResin, layer);
+    }
+    return make_issue(
+        SlaIssue::Kind::TrappedResin,
+        layer,
+        "trapped resin, layers " + std::to_string(layer) + "-" + std::to_string(layer + 2) + ", "
+            + std::to_string(volume) + " mm3"
+    );
+}
+
 } // namespace
 
 TEST_CASE("SlaIssueRows - no issues means no list", "[SlaIssueRows]")
@@ -53,6 +67,7 @@ TEST_CASE("SlaIssueRows - no issues means no list", "[SlaIssueRows]")
     CHECK(rows.total_count == 0);
     CHECK(rows.island_count == 0);
     CHECK(rows.cup_count == 0);
+    CHECK(rows.trapped_resin_count == 0);
     CHECK(rows.hidden_count == 0);
     CHECK(rows.more_text().empty());
 }
@@ -117,11 +132,40 @@ TEST_CASE("SlaIssueRows - a row without a number sorts after one with it", "[Sla
     CHECK_FALSE(rows.rows[1].area_mm2.has_value());
 }
 
+TEST_CASE("SlaIssueRows - trapped resin is listed with the resin it holds", "[SlaIssueRows]")
+{
+    const SlaIssueRows rows = build_sla_issue_rows({make_island(3, 1.0), make_trapped_resin(3, 21.0)});
+
+    CHECK(rows.total_count == 2);
+    CHECK(rows.island_count == 1);
+    CHECK(rows.trapped_resin_count == 1);
+    REQUIRE(rows.rows.size() == 2);
+    // Same layer, so the island comes first.
+    CHECK(rows.rows[0].kind == SlaIssue::Kind::Island);
+    CHECK(rows.rows[1].kind == SlaIssue::Kind::TrappedResin);
+    // The note of a pocket starts with its layer range, which is not its size.
+    CHECK_FALSE(rows.rows[1].area_mm2.has_value());
+    REQUIRE(rows.rows[1].volume_mm3.has_value());
+    CHECK(*rows.rows[1].volume_mm3 == Catch::Approx(21.0));
+}
+
+TEST_CASE("SlaIssueRows - a row carries where the issue was found", "[SlaIssueRows]")
+{
+    SlaIssue issue      = make_cup(7, 4.0);
+    issue.position      = Slic3r::Domain::Vec3d(12.5, -3.25, 8.);
+
+    const SlaIssueRows rows = build_sla_issue_rows({issue});
+
+    REQUIRE(rows.rows.size() == 1);
+    CHECK(rows.rows[0].position.x() == Catch::Approx(12.5));
+    CHECK(rows.rows[0].position.y() == Catch::Approx(-3.25));
+    CHECK(rows.rows[0].position.z() == Catch::Approx(8.0));
+}
+
 TEST_CASE("SlaIssueRows - issue kinds without a row yet are not listed", "[SlaIssueRows]")
 {
     const SlaIssueRows rows = build_sla_issue_rows({
         make_island(3),
-        make_issue(SlaIssue::Kind::TrappedResin, 4, "trapped resin, 2.00 mm2"),
         make_issue(SlaIssue::Kind::Other, 6),
     });
 
@@ -183,7 +227,31 @@ TEST_CASE("SlaIssueRows - the area is read out of the note of the slicer", "[Sla
     }
 }
 
-TEST_CASE("SlaIssueRows - the row text names the kind, the layer and the area", "[SlaIssueRows]")
+TEST_CASE("SlaIssueRows - the volume is read out of the note of the slicer", "[SlaIssueRows]")
+{
+    SECTION("the note of a pocket of trapped resin")
+    {
+        CHECK(*sla_issue_volume_mm3("trapped resin, layers 3-5, 21.00 mm3") == Catch::Approx(21.0));
+    }
+    SECTION("the note of a cup, which reports both")
+    {
+        CHECK(*sla_issue_volume_mm3("cup, 64.00 mm2 opening, layers 1-3, 192.00 mm3") == Catch::Approx(192.0));
+    }
+    SECTION("a note without a volume has none")
+    {
+        CHECK_FALSE(sla_issue_volume_mm3("island, 4.20 mm2").has_value());
+    }
+    SECTION("an empty note has none")
+    {
+        CHECK_FALSE(sla_issue_volume_mm3("").has_value());
+    }
+    SECTION("a unit without a number in front of it is not a volume")
+    {
+        CHECK_FALSE(sla_issue_volume_mm3("trapped resin, layers 3-5, mm3").has_value());
+    }
+}
+
+TEST_CASE("SlaIssueRows - the row text names the kind, the layer and the size", "[SlaIssueRows]")
 {
     SECTION("island with an area")
     {
@@ -198,10 +266,18 @@ TEST_CASE("SlaIssueRows - the row text names the kind, the layer and the area", 
             sla_issue_row_text(SlaIssueRow{SlaIssue::Kind::Cup, 0, std::nullopt}) == "Cup, layer 1"
         );
     }
+    SECTION("trapped resin with the volume of resin it holds")
+    {
+        SlaIssueRow row;
+        row.kind       = SlaIssue::Kind::TrappedResin;
+        row.layer      = 3;
+        row.volume_mm3 = 21.0;
+        CHECK(sla_issue_row_text(row) == "Trapped resin, layer 4  21.0 mm\xC2\xB3");
+    }
     SECTION("a kind without a name yet")
     {
         CHECK(
-            sla_issue_row_text(SlaIssueRow{SlaIssue::Kind::TrappedResin, 3, 1.0})
+            sla_issue_row_text(SlaIssueRow{SlaIssue::Kind::Other, 3, 1.0})
             == "Issue, layer 4  1.0 mm\xC2\xB2"
         );
     }

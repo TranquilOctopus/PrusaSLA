@@ -1342,19 +1342,15 @@ void SceneInteractor::modify_layer_config_ranges(
     }
 }
 
-void SceneInteractor::modify_sla_support_points(
+void SceneInteractor::notify_object_print_changed(
     const Domain::ElementRef& object_ref,
-    const std::function<void(ModelObject&)>& modifier
+    ModelObject& model_object
 )
 {
-    Project& project          = m_workbench.project(m_selected_project_id);
-    ModelObject* model_object = project.find_object_by_id(object_ref.object_id);
-    ASSERT(model_object != nullptr);
-
-    modifier(*model_object);
+    Project& project = m_workbench.project(m_selected_project_id);
 
     Domain::ElementRefs instance_refs;
-    for (const ModelInstance* model_instance : model_object->instances) {
+    for (const ModelInstance* model_instance : model_object.instances) {
         instance_refs.emplace_back(object_ref.object_id, model_instance->id().id);
     }
 
@@ -1367,14 +1363,41 @@ void SceneInteractor::modify_sla_support_points(
     // Also notify slicing input changed for each instance's last_bed if it's a valid bed
     // (in case updated_beds only contains beds whose placement changed)
     std::set<Domain::BedRef> notified_beds(changes.updated_beds.begin(), changes.updated_beds.end());
-    for (const ModelInstance* model_instance : model_object->instances) {
+    for (const ModelInstance* model_instance : model_object.instances) {
         const Domain::BedRef last_bed = model_instance->get_last_bed();
-        if (project.find_bed_instance_by_id(last_bed.instance_id) != nullptr &&
-            notified_beds.insert(last_bed).second)
-        {
+        if (project.find_bed_instance_by_id(last_bed.instance_id) != nullptr
+            && notified_beds.insert(last_bed).second) {
             this->invoke_slicing_input_changed(last_bed);
         }
     }
+}
+
+void SceneInteractor::modify_sla_support_points(
+    const Domain::ElementRef& object_ref,
+    const std::function<void(ModelObject&)>& modifier
+)
+{
+    Project& project          = m_workbench.project(m_selected_project_id);
+    ModelObject* model_object = project.find_object_by_id(object_ref.object_id);
+    ASSERT(model_object != nullptr);
+
+    modifier(*model_object);
+
+    this->notify_object_print_changed(object_ref, *model_object);
+}
+
+void SceneInteractor::modify_sla_drain_holes(
+    const Domain::ElementRef& object_ref,
+    const std::function<void(ModelObject&)>& modifier
+)
+{
+    Project& project          = m_workbench.project(m_selected_project_id);
+    ModelObject* model_object = project.find_object_by_id(object_ref.object_id);
+    ASSERT(model_object != nullptr);
+
+    modifier(*model_object);
+
+    this->notify_object_print_changed(object_ref, *model_object);
 }
 
 void SceneInteractor::edit_name(const Domain::ElementRef& id, const std::string& new_name)

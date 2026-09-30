@@ -1,6 +1,7 @@
 #include "Slic3r/App/SidebarSlaSummary.hpp"
 
 #include "Slic3r/App/AppServices.hpp"
+#include "Slic3r/App/IDialogManager.hpp"
 #include "Slic3r/App/Theme.hpp"
 #include "Slic3r/App/Yoga/Text.hpp"
 #include "Slic3r/App/Yoga/Item.hpp"
@@ -9,20 +10,31 @@
 
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/Biz/ResinEconomicsInteractor.hpp"
+#include "Slic3r/Biz/SLAObjectCache.hpp"
 #include "Slic3r/Biz/SLAResultCache.hpp"
+#include "Slic3r/Biz/Sla/DrainHoleSuggestion.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
+#include "Slic3r/Biz/IUndoProvider.hpp"
 #include "Slic3r/Biz/Slicing/SlicingInteractor.hpp"
 #include "Slic3r/Biz/Scene/SceneInteractor.hpp"
+#include "Slic3r/Domain/BedInstance.hpp"
 #include "Slic3r/Domain/ConfigContainer.hpp"
+#include "Slic3r/Domain/ElementRef.hpp"
 #include "Slic3r/Domain/FindById.hpp"
+#include "Slic3r/Domain/ModelInstance.hpp"
+#include "Slic3r/Domain/ModelObject.hpp"
 #include "Slic3r/Domain/Project.hpp"
+#include "Slic3r/Domain/SLA/DrainHole.hpp"
 #include "Slic3r/Domain/SlicingId.hpp"
 #include "Slic3r/Domain/PrinterTechnology.hpp"
 
 #include "libslic3r/SLAResult.hpp"
 
+#include <algorithm>
 #include <iomanip>
+#include <optional>
 #include <sstream>
+#include <vector>
 
 using namespace Slic3r::App::Yoga;
 using namespace Slic3r::Biz;
@@ -216,12 +228,22 @@ void SidebarSlaSummary::add_issue_rows(const SlaIssueRows& issue_rows)
     title->set_flex_shrink(0_fpx);
 
     for (const SlaIssueRow& issue_row : issue_rows.rows) {
-        const bool is_cup   = issue_row.kind == Biz::Slicing::Sla::SlaIssue::Kind::Cup;
+        // A cavity is the one kind of issue a hole in the model can answer, so its row carries a
+        // button that adds the suggested one next to the link into the layer image window.
+        const bool is_cavity = Slic3r::Biz::Sla::accepts_drain_hole_suggestion(issue_row.kind);
+        Item*      line      = m_rows_container->emplace_back<Item>();
+        line->set_orientation(Orientation::Horizontal);
+        line->set_align_items(YGAlignCenter);
+        line->set_gap(4_fpx);
+        line->set_flex_shrink(0_fpx);
+
+        // A cavity of trapped resin is the same kind of problem as a cup and takes the same answer,
+        // so both wear the token of the cup warning.
         const ImColor color = m_theme->color_imgui(
-            is_cup ? Platform::Color::SlaCupWarning : Platform::Color::SlaIslandWarning
+            is_cavity ? Platform::Color::SlaCupWarning : Platform::Color::SlaIslandWarning
         );
 
-        LayoutButton* row = m_rows_container->emplace_back<
+        LayoutButton* row = line->emplace_back<
             LayoutButton>(sla_issue_row_text(issue_row), Render::Icon::WarningMarker);
         row->set_label_color(color);
         row->set_icon_tint(color);
@@ -229,7 +251,7 @@ void SidebarSlaSummary::add_issue_rows(const SlaIssueRows& issue_rows)
         row->set_background_color(Platform::Color::ButtonTransparent);
         row->set_content_justify_content(YGJustifyFlexStart);
         row->set_content_padding({4.f, 2.f});
-        row->set_flex_shrink(0_fpx);
+        row->set_flex_grow(1_fpx);
         row->set_tooltip(_u8L("Show this layer in the layer image window"));
 
         const size_t layer      = issue_row.layer;
@@ -239,12 +261,94 @@ void SidebarSlaSummary::add_issue_rows(const SlaIssueRows& issue_rows)
             // the app wide channel and is picked up there.
             AppServices::instance().sla_layer_jump().request(m_current_slicing_id, layer);
         };
+
+        if (!is_cavity) {
+            continue;
+        }
+
+        LayoutButton* add_hole = line->emplace_back<LayoutButton>(_u8L("Add drain hole"));
+        add_hole->set_tooltip(_u8L("Add a drain hole where this issue suggests one. "
+                                   "Slice again to see it in the print."));
+        add_hole->set_flex_shrink(0_fpx);
+        add_hole->callbacks().action = [this, issue_row]() { this->add_suggested_drain_hole(issue_row); };
     }
 
     if (const std::string more_text = issue_rows.more_text(); !more_text.empty()) {
         Text* more = m_rows_container->emplace_back<Text>(more_text);
         more->set_flex_shrink(0_fpx);
     }
+}
+
+void SidebarSlaSummary::add_suggested_drain_hole(const SlaIssueRow& issue_row)
+{
+    const Domain::Project& project = m_project_interactor.selected_project();
+    const Domain::BedInstance* bed_instance = project.find_bed_instance_by_id(m_current_bed_instance_id);
+    if (bed_instance == nullptr) {
+        AppServices::instance().dialog_manager().show_warning_dialog(
+            _u8L("The build plate of this issue is not on screen anymore."),
+            _u8L("Warning")
+        );
+        return;
+    }
+
+    // The issues of a slice are found on the merged layers of the whole bed, so none of them names
+    // the model the cavity is in. The models of the bed are the candidates and the one whose
+    // surface lies nearest to the cavity along its axis is the one that owns it.
+    //
+    // The candidates borrow their mesh, so the meshes are kept alive here for the whole search and
+    // are reserved once, so that the addresses the candidates hold stay valid.
+    std::vector<Domain::TriangleMesh>                  meshes;
+    std::vector<Slic3r::Biz::Sla::DrainHoleCandidate>  candidates;
+    meshes.reserve(bed_instance->model_instances.size());
+    candidates.reserve(bed_instance->model_instances.size());
+    const Biz::SLAObjectCache& sla_object_cache = m_project_interactor.sla_object_cache();
+    for (const Domain::ModelInstance* instance : bed_instance->model_instances) {
+        if (instance == nullptr || !instance->is_printable()) {
+            continue;
+        }
+        const Domain::ModelObject* model_object = instance->get_object();
+        if (model_object == nullptr) {
+            continue;
+        }
+        // The transformation of the instance in the frame of the sliced layers, which is the one
+        // the slice used. Without it there is no way to tell where the model was when the cavity
+        // was found.
+        const Biz::SLAObjectOptRef sla_object =
+            sla_object_cache.get_instance(Biz::SLAObjectCache::Key{m_current_slicing_id, model_object->id()});
+        if (!sla_object.has_value()) {
+            continue;
+        }
+        const Biz::Slicing::Sla::Object& sliced_object = sla_object->get();
+        const auto instance_trafo                     = std::find_if(
+            sliced_object.instance_trafos.begin(),
+            sliced_object.instance_trafos.end(),
+            [&instance](const auto& entry) { return entry.first == instance->id(); }
+        );
+        if (instance_trafo == sliced_object.instance_trafos.end()) {
+            continue;
+        }
+        meshes.emplace_back(model_object->raw_mesh());
+        candidates.push_back(Slic3r::Biz::Sla::DrainHoleCandidate{
+            model_object->id(), &meshes.back(), sliced_object.object_trafo * (instance_trafo->second)});
+    }
+
+    const std::optional<Slic3r::Biz::Sla::DrainHoleSuggestion> suggestion =
+        Slic3r::Biz::Sla::suggest_nearest_drain_hole(candidates, issue_row.kind, issue_row.position);
+    if (!suggestion.has_value()) {
+        AppServices::instance().dialog_manager().show_warning_dialog(
+            _u8L("No surface of a model on the plate lies inside this issue, so no drain hole "
+                 "could be placed. The model may have been moved since it was sliced."),
+            _u8L("Warning")
+        );
+        return;
+    }
+
+    const Domain::SLA::DrainHole hole = suggestion->to_drain_hole();
+    m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SlaDrainHolesApply);
+    m_project_interactor.scene_interactor().modify_sla_drain_holes(
+        Domain::ElementRef{suggestion->object_id.id, 0},
+        [hole](Domain::ModelObject& model_object) { model_object.sla_drain_holes.emplace_back(hole); }
+    );
 }
 
 void SidebarSlaSummary::update_visibility()
