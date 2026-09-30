@@ -94,6 +94,9 @@ public:
 
 private:
     Yoga::CollapsibleWindow* m_settings_window = nullptr;
+    // The keyboard shortcuts of the tool (M2.28), one line each, in a section of the settings that
+    // is closed so that the list does not stand between the point settings and the presets.
+    Yoga::CollapsibleWindow* m_shortcuts_window = nullptr;
     Yoga::SliderWithInput* m_density_slider = nullptr;
     Yoga::SliderWithInput* m_head_diameter_slider = nullptr;
     Yoga::SliderWithInput* m_pillar_diameter_slider = nullptr;

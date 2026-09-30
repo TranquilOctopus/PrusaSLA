@@ -231,8 +231,12 @@ bool GizmoManager::on_scene_keyboard_event(const Platform::KeyboardEvent& e)
             g->on_keyboard(ctx);
         }
     }
-    for (auto& g : m_tool_gizmos)
+    for (auto& g : m_tool_gizmos) {
         g->on_keyboard(ctx);
+        if (ctx.consumed()) {
+            return true;
+        }
+    }
 
     return m_command_registry.process_keyboard_event(e);
 }

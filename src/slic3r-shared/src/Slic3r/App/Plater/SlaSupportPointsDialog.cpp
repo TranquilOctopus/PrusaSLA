@@ -1,4 +1,5 @@
 #include "Slic3r/App/Plater/SlaSupportPointsDialog.hpp"
+#include "Slic3r/App/Plater/SlaSupportToolShortcuts.hpp"
 
 #include "Slic3r/App/Yoga/SliderWithInput.hpp"
 #include "Slic3r/App/Yoga/LayoutButton.hpp"
@@ -275,6 +276,24 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     m_preset_heavy_button->set_checkable(true);
     m_preset_heavy_button->callbacks().action = [this]()
     { m_callbacks.preset_heavy(); };
+
+    // The keyboard shortcuts of the tool (M2.28), one line each, at the end of the settings they
+    // belong to. The section is closed, so the list is there for the one who looks for it without
+    // standing between the point settings and the presets.
+    this->add_separator(settings);
+
+    m_shortcuts_window = settings->emplace_back<CollapsibleWindow>(
+        _u8L("Shortcuts"),
+        "SlaSupportPointsShortcuts"
+    );
+    m_shortcuts_window->set_padding(0.f);
+    m_shortcuts_window->set_collapsed(true);
+    Item* shortcuts = m_shortcuts_window->content();
+    shortcuts->set_padding(0.f);
+    for (const std::string& line : support_tool_shortcut_lines()) {
+        Text* shortcut_line = shortcuts->emplace_back<Text>(line);
+        shortcut_line->set_flex_shrink(0);
+    }
 
     this->add_separator(this->content());
 
