@@ -114,8 +114,11 @@ SlaSupportPreviewDiff diff_sla_support_previews(
  *
  * A burst of edits (dragging a support point, a slider changing a per point value) is collected by
  * SlaSupportPreviewSchedule and costs one build of the final state, and a key that changes while
- * a build runs stops it instead of letting it finish into the bin. The main thread never waits for
- * a build and never holds more than the newest tree and raft of an object.
+ * a build runs stops it instead of letting it finish into the bin. When a build does start, the
+ * main thread only snapshots the model's meshes (sla::support_tool_model_mesh), which shares them
+ * instead of copying, so the cost does not scale with the size of the figure; merging, the AABB
+ * and the tree itself are built on the worker. The main thread never waits for a build and never
+ * holds more than the newest tree and raft of an object.
  */
 class SlaSupportPreviewService :
     public Biz::ISlicingInputChangedListener,
@@ -166,9 +169,9 @@ public:
     ) override;
 
 private:
-    /// @brief Everything a build needs but the mesh, taken when the key changed and used when the
-    /// debounce window is over. Cheap to copy, so it is taken on every edit of the burst; the mesh
-    /// is not, it is cloned once the burst is.
+    /// @brief Everything a build needs but the geometry, taken when the key changed and used when
+    /// the debounce window is over. Cheap to copy, so it is taken on every edit of the burst; the
+    /// geometry is not, it is snapshotted once the burst is.
     struct Pending
     {
         Domain::ObjectID                  object_id;
@@ -182,11 +185,12 @@ private:
 
     struct Job
     {
-        SlaSupportPreviewSchedule::Request     request;
-        Pending                               pending;
-        // The worker's copy of the model: the worker thread must not read the object the main
-        // thread keeps editing.
-        std::unique_ptr<Domain::ModelObject> cloned_object;
+        SlaSupportPreviewSchedule::Request request;
+        Pending                           pending;
+        // The worker's view of the model: the meshes of its MODEL PART volumes, shared with the
+        // model instead of copied (M2.21c), so the main thread stays O(volumes) however big the
+        // figure is, and the worker reads data the main thread cannot change under it.
+        sla::SupportToolModelMesh         model_mesh;
     };
 
     struct ObjectPreview

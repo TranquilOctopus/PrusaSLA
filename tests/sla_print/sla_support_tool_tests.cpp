@@ -16,7 +16,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <limits>
+#include <memory>
 #include <utility>
 
 namespace {
@@ -201,4 +203,114 @@ TEST_CASE("SLASupportTool: build_support_tree_for_tool places tree under moved o
     CHECK(tree_bb.min.y() <= obj_max_y + 1e-6);
     // Check tree max z is at least object world min z - 0.5 (tree extends down from object bottom)
     CHECK(tree_bb.max.z() >= obj_min_z - 0.5);
+}
+
+// M2.21c: the preview snapshots the model on the main thread and builds on a worker, so the
+// snapshot has to share the meshes of the model instead of copying them.
+
+TEST_CASE("SLASupportTool: the model mesh snapshot shares the meshes of the model", "[SLASupportTool]")
+{
+    BoxModel box{20., 20., 40.};
+    // A volume that is not a model part never reached the tree, and it is not in the snapshot either.
+    Slic3r::Biz::Algorithms::ModelObject::add_volume(
+        box.object,
+        Slic3r::Biz::Algorithms::TriangleMesh::make_cube(5., 5., 5.),
+        Slic3r::Domain::ModelVolumeType::NEGATIVE_VOLUME
+    );
+
+    Slic3r::Domain::ModelVolume* volume = box.object->volumes.front();
+    const std::shared_ptr<const Slic3r::Domain::TriangleMesh> mesh = volume->mesh_ptr();
+    const Slic3r::Domain::Vec3f* vertices                         = mesh->its.vertices.data();
+
+    const Slic3r::sla::SupportToolModelMesh snapshot = Slic3r::sla::support_tool_model_mesh(*box.object);
+
+    REQUIRE(snapshot.parts.size() == 1);
+    // The very mesh the volume holds, down to the vertex buffer: taking the snapshot copied nothing.
+    CHECK(snapshot.parts.front().mesh.get() == mesh.get());
+    CHECK(snapshot.parts.front().mesh->its.vertices.data() == vertices);
+    // Only the volume's own placement is copied with it.
+    CHECK(snapshot.parts.front().matrix.isApprox(volume->get_matrix()));
+}
+
+TEST_CASE("SLASupportTool: a snapshot keeps the geometry the model had", "[SLASupportTool]")
+{
+    BoxModel box{20., 20., 40.};
+    const std::shared_ptr<const Slic3r::Domain::TriangleMesh> mesh = box.object->volumes.front()->mesh_ptr();
+    const std::size_t vertices                                    = mesh->its.vertices.size();
+
+    const Slic3r::sla::SupportToolModelMesh snapshot = Slic3r::sla::support_tool_model_mesh(*box.object);
+
+    // The model goes on changing while the worker is building: a replaced mesh and a moved volume
+    // leave the snapshot on the geometry the build was asked for, so the worker reads data the
+    // main thread cannot change under it.
+    box.object->volumes.front()->set_mesh(Slic3r::Biz::Algorithms::TriangleMesh::make_sphere(5., 1.));
+    box.object->volumes.front()->set_offset(Slic3r::Domain::Vec3d(10., 0., 0.));
+
+    REQUIRE(snapshot.parts.size() == 1);
+    CHECK(snapshot.parts.front().mesh.get() == mesh.get());
+    CHECK(snapshot.parts.front().mesh->its.vertices.size() == vertices);
+    CHECK(snapshot.parts.front().matrix.isApprox(Slic3r::Domain::Transform3d::Identity()));
+    // While the model moved on to a mesh of its own, of a very different size.
+    CHECK(box.object->volumes.front()->mesh_ptr()->its.vertices.size() != vertices);
+}
+
+TEST_CASE("SLASupportTool: a tree built from a snapshot is the tree of the object", "[SLASupportTool]")
+{
+    BoxModel box{20., 20., 40.};
+
+    Slic3r::Domain::Transform3d object_to_world = Slic3r::Domain::Transform3d::Identity();
+    object_to_world.translate(Slic3r::Domain::Vec3d(0., 0., 10.));
+
+    SlaConfig config = make_sla_config();
+
+    const auto points = Slic3r::sla::generate_support_points_for_tool(*box.object, object_to_world, config.full, config.object_settings, []{ return false; });
+    REQUIRE(points.size() > 0);
+
+    const auto from_object = Slic3r::sla::build_support_tree_for_tool(*box.object, object_to_world, points, config.full, config.object_settings, []{ return false; });
+    const auto from_snapshot =
+        Slic3r::sla::build_support_tree_for_tool(Slic3r::sla::support_tool_model_mesh(*box.object), object_to_world, points, config.full, config.object_settings, []{ return false; });
+
+    REQUIRE(from_object.tree != nullptr);
+    REQUIRE(from_snapshot.tree != nullptr);
+    REQUIRE_FALSE(from_snapshot.tree->empty());
+
+    // The same tree out of the snapshot as out of the object: as many pillars of the same height
+    // down to the same place. (The facets themselves are not compared one by one, the order they
+    // come in is not part of what the preview shows.)
+    CHECK(from_snapshot.tree->facets_count() == from_object.tree->facets_count());
+    CHECK(from_snapshot.tree->its.vertices.size() == from_object.tree->its.vertices.size());
+    CHECK(std::abs(from_snapshot.tree->bounding_box().min.z() - from_object.tree->bounding_box().min.z()) < 1e-6);
+    CHECK(std::abs(from_snapshot.tree->bounding_box().max.z() - from_object.tree->bounding_box().max.z()) < 1e-6);
+    CHECK(std::abs(from_snapshot.tree->stats().volume - from_object.tree->stats().volume) < 1e-3);
+
+    // And the same raft, which is built from that same merged mesh (or none at all for both, when
+    // the pad does not validate for this model).
+    CHECK((from_object.pad == nullptr) == (from_snapshot.pad == nullptr));
+    if (from_object.pad != nullptr) {
+        CHECK(from_snapshot.pad->facets_count() == from_object.pad->facets_count());
+        CHECK(from_snapshot.pad->its.vertices.size() == from_object.pad->its.vertices.size());
+        CHECK(std::abs(from_snapshot.pad->bounding_box().min.z() - from_object.pad->bounding_box().min.z()) < 1e-6);
+    }
+}
+
+TEST_CASE("SLASupportTool: points generated from a snapshot are the points of the object", "[SLASupportTool]")
+{
+    BoxModel box{20., 20., 40.};
+
+    Slic3r::Domain::Transform3d object_to_world = Slic3r::Domain::Transform3d::Identity();
+    object_to_world.translate(Slic3r::Domain::Vec3d(0., 0., 10.));
+
+    SlaConfig config = make_sla_config();
+
+    const auto from_object = Slic3r::sla::generate_support_points_for_tool(*box.object, object_to_world, config.full, config.object_settings, []{ return false; });
+    REQUIRE(from_object.size() > 0);
+
+    const auto from_snapshot =
+        Slic3r::sla::generate_support_points_for_tool(Slic3r::sla::support_tool_model_mesh(*box.object), object_to_world, config.full, config.object_settings, []{ return false; });
+
+    REQUIRE(from_snapshot.size() == from_object.size());
+    for (std::size_t i = 0; i < from_object.size(); ++i) {
+        CHECK(from_snapshot[i].pos.isApprox(from_object[i].pos));
+        CHECK(from_snapshot[i].head_front_radius == from_object[i].head_front_radius);
+    }
 }
