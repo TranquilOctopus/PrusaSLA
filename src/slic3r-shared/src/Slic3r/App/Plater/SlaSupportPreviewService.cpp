@@ -56,12 +56,18 @@ std::uint64_t hash_support_points(const Domain::SLA::SupportPoints& points)
         mix_float(point.head_front_radius);
         // Every dimension the support tree reads off the point, so that a change
         // which only moves the pillar or the base (a support preset, see M2.18c)
-        // still refreshes the preview geometry.
+        // or only reshapes the head or the stem (the tip shape, the knot, the
+        // stem sides and the stem taper, see M2.16b) still refreshes the preview
+        // geometry.
         mix_float(point.tip_length);
         mix_float(point.contact_depth);
         mix_float(point.pillar_diameter);
         mix_float(point.base_diameter);
         mix_float(point.base_height);
+        mix(static_cast<std::uint64_t>(point.tip_shape));
+        mix_float(point.knot_radius);
+        mix(static_cast<std::uint64_t>(point.stem_sides));
+        mix_float(point.stem_taper);
     }
     return seed;
 }

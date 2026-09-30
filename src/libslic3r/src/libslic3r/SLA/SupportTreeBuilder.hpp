@@ -20,6 +20,7 @@
 #include "libslic3r/Point.hpp"
 #include "libslic3r/SLA/JobController.hpp"
 #include "libslic3r/libslic3r.h"
+#include "Slic3r/Domain/SLA/SupportPoint.hpp"
 
 namespace Slic3r {
 namespace sla {
@@ -74,6 +75,39 @@ T distance(const LegacyVec<I, T>& pp1, const LegacyVec<I, T>& pp2) {
 
 const Vec3d DOWN = {0.0, 0.0, -1.0};
 
+// The stem (pillar) geometry of a support point: the cross section of its
+// pillar and how much the pillar radius changes along it. Built from the per
+// point stem_sides / stem_taper of a support point by sla::stem_geometry().
+struct StemGeometry
+{
+    // Cross section of the pillar: 0 = round (a steps sided cylinder as the
+    // mesh builder has always made), 3..12 = a regular polygon prism with that
+    // many corners. The polygon keeps the given radius as its circumscribed
+    // radius, so it is about as strong as the round pillar of the same radius.
+    uint8_t sides = 0;
+
+    // How much the pillar radius changes over the length of the pillar, in mm,
+    // measured from the head end (r_start) to the base end (r_end). Positive
+    // means the pillar is that many mm thinner where it meets the base.
+    double taper_mm = 0.;
+
+    // The smallest radius a tapered pillar may reach: the fallback radius the
+    // algorithm may shrink a head to, so a stem never becomes thinner than the
+    // thinnest pillar the tree builds anyway.
+    double min_radius_mm = 0.;
+
+    bool round() const { return sides < 3; }
+
+    // The radius at the base end of a pillar of this geometry that starts with
+    // start_radius. Without a taper this is exactly start_radius, so the
+    // pillars of the support points that did not ask for one are unchanged.
+    double end_radius(double start_radius) const
+    {
+        return taper_mm > 0. ? std::max(start_radius - taper_mm, min_radius_mm)
+                              : start_radius;
+    }
+};
+
 struct SupportTreeNode
 {
     static const constexpr long ID_UNSET = -1;
@@ -99,6 +133,18 @@ struct Head: public SupportTreeNode {
     double width_mm = 2;
     double penetration_mm = 0.5;
 
+    // The shape of the contact end of this head (M2.16b). Default is the two
+    // sphere pinhead this slicer has always built.
+    Domain::SLA::SupportPoint::TipShape tip_shape =
+        Domain::SLA::SupportPoint::TipShape::Default;
+
+    // Radius of a ball at the junction between the back of the pinhead and the
+    // pillar. 0 = no knot.
+    double knot_radius_mm = 0.;
+
+    // The cross section and the taper of the pillar this head carries.
+    StemGeometry stem;
+
     // If there is a pillar connecting to this head, then the id will be set.
     long pillar_id = ID_UNSET;
 
@@ -123,6 +169,13 @@ struct Head: public SupportTreeNode {
     inline double fullwidth() const
     {
         return real_width() - penetration_mm;
+    }
+
+    // The radius of the head where the pillar meets it: the back of the
+    // pinhead, or the knot ball if the support point asked for one.
+    inline double junction_radius() const
+    {
+        return std::max(r_back_mm, knot_radius_mm);
     }
 
     inline Junction junction() const
@@ -156,8 +209,10 @@ struct Pillar: public SupportTreeNode {
     // How many pillars are cascaded with this one
     unsigned links = 0;
 
-    // Per-point stem sides override. 0 = use global/round; 4 = square, 6 = hexagon, etc.
-    uint8_t stem_sides = 0;
+    // The cross section and the taper of this pillar, as the support point that
+    // owns it asked for them. r_end is already the tapered radius at the base
+    // end, see StemGeometry::end_radius().
+    StemGeometry stem;
 
     Pillar(const Vec3d &endp, double h, double start_radius, double end_radius)
         : height{h}
@@ -285,7 +340,9 @@ public:
         return m_heads.back();
     }
     
-    long add_pillar(long headid, double length, uint8_t stem_sides = 0)
+    // A pillar hanging from a head takes the stem geometry (cross section and
+    // taper) of the support point the head belongs to.
+    long add_pillar(long headid, double length)
     {
         std::lock_guard<Mutex> lk(m_mutex);
         if (m_pillars.capacity() < m_heads.size())
@@ -295,8 +352,9 @@ public:
         Head &head = m_heads[m_head_indices[size_t(headid)]];
         
         Vec3d hjp = head.junction_point() - Vec3d{0, 0, length};
-        m_pillars.emplace_back(hjp, length, head.r_back_mm);
-        m_pillars.back().stem_sides = stem_sides;
+        m_pillars.emplace_back(hjp, length, head.r_back_mm,
+                               head.stem.end_radius(head.r_back_mm));
+        m_pillars.back().stem = head.stem;
 
         Pillar& pillar = m_pillars.back();
         pillar.id = long(m_pillars.size() - 1);
@@ -357,15 +415,18 @@ public:
         return pillar.id;
     }
     
-    // Overload to add pillar with explicit stem_sides
-    long add_pillar(const Vec3d &endp, double h, double start_radius, double end_radius, uint8_t stem_sides)
+    // A pillar with explicit radii and the stem geometry of a support point. The
+    // taper is applied to the radius at the base end, so the pillar is as wide
+    // as it was asked for where it starts and taper_mm thinner where it ends.
+    long add_pillar(const Vec3d &endp, double h, double start_radius, double end_radius,
+                    const StemGeometry &stem)
     {
         std::lock_guard<Mutex> lk(m_mutex);
         if (m_pillars.capacity() < m_heads.size())
             m_pillars.reserve(m_heads.size() * 10);
         
-        m_pillars.emplace_back(endp, h, start_radius, end_radius);
-        m_pillars.back().stem_sides = stem_sides;
+        m_pillars.emplace_back(endp, h, start_radius, stem.end_radius(end_radius));
+        m_pillars.back().stem = stem;
         Pillar& pillar = m_pillars.back();
         pillar.id = long(m_pillars.size() - 1);
         pillar.starts_from_head = false;

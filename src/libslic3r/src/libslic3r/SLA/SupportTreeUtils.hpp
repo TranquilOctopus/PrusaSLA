@@ -371,6 +371,31 @@ inline BaseSize base_size(const SupportableMesh            &sm,
     return ret;
 }
 
+// The cross section and the taper of the pillar a support point asks for
+// (M2.16b). A stem side count below 3 or above 12 is not a polygon this mesh
+// builder makes, so it falls back to the round pillar. Without a stem of its own
+// the point gets the round, untapered pillar, which is what every point got
+// before the per point stem geometry existed.
+inline StemGeometry stem_geometry(const SupportableMesh            &sm,
+                                  const Domain::SLA::SupportPoint *sp)
+{
+    StemGeometry ret;
+    ret.min_radius_mm = sm.cfg.head_fallback_radius_mm;
+
+    if (sp == nullptr)
+        return ret;
+
+    if (sp->stem_sides >= 3 && sp->stem_sides <= 12)
+        ret.sides = sp->stem_sides;
+
+    // The taper is in mm of radius over the pillar: a negative or missing value
+    // means no taper at all.
+    if (sp->stem_taper > 0.f)
+        ret.taper_mm = double(sp->stem_taper);
+
+    return ret;
+}
+
 template<class Ex>
 bool optimize_pinhead_placement(Ex                     policy,
                                 const SupportableMesh &m,
@@ -405,7 +430,9 @@ bool optimize_pinhead_placement(Ex                     policy,
         lmin = 0., lmax = head.penetration_mm;
     }
 
-    // The distance needed for a pinhead to not collide with model.
+    // The distance needed for a pinhead to not collide with model. Every tip shape
+    // of M2.16b reaches as far into the model as the default one, so this does
+    // not change with them.
     double w = lmin + 2 * back_r + 2 * head.r_pin_mm - head.penetration_mm;
 
     double pin_r = head.r_pin_mm;
@@ -483,6 +510,13 @@ std::optional<Head> calculate_pinhead_placement(Ex                     policy,
         sp.pos.cast<double>() // displacement
     };
 
+    // The rest of the per point geometry of the point (M2.16b): the shape of
+    // the contact, an optional knot ball at the junction and the cross section
+    // and taper of the pillar that carries this head.
+    head.tip_shape      = sp.tip_shape;
+    head.knot_radius_mm = double(sp.knot_radius);
+    head.stem           = stem_geometry(sm, &sp);
+
     if (optimize_pinhead_placement(policy, sm, head)) {
         head.id = long(suppt_idx);
 
@@ -507,6 +541,10 @@ struct GroundConnection {
     // pillar diameter (the support presets) brings its own, zero means the
     // globally configured one. See head_back_radius().
     double full_radius = 0.;
+
+    // The cross section and the taper of the pillar of this connection, from
+    // the support point the leaf it starts from. (M2.16b)
+    StemGeometry stem;
 
     operator bool() const { return pillar_base.has_value() && !path.empty(); }
 };
@@ -553,7 +591,8 @@ inline long build_ground_connection(SupportTreeBuilder &builder,
 //        ret = builder.add_pillar(head_id, h);
 //    } else
 
-    ret = builder.add_pillar(gp, h, conn.path.back().r, conn.pillar_base->r_top);
+    ret = builder.add_pillar(gp, h, conn.path.back().r, conn.pillar_base->r_top,
+                             conn.stem);
 
     if (conn.pillar_base->r_top >= full_r)
         builder.add_pillar_base(ret, conn.pillar_base->height, conn.pillar_base->r_bottom);
@@ -786,6 +825,7 @@ GroundConnection deepsearch_ground_connection(
     if (z_fn(Biz::Algorithms::Optimize::Input<3>({plr, azm, bridge_l})) <= gndlvl) {
         conn.pillar_base = Pedestal{gp, base.height, base_r, end_radius};
         conn.full_radius = sp != nullptr ? head_back_radius(sm, *sp) : 0.;
+        conn.stem        = stem_geometry(sm, sp);
     }
 
     return conn;
