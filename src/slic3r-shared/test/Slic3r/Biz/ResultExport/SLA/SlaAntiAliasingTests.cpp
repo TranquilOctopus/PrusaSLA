@@ -1,0 +1,292 @@
+// M4.13: does every writer describe the anti-aliasing it actually rasterized with?
+//
+// One slice of a 20 mm cube per format, with gamma_correction 0 (thresholded, AA off) and 1
+// (anti-aliased), exported to each of the four rasterized containers. The rasterizer is the same
+// for all of them (sla::create_raster_grayscale_aa, keyed off gamma_correction), so the interesting
+// part is what each header says and what each encoder did to the 8-bit raster afterwards.
+//
+// Checked, per format:
+//   - a thresholded layer decodes to exactly two greys (0 and 255), an anti-aliased one to more;
+//   - every decoded value is on the quantization grid that format's encoder uses;
+//   - the AA / level-count field the header declares, at the offset the format documents.
+//
+// See doc/sla-fork/profiling/aa-and-z-correction.md for the offsets and for the three findings
+// these tests deliberately pin rather than change.
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+
+#include "Slic3r/Biz/ResultExport/SLA/SlaArchiveFormat.hpp"
+#include "Slic3r/Biz/ResultExport/SLA/SlaLayerDecoders.hpp"
+#include "Slic3r/Biz/SlaFixture.hpp"
+#include "Slic3r/Domain/ConfigDefsSLA.hpp"
+#include "Slic3r/TestUtils/TestTempDir.hpp"
+
+#include <boost/filesystem.hpp>
+#include <boost/nowide/fstream.hpp>
+
+#include <algorithm>
+#include <cstdint>
+#include <iterator>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace fs = boost::filesystem;
+
+using Slic3r::Test::Sla::decode_goo_layer;
+using Slic3r::Test::Sla::decode_pw0_layer;
+using Slic3r::Test::Sla::decode_sl1_png_layer;
+using Slic3r::Test::Sla::distinct_greys;
+using Slic3r::Test::Sla::on_quantization_grid;
+
+using Slic3r::Biz::PrintHost::Sla::SlaArchiveFormatRegistry;
+using Slic3r::Biz::PrintHost::Sla::register_sla_archive_formats;
+using Slic3r::Biz::Slicing::Sla::FileDataType;
+
+namespace {
+
+// A small display and a coarse layer height: only one layer is decoded, so the cost is in the
+// slicing, and a 20 mm cube at 0.5 mm is 40 layers instead of 400.
+constexpr int    DISPLAY_PIXELS_X = 320;
+constexpr int    DISPLAY_PIXELS_Y = 180;
+constexpr size_t LAYER_PIXELS     = size_t(DISPLAY_PIXELS_X) * DISPLAY_PIXELS_Y;
+
+// Body offsets of the fields under test, counted from the first byte after a section's 12-byte tag
+// and 4-byte declared length (pm5.md, and the writers themselves).
+constexpr size_t PM5_LEVELS_OFFSET      = 40; // u32 grey level count
+constexpr size_t ANYCUBIC_AA_OFFSET    = 40; // u32 antialiasing flag
+constexpr size_t GOO_AA_OFFSET         = 188; // int16 big endian
+constexpr size_t GOO_GREY_LEVEL_OFFSET = 190; // int16 big endian
+
+std::vector<uint8_t> read_file_binary(const fs::path& path)
+{
+    boost::nowide::ifstream file(path.string(), std::ios::binary);
+    file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+    return std::vector<uint8_t>((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+}
+
+uint32_t read_le32(const std::vector<uint8_t>& data, size_t offset)
+{
+    uint32_t value = 0;
+    for (size_t i = 0; i < 4; ++i) value |= uint32_t(data.at(offset + i)) << (8 * i);
+    return value;
+}
+
+int16_t read_be16(const std::vector<uint8_t>& data, size_t offset)
+{
+    return int16_t((uint16_t(data.at(offset)) << 8) | uint16_t(data.at(offset + 1)));
+}
+
+/// The body of the block an intro address table entry points at: a section starts with a 12-byte
+/// tag and a 4-byte declared length, and the fields follow those.
+size_t section_body(const std::vector<uint8_t>& data, size_t address)
+{
+    return address + 12 + 4;
+}
+
+/// Slice one 20 mm cube into `format` with the given gamma and store the file. The layer images
+/// are small enough to decode in full, so the test decodes the middle one out of the slicing
+/// result, which is what gets written into the container.
+struct ExportedCube {
+    fs::path             path;
+    std::vector<uint8_t> bytes;
+    FileDataType         type  = FileDataType::other;
+    std::vector<uint8_t> layer; // one decoded layer, the middle one
+    std::set<uint8_t>    greys; // its distinct values
+};
+
+/// The (step, top) of the grid the format's encoder can produce. The two RLE encoders quantize
+/// differently: pw0 spreads 16 levels over the whole range in steps of 17, goo steps by 16 and
+/// writes the top nibble as 255. An sl1 layer is a greyscale PNG and carries its own bit depth, so
+/// anything goes.
+std::pair<int, int> quantization_grid(FileDataType type)
+{
+    switch (type) {
+    case FileDataType::anycubic:
+    case FileDataType::pm5: return {17, 255};
+    case FileDataType::goo: return {16, 255};
+    default: return {1, 255};
+    }
+}
+
+ExportedCube export_cube(const std::string& format, double gamma_correction)
+{
+    Slic3r::Test::SlaSlicingFixture fixture;
+
+    auto model = Slic3r::Test::generate_cubes(1, 5);
+    auto config = Slic3r::Domain::ConfigPackSLA{};
+
+    config.sla_printer_settings.items.opt("sla_archive_format").set(format);
+    config.sla_printer_settings.items.opt("display_pixels_x").set(DISPLAY_PIXELS_X);
+    config.sla_printer_settings.items.opt("display_pixels_y").set(DISPLAY_PIXELS_Y);
+    config.sla_printer_settings.items.opt("display_orientation").set(
+        Slic3r::Domain::SLADisplayOrientation::sladoLandscape);
+    config.sla_printer_settings.items.opt("display_width").set(64.0);
+    config.sla_printer_settings.items.opt("display_height").set(36.0);
+    config.sla_printer_settings.items.opt("display_mirror_x").set(false);
+    config.sla_printer_settings.items.opt("display_mirror_y").set(false);
+    // 0 thresholds the raster, 1 anti-aliases it. Nothing in between: the test is about the two
+    // ends, and a gamma in between still produces an 8-bit AA raster.
+    config.sla_printer_settings.items.opt("gamma_correction").set(gamma_correction);
+    config.sla_print_settings.items.opt("layer_height").set(0.5);
+    config.sla_material_settings.items.opt("initial_layer_height").set(0.5);
+    // No supports and no raft: every layer is then a plain square, so the pixels under test are
+    // the object's own and not a support pillar's. raft_type has to be cleared as well, it wins
+    // over pad_enable (is_pad_enabled, SLAPrint.cpp:104).
+    config.sla_print_settings.items.opt("supports_enable").set(false);
+    config.sla_print_settings.items.opt("pad_enable").set(false);
+    config.sla_print_settings.items.opt("raft_type").set(Slic3r::Domain::sla::RaftType::None);
+
+    auto sla_result = fixture.slice_sla_model(model, config);
+    REQUIRE(sla_result != nullptr);
+    REQUIRE_FALSE(sla_result->files.data.empty());
+
+    register_sla_archive_formats();
+    auto format_entry =
+        SlaArchiveFormatRegistry::instance().find_by_file_data_type(sla_result->files.type);
+    REQUIRE(format_entry != nullptr);
+    REQUIRE_FALSE(format_entry->extensions().empty());
+
+    Tests::TestTempDir temp_dir;
+    ExportedCube out;
+    out.type = sla_result->files.type;
+    out.path = temp_dir.path() / ("out." + format_entry->extensions().front());
+    REQUIRE_NOTHROW(format_entry->store(out.path.string(), *sla_result));
+    out.bytes = read_file_binary(out.path);
+    REQUIRE_FALSE(out.bytes.empty());
+
+    // The middle layer, so the test never looks at a first layer a fade or a raft touched.
+    const std::vector<uint8_t>& middle = sla_result->files.data[sla_result->files.data.size() / 2];
+    if (out.type == FileDataType::goo) {
+        out.layer = decode_goo_layer(middle, LAYER_PIXELS);
+    } else if (out.type == FileDataType::anycubic || out.type == FileDataType::pm5) {
+        out.layer = decode_pw0_layer(middle, LAYER_PIXELS);
+    } else {
+        out.layer = decode_sl1_png_layer(middle);
+    }
+    out.greys = distinct_greys(out.layer);
+    return out;
+}
+
+/// The decoded layer covers the whole display and has something on it, anti-aliased or not.
+void require_whole_layer(const ExportedCube& cube)
+{
+    REQUIRE(cube.layer.size() == LAYER_PIXELS);
+    const size_t lit = std::count_if(cube.layer.begin(), cube.layer.end(), [](uint8_t v) { return v > 0; });
+    REQUIRE(lit > 0);
+}
+
+/// A thresholded raster carries nothing but black and white. Checked one value at a time so a
+/// failure says how many greys the file really had and which ones.
+void require_binary(const std::set<uint8_t>& greys)
+{
+    INFO("distinct greys: " << greys.size());
+    REQUIRE(greys.size() == 2);
+    REQUIRE(greys.count(0) == 1);
+    REQUIRE(greys.count(255) == 1);
+}
+
+/// The first address in the intro table is the HEADER block, in every one of these containers.
+size_t header_body(const ExportedCube& cube)
+{
+    return section_body(cube.bytes, read_le32(cube.bytes, 20));
+}
+
+} // namespace
+
+TEST_CASE("A thresholded layer is binary and an anti-aliased one is not", "[export][sla][aa]")
+{
+    const std::string format = GENERATE(std::string("sl1"), std::string("pwmx"), std::string("pm5"),
+                                        std::string("goo"));
+    const bool        aa_on = GENERATE(false, true);
+    CAPTURE(format, aa_on);
+
+    const ExportedCube cube = export_cube(format, aa_on ? 1.0 : 0.0);
+    require_whole_layer(cube);
+
+    if (aa_on) {
+        // An 8-bit anti-aliased raster has intermediate greys along the edges of the cube. Exactly
+        // two would mean the raster had been thresholded despite gamma_correction = 1.
+        REQUIRE(cube.greys.size() > 2);
+    } else {
+        // agg's threshold gamma (.5) makes the raster binary before any encoder sees it, so a
+        // thresholded file must carry nothing but 0 and 255 however it is encoded.
+        require_binary(cube.greys);
+    }
+
+    // Whatever the encoder does with the levels in between, it may not invent values its own
+    // quantization cannot produce.
+    const auto [step, top] = quantization_grid(cube.type);
+    REQUIRE(on_quantization_grid(cube.layer, step, top));
+}
+
+TEST_CASE("The pm5 levels field matches the levels the pw0 encoder writes", "[export][sla][aa][pm5]")
+{
+    // The field at body offset 40 is the grey level count (pm5.md), and the encoder keeps the top
+    // nibble of every pixel, so 16 is both the declared and the achievable count.
+    const ExportedCube aa = export_cube("pm5", 1.0);
+    require_whole_layer(aa);
+    REQUIRE(read_le32(aa.bytes, header_body(aa) + PM5_LEVELS_OFFSET) == 16u);
+    REQUIRE(aa.greys.size() <= 16);
+    // The layer colour table declares the same count as the header; it is the fourth address.
+    REQUIRE(read_le32(aa.bytes, read_le32(aa.bytes, 20 + 4 * 3) + 4) == 16u);
+
+    // A thresholded pm5 declares the same 16 and uses two of them.
+    const ExportedCube thresholded = export_cube("pm5", 0.0);
+    require_whole_layer(thresholded);
+    REQUIRE(read_le32(thresholded.bytes, header_body(thresholded) + PM5_LEVELS_OFFSET) == 16u);
+    require_binary(thresholded.greys);
+}
+
+TEST_CASE("The Anycubic antialiasing flag does not follow gamma_correction",
+          "[export][sla][aa][anycubic]")
+{
+    // store_anycubic writes h.antialiasing = 1 unconditionally (AnycubicSLA.cpp:310), also for a
+    // thresholded file. The field is a flag, not a level count, so the number of levels this format
+    // can carry is the encoder's 16 either way; finding 1 in the review doc covers the flag.
+    const ExportedCube aa = export_cube("pwmx", 1.0);
+    require_whole_layer(aa);
+    REQUIRE(read_le32(aa.bytes, header_body(aa) + ANYCUBIC_AA_OFFSET) == 1u);
+
+    const ExportedCube thresholded = export_cube("pwmx", 0.0);
+    require_whole_layer(thresholded);
+    CHECK(read_le32(thresholded.bytes, header_body(thresholded) + ANYCUBIC_AA_OFFSET) == 1u);
+    require_binary(thresholded.greys);
+}
+
+TEST_CASE("The goo header level count is smaller than what the encoder writes",
+          "[export][sla][aa][goo]")
+{
+    // store_goo writes anti_aliasing_level = 1 and grey_level = 4 (GooSLA.cpp:286-287) whatever the
+    // rasterizer did, while the encoder masks the raster to its high nibble, so up to 16 greys
+    // reach the file. Finding 2 in the review doc: the two numbers cannot both be right and there
+    // is no .goo sample in the repository to settle it, so the current values are pinned here and
+    // the pixels are checked against the encoder's grid rather than against the header's.
+    const ExportedCube aa = export_cube("goo", 1.0);
+    require_whole_layer(aa);
+    REQUIRE(read_be16(aa.bytes, GOO_AA_OFFSET) == 1);
+    REQUIRE(read_be16(aa.bytes, GOO_GREY_LEVEL_OFFSET) == 4);
+    REQUIRE(aa.greys.size() > 2);
+
+    const ExportedCube thresholded = export_cube("goo", 0.0);
+    require_whole_layer(thresholded);
+    CHECK(read_be16(thresholded.bytes, GOO_AA_OFFSET) == 1);
+    CHECK(read_be16(thresholded.bytes, GOO_GREY_LEVEL_OFFSET) == 4);
+    require_binary(thresholded.greys);
+}
+
+TEST_CASE("An sl1 layer is an 8-bit greyscale png whatever the gamma", "[export][sla][aa][sl1]")
+{
+    // store_sl1 writes no AA or level-count key at all (fill_iniconf, SL1.cpp:144): the printer is
+    // expected to read the PNG's own bit depth, which PNGRasterEncoder always writes as 8. So the
+    // only thing left to check is that both kinds of layer decode as 8-bit greyscale, which
+    // png::decode_png accepts and nothing else, and that the thresholded one is binary.
+    const ExportedCube aa = export_cube("sl1", 1.0);
+    require_whole_layer(aa);
+    REQUIRE(aa.greys.size() > 2);
+
+    const ExportedCube thresholded = export_cube("sl1", 0.0);
+    require_whole_layer(thresholded);
+    require_binary(thresholded.greys);
+}
