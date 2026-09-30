@@ -26,12 +26,18 @@ check `resources/icons/PrusaSlicer.ico`'s 16 px entry first after rendering.
 
 ## Rendering
 
-    python doc/sla-fork/tools/render_icons.py --check   # list sources and outputs, write nothing
+    python doc/sla-fork/tools/render_icons.py --dry-run  # list sources, outputs and backend, write nothing
     python doc/sla-fork/tools/render_icons.py           # icon + splash
     python doc/sla-fork/tools/render_icons.py --icon    # icon only
 
-Needs `cairosvg` (and the cairo C library) and `Pillow`; it exits 2 with the pip line if either is
-missing. It overwrites, in place:
+Needs `Pillow`, plus one of two rasterisers. `--backend auto` (the default) uses `cairosvg`
+(`python -m pip install cairosvg`, which also needs the cairo C library) when it imports and
+Inkscape 1.x otherwise; `--backend cairosvg` and `--backend inkscape` force one. Inkscape is
+found through the `INKSCAPE` environment variable, else as `inkscape` on PATH, so the Microsoft
+Store build needs its app execution alias switched on (Settings > Apps > Advanced app settings >
+App execution aliases > Inkscape) and a new terminal opened. It exports one size per run into
+`.render_icons-*/` beside the outputs rather than %TEMP%, and the folder is removed when the tool
+ends. Whichever backend runs, it exits 2 with the fix if one is missing. It overwrites, in place:
 
 | Output | Sizes | Read by |
 |---|---|---|
@@ -175,7 +181,8 @@ User-visible, but each needs a decision rather than a substitution.
 
 ## Checklist for whoever renders the binaries
 
-1. `python doc/sla-fork/tools/render_icons.py --check`, then run it.
+1. `python doc/sla-fork/tools/render_icons.py --dry-run`, then run it. It prints the backend it
+   picked, so an unexpected Inkscape (or cairosvg) is visible before the files are written.
 2. Look at the 16 px entry of `PrusaSlicer.ico` and the splash. The 16 px entry is the one that
    has to survive.
 3. `git status` should show only the four binaries in `resources/icons/` as modified.
