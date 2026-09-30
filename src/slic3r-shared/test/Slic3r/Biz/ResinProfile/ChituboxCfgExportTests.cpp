@@ -57,6 +57,7 @@ Domain::ConfigItems filled_resin_items()
     items.opt("light_pwm").set(255);
     items.opt("bottom_light_pwm").set(128);
     items.opt("bottle_cost").set(25.);
+    items.opt("bottle_volume").set(500.);
     items.opt("material_vendor").set(std::string{"Generic"});
     return items;
 }
@@ -246,9 +247,128 @@ TEST_CASE("ChituboxCfgExport - a resin preset becomes the keys the reader reads"
     CHECK(value_of(keys, "bottomLayerLiftHeight2") == "2");
     CHECK(value_of(keys, "normalLightIntensityPWM") == "255");
     CHECK(value_of(keys, "bottomLightIntensityPWM") == "128");
+    // The price of a bottle and the bottle it is for become a price per litre and its unit.
+    CHECK(value_of(keys, "resinPrice") == "50");
+    CHECK(value_of(keys, "resinUnit") == "L");
+    CHECK(value_of(keys, "bottleVolume") == "500");
     // A delay after the exposure is where a tilt printer keeps the wait before a lift, so a
     // printer that lifts has no use for it and the file does not carry it.
     CHECK(was_skipped(exported, "delay_after_exposure"));
+}
+
+TEST_CASE("ChituboxCfgExport - a price of a bottle becomes a price per litre", "[resin_profile][export]")
+{
+    SECTION("the cost of the bottle the preset names")
+    {
+        const std::map<std::string, std::string> keys =
+            parse_cfg(export_chitubox_cfg(filled_resin_items(), TargetPrinterClass::GenericMsla));
+
+        // 25 for a 500 ml bottle is 50 per litre, and a price without the unit it is per is not a
+        // price the import would read back, so both keys are written.
+        CHECK(value_of(keys, "resinPrice") == "50");
+        CHECK(value_of(keys, "resinUnit") == "L");
+        CHECK(value_of(keys, "bottleVolume") == "500");
+
+        const ChituboxCfgExport exported =
+            export_chitubox_cfg_report(filled_resin_items(), TargetPrinterClass::GenericMsla);
+        // The row is a written row, not one of the settings left out, and it says what it was made
+        // of, so a report reader can check the arithmetic.
+        CHECK_FALSE(was_skipped(exported, "bottle_cost"));
+        CHECK_FALSE(was_skipped(exported, "bottle_volume"));
+        const ExportedResinKey* price = find_row(exported, "bottle_cost");
+        REQUIRE(price != nullptr);
+        CHECK(price->chitubox_key == "resinPrice");
+        CHECK(price->value == "50");
+        CHECK(price->unit_key == "resinUnit");
+        CHECK(price->unit_value == "L");
+        CHECK(price->status == MappingStatus::Converted);
+        CHECK(price->note.find("500") != std::string::npos);
+        const ExportedResinKey* volume = find_row(exported, "bottle_volume");
+        REQUIRE(volume != nullptr);
+        CHECK(volume->chitubox_key == "bottleVolume");
+        CHECK(volume->value == "500");
+    }
+
+    SECTION("a cost of zero is the absence of a price and is not written")
+    {
+        Domain::ConfigItems items = filled_resin_items();
+        items.opt("bottle_cost").set(0.);
+        const ChituboxCfgExport exported = export_chitubox_cfg_report(items, TargetPrinterClass::GenericMsla);
+        const std::map<std::string, std::string> keys = parse_cfg(exported.text);
+
+        CHECK(keys.count("resinPrice") == 0);
+        CHECK(keys.count("resinUnit") == 0);
+        const ExportedResinKey* price = find_row(exported, "bottle_cost");
+        REQUIRE(price != nullptr);
+        CHECK(price->chitubox_key.empty());
+        CHECK(price->value.empty());
+        CHECK(price->note.find("not used") != std::string::npos);
+    }
+
+    SECTION("a bottle of no size is priced for the usual 1 litre bottle, and says so")
+    {
+        Domain::ConfigItems items = filled_resin_items();
+        items.opt("bottle_volume").set(0.);
+        const ChituboxCfgExport exported = export_chitubox_cfg_report(items, TargetPrinterClass::GenericMsla);
+        const std::map<std::string, std::string> keys = parse_cfg(exported.text);
+
+        // Dividing by a bottle of nothing would be a price of infinity, so the same bottle the
+        // import assumes is used here and the row names it.
+        CHECK(value_of(keys, "resinPrice") == "25");
+        const ExportedResinKey* price = find_row(exported, "bottle_cost");
+        REQUIRE(price != nullptr);
+        CHECK(price->note.find("1000") != std::string::npos);
+    }
+
+    SECTION("a resin with no price of its own writes neither the price nor the unit")
+    {
+        Domain::ConfigItems items = resin_items();
+        const ChituboxCfgExport exported = export_chitubox_cfg_report(items, TargetPrinterClass::GenericMsla);
+        const std::map<std::string, std::string> keys = parse_cfg(exported.text);
+
+        CHECK(keys.count("resinPrice") == 0);
+        CHECK(keys.count("resinUnit") == 0);
+    }
+}
+
+TEST_CASE("ChituboxCfgExport - a price per litre survives the import and back out", "[resin_profile][export]")
+{
+    ResinImportFixture fx;
+
+    // A file of the shape the export writes: a price per litre, the unit it is per and the bottle
+    // the price was made for. The import turns the first two into a bottle cost, and the volume
+    // stays a resin setting of its own, so the export can take them apart again.
+    const fs::path profile = fx.write_profile(
+        "price.cfg",
+        "currProfile: Priced resin\n"
+        "normalExposureTime: 2.5\n"
+        "resinPrice: 40\n"
+        "resinUnit: /l\n"
+        "bottleVolume: 500\n"
+    );
+    ResinProfileImportInteractor interactor(fx.project_interactor);
+    const ResinImportResult       result = interactor.import_file(profile, fx.target(), /*dry_run=*/true);
+    REQUIRE(result.ok);
+
+    const MappingResult& mapping = result.mapping;
+    // 40 per litre of a 500 ml bottle is 20 for the bottle.
+    CHECK(mapping.material_values.at("bottle_cost") == "20");
+    CHECK(mapping.material_values.at("bottle_volume") == "500");
+
+    const ChituboxCfgExport exported =
+        export_chitubox_cfg_report(resin_items_of(mapping), TargetPrinterClass::GenericMsla, "Priced resin");
+    const std::map<std::string, std::string> keys = parse_cfg(exported.text);
+
+    // 20 for a 500 ml bottle is the 40 per litre the file stated.
+    CHECK(value_of(keys, "resinPrice") == "40");
+    CHECK(value_of(keys, "resinUnit") == "L");
+    CHECK(value_of(keys, "bottleVolume") == "500");
+    // And the unit is one the import reads as a litre, so the file really does come back in.
+    const ChituboxCfgReader reader;
+    const auto             reread = reader.read(fx.write_profile("price_exported.cfg", exported.text));
+    REQUIRE(reread.has_value());
+    const MappingResult again = map_resin_profile(*reread, TargetPrinterClass::GenericMsla);
+    check_same_number(again.material_values.at("bottle_cost"), mapping.material_values.at("bottle_cost"));
 }
 
 TEST_CASE("ChituboxCfgExport - the speeds are converted back to mm/min", "[resin_profile][export]")
@@ -292,25 +412,22 @@ TEST_CASE("ChituboxCfgExport - a setting with no Chitubox key is left out and na
     const ChituboxCfgExport exported = export_chitubox_cfg_report(filled_resin_items(), TargetPrinterClass::GenericMsla);
     const std::map<std::string, std::string> keys = parse_cfg(exported.text);
 
-    // The price of a bottle, the vendor of the resin and the tilt of the machine are resin
-    // settings that a .cfg has no key for, so they are named instead of being written under a key
-    // that means something else.
-    CHECK(was_skipped(exported, "bottle_cost"));
+    // The vendor of the resin and the tilt of the machine are resin settings that a .cfg has no key
+    // for, so they are named instead of being written under a key that means something else.
     CHECK(was_skipped(exported, "material_vendor"));
     CHECK(was_skipped(exported, "use_tilt"));
-    CHECK(keys.count("resinPrice") == 0);
     CHECK(keys.count("machineName") == 0);
     // A setting the file can carry is never reported as left out.
     CHECK_FALSE(was_skipped(exported, "exposure_time"));
     CHECK_FALSE(was_skipped(exported, "lift_height"));
 
-    const ExportedResinKey* price = find_row(exported, "bottle_cost");
-    REQUIRE(price != nullptr);
-    CHECK(price->status == MappingStatus::NotApplicable);
-    CHECK(price->chitubox_key.empty());
-    CHECK(price->value.empty());
-    // The report says why there is nothing to write, so the price is not lost without a word.
-    CHECK(price->note.find("price per litre") != std::string::npos);
+    const ExportedResinKey* vendor = find_row(exported, "material_vendor");
+    REQUIRE(vendor != nullptr);
+    CHECK(vendor->status == MappingStatus::NotApplicable);
+    CHECK(vendor->chitubox_key.empty());
+    CHECK(vendor->value.empty());
+    // The report says why there is nothing to write, so the setting is not lost without a word.
+    CHECK(vendor->note.find("vendor") != std::string::npos);
 
     // Every key of the table has a row, and a row says in one way or the other what became of it.
     int written = 0;
@@ -318,6 +435,10 @@ TEST_CASE("ChituboxCfgExport - a setting with no Chitubox key is left out and na
         INFO(row.material_key);
         const bool wrote = !row.chitubox_key.empty();
         CHECK(wrote == !row.value.empty());
+        // A row that writes a value and its unit writes both, and a row that writes nothing has
+        // no unit either: the unit of a price is what makes it a price.
+        CHECK(wrote == !row.unit_key.empty());
+        CHECK(row.unit_key.empty() == row.unit_value.empty());
         if (wrote)
             ++written;
     }

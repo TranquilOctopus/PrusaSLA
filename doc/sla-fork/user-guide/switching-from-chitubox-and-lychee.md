@@ -156,9 +156,13 @@ Chitubox. It is a command-line action only; there is no button in the app yet:
   same way the import picks its table, so a preset that goes out and comes back is mapped the same
   way both times. Speeds are converted back to mm/min, and a `[below, above]` area-fill pair is
   written as the single value Chitubox has, with the other named in the console.
-- A setting the `.cfg` format has no key for — the bottle cost, the vendor, `use_tilt`, the lift keys
-  on a tilt printer — is not written and is named in the console instead, so nothing is dropped
-  quietly. A value of zero is not written either, because zero means the setting is unused.
+- A setting the `.cfg` format has no key for — the vendor, `use_tilt`, the lift keys on a tilt
+  printer — is not written and is named in the console instead, so nothing is dropped quietly. A
+  value of zero is not written either, because zero means the setting is unused.
+- The price goes back as a price per litre: the bottle cost and the bottle volume the resin preset
+  carries become `resinPrice` with `resinUnit`, and the bottle itself is written as `bottleVolume`,
+  so a file that comes back in is priced for the same bottle. A bottle volume of zero would not be a
+  bottle, so the usual 1 litre bottle is used instead and the console says so.
 - What the file is not: it is a resin profile, not a print profile. A real `.cfg` also carries the
   machine's G-code, its model and its build volume, and none of that is a resin setting, so open it
   in Chitubox as a resin rather than as a print.
@@ -272,7 +276,7 @@ by the printer you import into.
 | `layerHeight` | `resin_layer_height` | mm to mm | Exact | Exact |
 | `resinDensity` | `material_density` | g/ml to g/ml | Exact | Exact |
 | `resinPrice` with `resinUnit` | `bottle_cost` | price per litre x bottle volume / 1000 | Converted | Converted |
-| `bottleVolume`, `bottle_volume` | read with `resinPrice`, writes nothing of its own | ml | Converted | Converted |
+| `bottleVolume`, `bottle_volume` | `bottle_volume` | ml to ml | Exact | Exact |
 | `lightOffTime`, `bottomLightOffTime` | `delay_before_exposure` | s, written twice as `v,v` | Approximated | Approximated |
 | `resetTimeBeforeLift` | SL1: `delay_after_exposure`; MSLA: `wait_before_lift` | s, `v,v` on tilt | Approximated | Exact |
 | `resetTimeAfterLift` | MSLA: `wait_after_lift` | s | Not applicable | Exact |
@@ -322,7 +326,9 @@ not use yet, so they arrive as *Unknown* rather than silently:
 - **A price only becomes a bottle cost when the file says it is per litre.** A per-kilo price, or a
   file with no unit, is reported and nothing is written. The currency is never converted, so the
   cost estimate stays in the currency of the source profile. Without a `bottleVolume` in the file a
-  1 litre bottle is assumed, and the note says so.
+  1 litre bottle is assumed for that calculation, and the note says so. A `bottleVolume` that is
+  there is kept as the resin's own `bottle_volume`, which is what lets the export write the price
+  back as a price per litre of that same bottle.
 - **On a tilt printer the bottom layer count becomes the transition layer count**, clamped to the
   3 to 20 layers a tilt printer fades the exposure over, because a tilt printer has no block of
   bottom layers. If the file states a transition layer count as well, that one is what lands in

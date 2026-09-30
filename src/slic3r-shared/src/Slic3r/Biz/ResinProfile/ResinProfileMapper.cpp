@@ -366,12 +366,14 @@ const std::vector<Rule>& mapping_table()
          .note =
              "Read together with resinPrice: a per-litre price becomes a bottle cost, any other unit does not."},
 
+        // The bottle the price is per litre of. It used to be dropped here, which left nothing to
+        // turn the bottle cost back into a price per litre on the way out (M3.15b).
         {.sources     = {"bottleVolume", "bottle_volume"},
-         .tilt        = {Transform::None, "", MappingStatus::Converted},
-         .generic     = {Transform::None, "", MappingStatus::Converted},
+         .tilt        = {Transform::Copy, "bottle_volume", MappingStatus::Exact, UNIT_ML},
+         .generic     = {Transform::Copy, "bottle_volume", MappingStatus::Exact, UNIT_ML},
          .source_unit = UNIT_ML,
          .note =
-             "The bottle size resinPrice is turned into a bottle cost with; without it a 1 litre bottle is assumed."},
+             "The bottle size resinPrice is turned into a bottle cost with, kept as a resin setting of its own so that the price per litre can be written back out of it; without it a 1 litre bottle is assumed."},
 
         {.sources = {"lightOffTime", "bottomLightOffTime"},
          .tilt =
