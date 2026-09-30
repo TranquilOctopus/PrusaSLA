@@ -95,7 +95,7 @@ u32 layer count (289 in the sample), then one 32-byte entry per layer:
 | 4 | u32 | image data length in bytes (confirmed) |
 | 8 | f32 | lift height, mm (confirmed: 8.0) |
 | 12 | f32 | lift speed (confirmed: 6.0) |
-| 16 | f32 | exposure, s (confirmed: 25 for the 5 bottom layers, 2.8 after) |
+| 16 | f32 | exposure, s (confirmed: 25 for the 5 bottom layers, 2.8 after). The raft interface layers of `sla_raft_interface()` carry `raft_interface_exposure` here; a layer that is both a bottom and an interface layer keeps the bottom exposure |
 | 20 | f32 | layer height, mm (confirmed: 0.05) |
 | 24 | u32 | number of lit pixels in the layer (confirmed: equals the decoded count on every layer checked) |
 | 28 | u32 | 0 (unknown) |
