@@ -535,11 +535,16 @@ void SlaSupportPreviewService::build_nodes(
         return;
     }
 
+    // The tree and the raft are resin too, but they have to be told apart from the model, so each
+    // gets its own theme token (PLAN 2.1) instead of the model's resin colour.
     const auto& theme = AppServices::instance().theme();
-    const ColorRGBA support_color = theme.color(Platform::Color::SlaModelResin, Platform::ColorGroup::Default);
-    const Render::Material material = Render::Material{}
-                                          .set_shader(m_device.context().shader_manager().shader("gouraud_light"))
-                                          .set_uniform("uniform_color", support_color);
+    const auto material_for = [this, &theme](Platform::Color color) {
+        const ColorRGBA mesh_color = theme.color(color, Platform::ColorGroup::Default);
+        return Render::Material{}
+            .set_shader(m_device.context().shader_manager().shader("gouraud_light"))
+            .set_uniform("uniform_color", mesh_color)
+            .set_transparent(mesh_color.is_transparent());
+    };
 
     // The meshes come back in the world placement of the object, not lifted: the bed transform and
     // the support elevation belong to the node, so the tree stands on the plate and the model sits
@@ -559,6 +564,7 @@ void SlaSupportPreviewService::build_nodes(
             [&]() { return Render::geometry_from_triangle_mesh(m_device, trimesh->triangles()); }
         );
 
+        const Render::Material material = material_for(Platform::Color::SlaSupport);
         object_builder.child([&](Scene::NodeBuilder& bldr) {
             bldr.set_debug_name("SlaSupportPreviewService - Support Structure")
                 .set_mesh(geom, material, Scene::RenderLayerId(PlaterSceneLayer::DocumentObjects))
@@ -576,6 +582,7 @@ void SlaSupportPreviewService::build_nodes(
             [&]() { return Render::geometry_from_triangle_mesh(m_device, trimesh->triangles()); }
         );
 
+        const Render::Material material = material_for(Platform::Color::SlaPad);
         object_builder.child([&](Scene::NodeBuilder& bldr) {
             bldr.set_debug_name("SlaSupportPreviewService - Pad")
                 .set_mesh(geom, material, Scene::RenderLayerId(PlaterSceneLayer::DocumentObjects))

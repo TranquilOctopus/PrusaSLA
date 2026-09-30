@@ -2,6 +2,7 @@
 
 #include <Slic3r/App/Theme.hpp>
 #include <Slic3r/App/ThemeTypes.hpp>
+#include <Slic3r/Domain/Color.hpp>
 #include <cmath>
 
 using namespace Slic3r::App;
@@ -346,4 +347,37 @@ TEST_CASE("[Theme] Light theme uses SLA palette colors")
     REQUIRE(u8(cursor_highlight.g()) == 255);
     REQUIRE(u8(cursor_highlight.b()) == 0);
     REQUIRE(u8(cursor_highlight.a()) == 255);
+}
+
+TEST_CASE("[Theme] The SLA support and pad tokens are their own colours in both themes")
+{
+    // M2.9a: the support tree and the raft are drawn with these two tokens, never with the model
+    // colour, so each has to resolve and to stay apart from SlaModelResin in both themes, and the
+    // three have to differ in a grayscale render too (PLAN 2.1).
+    Theme dark_theme(Theme::Style::Dark);
+    Theme light_theme(Theme::Style::Light);
+
+    const auto rgb_differs = [](const Domain::ColorRGBA& lhs, const Domain::ColorRGBA& rhs) {
+        return u8(lhs.r()) != u8(rhs.r()) || u8(lhs.g()) != u8(rhs.g()) || u8(lhs.b()) != u8(rhs.b());
+    };
+    const auto grayscale = [](const Domain::ColorRGBA& color) {
+        return u8(0.299f * color.r() + 0.587f * color.g() + 0.114f * color.b());
+    };
+
+    const auto verify_theme = [](const Theme& theme, const char* theme_name) {
+        const Domain::ColorRGBA& model = theme.color(Platform::Color::SlaModelResin);
+        const Domain::ColorRGBA& tree  = theme.color(Platform::Color::SlaSupport);
+        const Domain::ColorRGBA& raft  = theme.color(Platform::Color::SlaPad);
+
+        INFO("Theme: " << theme_name);
+        CHECK(rgb_differs(tree, model));
+        CHECK(rgb_differs(raft, model));
+        CHECK(rgb_differs(tree, raft));
+        CHECK(grayscale(tree) != grayscale(model));
+        CHECK(grayscale(raft) != grayscale(model));
+        CHECK(grayscale(tree) != grayscale(raft));
+    };
+
+    verify_theme(dark_theme, "Dark");
+    verify_theme(light_theme, "Light");
 }
