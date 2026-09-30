@@ -139,17 +139,17 @@ branch, one commit, the box ticked in the same commit.
 
 ## Progress
 
-**209 of 268 todos done (78%)** · updated 2026-09-30 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**214 of 272 todos done (79%)** · updated 2026-09-30 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
 | M0: Foundation | 14/15 | `███████████░` 93% |
-| M1: Look, feel and SLA-first shell | 40/42 | `███████████░` 95% |
-| M2: SLA editing tools (porting the legacy gizmos) | 71/78 | `███████████░` 91% |
+| M1: Look, feel and SLA-first shell | 41/43 | `███████████░` 95% |
+| M2: SLA editing tools (porting the legacy gizmos) | 72/79 | `███████████░` 91% |
 | M3: Resin profile import (Chitubox, Lychee and others) | 16/28 | `███████░░░░░` 57% |
 | M4: Engine quality (measure first; every PR includes before/after metrics) | 20/29 | `████████░░░░` 69% |
 | M5: Formats and inspection | 33/40 | `██████████░░` 82% |
-| M6: Quality gates and release | 10/19 | `██████░░░░░░` 53% |
+| M6: Quality gates and release | 13/21 | `███████░░░░░` 62% |
 | M7: Excellent auto-supports *(parked)* | 5/17 | `████░░░░░░░░` 29% |
 
 ### Waiting on you
@@ -230,13 +230,12 @@ branch, one commit, the box ticked in the same commit.
 
 </details>
 
-<details><summary>M6: Quality gates and release — 9 open</summary>
+<details><summary>M6: Quality gates and release — 8 open</summary>
 
 - [ ] **M6.2a** The visual regression has never been run end to end: build the app, choose the three fixture scenes and bot… *(needs you)*
 - [ ] **M6.2b** `--render-view preview` draws the sliced print the way the objects list thumbnails do, not the Preview tab…
 - [ ] **M6.2c** A render is the scene and not the window, so the sidebars and the preview overlays (the layer image window,…
 - [ ] **M6.2d** Nothing runs the tool in CI yet: add a job beside M0.14's that renders the fixtures, runs `visual_diff.py`…
-- [ ] **M6.3** Nightly upstream merge rehearsal with a conflict report (PLAN G4).
 - [ ] **M6.4** End-to-end walk through the M1.1 journeys on an integrated build, filing new todos for gaps. *(needs you)*
 - [ ] **M6.5** Retune default presets after the M4 changes.
 - [ ] **M6.6** Fork README and user guide.
