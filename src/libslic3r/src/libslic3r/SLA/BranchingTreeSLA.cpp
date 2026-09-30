@@ -429,7 +429,9 @@ void create_branching_tree(SupportTreeBuilder &builder, const SupportableMesh &s
 
     for (size_t i = 0; i < heads.size(); ++i)
         if (auto &h = heads[i]; h && h->is_valid()) {
-            leafs.emplace_back(h->junction_point().cast<float>(), h->r_back_mm);
+            // The leaf carries the radius of what sits at the junction: the back
+            // of the pinhead, or the knot ball the point asked for. (M2.16b)
+            leafs.emplace_back(h->junction_point().cast<float>(), h->junction_radius());
             h->id = long(leafs.size() - 1);
             // Remember which support point a leaf belongs to, so the ground
             // connection can read the per point sizes of the support presets.

@@ -12,6 +12,7 @@
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -251,6 +252,32 @@ inline DecodedLayer decode_png_layer(const std::vector<uint8_t>& encoded)
         return DecodedLayer{};
 
     return DecodedLayer{image.cols, image.rows, std::move(image.buf)};
+}
+
+// ---------------------------------------------------------------------------
+// Level bookkeeping (M4.13)
+// ---------------------------------------------------------------------------
+
+/// The number of distinct greys in a decoded layer, and the greys themselves, smallest first.
+inline std::set<uint8_t> distinct_greys(const std::vector<uint8_t>& pixels)
+{
+    return std::set<uint8_t>(pixels.begin(), pixels.end());
+}
+
+/// True when every value in the layer is one an encoder that kept a fixed number of levels could
+/// have written: 0, a multiple of `step` below `top`, or `top` itself. The two RLE encoders that
+/// quantize (pw0 spreads 16 levels over the full range in steps of 17, goo steps by 16 and writes
+/// the top nibble as 255) differ, and .ctb and .sl1 keep the rasterizer's own 8 bits, so the caller
+/// passes the grid it expects.
+inline bool on_quantization_grid(const std::vector<uint8_t>& pixels, int step, int top)
+{
+    if (step < 1) return false;
+    for (uint8_t value : pixels) {
+        if (value == 0 || value == top) continue;
+        if (value % step != 0) return false;
+        if (value >= top) return false;
+    }
+    return true;
 }
 
 // The bounding box of everything at or above `threshold` in a decoded image. An image that is

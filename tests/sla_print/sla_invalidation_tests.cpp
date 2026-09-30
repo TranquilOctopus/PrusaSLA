@@ -99,6 +99,8 @@ std::vector<std::string> get_all_sla_config_keys() {
     keys.push_back("raft_infill_spacing");
     keys.push_back("raft_infill_wall");
     keys.push_back("raft_infill_skin");
+    keys.push_back("raft_interface_exposure");
+    keys.push_back("raft_interface_thickness");
     keys.push_back("raft_type");
     keys.push_back("printer_model");
     keys.push_back("printer_notes");
@@ -335,6 +337,7 @@ TEST_CASE("SLAInvalidation: table-driven expected steps for representative keys"
         {"material_correction", all_steps()},
         {"pad_brim_size", steps({propagate(slaposPad)})},
         {"pad_enable", steps({propagate(slaposObjectSlice)})},
+        {"raft_interface_thickness", steps({propagate(slapsMergeSlicesAndEval)})},
         {"raft_type", steps({propagate(slaposObjectSlice), propagate(slaposPad)})},
         {"relative_correction", all_steps()},
         {"resin_faded_layers", steps({propagate(slaposObjectSlice)})},

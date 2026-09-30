@@ -64,6 +64,7 @@ private:
         double x_mm{0.};
         double y_mm{0.};
         std::optional<double> area_mm2;
+        std::string object_name; //< the model it was found on, empty when unknown
     };
     // Fills the island list and its rows from the issues of the last result.
     void rebuild_island_list();

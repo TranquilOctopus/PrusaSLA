@@ -9,11 +9,19 @@
 #include "libslic3r/Point.hpp"
 #include "libslic3r/SLA/SupportTreeBuilder.hpp"
 #include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
+#include "Slic3r/Domain/SLA/SupportPoint.hpp"
 #include "admesh/stl.h"
 #include "libslic3r/libslic3r.h"
 //#include "libslic3r/SLA/Contour3D.hpp"
 
 namespace Slic3r { namespace sla {
+
+// The shape of the contact (tip) end of a head, the same choice a support point
+// carries as its per point tip_shape: Default is the two sphere pinhead this
+// slicer has always built, Cone a pointed cone and Ball a full sphere of the
+// front radius. Only the contact end changes, the back sphere, the robe and
+// with them the length and the junction of the head are the same for all three.
+using HeadTipShape = Domain::SLA::SupportPoint::TipShape;
 
 using Portion = std::tuple<double, double>;
 
@@ -45,6 +53,17 @@ indexed_triangle_set pinhead(double r_pin,
                              double length,
                              size_t steps = 45);
 
+// The pinhead with the contact end shaped as the support point asked for:
+// Default is the pinhead above, Cone has no front sphere but a point where its
+// pole was, and Ball a ball of the front radius. In all three the head is
+// as long as the default pinhead and reaches into the model as deep, so only
+// the contact itself is different and the pillar is placed at the same junction.
+indexed_triangle_set pinhead(HeadTipShape shape,
+                             double      r_pin,
+                             double      r_back,
+                             double      length,
+                             size_t      steps = 45);
+
 indexed_triangle_set halfcone(double       baseheight,
                               double       r_bottom,
                               double       r_top,
@@ -54,6 +73,17 @@ indexed_triangle_set halfcone(double       baseheight,
 // The thinnest a flat disc pillar base may get, no matter which base height is configured.
 inline constexpr double flat_base_height_mm = 0.5;
 
+// A down facing prism or frustum with a regular polygon cross section of the
+// given number of corners. The radii are the circumscribed ones, so a polygon
+// of the same radius carries about as much resin as the round one, and the
+// triangle count is bounded by 4 * sides instead of 4 * steps.
+indexed_triangle_set polygon_cone(double       baseheight,
+                                  double       r_bottom,
+                                  double       r_top,
+                                  const Vec3d &pt,
+                                  size_t       sides,
+                                  double       phase = 0.);
+
 indexed_triangle_set get_mesh(const Head &h, size_t steps);
 
 inline indexed_triangle_set get_mesh(const Pillar &p, size_t steps)
@@ -62,6 +92,13 @@ inline indexed_triangle_set get_mesh(const Pillar &p, size_t steps)
         // We just create a bridge geometry with the pillar parameters and
         // move the data.
         //return cylinder(p.r_start, p.height, steps, p.endpoint());
+        // A support point may ask for a regular polygon stem (M2.16b): the
+        // sides are the corners of the cross section, the radii stay the
+        // circumscribed ones.
+        if (!p.stem.round())
+            return polygon_cone(p.height, p.r_end, p.r_start, p.endpt,
+                                p.stem.sides, PI / p.stem.sides);
+
         return halfcone(p.height, p.r_end, p.r_start, p.endpt, steps);
     }
 

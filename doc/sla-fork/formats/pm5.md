@@ -85,6 +85,11 @@ not yet explained.
 u32 0 (likely "use full greyscale" = off), u32 16 (grey level count), 16 bytes `0F 1F 2F … EF FF`,
 u32 0. The 16 levels match HEADER +40.
 
+Both level counts stay 16 whatever `gamma_correction` is (M4.13b): they count the levels of the
+encoding, which the pw0 encoder always writes as a 4-bit grey, and the table is 16 bytes wide. A
+thresholded print uses two of the sixteen. Only the sample has been compared, and it was sliced
+with anti-aliasing on, so no value is known for a binary layer.
+
 ### LAYERDEF (body at 0x126EC)
 
 u32 layer count (289 in the sample), then one 32-byte entry per layer:
@@ -95,7 +100,7 @@ u32 layer count (289 in the sample), then one 32-byte entry per layer:
 | 4 | u32 | image data length in bytes (confirmed) |
 | 8 | f32 | lift height, mm (confirmed: 8.0) |
 | 12 | f32 | lift speed (confirmed: 6.0) |
-| 16 | f32 | exposure, s (confirmed: 25 for the 5 bottom layers, 2.8 after) |
+| 16 | f32 | exposure, s (confirmed: 25 for the 5 bottom layers, 2.8 after). The raft interface layers of `sla_raft_interface()` carry `raft_interface_exposure` here; a layer that is both a bottom and an interface layer keeps the bottom exposure |
 | 20 | f32 | layer height, mm (confirmed: 0.05) |
 | 24 | u32 | number of lit pixels in the layer (confirmed: equals the decoded count on every layer checked) |
 | 28 | u32 | 0 (unknown) |

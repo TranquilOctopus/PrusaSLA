@@ -13,6 +13,8 @@ struct SlaIssueAnalysis
 {
     size_t island_count = 0;
     size_t lowest_layer = 0;
+    /// How many models the islands were found on, 0 when none of them could be attributed.
+    size_t affected_objects = 0;
     std::string message;
 };
 

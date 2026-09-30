@@ -1016,6 +1016,7 @@ set(SLIC3R_SHARED_FILES
         include/Slic3r/Biz/ResultExport/SLA/AnycubicSLA.hpp
         include/Slic3r/Biz/ResultExport/SLA/GooSLA.hpp
         include/Slic3r/Biz/ResultExport/SLA/CtbSLA.hpp
+        include/Slic3r/Biz/ResultExport/SLA/SlaAntiAliasing.hpp
         src/Slic3r/Biz/ResultExport/ResultExportInteractor.cpp
         src/Slic3r/Biz/ResultExport/ResultExportDataFinalizer.cpp
         src/Slic3r/Biz/ResultExport/SLA/SL1.cpp
@@ -1027,6 +1028,7 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/Biz/ResultExport/SLA/AnycubicSLA.cpp
         src/Slic3r/Biz/ResultExport/SLA/GooSLA.cpp
         src/Slic3r/Biz/ResultExport/SLA/CtbSLA.cpp
+        src/Slic3r/Biz/ResultExport/SLA/SlaAntiAliasing.cpp
 
         include/Slic3r/Biz/PrintHost/IPrintHost.hpp
         include/Slic3r/Biz/PrintHost/PrintHostJob.hpp
@@ -1793,6 +1795,7 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/Biz/ResultExport/SLA/SlaArchiveOrientationTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/SlaPm5WorkshopOrientationTests.cpp
             test/Slic3r/Biz/ResultExport/SLA/SlaUnsupportedSliceTests.cpp
+            test/Slic3r/Biz/ResultExport/SLA/SlaAntiAliasingTests.cpp
 
             test/Slic3r/Biz/PrintHost/PrintHostFormatsTests.cpp
 

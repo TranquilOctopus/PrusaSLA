@@ -1,5 +1,6 @@
 #include "Slic3r/Biz/ResultExport/SLA/AnycubicSLA.hpp"
 
+#include "Slic3r/Biz/ResultExport/SLA/SlaAntiAliasing.hpp"
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/Domain/Image.hpp"
 #include "Slic3r/Domain/SlaLayerHeight.hpp"
@@ -300,6 +301,10 @@ static void fill_header_and_misc(anycubicsla_format_header &h,
     if (layer_count < h.bottom_layer_count) {
         h.bottom_layer_count = layer_count;
     }
+    // The raft interface is the band of layers at the top of the raft with an exposure of their
+    // own. The header counts what the print spends on it, the layer records in store_anycubic()
+    // carry it per layer.
+    const Domain::RaftInterface raft_interface = Domain::sla_raft_interface(cfg, int(layer_count));
     h.res_x     = get_cfg_value_i(cfg, "display_pixels_x");
     h.res_y     = get_cfg_value_i(cfg, "display_pixels_y");
 
@@ -307,7 +312,12 @@ static void fill_header_and_misc(anycubicsla_format_header &h,
     h.weight_g  = h.volume_ml * material_density;
     h.price     = (h.volume_ml * bottle_cost) / bottle_volume_ml;
     h.price_currency = '$';
-    h.antialiasing = 1;
+    // The field says whether the file is anti-aliased, and a gamma_correction of 0 thresholded the
+    // raster to a binary image, so it follows that setting (M4.13b). Anti-aliased is the value this
+    // writer has always written, and every printer preset in the shipped bundles leaves
+    // gamma_correction at its default of 1, so an export from a stock profile is unchanged.
+    h.antialiasing = sla_raster_anti_aliased(cfg) ? SLA_AA_LEVEL_ANTI_ALIASED
+                                                  : SLA_AA_LEVEL_BINARY;
     h.per_layer_override = 0;
 
     // The header has a single delay field and no light PWM field, so of the three waits around the
@@ -338,6 +348,8 @@ static void fill_header_and_misc(anycubicsla_format_header &h,
     h.print_time_s = static_cast<std::uint32_t>(
         (h.bottom_layer_count * h.bottom_exposure_time_s) +
         ((layer_count - h.bottom_layer_count) * h.exposure_time_s) +
+        // The interface layers are spent on the interface exposure instead of the normal one.
+        raft_interface.print_time_delta_s(h.exposure_time_s) +
         (layer_count * h.lift_distance_mm / h.retract_speed_mms) +
         (layer_count * h.lift_distance_mm / h.lift_speed_mms) +
         (layer_count * h.delay_before_exposure_s)
@@ -392,6 +404,11 @@ void store_anycubic(const std::string& file_path, const Biz::Slicing::SLAResultD
     fill_header_and_misc(header, misc, cfg, stats, layer_count);
     fill_preview(preview, data.thumbnails);
 
+    // The raft interface is the band of layers at the top of the raft with an exposure of their
+    // own, and every layer record of this format carries an exposure of its own. No interface
+    // leaves every layer the exposure it had before.
+    const Domain::RaftInterface raft_interface = Domain::sla_raft_interface(cfg, int(layer_count));
+
     try {
         std::ofstream out;
         out.open(file_path, std::ios::binary | std::ios::out | std::ios::trunc);
@@ -424,7 +441,9 @@ void store_anycubic(const std::string& file_path, const Biz::Slicing::SLAResultD
                 l.lift_distance_mm = misc.bottom_lift_distance_mm;
                 l.lift_speed_mms = misc.bottom_lift_speed_mms;
             } else {
-                l.exposure_time_s = header.exposure_time_s;
+                // The interface layers are exposed like the rest of the print unless the interface
+                // brings an exposure of its own.
+                l.exposure_time_s = float(raft_interface.layer_exposure_s(i, header.exposure_time_s));
                 l.layer_height_mm = header.layer_height_mm;
                 l.lift_distance_mm = header.lift_distance_mm;
                 l.lift_speed_mms = header.lift_speed_mms;
@@ -456,7 +475,7 @@ constexpr std::uint32_t PM5_AREA_NUM = 9;
 constexpr std::uint32_t PM5_PREVIEW_W = 224;
 constexpr std::uint32_t PM5_PREVIEW_H = 168;
 constexpr std::uint32_t PM5_PREVIEW_DPI = 120;
-constexpr std::uint32_t PM5_LAYER_COLOR_LEVELS = 16;
+constexpr std::uint32_t PM5_LAYER_COLOR_LEVELS = 16; // the pw0 encoder's grey levels, AA on or off
 constexpr std::uint32_t PM5_LAYERDEF_ENTRY_SIZE = 32;
 constexpr std::uint32_t PM5_HEADER_PAYLOAD_SIZE = 92;
 constexpr std::uint32_t PM5_PREVIEW_DECLARED_SIZE = 75292;
@@ -541,6 +560,10 @@ void store_pm5(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     if (layer_count < bottom_layer_count) {
         bottom_layer_count = layer_count;
     }
+    // The raft interface is the band of layers at the top of the raft with an exposure of their
+    // own. The LAYERDEF records carry an exposure each, so they can hold one, and no interface
+    // leaves every layer the exposure it had before.
+    const Domain::RaftInterface raft_interface = Domain::sla_raft_interface(cfg, int(layer_count));
     // The transition layers are where the exposure fades from the bottom exposure to the normal one.
     std::uint32_t transition_layer_count =
         static_cast<std::uint32_t>(std::max(0, Domain::sla_effective_faded_layers(cfg)));
@@ -575,6 +598,8 @@ void store_pm5(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     std::uint32_t print_time_s = static_cast<std::uint32_t>(
         (bottom_layer_count * initial_exposure_time_s) +
         ((layer_count - bottom_layer_count) * exposure_time_s) +
+        // The interface layers are spent on the interface exposure instead of the normal one.
+        raft_interface.print_time_delta_s(exposure_time_s) +
         (bottom_layer_count * bottom_separation_s) +
         ((layer_count - bottom_layer_count) * separation_s) +
         (layer_count * wait_before_lift_s)
@@ -727,9 +752,14 @@ void store_pm5(const std::string& file_path, const Biz::Slicing::SLAResultData& 
         anycubicsla_write_int32(out, layer_sizes[i]);
         // The bottom layers are separated with the bottom_* settings, the rest with the plain ones.
         const bool bottom_layer = i < bottom_layer_count;
+        // The interface layers are exposed like the rest of the print unless the interface brings
+        // an exposure of its own.
+        const float layer_exposure_s =
+            bottom_layer ? initial_exposure_time_s
+                         : float(raft_interface.layer_exposure_s(i, exposure_time_s));
         anycubicsla_write_float(out, bottom_layer ? bottom_lift_height_mm : lift_height_mm);
         anycubicsla_write_float(out, bottom_layer ? bottom_lift_speed_mms : lift_speed_mms);
-        anycubicsla_write_float(out, i < bottom_layer_count ? initial_exposure_time_s : exposure_time_s);
+        anycubicsla_write_float(out, layer_exposure_s);
         // Only the first layer is sliced at initial_layer_height; every other layer, bottom layers
         // included, is sliced at layer_height. The printer moves Z by this value, so giving the
         // bottom layers initial_layer_height would stretch them whenever the two differ.

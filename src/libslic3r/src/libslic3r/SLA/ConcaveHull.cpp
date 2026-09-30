@@ -79,6 +79,10 @@ void ConcaveHull::add_connector_rectangles(const Points &centroids,
 
         double dx = c.x() - cc.x(), dy = c.y() - cc.y();
         double l  = std::sqrt(dx * dx + dy * dy);
+        // Two islands with the same centroid - the ring and the island in the middle of it, say -
+        // put the connector start on top of the island. The direction would be a division by zero
+        // and the stick Clipper is given next would have a vertex that is not a number.
+        if (l < scaled(EPSILON)) continue;
         double nx = dx / l, ny = dy / l;
 
         const Point &ct = centroids[idx];

@@ -153,3 +153,68 @@ TEST_CASE("PM5 store writes a Photon Workshop version 517 file", "[export][sla][
         REQUIRE(read_le_float(data, entry + 12) == Catch::Approx(bottom ? 1.75f : 1.25f));
     }
 }
+
+// The raft interface is the band of layers at the top of the raft that the file gives an exposure
+// of its own. The raft is 2 mm of wall at a layer height of 0.05 mm, so it covers 40 layers and an
+// interface of 0.5 mm is the top 10 of them. The default interface thickness is 0, which leaves
+// every layer with the exposure it had before, so this writes a different file.
+TEST_CASE("PM5 export exposes the raft interface layers with the interface exposure",
+          "[export][sla][pm5][raft]")
+{
+    register_sla_archive_formats();
+    auto& registry = SlaArchiveFormatRegistry::instance();
+
+    auto format = registry.find_by_file_data_type(FileDataType::pm5);
+    REQUIRE(format != nullptr);
+
+    Slic3r::Test::SlaSlicingFixture fixture;
+    auto model = Slic3r::Test::generate_cubes(1, 5);
+    auto config = Slic3r::Domain::ConfigPackSLA{};
+
+    config.sla_printer_settings.items.opt("sla_archive_format").set(std::string("pm5"));
+    config.sla_printer_settings.items.opt("display_pixels_x").set(2560);
+    config.sla_printer_settings.items.opt("display_pixels_y").set(1440);
+    config.sla_printer_settings.items.opt("display_orientation").set(Slic3r::Domain::SLADisplayOrientation::sladoLandscape);
+    config.sla_printer_settings.items.opt("display_width").set(120.96);
+    config.sla_printer_settings.items.opt("display_height").set(68.04);
+    config.sla_printer_settings.items.opt("gamma_correction").set(1.0);
+    config.sla_print_settings.items.opt("layer_height").set(0.05);
+    config.sla_material_settings.items.opt("initial_layer_height").set(0.05);
+    config.sla_material_settings.items.opt("exposure_time").set(6.0);
+    config.sla_material_settings.items.opt("initial_exposure_time").set(35.0);
+    config.sla_print_settings.items.opt("faded_layers").set(10);
+    config.sla_print_settings.items.opt("supports_enable").set(true);
+    // The raft: 2 mm of wall, and 0.5 mm of it exposed at 12 s instead of the normal 6 s.
+    config.sla_print_settings.items.opt("pad_wall_thickness").set(2.0);
+    config.sla_print_settings.items.opt("pad_wall_height").set(0.0);
+    config.sla_print_settings.items.opt("raft_interface_thickness").set(0.5);
+    config.sla_print_settings.items.opt("raft_interface_exposure").set(12.0);
+
+    auto sla_result = fixture.slice_sla_model(model, config);
+    REQUIRE(sla_result != nullptr);
+
+    Tests::TestTempDir temp_dir;
+    fs::path out_path = temp_dir.path() / "out.pm5";
+    REQUIRE_NOTHROW(format->store(out_path.string(), *sla_result));
+
+    auto data = read_file_binary(out_path);
+    const size_t layerdef_body = read_le32(data, 20 + 4 * 4) + 12 + 4 + 4;
+    const uint32_t layer_count = read_le32(data, layerdef_body - 4);
+    REQUIRE(layer_count > 40);
+    REQUIRE(data.size() >= layerdef_body + layer_count * 32);
+
+    for (uint32_t i = 0; i < layer_count; ++i) {
+        const size_t entry = layerdef_body + i * 32;
+        // The exposure of a layer is the 5th field of the entry.
+        const float exposure = read_le_float(data, entry + 16);
+        INFO("layer " << i);
+        if (i < 11)
+            REQUIRE(exposure == Catch::Approx(35.0f));
+        else if (i < 30)
+            REQUIRE(exposure == Catch::Approx(6.0f));
+        else if (i < 40)
+            REQUIRE(exposure == Catch::Approx(12.0f));
+        else
+            REQUIRE(exposure == Catch::Approx(6.0f));
+    }
+}

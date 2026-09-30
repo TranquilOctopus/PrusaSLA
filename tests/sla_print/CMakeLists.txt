@@ -11,6 +11,7 @@ add_executable(${_TEST_NAME}_tests ${_TEST_NAME}_tests_main.cpp
     sla_supptreeutils_tests.cpp
     sla_zcorrection_tests.cpp
     sla_island_detection_tests.cpp
+    sla_cavity_detection_tests.cpp
     sla_layer_stats_tests.cpp
     sla_raft_preset_tests.cpp
     sla_raft_type_tests.cpp
@@ -27,10 +28,14 @@ add_executable(${_TEST_NAME}_tests ${_TEST_NAME}_tests_main.cpp
     sla_support_preset_tests.cpp
     sla_support_base_shape_tests.cpp
     sla_support_placement_tests.cpp
+    sla_support_point_geometry_tests.cpp
     sla_benchmark_tests.cpp
+    sla_layer_hash_tests.cpp
     sla_support_brace_tests.cpp
     sla_hollowing_tests.cpp
     sla_robustness_tests.cpp)
+    sla_robustness_tests.cpp
+    sla_pad_robustness_tests.cpp)
 
 # mold linker for successful linking needs also to link TBB library and link it before libslic3r.
 target_link_libraries(${_TEST_NAME}_tests test_common TBB::tbb TBB::tbbmalloc libslic3r slic3r-shared)

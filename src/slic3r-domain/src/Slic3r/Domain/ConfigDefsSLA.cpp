@@ -672,7 +672,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Max merge distance");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 10; // below raft_type, see raft_type_visible_settings
+    def->order = 12; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
      def->tooltip = L("Some objects can get along with a few smaller rafts "
                       "instead of a single big one. This parameter defines "
@@ -722,7 +722,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft around object everywhere");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 12; // below raft_type, see raft_type_visible_settings
+    def->order = 14; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::checkbox;
     def->tooltip = L("Make the raft follow the object everywhere, even where the supports do not reach.");
     def->init_fn = init_with(false);
@@ -733,7 +733,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft gap to object");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 11; // below raft_type, see raft_type_visible_settings
+    def->order = 13; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip  = L("The gap left between the object bottom and the raft that carries it.");
     def->units = {L("mm")};
@@ -747,7 +747,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft object connector stride");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 13; // below raft_type, see raft_type_visible_settings
+    def->order = 15; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Distance between two connector sticks which tie the object to the raft.");
     def->units = {L("mm")};
@@ -760,7 +760,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft object connector width");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 14; // below raft_type, see raft_type_visible_settings
+    def->order = 16; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip  = L("Width of the connector sticks which tie the object to the raft.");
     def->units = {L("mm")};
@@ -773,7 +773,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft object connector penetration");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 15; // below raft_type, see raft_type_visible_settings
+    def->order = 17; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip  = L(
         "How far the tiny connectors that tie the object to the raft reach into the object body.");
@@ -882,6 +882,47 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->min = 0;
     def->max = 5;
     def->init_fn = init_with(0.5);
+
+    def = defs.add("raft_interface_thickness", typeid(double));
+    def->location = Print;
+    def->overrides_in = Locations{ Object };
+    def->label = L("Raft interface thickness");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
+    def->category = ConfigItemDef::Category::Print_Pad;
+    // The interface is the skin of the raft the object sits on, so it comes with the knobs that
+    // make up the raft itself, after the pattern cut into it.
+    def->order = 10;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("How deep the raft interface reaches down into the top of the raft, the skin "
+                     "between the raft and the object that the object can rest on and that can be "
+                     "exposed differently from the rest of the raft. The thickness is rounded to "
+                     "whole layers. Zero prints no interface, which is the raft of today. A layer "
+                     "that is a bottom layer is exposed at the bottom exposure, not the interface "
+                     "one, and the .sl1 and .sl1s formats have no per-layer exposure at all, so "
+                     "they print the interface with the normal exposure whatever this is set to.");
+    def->units = {L("mm")};
+    def->min = 0;
+    def->max = 30;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("raft_interface_exposure", typeid(double));
+    def->location = Print;
+    def->overrides_in = Locations{ Object };
+    def->label = L("Raft interface exposure");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
+    def->category = ConfigItemDef::Category::Print_Pad;
+    def->order = 11;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Exposure of the raft interface, the band of layers at the top of the raft "
+                     "that the raft interface thickness marks. Zero exposes it like every other "
+                     "layer. A longer exposure bonds the interface to the raft more strongly, which "
+                     "is what an object that keeps coming off its raft needs. Only the file "
+                     "formats with an exposure per layer (.pm5, .pwmx and .goo) can apply it; the "
+                     ".sl1 and .sl1s formats hold a single exposure for the whole print.");
+    def->units = {L("s")};
+    def->min = 0;
+    def->max = 120;
+    def->init_fn = init_with(0.);
 
     def = defs.add("hollowing_enable", typeid(bool));
     def->location = Print;

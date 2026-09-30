@@ -108,6 +108,7 @@ std::pair<bool, long> create_ground_pillar(
     double                 base_height_override = 0.,
     double                 base_radius_override = 0.,
     double                 full_pillar_radius = 0.,
+    const StemGeometry    &stem = StemGeometry{},
     // The shape of the foot the pillar gets. Left empty the globally configured one is used.
     std::optional<Domain::sla::SupportBaseShape> base_shape = std::nullopt)
 {
@@ -224,7 +225,7 @@ std::pair<bool, long> create_ground_pillar(
     double h = endp.z() - gp.z();
 
     pillar_id = head_id >= 0 && !non_head ? builder.add_pillar(head_id, h) :
-                                            builder.add_pillar(gp, h, radius, end_radius);
+                                            builder.add_pillar(gp, h, radius, end_radius, stem);
 
     if (can_add_base) {
         double base_h = (base_height_override > 0. ? base_height_override : sm.cfg.base_height_mm);
@@ -242,7 +243,8 @@ std::pair<bool, long> connect_to_ground(Ex                     policy,
                                         const SupportableMesh &sm,
                                         const Junction        &j,
                                         const Vec3d           &dir,
-                                        double                 end_r)
+                                        double                 end_r,
+                                        const StemGeometry    &stem = StemGeometry{})
 {
     auto   hjp = j.pos;
     double r   = j.r;
@@ -264,7 +266,8 @@ std::pair<bool, long> connect_to_ground(Ex                     policy,
         return {false, SupportTreeNode::ID_UNSET};
 
     Vec3d endp = hjp + d * dir;
-    auto ret = create_ground_pillar(policy, builder, sm, endp, dir, r, end_r);
+    auto ret = create_ground_pillar(policy, builder, sm, endp, dir, r, end_r,
+                                    SupportTreeNode::ID_UNSET, 0., 0., 0., stem);
 
     if (ret.second >= 0) {
         builder.add_bridge(hjp, endp, r);
@@ -280,11 +283,12 @@ std::pair<bool, long> search_ground_route(Ex                     policy,
                                           const SupportableMesh &sm,
                                           const Junction        &j,
                                           double                 end_radius,
-                                          const Vec3d &init_dir = DOWN)
+                                          const Vec3d           &init_dir  = DOWN,
+                                          const StemGeometry    &stem      = StemGeometry{})
 {
     double downdst = j.pos.z() - ground_level(sm);
 
-    auto res = connect_to_ground(policy, builder, sm, j, init_dir, end_radius);
+    auto res = connect_to_ground(policy, builder, sm, j, init_dir, end_radius, stem);
     if (res.first)
         return res;
 
@@ -310,7 +314,7 @@ std::pair<bool, long> search_ground_route(Ex                     policy,
 
     Vec3d bridgedir = spheric_to_dir(oresult.optimum).normalized();
 
-    return connect_to_ground(policy, builder, sm, j, bridgedir, end_radius);
+    return connect_to_ground(policy, builder, sm, j, bridgedir, end_radius, stem);
 }
 
 }} // namespace Slic3r::sla

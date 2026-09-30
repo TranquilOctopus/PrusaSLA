@@ -204,3 +204,93 @@ TEST_CASE("Goo export", "[export][sla][goo]")
     std::string ending(reinterpret_cast<const char*>(data.data() + data.size() - 11), 11);
     REQUIRE(ending == GOO_ENDING);
 }
+
+// The raft interface is the band of layers at the top of the raft that the file gives an exposure
+// of its own. The raft is 2 mm of wall at a layer height of 0.05 mm, so it covers 40 layers and an
+// interface of 0.5 mm is the top 10 of them. The default interface thickness is 0, which leaves
+// every layer with the exposure it had before, so this writes a different file.
+TEST_CASE("Goo export exposes the raft interface layers with the interface exposure",
+          "[export][sla][goo][raft]")
+{
+    Slic3r::Test::SlaSlicingFixture fixture;
+
+    auto model = Slic3r::Test::generate_cubes(1, 5);
+    auto config = Slic3r::Domain::ConfigPackSLA{};
+
+    config.sla_printer_settings.items.opt("sla_archive_format").set(std::string("goo"));
+    config.sla_printer_settings.items.opt("display_pixels_x").set(2560);
+    config.sla_printer_settings.items.opt("display_pixels_y").set(1440);
+    config.sla_printer_settings.items.opt("display_orientation").set(Slic3r::Domain::SLADisplayOrientation::sladoLandscape);
+    config.sla_printer_settings.items.opt("display_width").set(120.96);
+    config.sla_printer_settings.items.opt("display_height").set(68.04);
+    config.sla_print_settings.items.opt("layer_height").set(0.05);
+    config.sla_material_settings.items.opt("initial_layer_height").set(0.05);
+    config.sla_material_settings.items.opt("exposure_time").set(6.0);
+    config.sla_material_settings.items.opt("initial_exposure_time").set(35.0);
+    config.sla_print_settings.items.opt("faded_layers").set(10);
+    config.sla_print_settings.items.opt("supports_enable").set(true);
+    // The raft: 2 mm of wall, and 0.5 mm of it exposed at 12 s instead of the normal 6 s.
+    config.sla_print_settings.items.opt("pad_wall_thickness").set(2.0);
+    config.sla_print_settings.items.opt("pad_wall_height").set(0.0);
+    config.sla_print_settings.items.opt("raft_interface_thickness").set(0.5);
+    config.sla_print_settings.items.opt("raft_interface_exposure").set(12.0);
+
+    auto sla_result = fixture.slice_sla_model(model, config);
+    REQUIRE(sla_result != nullptr);
+
+    Tests::TestTempDir temp_dir;
+    fs::path out_path = temp_dir.path() / "out.goo";
+
+    register_sla_archive_formats();
+    auto& registry = SlaArchiveFormatRegistry::instance();
+    auto format = registry.find_by_file_data_type(FileDataType::goo);
+    REQUIRE(format != nullptr);
+    REQUIRE_NOTHROW(format->store(out_path.string(), *sla_result));
+
+    auto data = read_file_binary(out_path);
+    REQUIRE(!data.empty());
+
+    // The layer records follow the header, each of them the record itself, the image of the layer
+    // and the delimiter after it. The header states where they start, which is the size the
+    // packed header struct has.
+    const size_t total_layers_offset = 4 + 8 + 32 + 24 + 24 + 32 + 32 + 32 + 6 + 2 * 116 * 116 + 2 + 2 * 290 * 290 + 2;
+    const uint32_t total_layers = read_be<uint32_t>(data.data() + total_layers_offset);
+    REQUIRE(total_layers == sla_result->files.data.size());
+    REQUIRE(total_layers > 40);
+
+    const size_t header_size = total_layers_offset + 4 + 4 + 2 + 12 + 4 + 4 + 1 + 4 + 6 * 4 + 4
+                               + 4 + 16 * 4 + 2 * 2 + 1 + 4 + 3 * 4 + 8 + 4 + 1 + 2;
+    REQUIRE(data.size() >= header_size);
+    // layer_content_offset is the last int32 of the header but two.
+    REQUIRE(read_be<uint32_t>(data.data() + header_size - 7) == header_size);
+
+    const auto f = [&data](size_t offset) {
+        const uint32_t bits = read_be<uint32_t>(data.data() + offset);
+        float value = 0.f;
+        std::memcpy(&value, &bits, sizeof(value));
+        return value;
+    };
+
+    // 2 bytes of pause flag, then the z of the layer, then the exposure of the layer.
+    constexpr size_t layer_def_size    = 70;
+    constexpr size_t exposure_offset   = 10;
+    constexpr size_t data_size_offset  = 66;
+
+    size_t offset = header_size;
+    for (uint32_t i = 0; i < total_layers; ++i) {
+        REQUIRE(data.size() >= offset + layer_def_size);
+        INFO("layer " << i);
+        if (i < 11)
+            REQUIRE(f(offset + exposure_offset) == Catch::Approx(35.0f));
+        else if (i < 30)
+            REQUIRE(f(offset + exposure_offset) == Catch::Approx(6.0f));
+        else if (i < 40)
+            REQUIRE(f(offset + exposure_offset) == Catch::Approx(12.0f));
+        else
+            REQUIRE(f(offset + exposure_offset) == Catch::Approx(6.0f));
+
+        const int32_t image_size = read_be<int32_t>(data.data() + offset + data_size_offset);
+        REQUIRE(image_size >= 0);
+        offset += layer_def_size + static_cast<size_t>(image_size) + 2;
+    }
+}

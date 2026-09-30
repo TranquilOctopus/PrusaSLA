@@ -1,19 +1,24 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 #include <algorithm>
+#include <string>
+#include <vector>
 
 #include "Slic3r/Domain/Point.hpp"
 #include "Slic3r/Domain/ExPolygon.hpp"
+#include "Slic3r/Domain/ObjectID.hpp"
+#include "Slic3r/Biz/Algorithms/ClipperUtils.hpp"
 #include "Slic3r/Biz/Algorithms/ExPolygon.hpp"
 #include "Slic3r/Biz/Algorithms/Scaling.hpp"
 #include "libslic3r/SLA/IslandDetection.hpp"
 
 using namespace Slic3r;
+using Catch::Approx;
+using Slic3r::Biz::Algorithms::Scaling::scaled;
 using Slic3r::Domain::ExPolygon;
 using Slic3r::Domain::ExPolygons;
+using Slic3r::Domain::ObjectID;
 using Slic3r::Domain::Point;
-using Slic3r::Biz::Algorithms::Scaling::scaled;
-using Catch::Approx;
 
 namespace {
 
@@ -115,6 +120,25 @@ std::vector<ExPolygons> make_small_speck(double speck_size_mm, double base_size_
     // Add a small square on layer 1 that's not on layer 0
     layers[1].push_back(make_square(speck_size_mm, 10.0, 10.0));
     return layers;
+}
+
+// --- Attributing an island to the model it belongs to (M4.8g) ---
+
+// One model object on one layer, as the slicer hands it over for the attribution.
+SLA::ObjectLayer make_object(size_t id, const std::string& name, ExPolygons slices)
+{
+    return SLA::ObjectLayer{ObjectID{id}, name, std::move(slices)};
+}
+
+// The merged layer the slicer sees: the polygons of every object of that layer in one layer.
+ExPolygons merged_layer(const std::vector<SLA::ObjectLayer>& objects)
+{
+    ExPolygons all;
+    for (const SLA::ObjectLayer& object : objects) {
+        for (const ExPolygon& poly : object.slices)
+            all.push_back(poly);
+    }
+    return Slic3r::Biz::Algorithms::ClipperUtils::union_ex(all);
 }
 
 } // namespace
@@ -227,4 +251,161 @@ TEST_CASE("IslandDetection: multiple islands in same layer all reported", "[SLA]
     CHECK(areas[0] == Approx(25.0).margin(0.01));
     CHECK(areas[1] == Approx(25.0).margin(0.01));
     CHECK(areas[2] == Approx(25.0).margin(0.01));
+}
+
+TEST_CASE(
+    "IslandDetection: the island of a second cube is put on that cube",
+    "[SLA][IslandDetection]"
+)
+{
+    // Two cubes on the plate, seen from the top, and a small block floating above the second one
+    // with a gap under it. The merged layers are what the island is detected in, the per object
+    // layers are what it is named after.
+    const size_t base_id  = 7;
+    const size_t tower_id = 9;
+
+    std::vector<ExPolygons> layers;
+    std::vector<std::vector<SLA::ObjectLayer>> object_layers;
+
+    for (size_t layer = 0; layer < 6; ++layer) {
+        std::vector<SLA::ObjectLayer> objects;
+        // The first cube stands through all the layers.
+        objects.push_back(make_object(base_id, "base cube", ExPolygons{make_square(10.0, 0.0, 0.0)})
+        );
+        if (layer < 3) {
+            // The second cube, on the other side of the plate.
+            objects.push_back(
+                make_object(tower_id, "tower cube", ExPolygons{make_square(10.0, 30.0, 0.0)})
+            );
+        } else if (layer == 4) {
+            // The floating block above the second cube, the gap is under it.
+            objects.push_back(
+                make_object(tower_id, "tower cube", ExPolygons{make_square(4.0, 30.0, 0.0)})
+            );
+        }
+        layers.push_back(merged_layer(objects));
+        object_layers.push_back(std::move(objects));
+    }
+
+    const std::vector<SLA::IslandHit> hits = SLA::detect_islands(layers, 0.05);
+
+    REQUIRE(hits.size() == 1);
+    CHECK(hits[0].layer_index == 4);
+
+    const SLA::IslandOwner owner = SLA::attribute_island(hits[0], object_layers[4]);
+    CHECK(owner.object_id == ObjectID{tower_id});
+    CHECK(owner.name == "tower cube");
+}
+
+TEST_CASE(
+    "IslandDetection: an island between two blocks belongs to the one it mostly lies on",
+    "[SLA][IslandDetection]"
+)
+{
+    // Two blocks floating above two cubes, touching each other, so the merged layer holds one
+    // region that both models have a piece of. The left block covers x -5..5, the right one
+    // x -3..13, so the right one holds more of the island while the centroid (x = 4) sits in the
+    // left one: the answer can come from neither of those two rules.
+    const size_t left_id  = 3;
+    const size_t right_id = 4;
+
+    std::vector<ExPolygons> layers(2);
+    std::vector<std::vector<SLA::ObjectLayer>> object_layers(2);
+
+    for (size_t layer = 0; layer < 2; ++layer) {
+        if (layer == 0) {
+            // The cubes below, the blocks are not there yet.
+            object_layers[layer].push_back(
+                make_object(left_id, "left cube", ExPolygons{make_square(10.0, 0.0, 0.0)})
+            );
+            object_layers[layer].push_back(
+                make_object(right_id, "right cube", ExPolygons{make_square(10.0, 20.0, 0.0)})
+            );
+        } else {
+            // The blocks, touching each other, so the layer holds a single region of both.
+            object_layers[layer].push_back(
+                make_object(left_id, "left cube", ExPolygons{make_square(10.0, 0.0, 10.0)})
+            );
+            object_layers[layer].push_back(
+                make_object(right_id, "right cube", ExPolygons{make_square(16.0, 5.0, 10.0)})
+            );
+        }
+        layers[layer] = merged_layer(object_layers[layer]);
+    }
+
+    const std::vector<SLA::IslandHit> hits = SLA::detect_islands(layers, 0.05);
+
+    REQUIRE(hits.size() == 1);
+    CHECK(hits[0].layer_index == 1);
+    CHECK(hits[0].centroid.x() == Approx(4.0).margin(0.01));
+
+    const SLA::IslandOwner owner = SLA::attribute_island(hits[0], object_layers[1]);
+    CHECK(owner.object_id == ObjectID{right_id});
+    CHECK(owner.name == "right cube");
+}
+
+TEST_CASE(
+    "IslandDetection: an island over a support is put on the model the support belongs to",
+    "[SLA][IslandDetection]"
+)
+{
+    // Only the support of the second model is anywhere near the island, its body is not. Body and
+    // supports of a model come as one entry, so both count as that model.
+    std::vector<ExPolygons> layers(2);
+    std::vector<std::vector<SLA::ObjectLayer>> object_layers(2);
+
+    layers[0]        = ExPolygons{make_square(10.0, 0.0, 0.0)};
+    object_layers[0] = {make_object(1, "with support", ExPolygons{make_square(10.0, 0.0, 0.0)})};
+
+    layers[1]        = ExPolygons{make_square(10.0, 0.0, 0.0), make_square(3.0, 30.0, 0.0)};
+    object_layers[1] = {make_object(
+        1,
+        "with support",
+        ExPolygons{make_square(10.0, 0.0, 0.0), make_square(3.0, 30.0, 0.0)}
+    )};
+
+    const std::vector<SLA::IslandHit> hits = SLA::detect_islands(layers, 0.05);
+
+    REQUIRE(hits.size() == 1);
+    CHECK(hits[0].layer_index == 1);
+
+    const SLA::IslandOwner owner = SLA::attribute_island(hits[0], object_layers[1]);
+    CHECK(owner.object_id == ObjectID{1});
+    CHECK(owner.name == "with support");
+}
+
+TEST_CASE("IslandDetection: an island that no model holds stays unnamed", "[SLA][IslandDetection]")
+{
+    // Nothing is known about the models of the layer, e.g. the island only sits on the pad,
+    // which belongs to no model: the issue then carries no name instead of a wrong one.
+    std::vector<ExPolygons> layers(2);
+    layers[0] = {};
+    layers[1].push_back(make_square(10.0, 0.0, 0.0));
+
+    const std::vector<SLA::IslandHit> hits = SLA::detect_islands(layers, 0.05);
+
+    REQUIRE(hits.size() == 1);
+
+    const SLA::IslandOwner owner = SLA::attribute_island(hits[0], {});
+    CHECK(owner.object_id.invalid());
+    CHECK(owner.name.empty());
+}
+
+TEST_CASE("IslandDetection: the region of an island is kept with it", "[SLA][IslandDetection]")
+{
+    // The attribution needs the island itself and not only its centroid, so the region travels
+    // with the hit.
+    std::vector<ExPolygons> layers(2);
+    layers[0] = {};
+    layers[1].push_back(make_square(10.0, 0.0, 0.0));
+
+    const std::vector<SLA::IslandHit> hits = SLA::detect_islands(layers, 0.05);
+
+    REQUIRE(hits.size() == 1);
+    const ExPolygon& region = hits[0].region;
+    REQUIRE(region.contour.size() == 5);
+    const double area_mm2 = Slic3r::Biz::Algorithms::ExPolygon::area(region)
+        * Slic3r::Biz::Algorithms::Scaling::SCALING_FACTOR
+        * Slic3r::Biz::Algorithms::Scaling::SCALING_FACTOR;
+    CHECK(area_mm2 == Approx(100.0).margin(0.01));
 }

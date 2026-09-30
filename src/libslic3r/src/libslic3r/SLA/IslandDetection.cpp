@@ -43,17 +43,49 @@ std::vector<IslandHit> detect_islands(const std::vector<Domain::ExPolygons>& lay
                     Domain::Point centroid_point = region.contour.centroid();
                     Domain::Vec2d centroid(unscaled<double>(centroid_point.x()), unscaled<double>(centroid_point.y()));
 
-                    hits.push_back(IslandHit{
-                        .layer_index = layer_idx,
-                        .centroid = centroid,
-                        .area_mm2 = area_mm2
-                    });
+                    hits.push_back(
+                        IslandHit{
+                            .layer_index = layer_idx,
+                            .centroid    = centroid,
+                            .area_mm2    = area_mm2,
+                            .region      = region
+                        }
+                    );
                 }
             }
         }
     }
 
     return hits;
+}
+
+IslandOwner attribute_island(const IslandHit& island, const std::vector<ObjectLayer>& object_layers)
+{
+    IslandOwner owner;
+    // Any overlap at all beats no object, the winner is the object covering the most of the island.
+    double best_overlap = 0.0;
+
+    if (island.region.contour.empty())
+        return owner;
+
+    const Domain::ExPolygons island_area{island.region};
+
+    for (const ObjectLayer& object : object_layers) {
+        if (object.slices.empty())
+            continue;
+
+        double overlap = 0.0;
+        for (const Domain::ExPolygon& poly : intersection_ex(island_area, object.slices))
+            overlap += Biz::Algorithms::ExPolygon::area(poly);
+
+        if (overlap > best_overlap) {
+            best_overlap    = overlap;
+            owner.object_id = object.object_id;
+            owner.name      = object.name;
+        }
+    }
+
+    return owner;
 }
 
 } // namespace Slic3r::SLA

@@ -1,5 +1,6 @@
 #include "Slic3r/Biz/ResultExport/SLA/GooSLA.hpp"
 
+#include "Slic3r/Biz/ResultExport/SLA/SlaAntiAliasing.hpp"
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/Domain/Image.hpp"
 #include "Slic3r/Domain/SlaLayerHeight.hpp"
@@ -282,8 +283,17 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     std::string profile_name = get_cfg_value_s(cfg, "sla_material_profile_id");
     std::memcpy(header.profile_name, profile_name.data(), std::min<size_t>(32, profile_name.size()));
 
-    header.anti_aliasing_level = 1;
-    header.grey_level = 4;
+    // Both fields follow the anti-aliasing of the raster, which is gamma_correction and nothing
+    // else (M4.13b). A thresholded layer was rasterized to 0 or 255, so it declares no
+    // anti-aliasing and one bit of grey; an anti-aliased one declares the anti-aliasing and the
+    // four bits the nibble encoder writes 16 greys with, which is what this writer has always put
+    // here. Unverified: there is no .goo sample, and whether grey_level counts bits or levels is
+    // what aa-and-z-correction.md finding 2 leaves open.
+    const bool anti_aliased = sla_raster_anti_aliased(cfg);
+    header.anti_aliasing_level = int16_t(anti_aliased ? SLA_AA_LEVEL_ANTI_ALIASED
+                                                       : SLA_AA_LEVEL_BINARY);
+    header.grey_level           = int16_t(anti_aliased ? SLA_GREY_BITS_ANTI_ALIASED
+                                                       : SLA_GREY_BITS_BINARY);
     header.blur_level = 0;
 
     fill_preview(header.small_preview, PREV_SMALL_W, PREV_SMALL_H, data.thumbnails);
@@ -325,6 +335,11 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
         header.bottom_layers = layer_count;
     }
 
+    // The raft interface is the band of layers at the top of the raft with an exposure of their
+    // own. The format has an exposure per layer, so it can carry one, and no interface leaves
+    // every layer the exposure it had before.
+    const Domain::RaftInterface raft_interface = Domain::sla_raft_interface(cfg, int(layer_count));
+
     // Distances are mm and speeds mm/s, the units the settings are defined in.
     header.bottom_lift_distance = get_cfg_value_f_pos(cfg, "bottom_lift_height", 6.0f);
     header.bottom_lift_speed = get_cfg_value_f_pos(cfg, "bottom_lift_speed", 2.0f);
@@ -360,7 +375,7 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
             print_time += header.bottom_exposure_time;
             print_time += header.bottom_before_lift_time + header.bottom_after_lift_time + header.bottom_after_retract_time;
         } else {
-            print_time += header.common_exposure_time;
+            print_time += float(raft_interface.layer_exposure_s(i, header.common_exposure_time));
             print_time += header.before_lift_time + header.after_lift_time + header.after_retract_time;
         }
     }
@@ -482,7 +497,10 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
                 layer_def.second_retract_speed = header.bottom_second_retract_speed;
                 layer_def.light_pwm = header.bottom_light_pwm;
             } else {
-                layer_def.layer_exposure_time = header.common_exposure_time;
+                // The interface layers are exposed like the rest of the print unless the interface
+                // brings an exposure of its own, and are separated like them.
+                layer_def.layer_exposure_time =
+                    float(raft_interface.layer_exposure_s(i, header.common_exposure_time));
                 layer_def.layer_off_time = header.turn_off_time;
                 layer_def.before_lift_time = header.before_lift_time;
                 layer_def.after_lift_time = header.after_lift_time;

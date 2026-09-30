@@ -96,6 +96,29 @@ TEST_CASE("SlaSupportPreviewService - hash_support_points", "[SlaSupportPreviewS
         c[1].base_height   = 1.f;
         REQUIRE(hash_support_points(a) != hash_support_points(c));
     }
+
+    SECTION("A changed tip shape or stem geometry changes the hash")
+    {
+        // These four reach the support tree mesh since M2.16b, so a project that
+        // carries them has to refresh the preview geometry.
+        SupportPoints a = make_points(3);
+
+        SupportPoints shape = make_points(3);
+        shape[2].tip_shape = SupportPoint::TipShape::Cone;
+        REQUIRE(hash_support_points(a) != hash_support_points(shape));
+
+        SupportPoints knot = make_points(3);
+        knot[1].knot_radius = 0.8f;
+        REQUIRE(hash_support_points(a) != hash_support_points(knot));
+
+        SupportPoints sides = make_points(3);
+        sides[0].stem_sides = 6;
+        REQUIRE(hash_support_points(a) != hash_support_points(sides));
+
+        SupportPoints taper = make_points(3);
+        taper[2].stem_taper = 0.2f;
+        REQUIRE(hash_support_points(a) != hash_support_points(taper));
+    }
 }
 
 TEST_CASE("SlaSupportPreviewService - make_sla_support_preview_key", "[SlaSupportPreviewService]")

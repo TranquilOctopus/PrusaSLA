@@ -380,16 +380,14 @@ bool DefaultSupportTree::create_ground_pillar(const Junction &hjp,
     double full_pillar_radius = m_sm.cfg.head_back_radius_mm;
     // A point may ask for a foot of a shape of its own, the others get the configured one.
     Domain::sla::SupportBaseShape base_shape = m_sm.cfg.base_shape;
-    [[maybe_unused]] uint8_t stem_sides = 0;   // see note below: not yet honoured
-    [[maybe_unused]] double stem_taper = 0.;   // see note below: not yet honoured
+    StemGeometry stem;     // round and untapered unless the point asks for more
     if (head_id >= 0 && size_t(head_id) < m_sm.pts->size()) {
         const Domain::SLA::SupportPoint &sp = m_sm.pts->at(head_id);
         const BaseSize base = base_size(m_sm, &sp);
         base_height_override = base.height;
         base_radius_override = base.radius;
         base_shape = base.shape;
-        if (sp.stem_sides != 0) stem_sides = sp.stem_sides;
-        if (sp.stem_taper > 0.f) stem_taper = double(sp.stem_taper);
+        stem = stem_geometry(m_sm, &sp);
         full_pillar_radius = head_back_radius(m_sm, sp);
     }
 
@@ -404,9 +402,8 @@ bool DefaultSupportTree::create_ground_pillar(const Junction &hjp,
                                                       base_height_override,
                                                       base_radius_override,
                                                       full_pillar_radius,
+                                                      stem,
                                                       base_shape);
-    // stem_sides and stem_taper are stored on the point but not yet used: the pillar mesh
-    // builder only makes round, untapered pillars. Honouring them needs a mesh-builder change.
 
     if (pillar_id >= 0) // Save the pillar endpoint in the spatial index
         m_pillar_index.guarded_insert(m_builder.pillar(pillar_id).endpt,
@@ -488,7 +485,9 @@ void DefaultSupportTree::add_pinheads()
             lmin = 0., lmax = pen;
         }
 
-        // The distance needed for a pinhead to not collide with model.
+        // The distance needed for a pinhead to not collide with model. Every tip
+        // shape of M2.16b reaches as far into the model as the default one, so
+        // this does not change with them.
         double w = lmin + 2 * back_r + 2 * double(sp.head_front_radius) - pen;
 
         double pin_r = double(sp.head_front_radius);
@@ -539,6 +538,13 @@ void DefaultSupportTree::add_pinheads()
             h.dir       = nn;
             h.width_mm  = lmin;
             h.r_back_mm = back_r;
+
+            // The rest of the per point geometry of the point (M2.16b): the
+            // shape of the contact, an optional knot ball at the junction and
+            // the cross section and taper of the pillar below this head.
+            h.tip_shape      = sp.tip_shape;
+            h.knot_radius_mm = double(sp.knot_radius);
+            h.stem           = stem_geometry(m_sm, &sp);
         } else if (back_r > m_sm.cfg.head_fallback_radius_mm) {
             filterfn(fidx, i, m_sm.cfg.head_fallback_radius_mm);
         }
@@ -576,7 +582,9 @@ void DefaultSupportTree::classify()
         m_thr();
 
         Head &head = m_builder.head(i);
-        double r = head.r_back_mm;
+        // What sits at the junction is the back of the pinhead, or the knot
+        // ball around it when the point asked for one. (M2.16b)
+        double r = head.junction_radius();
         Vec3d headjp = head.junction_point();
 
            // collision check
@@ -687,9 +695,10 @@ bool DefaultSupportTree::connect_to_ground(Head &head)
     auto [ret, pillar_id] = sla::search_ground_route(suptree_ex_policy,
                                                      m_builder, m_sm,
                                                      {head.junction_point(),
-                                                      head.r_back_mm},
-                                                     head.r_back_mm,
-                                                     head.dir);
+                                                      head.junction_radius()},
+                                                     head.junction_radius(),
+                                                     head.dir,
+                                                     head.stem);
 
     if (pillar_id >= 0) {
         // Save the pillar endpoint in the spatial index
@@ -997,6 +1006,11 @@ void DefaultSupportTree::interconnect_pillars()
             for (unsigned n = 0; n < needpillars; n++) {
                 Vec3d s = spts[n];
                 Pillar p(Vec3d{s.x(), s.y(), gnd}, s.z() - gnd, pillar().r_start);
+                // The extra stability pillars belong to the same support point
+                // as the one they are added next to, so they get the same stem
+                // cross section and taper. (M2.16b)
+                p.stem  = pillar().stem;
+                p.r_end = p.stem.end_radius(p.r_start);
 
                 if (interconnect(pillar(), p)) {
                     Pillar &pp = m_builder.pillar(m_builder.add_pillar(p));

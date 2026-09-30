@@ -104,6 +104,15 @@ indexed_triangle_set pinhead(double r_pin,
                              double length,
                              size_t steps)
 {
+    return pinhead(HeadTipShape::Default, r_pin, r_back, length, steps);
+}
+
+indexed_triangle_set pinhead(HeadTipShape shape,
+                             double      r_pin,
+                             double      r_back,
+                             double      length,
+                             size_t      steps)
+{
     assert(steps > 0);
     assert(length >= 0.);
     assert(r_back > 0.);
@@ -136,12 +145,56 @@ indexed_triangle_set pinhead(double r_pin,
     // the transition from the circle to the robe geometry
 
     auto s1 = sphere(r_back, make_portion(0, PI / 2 + phi), detail);
-    auto s2 = sphere(r_pin, make_portion(PI / 2 + phi, PI), detail);
 
-    for (auto &p : s2.vertices) p.z() += h;
+    // The contact end of the head. The default pinhead closes the robe with the
+    // visible part of a sphere of the front radius. The shapes of M2.16b close
+    // that circle differently, each where the front sphere had its centre, so
+    // the tip of the head ends up exactly as far into the model as the tip of
+    // the default pinhead: the length of the head and with it the position of
+    // the junction stay the same.
+    indexed_triangle_set contact = sphere(r_pin, make_portion(PI / 2 + phi, PI), detail);
+    for (auto &p : contact.vertices) p.z() += h;
+
+    // How many corners a circle of this detail level has and the angle between
+    // them: sphere() rounds the detail to a whole circle.
+    const double  ring_angle = 2 * PI / std::floor(2 * PI / detail);
+    const size_t  corners    = size_t(std::floor(2 * PI / ring_angle));
+
+    if (shape == HeadTipShape::Cone) {
+        // A point instead of the front sphere: the circle the robe ends at is
+        // closed to a single vertex where the pole of the sphere was.
+        contact.indices.clear();
+        contact.vertices.resize(corners);
+        contact.vertices.emplace_back(0.f, 0.f, float(h + r_pin));
+
+        for (size_t i = 0; i < corners; ++i)
+            contact.indices.emplace_back(Domain::Index3{coord_t(i),
+                                                        coord_t((i + 1) % corners),
+                                                        coord_t(corners)});
+    } else if (shape == HeadTipShape::Ball) {
+        // A ball of the front radius instead of the pinched cap of it. Its
+        // equator is the circle the robe ends at now and sits where the front
+        // sphere of the default pinhead had its centre, so the tip of the head
+        // reaches as deep as the tip of the default one. Only the upper half of
+        // the sphere is built: the lower one is inside the robe, and its circle
+        // is the one the robe closes.
+        contact.vertices.clear();
+        contact.indices.clear();
+
+        for (size_t i = 0; i < corners; ++i) {
+            Vec2d b = Eigen::Rotation2Dd(double(i) * ring_angle) * Eigen::Vector2d(0, r_pin);
+            contact.vertices.emplace_back(float(b(0)), float(b(1)), float(h));
+        }
+        contact.vertices.emplace_back(0.f, 0.f, float(h + r_pin));
+
+        for (size_t i = 0; i < corners; ++i)
+            contact.indices.emplace_back(Domain::Index3{coord_t(i),
+                                                        coord_t((i + 1) % corners),
+                                                        coord_t(corners)});
+    }
 
     its_merge(mesh, s1);
-    its_merge(mesh, s2);
+    its_merge(mesh, contact);
 
     for (size_t idx1 = s1.vertices.size() - steps, idx2 = s1.vertices.size();
          idx1 < s1.vertices.size() - 1; idx1++, idx2++) {
@@ -215,9 +268,61 @@ indexed_triangle_set halfcone(double       baseheight,
     return base;
 }
 
+indexed_triangle_set polygon_cone(double       baseheight,
+                                  double       r_bottom,
+                                  double       r_top,
+                                  const Vec3d &pos,
+                                  size_t       sides,
+                                  double       phase)
+{
+    if (baseheight <= 0 || sides < 3 || (r_bottom <= 0. && r_top <= 0.))
+        return {};
+
+    indexed_triangle_set base;
+
+    double a    = 2 * PI / sides;
+    auto   last = int(sides - 1);
+    Vec3d  ep{pos.x(), pos.y(), pos.z() + baseheight};
+
+    for (size_t i = 0; i < sides; ++i) {
+        double phi = i * a + phase;
+        base.vertices.emplace_back(float(pos.x() + r_top * std::cos(phi)),
+                                   float(pos.y() + r_top * std::sin(phi)),
+                                   float(ep.z()));
+    }
+
+    for (size_t i = 0; i < sides; ++i) {
+        double phi = i * a + phase;
+        base.vertices.emplace_back(float(pos.x() + r_bottom * std::cos(phi)),
+                                   float(pos.y() + r_bottom * std::sin(phi)),
+                                   float(pos.z()));
+    }
+
+    base.vertices.emplace_back(pos.cast<float>());
+    base.vertices.emplace_back(ep.cast<float>());
+
+    auto &indices = base.indices;
+    auto  hcenter = int(base.vertices.size() - 1);
+    auto  lcenter = int(base.vertices.size() - 2);
+    auto  offs    = int(sides);
+    for (int i = 0; i < last; ++i) {
+        indices.emplace_back(Domain::Index3{i, i + offs, offs + i + 1});
+        indices.emplace_back(Domain::Index3{i, offs + i + 1, i + 1});
+        indices.emplace_back(Domain::Index3{i, i + 1, hcenter});
+        indices.emplace_back(Domain::Index3{lcenter, offs + i + 1, offs + i});
+    }
+
+    indices.emplace_back(Domain::Index3{0, last, offs});
+    indices.emplace_back(Domain::Index3{last, offs + last, offs});
+    indices.emplace_back(Domain::Index3{hcenter, last, 0});
+    indices.emplace_back(Domain::Index3{offs, offs + last, lcenter});
+
+    return base;
+}
+
 indexed_triangle_set get_mesh(const Head &h, size_t steps)
 {
-    indexed_triangle_set mesh = pinhead(h.r_pin_mm, h.r_back_mm, h.width_mm, steps);
+    indexed_triangle_set mesh = pinhead(h.tip_shape, h.r_pin_mm, h.r_back_mm, h.width_mm, steps);
 
     for (auto& p : mesh.vertices) p.z() -= (h.fullwidth() - h.r_back_mm);
 
@@ -232,6 +337,16 @@ indexed_triangle_set get_mesh(const Head &h, size_t steps)
 
     Vec3f pos = h.pos.cast<float>();
     for (auto& p : mesh.vertices) p = quatern * p + pos;
+
+    // The optional knot: a ball at the junction between the back of the
+    // pinhead and the pillar. Its centre is the junction the pillar starts at,
+    // so a knot thicker than the pillar also thickens the pillar there. (M2.16b)
+    if (h.knot_radius_mm > 0.) {
+        auto knot = sphere(h.knot_radius_mm, make_portion(0, PI), 2 * PI / steps);
+        Vec3f jpos = h.junction_point().cast<float>();
+        for (auto &p : knot.vertices) p += jpos;
+        its_merge(mesh, knot);
+    }
 
     return mesh;
 }
