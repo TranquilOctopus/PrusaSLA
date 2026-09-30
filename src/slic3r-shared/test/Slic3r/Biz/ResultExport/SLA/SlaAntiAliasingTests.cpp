@@ -8,10 +8,13 @@
 // Checked, per format:
 //   - a thresholded layer decodes to exactly two greys (0 and 255), an anti-aliased one to more;
 //   - every decoded value is on the quantization grid that format's encoder uses;
-//   - the AA / level-count field the header declares, at the offset the format documents.
+//   - the AA / level-count field the header declares, at the offset the format documents: the
+//     "no anti-aliasing" value of that field when gamma_correction is 0 (M4.13b), and the value
+//     the writer has always written when it is above 0.
 //
-// See doc/sla-fork/profiling/aa-and-z-correction.md for the offsets and for the three findings
-// these tests deliberately pin rather than change.
+// See doc/sla-fork/profiling/aa-and-z-correction.md for the offsets, and SlaAntiAliasing.hpp for
+// the two values a header states per container. The no-anti-aliasing values are unverified: no
+// printer sample settles what a firmware reads these fields as.
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -238,7 +241,8 @@ TEST_CASE("A thresholded layer is binary and an anti-aliased one is not", "[expo
     REQUIRE(on_quantization_grid(cube.layer, step, top));
 }
 
-TEST_CASE("The pm5 levels field matches the levels the pw0 encoder writes", "[export][sla][aa][pm5]")
+TEST_CASE("The pm5 levels field is the level count of the encoding, not of the raster",
+          "[export][sla][aa][pm5]")
 {
     // The field at body offset 40 is the grey level count (pm5.md), and the encoder keeps the top
     // nibble of every pixel, so 16 is both the declared and the achievable count.
@@ -249,37 +253,40 @@ TEST_CASE("The pm5 levels field matches the levels the pw0 encoder writes", "[ex
     // The layer colour table declares the same count as the header; it is the fourth address.
     REQUIRE(read_le32(aa.bytes, read_le32(aa.bytes, 20 + 4 * 3) + 4) == 16u);
 
-    // A thresholded pm5 declares the same 16 and uses two of them.
+    // A thresholded pm5 declares the same 16 and uses two of them. Unlike the flags of the other
+    // containers this field counts the levels of the encoding, which a binary raster does not
+    // change, and the colour table next to it is 16 bytes wide whatever the raster holds, so it
+    // stays as it is in both cases (M4.13b, and the "not a finding" note in the review doc).
     const ExportedCube thresholded = export_cube("pm5", 0.0);
     require_whole_layer(thresholded);
     REQUIRE(read_le32(thresholded.bytes, header_body(thresholded) + PM5_LEVELS_OFFSET) == 16u);
     require_binary(thresholded.greys);
 }
 
-TEST_CASE("The Anycubic antialiasing flag does not follow gamma_correction",
+TEST_CASE("The Anycubic antialiasing flag follows gamma_correction",
           "[export][sla][aa][anycubic]")
 {
-    // store_anycubic writes h.antialiasing = 1 unconditionally (AnycubicSLA.cpp:310), also for a
-    // thresholded file. The field is a flag, not a level count, so the number of levels this format
-    // can carry is the encoder's 16 either way; finding 1 in the review doc covers the flag.
+    // store_anycubic writes the AA level of the raster, so an anti-aliased file says 1 and a
+    // thresholded one 0 (AnycubicSLA.cpp, SlaAntiAliasing.hpp). The field is a flag, not a level
+    // count, so the number of levels this format can carry is the encoder's 16 either way.
     const ExportedCube aa = export_cube("pwmx", 1.0);
     require_whole_layer(aa);
     REQUIRE(read_le32(aa.bytes, header_body(aa) + ANYCUBIC_AA_OFFSET) == 1u);
 
     const ExportedCube thresholded = export_cube("pwmx", 0.0);
     require_whole_layer(thresholded);
-    CHECK(read_le32(thresholded.bytes, header_body(thresholded) + ANYCUBIC_AA_OFFSET) == 1u);
+    REQUIRE(read_le32(thresholded.bytes, header_body(thresholded) + ANYCUBIC_AA_OFFSET) == 0u);
     require_binary(thresholded.greys);
 }
 
-TEST_CASE("The goo header level count is smaller than what the encoder writes",
-          "[export][sla][aa][goo]")
+TEST_CASE("The goo header states the anti-aliasing of the raster", "[export][sla][aa][goo]")
 {
-    // store_goo writes anti_aliasing_level = 1 and grey_level = 4 (GooSLA.cpp:286-287) whatever the
-    // rasterizer did, while the encoder masks the raster to its high nibble, so up to 16 greys
-    // reach the file. Finding 2 in the review doc: the two numbers cannot both be right and there
-    // is no .goo sample in the repository to settle it, so the current values are pinned here and
-    // the pixels are checked against the encoder's grid rather than against the header's.
+    // store_goo writes an anti-aliasing level and a grey depth, both of them following the raster
+    // (GooSLA.cpp, SlaAntiAliasing.hpp): 1 and 4 bits for an anti-aliased layer, 0 and 1 bit for a
+    // thresholded one. The 4 bits are what the nibble encoder writes 16 greys with, so the header
+    // no longer claims fewer levels than the file carries, and a binary layer claims the one bit it
+    // uses. Unverified: there is no .goo sample, so what a firmware makes of either field is still
+    // the open half of finding 2 in the review doc.
     const ExportedCube aa = export_cube("goo", 1.0);
     require_whole_layer(aa);
     REQUIRE(read_be16(aa.bytes, GOO_AA_OFFSET) == 1);
@@ -288,17 +295,17 @@ TEST_CASE("The goo header level count is smaller than what the encoder writes",
 
     const ExportedCube thresholded = export_cube("goo", 0.0);
     require_whole_layer(thresholded);
-    CHECK(read_be16(thresholded.bytes, GOO_AA_OFFSET) == 1);
-    CHECK(read_be16(thresholded.bytes, GOO_GREY_LEVEL_OFFSET) == 4);
+    REQUIRE(read_be16(thresholded.bytes, GOO_AA_OFFSET) == 0);
+    REQUIRE(read_be16(thresholded.bytes, GOO_GREY_LEVEL_OFFSET) == 1);
     require_binary(thresholded.greys);
 }
 
-TEST_CASE("The ctb antialiasing flag does not follow gamma_correction either", "[export][sla][aa][ctb]")
+TEST_CASE("The ctb anti-aliasing word follows gamma_correction", "[export][sla][aa][ctb]")
 {
-    // store_ctb writes the flag as 1 unconditionally (CtbSLA.cpp:320), the same finding as .pwmx
-    // above, and there is no level-count field next to it to check the encoder against: the .ctb
-    // layer image is a run-length encoding of the 8-bit raster as it is (CtbSLARasterEncoder), so
-    // the pixels below are the only statement the file makes about the levels.
+    // store_ctb writes the AA level of the raster, 1 anti-aliased and 0 thresholded (CtbSLA.cpp,
+    // SlaAntiAliasing.hpp), and there is no level-count field next to it to check the encoder
+    // against: the .ctb layer image is a run-length encoding of the 8-bit raster as it is
+    // (CtbSLARasterEncoder), so the pixels below are the only other statement the file makes.
     const ExportedCube aa = export_cube("ctb", 1.0);
     require_whole_layer(aa);
     REQUIRE(read_le32(aa.bytes, CTB_AA_OFFSET) == 1u);
@@ -306,7 +313,7 @@ TEST_CASE("The ctb antialiasing flag does not follow gamma_correction either", "
 
     const ExportedCube thresholded = export_cube("ctb", 0.0);
     require_whole_layer(thresholded);
-    CHECK(read_le32(thresholded.bytes, CTB_AA_OFFSET) == 1u);
+    REQUIRE(read_le32(thresholded.bytes, CTB_AA_OFFSET) == 0u);
     require_binary(thresholded.greys);
 }
 

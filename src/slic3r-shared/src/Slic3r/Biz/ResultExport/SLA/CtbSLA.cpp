@@ -1,5 +1,6 @@
 #include "Slic3r/Biz/ResultExport/SLA/CtbSLA.hpp"
 
+#include "Slic3r/Biz/ResultExport/SLA/SlaAntiAliasing.hpp"
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/Domain/Image.hpp"
 #include "Slic3r/Domain/SlaLayerHeight.hpp"
@@ -317,7 +318,11 @@ void store_ctb(const std::string& file_path, const Biz::Slicing::SLAResultData& 
         write_f32(out, total_weight);
         write_f32(out, total_price);
         write_string(out, "USD", CTB_PRICE_UNIT_LEN);
-        write_u32(out, 1); // anti-aliasing
+        // The word says whether the file is anti-aliased, and a gamma_correction of 0 thresholded
+        // the raster to a binary image, so it follows that setting (M4.13b). Unverified like the
+        // rest of this container: no Chitubox-sliced sample has been compared against the writer.
+        write_u32(out, sla_raster_anti_aliased(cfg) ? SLA_AA_LEVEL_ANTI_ALIASED
+                                                    : SLA_AA_LEVEL_BINARY);
         write_u32(out, 0); // reserved
 
         // Every layer definition comes before the layer images, in print order. A definition is 12

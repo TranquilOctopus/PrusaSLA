@@ -1,5 +1,6 @@
 #include "Slic3r/Biz/ResultExport/SLA/AnycubicSLA.hpp"
 
+#include "Slic3r/Biz/ResultExport/SLA/SlaAntiAliasing.hpp"
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/Domain/Image.hpp"
 #include "Slic3r/Domain/SlaLayerHeight.hpp"
@@ -311,7 +312,12 @@ static void fill_header_and_misc(anycubicsla_format_header &h,
     h.weight_g  = h.volume_ml * material_density;
     h.price     = (h.volume_ml * bottle_cost) / bottle_volume_ml;
     h.price_currency = '$';
-    h.antialiasing = 1;
+    // The field says whether the file is anti-aliased, and a gamma_correction of 0 thresholded the
+    // raster to a binary image, so it follows that setting (M4.13b). Anti-aliased is the value this
+    // writer has always written, and every printer preset in the shipped bundles leaves
+    // gamma_correction at its default of 1, so an export from a stock profile is unchanged.
+    h.antialiasing = sla_raster_anti_aliased(cfg) ? SLA_AA_LEVEL_ANTI_ALIASED
+                                                  : SLA_AA_LEVEL_BINARY;
     h.per_layer_override = 0;
 
     // The header has a single delay field and no light PWM field, so of the three waits around the
@@ -469,7 +475,7 @@ constexpr std::uint32_t PM5_AREA_NUM = 9;
 constexpr std::uint32_t PM5_PREVIEW_W = 224;
 constexpr std::uint32_t PM5_PREVIEW_H = 168;
 constexpr std::uint32_t PM5_PREVIEW_DPI = 120;
-constexpr std::uint32_t PM5_LAYER_COLOR_LEVELS = 16;
+constexpr std::uint32_t PM5_LAYER_COLOR_LEVELS = 16; // the pw0 encoder's grey levels, AA on or off
 constexpr std::uint32_t PM5_LAYERDEF_ENTRY_SIZE = 32;
 constexpr std::uint32_t PM5_HEADER_PAYLOAD_SIZE = 92;
 constexpr std::uint32_t PM5_PREVIEW_DECLARED_SIZE = 75292;

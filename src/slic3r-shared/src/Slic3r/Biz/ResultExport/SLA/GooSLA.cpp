@@ -1,5 +1,6 @@
 #include "Slic3r/Biz/ResultExport/SLA/GooSLA.hpp"
 
+#include "Slic3r/Biz/ResultExport/SLA/SlaAntiAliasing.hpp"
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/Domain/Image.hpp"
 #include "Slic3r/Domain/SlaLayerHeight.hpp"
@@ -282,8 +283,17 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
     std::string profile_name = get_cfg_value_s(cfg, "sla_material_profile_id");
     std::memcpy(header.profile_name, profile_name.data(), std::min<size_t>(32, profile_name.size()));
 
-    header.anti_aliasing_level = 1;
-    header.grey_level = 4;
+    // Both fields follow the anti-aliasing of the raster, which is gamma_correction and nothing
+    // else (M4.13b). A thresholded layer was rasterized to 0 or 255, so it declares no
+    // anti-aliasing and one bit of grey; an anti-aliased one declares the anti-aliasing and the
+    // four bits the nibble encoder writes 16 greys with, which is what this writer has always put
+    // here. Unverified: there is no .goo sample, and whether grey_level counts bits or levels is
+    // what aa-and-z-correction.md finding 2 leaves open.
+    const bool anti_aliased = sla_raster_anti_aliased(cfg);
+    header.anti_aliasing_level = int16_t(anti_aliased ? SLA_AA_LEVEL_ANTI_ALIASED
+                                                       : SLA_AA_LEVEL_BINARY);
+    header.grey_level           = int16_t(anti_aliased ? SLA_GREY_BITS_ANTI_ALIASED
+                                                       : SLA_GREY_BITS_BINARY);
     header.blur_level = 0;
 
     fill_preview(header.small_preview, PREV_SMALL_W, PREV_SMALL_H, data.thumbnails);

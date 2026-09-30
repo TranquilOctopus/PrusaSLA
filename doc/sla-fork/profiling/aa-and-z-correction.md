@@ -9,6 +9,9 @@ No behaviour changed in this session. The three findings that need a decision ar
 `gamma_correction`, and one guard that keeps the raft and the supports out of the
 printer corrections. None of the three can be settled without a real printer.
 
+Update 2026-09-30 (M4.13b): findings 1 and 2 are now partly changed - the three AA
+fields follow `gamma_correction`, still without a sample. Finding 3 is untouched.
+
 ## Where the raster comes from
 
 One rasterizer serves every format. `SLAPrint::Steps::rasterize()`
@@ -73,34 +76,36 @@ every pixel away (`pixel & 0xF0`) and run-length encodes the high nibble: 16 lev
 one (see `anycubicsla_get_pixel_span`, line 16, and `doc/sla-fork/formats/pm5.md:140`).
 
 - `.pwmo`/`.pwmx`/`.pwms`: `anycubicsla_format_header` has a `std::uint32_t
-  antialiasing` field (line 65) written from `h.antialiasing = 1`
-  (`Biz/ResultExport/SLA/AnycubicSLA.cpp:310`). That field is a *flag*, not a level
-  count: it is 1 whether the raster was thresholded or anti-aliased. See
+  antialiasing` field (line 66) written from `h.antialiasing = sla_raster_anti_aliased(cfg)
+  ? 1 : 0` (`Biz/ResultExport/SLA/AnycubicSLA.cpp:319`). That field is a *flag*, not a level
+  count, and since M4.13b it says whether the raster was anti-aliased. See
   [finding 1](#finding-1-the-anycubic-antialiasing-flag-does-not-follow-gamma_correction).
 - `.pm5`: the field at the same body offset 40 is the level count.
-  `PM5_LAYER_COLOR_LEVELS = 16` (`AnycubicSLA.cpp:454`) is written there (line 635)
-  and again in the layer colour table (line 687, with the 16-byte `0F 1F 2F .. EF FF`
+  `PM5_LAYER_COLOR_LEVELS = 16` (`AnycubicSLA.cpp:478`) is written there (line 665)
+  and again in the layer colour table (line 717, with the 16-byte `0F 1F 2F .. EF FF`
   ramp). `doc/sla-fork/formats/pm5.md:63` reads the same offset as "anti-aliasing grey
-  levels". 16 matches the encoder, so the header is right and the pixel check is the
-  interesting one: every decoded value must be a multiple of 17.
+  levels". 16 matches the encoder and is written whatever the raster is, so the header is
+  right and the pixel check is the interesting one: every decoded value must be a multiple
+  of 17.
 
-### Elegoo `.goo`: 16 levels in the raster, 4 grey levels claimed
+### Elegoo `.goo`: 16 levels in the raster, 4 grey bits claimed
 
 `GooSLARasterEncoder` (`Format/GooSLA.cpp:16`) does the same nibble truncation as the
 Anycubic one (`pixel_val = (*src) & 0xF0`), with a `0x55` magic byte in front, a grey
 run type byte per run (nibble 4..7) and a trailing checksum byte.
 
-The header disagrees with the encoder about the count. `store_goo` writes
+`store_goo` writes the two anti-aliasing fields, and both follow the raster:
 
 | field | offset in the header | value | source |
 |---|---|---|---|
-| `anti_aliasing_level` (int16 BE) | 188 | 1 | `GooSLA.cpp:286` |
-| `grey_level` (int16 BE) | 190 | 4 | `GooSLA.cpp:287` |
-| `blur_level` (int16 BE) | 192 | 0 | `GooSLA.cpp:288` |
-| `gray_scale_level` (uint8) | second to last byte | 1 | `GooSLA.cpp:383` |
+| `anti_aliasing_level` (int16 BE) | 188 | 1 anti-aliased, 0 thresholded | `GooSLA.cpp:293` |
+| `grey_level` (int16 BE) | 190 | 4 bits anti-aliased, 1 bit thresholded | `GooSLA.cpp:295` |
+| `blur_level` (int16 BE) | 192 | 0 | `GooSLA.cpp:297` |
+| `gray_scale_level` (uint8) | second to last byte | 1 | `GooSLA.cpp:397` |
 
-The rasterizer can put 16 distinct greys into a layer and `grey_level` says 4, and
-`anti_aliasing_level` says 1 whether or not `gamma_correction` was 0. See
+With the anti-aliasing on, the rasterizer can put 16 distinct greys into a layer and the 4 bits
+`grey_level` declares are exactly the nibble the encoder keeps, so the two agree; a thresholded
+layer was rasterized to 0 and 255, and the header says no anti-aliasing and one bit. See
 [finding 2](#finding-2-the-goo-header-level-count-and-aa-flag-are-constants).
 
 ## Z-correction
@@ -244,25 +249,38 @@ differ only in AA: the polygons are identical, the pixels are not.
 
 ### Finding 1: the Anycubic antialiasing flag does not follow `gamma_correction`
 
-`h.antialiasing = 1` (`Biz/ResultExport/SLA/AnycubicSLA.cpp:310`) is written for every
-`.pwmo`/`.pwmx`/`.pwms` file, including ones sliced with
+`h.antialiasing = 1` (`Biz/ResultExport/SLA/AnycubicSLA.cpp`, `fill_header_and_misc`) used to
+be written for every `.pwmo`/`.pwmx`/`.pwms` file, including ones sliced with
 `gamma_correction = 0`, where the raster is binary. Reading the field as "the file is
 anti-aliased" then lies; reading it as "the format supports anti-aliasing" it is
 redundant. There is no sample `.pwmx` in the repository and no spec for the field, so
-which reading the firmware uses is unknown. Not changed. If a printer is found to
-re-AA a binary file, the fix is `h.antialiasing = gamma_correction > 0 ? 1 : 0`.
+which reading the firmware uses is unknown.
+
+Update (M4.13b, 2026-09-30): changed to the fix this finding names,
+`h.antialiasing = gamma_correction > 0 ? 1 : 0`, through `sla_raster_anti_aliased` in
+`SlaAntiAliasing.hpp`, which the `.goo` and `.ctb` writers use as well. A value of 0 says the
+file is not anti-aliased, which is what it is; if a firmware reads the field the other way
+("this format supports anti-aliasing"), 0 would turn the feature off on a printer that needs
+it, and a printer run is what settles it. An export above a gamma of 0 is byte for byte what
+it was, and every printer preset in the shipped bundles leaves `gamma_correction` at its
+default of 1, so no export from a stock profile moves.
 
 ### Finding 2: the `.goo` header level count and AA flag are constants
 
-`anti_aliasing_level = 1` and `grey_level = 4` (`Biz/ResultExport/SLA/GooSLA.cpp:286-287`)
-are written unconditionally, while the encoder emits up to 16 greys
-(`Format/GooSLA.cpp:43`). If `grey_level` counts levels, the header understates the
-data by 4x; if it counts bits, 4 is right and the field is not a level count at all.
-Either way `anti_aliasing_level = 1` has the same problem as finding 1. There is no
-`.goo` sample and no spec in the repository. Not changed. The test pins the current
-behaviour and the pixel-level truth (a thresholded layer is binary, an anti-aliased
-one has more than two levels) so that a future fix cannot silently move the pixels
-without moving the header.
+`anti_aliasing_level = 1` and `grey_level = 4` (`Biz/ResultExport/SLA/GooSLA.cpp`,
+`store_goo`) used to be written unconditionally, while the encoder emits up to 16 greys
+(`Format/GooSLA.cpp:43`). If `grey_level` counts levels, the header understated the
+data by 4x; if it counts bits, 4 was right and the field was not a level count at all.
+Either way `anti_aliasing_level = 1` had the same problem as finding 1. There is no
+`.goo` sample and no spec in the repository.
+
+Update (M4.13b, 2026-09-30): both fields follow the raster now, on the reading that `grey_level`
+is the grey depth in bits: 1 and 4 bits for an anti-aliased layer, 0 and 1 bit for a thresholded
+one. A thresholded raster has no intermediate greys, so one bit is what it uses. The other
+reading is left open: if `grey_level` turns out to count levels, the anti-aliased value has to
+move to 16 as well, which is a one-line change here. The test pins both values and the
+pixel-level truth (a thresholded layer is binary, an anti-aliased one has more than two levels),
+so a future fix cannot silently move the pixels without moving the header.
 
 ### Finding 3: the raft and the supports never see a printer correction
 
@@ -280,4 +298,6 @@ it is model-only by its own `if (o == soModel)`.
 ### Not a finding: pm5
 
 `PM5_LAYER_COLOR_LEVELS = 16` matches the nibble encoder exactly, and
-`doc/sla-fork/formats/pm5.md:63` already records the field as the grey level count.
+`doc/sla-fork/formats/pm5.md:63` already records the field as the grey level count. It counts the
+levels of the encoding, which a binary raster does not change, and the layer colour table beside it
+is 16 bytes wide either way, so M4.13b left both writes alone.
