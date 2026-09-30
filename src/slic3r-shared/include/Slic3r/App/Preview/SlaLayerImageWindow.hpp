@@ -12,6 +12,7 @@
 #include <vector>
 
 namespace Slic3r::App::Render { class Device; }
+namespace Slic3r::App::Platform { class KeyboardEvent; }
 namespace Slic3r::Biz { class ProjectInteractor; }
 
 namespace Slic3r::App::Yoga {
@@ -33,6 +34,16 @@ public:
 
     void update(const Biz::Slicing::SLAResult* result);
     void set_slider(DoubleSliderForLayers* slider);
+
+    /**
+     * @brief Step between layers with the keyboard, the way a layer viewer is used to be.
+     *
+     * Returns true when the event was one of the layer keys and was taken here, so that the
+     * caller can leave it to this window instead of letting the slider read it as well. Only the
+     * keys of the plain keyboard and of Shift are read, and only while this window (or the 3D
+     * scene of the Preview) holds the keyboard and no text field wants it.
+     */
+    bool on_keyboard_event(const Platform::KeyboardEvent& e);
 
 protected:
     void render_body(const Domain::Vec2f& pos, const Domain::Vec2f& size) override;
@@ -57,6 +68,7 @@ private:
     void on_layer_image_clicked();
     void render_zoom_region(size_t layer_index);
     void close_zoom();
+    void toggle_zoom();
     size_t current_layer_index() const;
 
     // A single island reported by the slicer, with the slice coordinates of its centroid.
@@ -74,6 +86,9 @@ private:
     // Island layer closest to the current one, in the given direction.
     std::optional<size_t> prev_island_layer() const;
     std::optional<size_t> next_island_layer() const;
+    // Layers of every kind of issue the slicer found, ascending and free of duplicates, so that
+    // Shift+Up and Shift+Down can step through all of them and not only through the islands.
+    void rebuild_issue_layers();
     void go_to_layer(size_t layer);
     void on_prev_island();
     void on_next_island();
@@ -87,6 +102,9 @@ private:
     DoubleSliderForLayers* m_slider{nullptr};
     const Biz::Slicing::SLAResult* m_last_result{nullptr};
     size_t m_last_layer_index{SIZE_MAX};
+    // Whether this window held the keyboard when it was last drawn, so that the layer keys only
+    // act while the window the user is looking at is the one they are typing into.
+    bool m_focused{false};
 
     // Per layer statistics owned by the result, kept alive as long as we draw them
     std::shared_ptr<const Biz::Slicing::SLAResultData> m_result_data;
@@ -101,11 +119,15 @@ private:
     Yoga::Text* m_layer_info_text{nullptr};
     Yoga::LayoutButton* m_prev_button{nullptr};
     Yoga::LayoutButton* m_next_button{nullptr};
+    // The keys that move between layers, drawn on one line under the image.
+    std::string m_key_hint;
 
     // Islands of the last result, sorted by layer. The list is empty and hidden when the
     // slicer found none.
     std::vector<Island> m_islands;
     std::vector<size_t> m_island_layers; //< unique layers of m_islands, ascending
+    // Unique layers of every issue of the last result, ascending, whatever its kind.
+    std::vector<size_t> m_issue_layers;
     Yoga::Item* m_islands_panel{nullptr};
     Yoga::Item* m_islands_header{nullptr};
     Yoga::Text* m_islands_title{nullptr};
