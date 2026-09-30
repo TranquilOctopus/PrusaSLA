@@ -1,5 +1,6 @@
 
 #include <Slic3r/Biz/Slicing/SlicingInteractor.hpp>
+#include <Slic3r/Biz/Slicing/AutoSlicing.hpp>
 #include <Slic3r/Biz/Platform/PlatformServices.hpp>
 #include "Slic3r/Assert.hpp"
 #include "libslic3r/SLAResult.hpp"
@@ -177,6 +178,7 @@ void SlicingInteractor::stop_all()
 
 void SlicingInteractor::enable_auto_slicing(Domain::SlicingId slicing_id) {
     m_autoslicing_id = slicing_id;
+    m_autoslicing_skipped_logged = false;
     process_slicing_queue();
 }
 void SlicingInteractor::disable_auto_slicing() {
@@ -184,6 +186,7 @@ void SlicingInteractor::disable_auto_slicing() {
         return;
     }
     m_autoslicing_id = std::nullopt;
+    m_autoslicing_skipped_logged = false;
 }
 
 void SlicingInteractor::on_selected_project_changed(size_t index)
@@ -380,13 +383,26 @@ void SlicingInteractor::process_slicing_queue()
     process_update_requests();
 
     if (m_autoslicing_id && m_processes.contains(*m_autoslicing_id)) {
-        const LoggingScopeLock lock{m_status_mutex, "slicing statuses"};
-        if (m_statuses.at(*m_autoslicing_id) == Slicing::StatusCode::Modified) {
-            const auto it{
-                std::ranges::find(m_slicing_queue, *m_autoslicing_id, &SlicingRequest::id)
-            };
-            if (it == m_slicing_queue.end()) {
-                m_slicing_queue.push_front(SlicingRequest{*m_autoslicing_id});
+        const SlicingId autoslicing_id{*m_autoslicing_id};
+        // Getting here means the auto slicing was requested, so only the technology can refuse it.
+        if (!is_auto_slicing_allowed(m_processes.at(autoslicing_id).technology(), true)) {
+            // An SLA bed is only sliced from the Slice button, never by itself.
+            if (!m_autoslicing_skipped_logged) {
+                SPDLOG_DEBUG(
+                    "{}: auto slicing skipped, SLA beds are sliced by the Slice button only",
+                    fmt::streamed(autoslicing_id)
+                );
+                m_autoslicing_skipped_logged = true;
+            }
+        } else {
+            const LoggingScopeLock lock{m_status_mutex, "slicing statuses"};
+            if (m_statuses.at(autoslicing_id) == Slicing::StatusCode::Modified) {
+                const auto it{
+                    std::ranges::find(m_slicing_queue, autoslicing_id, &SlicingRequest::id)
+                };
+                if (it == m_slicing_queue.end()) {
+                    m_slicing_queue.push_front(SlicingRequest{autoslicing_id});
+                }
             }
         }
     }

@@ -988,6 +988,7 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/Biz/BackupStore.cpp
         include/Slic3r/Biz/IBackupStoreListener.hpp
 
+        include/Slic3r/Biz/Slicing/AutoSlicing.hpp
         include/Slic3r/Biz/Slicing/BackgroundProcess.hpp
         include/Slic3r/Biz/Slicing/SlicingInteractor.hpp
         src/Slic3r/Biz/Slicing/BackgroundProcess.cpp

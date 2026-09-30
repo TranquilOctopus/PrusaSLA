@@ -2,6 +2,8 @@
 
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/Biz/ISelectedProjectChangedListener.hpp"
+#include "Slic3r/Biz/ISelectedConfigContainerChangedListener.hpp"
+#include "Slic3r/Biz/Preset/IPresetChangedListener.hpp"
 #include "Slic3r/Biz/Scene/SceneInteractor.hpp"
 #include "Slic3r/Biz/ProjectScoped.hpp"
 
@@ -69,6 +71,8 @@ class PreviewRenderModule final :
     public Biz::ISelectedBedInstancesChangedListener,
     public Biz::IFDMResultCacheChangedListener,
     public Biz::ISelectedProjectChangedListener,
+    public Biz::ISelectedConfigContainerChangedListener,
+    public Biz::Preset::IPresetChangedListener,
     public Biz::ISLAResultCacheChangedListener,
     public Biz::ISLAObjectCacheChangedListener,
     public Biz::IStatusCacheChangedListener,
@@ -135,6 +139,22 @@ public:
      * @{
      */
     void on_selected_project_changed(size_t index) override;
+    /**@}*/
+
+    /**
+     * @name Implementation of Biz::ISelectedConfigContainerChangedListener and
+     * Biz::Preset::IPresetChangedListener public interface
+     * @{
+     */
+    void on_selected_config_container_changed(
+        Domain::SelectionId project_id,
+        Domain::SelectionId container_id
+    ) override;
+    void on_preset_selection_changed(
+        Domain::SelectionId project_id,
+        Domain::SelectionId config_container_id,
+        Biz::Preset::PresetItemType type
+    ) override;
     /**@}*/
 
     /**
@@ -292,6 +312,9 @@ private:
     void init_dialog_navigation();
 
     void on_invalidate_slice();
+    // Enables or disables the automatic slicing, so that it follows the printer technology and the
+    // auto-reslice toggle at any time, not only when Preview is entered.
+    void update_auto_slicing();
     void on_update_layers_slider(const Domain::CustomGCode::Info& info);
     void on_request_extra_frames(unsigned int count = 1);
     void on_gcode_view_type_changed();

@@ -3,6 +3,7 @@
 #include "Slic3r/App/Yoga/ToggleButton.hpp"
 
 #include "Slic3r/Biz/ProjectInteractor.hpp"
+#include "Slic3r/Biz/Slicing/AutoSlicing.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
 
 namespace Slic3r::App::Preview {
@@ -42,7 +43,10 @@ SidebarAutoReslice::SidebarAutoReslice(ProjectInteractor& project_interactor) :
 
 bool SidebarAutoReslice::is_enabled() const
 {
-    return !is_sla_active(m_project_interactor) && m_auto_reslice_chb->checked();
+    return Biz::Slicing::is_auto_slicing_allowed(
+        App::selected_printer_technology(m_project_interactor),
+        m_auto_reslice_chb->checked()
+    );
 }
 
 void SidebarAutoReslice::update_visibility()
