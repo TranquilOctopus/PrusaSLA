@@ -4,22 +4,31 @@ Two things live in `.github/workflows`, and both of them are run by hand:
 
 - **`sla-ci.yml`** (PLAN G1, [M0.14](ROADMAP.md)), the fork's CI: it builds the deps, builds and
   runs the two test binaries, runs the M0.13 benchmark harness over the committed models, and puts
-  the metrics diff on the pull request.
+  the metrics diff on the pull request. It has a second job beside the test one, the visual
+  regression ([M6.2d](ROADMAP.md)): it builds the app, renders the fixture views and compares them
+  with the committed references. Both jobs are manual and share the deps cache.
 - **`upstream_rehearsal.yml`** (PLAN G4, [M6.3](ROADMAP.md)), the optional wrapper around the
   upstream merge rehearsal: a script that merges `upstream/master` into a fork branch in a
   throwaway worktree and writes a conflict report. The script is local first; the workflow is one
   way to run it and publish the report. It is a file of its own rather than a job in `sla-ci.yml`,
   so the two concerns stay apart.
 
-Manual is the point in both cases. Actions minutes can cost money on a personal fork, so neither
-file has a `push` trigger and neither has a `schedule`: a run only happens when a person asks for
-one, from the Actions tab, from the `run-ci` label on a pull request, or with `gh workflow run`.
-**Neither workflow has ever been run.** Nothing in either file has been executed on a runner; the
-steps worth watching on a first run are listed per workflow below.
+Manual is the point in every case. Actions minutes can cost money on a personal fork, so no file
+has a `push` trigger and none has a `schedule`: a run only happens when a person asks for one, from
+the Actions tab, from the `run-ci` label on a pull request, or with `gh workflow run`. **Neither
+file has ever been run.** Nothing in either file has been executed on a runner; the steps worth
+watching on a first run are listed per workflow below.
 
 ## sla-ci.yml
 
+Two jobs, both on their own runner and both with the same gate (by hand, or the `run-ci` label):
+`build-and-test` and `visual-regression`. Neither needs the other, so on a labelled pull request
+they run side by side and each costs its own minutes. `pr-comment` is the third job, the one that
+writes a comment, and it depends on `build-and-test` alone.
+
 ### What a run does
+
+`build-and-test`:
 
 | Step | What it does |
 |---|---|
@@ -32,6 +41,31 @@ steps worth watching on a first run are listed per workflow below.
 | Benchmark | `sla_print_tests "[benchmark]"` over the committed `tests/data` models, `sla_benchmark.json` |
 | Metrics diff | `doc/sla-fork/tools/bench_diff.py` against `doc/sla-fork/baseline.json` when it exists |
 | Comment | a second job posts that table on the pull request (pull request runs only) and updates it on later pushes |
+
+`visual-regression` (roadmap M6.2d, the tool in [visual-regression.md](visual-regression.md)):
+
+| Step | What it does |
+|---|---|
+| Unit tests | `test_visual_ci.py`, which needs no build and no app |
+| Plan | `visual_ci.py plan`: one line per render, or the reason there is nothing to do |
+| Everything that costs minutes | skipped while the plan found no references |
+| System packages | the list above plus `xvfb` |
+| Restore the deps prefix | the same path and key as `build-and-test`, so one deps build serves both jobs |
+| Build the deps, configure | as in `build-and-test`, with `SLIC3R_GUI` on because the render is in the wx shell |
+| Build the app | `slic3r-app-launcher`, the binary that takes `--sla-fixture` and `--render-to` |
+| Render and compare | `xvfb-run` over `visual_ci.py run`: every entry of the manifest rendered with `--render-to`, then `visual_diff.py check` on it |
+| Summary and artifact | the report in the job summary, the renders, the diff images, the greyscale variants and the log in `sla-visual-regression` |
+
+`visual_ci.py` exits 0 when every render matched its reference, 1 when a render changed more than
+the tolerances allow or the PLAN 2.1 lightness check failed, and 2 when the run could not be made
+(no app, a manifest that is not valid, a reference the manifest names but that is not in the
+commit, a render that wrote no PNG, a missing sidecar). The job fails on 1 and on 2; a 2 has no
+verdict about the picture at all and must not read as a pass.
+
+**There are no committed references yet** (roadmap M6.2a is the `[human]` todo that makes them),
+so today the plan step finds no manifest, prints why, and every step that costs minutes is
+skipped. That is deliberate: a run that compares nothing is not a failing build, and an hour of
+app build to compare against nothing is minutes that can cost money.
 
 The benchmark step sets `SLA_BENCH_FILTER=testdata` and deliberately leaves `SLA_BENCH_DIR` unset,
 so the harness runs its built in set: the six small models in `tests/data`, which are in the
@@ -62,10 +96,13 @@ and the comment job holds a write token. Push the branch to this repository inst
 
 ### What it costs
 
-A run is Linux minutes from the `ubuntu-24.04` runner pool, and most of it is the build.
+A run is Linux minutes from the `ubuntu-24.04` runner pool, and most of it is the build. The two
+jobs run on separate runners, so a labelled pull request costs both.
 
 - **Deps, no cache hit:** the 50 dependency builds, OCCT and wxWidgets among them. This is the
-  long pole, budget an hour and a half on a 4-core runner.
+  long pole, budget an hour and a half on a 4-core runner. Both jobs ask for the same cache key on
+  the same day, so on a cold day they may both miss and both try to save it; the second save is
+  skipped with a warning by the cache action and the next run finds the entry.
 - **Deps, cache hit:** seconds, the prefix is restored instead of built. The cache is written at the
   end of the first run that built it and is keyed on `deps/CMakeLists.txt`, `deps/CMakePresets.json`,
   every `deps/+*/CMakeLists.txt` and `cmake/modules/AddCMakeProject.cmake`, so touching a
@@ -73,10 +110,17 @@ A run is Linux minutes from the `ubuntu-24.04` runner pool, and most of it is th
 - **The application build:** `libslic3r`, `slic3r-shared` and the two test binaries. On the same
   runner, order an hour, more if it is cold.
 - **The tests and the benchmark:** minutes. The benchmark slices six models at 0.05 mm layer height.
+- **The app build of `visual-regression`:** the same libraries plus the wx shell and the launcher,
+  so order an hour as well, and it is the step most likely to need the bigger runner.
+- **The renders:** a render is a fixed size and a fixed camera, but it runs on llvmpipe, so a
+  handful of minutes for a few entries, most of it slicing the fixture. `--render-timeout` is 540
+  seconds per render, and a render that overruns is killed and reported rather than left to hang.
 
-So: a first run is a two-hour thing, later runs are about an hour. Ways to spend less, none of them
-done: cache the build tree with ccache, or turn STEP support off (the `no-occt` preset pair, and OCCT
-is the biggest single dependency).
+So: a first run is a two-hour thing, later runs are about an hour; a run that includes the visual
+regression is that, plus the app build. Ways to spend less, none of them done: cache the build
+tree with ccache, or turn STEP support off (the `no-occt` preset pair, and OCCT is the biggest
+single dependency). Until M6.2a is done the visual job's steps are all skipped, so on a labelled
+pull request it costs a checkout and a plan step, not a runner hour.
 
 Two budgets to set before the first run, in repository *Settings -> Billing and licensing -> Budgets
 and alerts*: an alert at the number of minutes you are willing to spend, and the per-repository
@@ -86,13 +130,16 @@ chain of pushes to a labelled pull request costs one run, not one per push.
 
 ### Timeouts and failure behaviour
 
-- The job is capped at `timeout-minutes: 360`, which is GitHub's maximum, so it is a hard limit
-  rather than a decision. The deps build step is capped at 150 minutes and the application build at
-  200, so a run that is going to overrun says which step it was in.
+- Both build jobs are capped at `timeout-minutes: 360`, which is GitHub's maximum, so it is a hard
+  limit rather than a decision. The deps build step is capped at 150 minutes, the test job's
+  application build at 200 and the visual job's app build at 240, so a run that is going to overrun
+  says which step it was in.
 - A cold run (deps cache miss) is the one that can reach the cap. If it does, the fix is a larger
   runner for that one run (`ubuntu-24.04-large`), not a longer timeout.
 - The `sla_print_tests` run and the benchmark run are skipped when a suite failed. The metrics of a
   broken engine are worth nothing, and the run has already spent the minutes.
+- The visual regression job skips everything after the plan when there are no references, and its
+  summary and upload still run, so a run that compared nothing is visible in the log and says why.
 - The upload and the job summary run whatever happened, so a failed run still has its output in the
   artifact and in the summary.
 
@@ -150,10 +197,29 @@ than tested:
   somewhere else, wx is not found; the cache key does not carry the path on purpose, because a
   second prefix copy is far bigger than it is worth.
 
+And for `visual-regression` on top of those:
+
+- **A GL context on a runner with no display.** The render is offscreen, but the device that draws
+  into its framebuffer belongs to the window (`DesktopApp::do_fixture_render` makes the canvas
+  render once to get the context current), so the app opens a window and needs a display. The job
+  runs it under `xvfb-run` with `LIBGL_ALWAYS_SOFTWARE=1` and `GALLIUM_DRIVER=llvmpipe`. If the
+  first run reports no context or a black picture, that is the place to look: a real GPU runner,
+  or an EGL surfaceless context, is the alternative.
+- **A dialog blocking the render.** The app is the one a person would run, so anything that waits
+  for input (a migration prompt, an error dialog on a fixture it does not like) hangs the render
+  until `--render-timeout`. If the first run times out on a fixture, the log of that run says what
+  the app was waiting for; the fix is either the fixture or a flag for the prompt.
+- **The fixture scene itself.** A 3MF has to be committed for `--sla-fixture` (M6.2a), and the
+  ones in the repository today are roundtrip test data, not scenes chosen for a picture.
+- **Whether a Linux render matches a Windows reference.** The camera and the size are fixed, but
+  the driver is not, and the first run says how many pixels moved and where. That number is the
+  input to the tolerances in `visual_diff.py`, which are defaults (0.5 % of pixels, 8 of 255 per
+  channel) rather than a measured value for this pair of drivers.
+
 ### Not covered
 
-- Windows and macOS, and the app, the wx shell and the visual regression renders: this job builds
-  the two test binaries and nothing else. The visual regression tool (M6.2) still has no job.
+- Windows and macOS, and the wx shell: `build-and-test` builds the two test binaries and nothing
+  else. The app is built by `visual-regression`, and only to render, and only on Linux.
 - The benchmark on a pull request uses the committed test models, not the M0.12 corpus, because the
   corpus is not in the repository. A metrics diff over the real corpus stays a local run.
 - The nightly upstream merge rehearsal (M6.3) has its own workflow file rather than a job here.
