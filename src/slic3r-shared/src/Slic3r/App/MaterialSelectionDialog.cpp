@@ -125,7 +125,8 @@ MaterialSelectionDialog::MaterialSelectionDialog(
         content_item()->emplace_back<MaterialSettingsDialog>(project_interactor, m_navigator, this);
     // The resin import review dialog lives here because this is where a profile comes in from: the
     // "Import resin profile" button of M3.10b opens it through open_resin_import().
-    m_resin_import_dialog = content_item()->emplace_back<ResinImportDialog>(project_interactor, m_navigator);
+    m_resin_import_dialog =
+        content_item()->emplace_back<ResinImportDialog>(project_interactor, m_navigator);
     m_material_presets.add_listener<Biz::IListObserver<Biz::Preset::PresetItemObservableList>>(
         this
     );
