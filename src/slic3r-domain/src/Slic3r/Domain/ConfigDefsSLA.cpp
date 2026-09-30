@@ -643,7 +643,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Max merge distance");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 6; // below raft_type, see raft_type_visible_settings
+    def->order = 10; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
      def->tooltip = L("Some objects can get along with a few smaller rafts "
                       "instead of a single big one. This parameter defines "
@@ -693,7 +693,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft around object everywhere");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 8; // below raft_type, see raft_type_visible_settings
+    def->order = 12; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::checkbox;
     def->tooltip = L("Make the raft follow the object everywhere, even where the supports do not reach.");
     def->init_fn = init_with(false);
@@ -704,7 +704,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft gap to object");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 7; // below raft_type, see raft_type_visible_settings
+    def->order = 11; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip  = L("The gap left between the object bottom and the raft that carries it.");
     def->units = {L("mm")};
@@ -718,7 +718,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft object connector stride");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 9; // below raft_type, see raft_type_visible_settings
+    def->order = 13; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip = L("Distance between two connector sticks which tie the object to the raft.");
     def->units = {L("mm")};
@@ -731,7 +731,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft object connector width");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 10; // below raft_type, see raft_type_visible_settings
+    def->order = 14; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip  = L("Width of the connector sticks which tie the object to the raft.");
     def->units = {L("mm")};
@@ -744,7 +744,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->label = L("Raft object connector penetration");
     def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
     def->category = ConfigItemDef::Category::Print_Pad;
-    def->order = 11; // below raft_type, see raft_type_visible_settings
+    def->order = 15; // below raft_type, see raft_type_visible_settings
     def->gui_type = ConfigItemDef::GUIType::textfield;
     def->tooltip  = L(
         "How far the tiny connectors that tie the object to the raft reach into the object body.");
@@ -786,6 +786,73 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->min = 0;
     def->max = 30;
     def->init_fn = init_with(0.);
+
+    def = defs.add("raft_infill", typeid(EnumWrapper));
+    def->location = Print;
+    def->overrides_in = Locations{ Object };
+    def->label = L("Raft infill");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
+    def->category = ConfigItemDef::Category::Print_Pad;
+    // It fills the inside of the raft, so it goes after the knobs that shape the raft itself.
+    def->order = 6;
+    def->gui_type = ConfigItemDef::GUIType::combobox;
+    def->tooltip = L("Fill the inside of the raft with a pattern instead of solid resin, which "
+                     "saves resin and shortens the peel off the build plate. The raft keeps a "
+                     "solid skin under its top face and a solid rim around the pattern, so the "
+                     "object never rests on a hole. None prints the solid raft.");
+    def->init_fn = init_with(
+        sla::RaftInfillType::None,
+        {{int(sla::RaftInfillType::None), "none", L("None")},
+         {int(sla::RaftInfillType::Grid), "grid", L("Grid")},
+         {int(sla::RaftInfillType::Honeycomb), "honeycomb", L("Honeycomb")}}
+    );
+
+    def = defs.add("raft_infill_spacing", typeid(double));
+    def->location = Print;
+    def->overrides_in = Locations{ Object };
+    def->label = L("Raft infill spacing");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
+    def->category = ConfigItemDef::Category::Print_Pad;
+    // The three infill knobs read only when the infill is not None, and in this order.
+    def->order = 7;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("Clear size of one open cell of the raft infill, the gap between two "
+                     "neighbouring ribs of the pattern.");
+    def->units = {L("mm")};
+    def->min = 0.1;
+    def->max = 30;
+    def->init_fn = init_with(2.);
+
+    def = defs.add("raft_infill_wall", typeid(double));
+    def->location = Print;
+    def->overrides_in = Locations{ Object };
+    def->label = L("Raft infill wall");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
+    def->category = ConfigItemDef::Category::Print_Pad;
+    def->order = 8;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip  = L("Thickness of the material between two open cells of the raft infill. It is "
+                      "also the width of the solid rim that keeps the pattern inside the raft "
+                      "wall.");
+    def->units = {L("mm")};
+    def->min = 0.1;
+    def->max = 5;
+    def->init_fn = init_with(0.4);
+
+    def = defs.add("raft_infill_skin", typeid(double));
+    def->location = Print;
+    def->overrides_in = Locations{ Object };
+    def->label = L("Raft infill skin");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Pad_Pad;
+    def->category = ConfigItemDef::Category::Print_Pad;
+    def->order = 9;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip  = L("How much solid material is left under the top face of the raft, so the "
+                      "object never rests on a hole. One or two layers is usually enough.");
+    def->units = {L("mm")};
+    def->min = 0;
+    def->max = 5;
+    def->init_fn = init_with(0.5);
 
     def = defs.add("hollowing_enable", typeid(bool));
     def->location = Print;

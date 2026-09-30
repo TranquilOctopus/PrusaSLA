@@ -101,6 +101,10 @@ Short paths in the evidence column: `SLAPrint*.cpp`, `SLALayerImage.cpp`, `SLASu
 | `pad_object_connector_penetration` | Pad object connector penetration | Print | **used** | engine `SLAPrint.cpp:188,202` |
 | `raft_type` | Raft type | Print | **used** | engine `SLAPrint.cpp:75,77` (zero elevation), `:169,171` (embedded pad), `:216,218` (pad cfg); the mapping lives in `Domain/SLA/RaftPreset.cpp:9-49` |
 | `raft_edge_taper` | Raft edge taper | Print | **used** | engine `SLAPrint.cpp:98,222,232` (raft values for the pad cfg); the bevelled rim is built in `SLA/Pad.cpp` (`create_outer_pad_geometry`) |
+| `raft_infill` | Raft infill | Print | **used** | engine `SLAPrint.cpp` (`raft_infill`, then `make_pad_cfg`); the pattern is cut out of the raft in `SLA/Pad.cpp` (`cut_infill_cells`) |
+| `raft_infill_spacing` | Raft infill spacing | Print | **used** | engine `SLAPrint.cpp` (`raft_infill`); the cell size of the lattice in `SLA/Pad.cpp` (`infill_cells`) |
+| `raft_infill_wall` | Raft infill wall | Print | **used** | engine `SLAPrint.cpp` (`raft_infill`); the material between two cells and the rim in `SLA/Pad.cpp` |
+| `raft_infill_skin` | Raft infill skin | Print | **used** | engine `SLAPrint.cpp` (`raft_infill`); the solid skin under the top face in `SLA/Pad.cpp` (`PadConfig3D::infill_cells_top_z`) |
 | `hollowing_enable` | Enable hollowing | Print | **used** | engine `SLAPrintSteps.cpp:551` (hollowing step), `:1583` (statistics) |
 | `hollowing_min_thickness` | Wall thickness | Print | **used** | engine `SLAPrintSteps.cpp:558` |
 | `hollowing_quality` | Accuracy | Print | **used** | engine `SLAPrintSteps.cpp:559` |

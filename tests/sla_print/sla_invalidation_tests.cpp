@@ -94,6 +94,10 @@ std::vector<std::string> get_all_sla_config_keys() {
     keys.push_back("pad_wall_slope");
     keys.push_back("pad_wall_thickness");
     keys.push_back("raft_edge_taper");
+    keys.push_back("raft_infill");
+    keys.push_back("raft_infill_spacing");
+    keys.push_back("raft_infill_wall");
+    keys.push_back("raft_infill_skin");
     keys.push_back("raft_type");
     keys.push_back("printer_model");
     keys.push_back("printer_notes");
