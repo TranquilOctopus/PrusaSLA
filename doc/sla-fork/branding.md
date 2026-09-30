@@ -7,7 +7,8 @@ rename in `version.inc` to `ResinSlicer` is functionally safe. This file is the 
 **Status: the vector sources and the renderer are done, the binaries are not.** Nothing in
 `resources/icons/` has been overwritten yet, so the app still shows the Prusa artwork until
 someone runs `doc/sla-fork/tools/render_icons.py` and commits the result. M1.12 stays unticked
-until then.
+until then. M1.12b closed the four gaps below that need no binary, so what is left is the
+artwork and the strings that depend on a decision rather than a substitution.
 
 ## What is ours now
 
@@ -38,7 +39,7 @@ missing. It overwrites, in place:
 | `resources/icons/PrusaSlicer.ico` | 16 32 48 64 128 256 | `PrusaSlicer.rc.in:24`, `slic3r-app-launcher.rc.in:24` |
 | `resources/icons/PrusaSlicer.icns` | 16 32 64 128 256 512 1024, plus the @2x set | `Info.plist.in:10,51,68,85` |
 | `resources/icons/PrusaSlicer_128px.png` | 128 | `MainFrame.cpp:155` (non-Windows window icon) |
-| `resources/icons/splashscreen.jpg` | 600x540 | `SplashScreen.cpp:42` |
+| `resources/icons/splashscreen.jpg` | 600x540 | `SplashScreen.cpp:55` |
 
 Those four are the binary files the build and the installers read by name, which is deliberate. The
 names are load-bearing for `rc.in`, `Info.plist.in`, the `.desktop` entries and `MainFrame.cpp`, and
@@ -61,7 +62,7 @@ than a literal.
 | File:line | Before | After |
 |---|---|---|
 | `slic3r-shared/src/Slic3r/App/MenuBuilder.cpp:139` | `About PrusaSlicer` | `About ResinSlicer` |
-| `slic3r-app-desktop/src/Slic3r/App/Desktop/SplashScreen.cpp:296` | `Developed by Prusa Research.` | `PrusaSlicer by Prusa Research.` |
+| `slic3r-app-desktop/src/Slic3r/App/Desktop/SplashScreen.cpp:319` | `Developed by Prusa Research.` | `PrusaSlicer by Prusa Research.` |
 
 The splash credit was the one string that made a false claim: the fork is not developed by Prusa.
 `PrusaSlicer by Prusa Research.` keeps the AGPL attribution and stays short enough not to reflow the
@@ -73,6 +74,41 @@ Neither About dialog exists yet in the 3.0 shell: `MenuCommandRegistrar.cpp:1925
 `MenuCommandRegistrar.cpp:44`, so the label is compiled but never shown. It was renamed anyway
 because the moment somebody implements the dialog, the string is what they will read.
 
+## Changed in M1.12b
+
+The gaps below that need no binary. Two of them are drawn on the splash rather than loaded from a
+file, so they did not have to wait for `render_icons.py`; the other two are strings. None of it has
+been seen on screen yet, for the same reason the binaries have not: no one has run the app.
+
+| File:line | Before | After |
+|---|---|---|
+| `slic3r-app-desktop/src/Slic3r/App/Desktop/SplashScreen.cpp:230-231` | `Prusa` + `Slicer` in two colours, Prusa's logotype | `Resin` + `Slicer` in the same two-tone layout, through `_u8L` like every other user-visible string |
+| `slic3r-app-desktop/src/Slic3r/App/Desktop/SplashScreen.cpp:136` | `m_highlighted_text_color(wxColour(237, 107, 33))`, Prusa orange | `theme_color(Platform::Color::AccentPrimary)`, the helper at `SplashScreen.cpp:43-47` |
+| `slic3r-app-desktop/src/Slic3r/App/Desktop/SplashScreen.cpp:52-63` | the G-code viewer splash asked for a JPEG that is not in the tree and fell through to the bundled icon | it retries with the editor `splashscreen.jpg`; the bundled icon is now only the last resort, for when that is unreadable too |
+| `src/platform/unix/com.prusa3d.PrusaSlicer.desktop.in:2` | `Name=PrusaSlicer (@SLIC3R_BUILD_ID@)` | `Name=@SLIC3R_APP_NAME@ (@SLIC3R_BUILD_ID@)`, so the installed entry reads `ResinSlicer` |
+
+The wordmark layout needs no change beyond the two literals: the split point and the kerning are
+measured from the text extents, and `title_font` is scaled from `SLIC3R_APP_NAME` rather than from
+the wordmark, so `Resin` being three characters narrower than `Prusa` only moves the pair towards
+the middle of the banner. It is still the one change here that has to be eyeballed.
+
+The highlight colour is the one line here that touches a theme token. `AccentPrimary` is
+`k_palette_sage300` under the dark theme and `k_palette_teal500` under the light one, while the
+banner the text sits on is a fixed dark grey either way, so the splash keeps its contrast in the
+dark theme and gives some of it up in the light one: sage300 on 26/26/26 is roughly 6.5:1, teal500
+roughly 3.5:1, which carries the large wordmark but not the small state line `SetText` draws under
+it. The theme is built at `DesktopApp.cpp:236`, before the splash is constructed at
+`DesktopApp.cpp:277`, so the token is already there when the colour is read - in the initializer
+list that composes the bitmap as much as in `Decorate` - and no palette constant had to be exposed
+for a pre-theme case. Whether the light theme wants a splash accent of its own is a question for
+whoever renders the binaries.
+
+`SplashScreen.cpp:135` keeps plain white for the rest of the banner text on purpose:
+`Platform::Color::Text` is dark in the light theme and would disappear into the dark grey. The two
+greys the banner itself is filled with (`SplashScreen.cpp:93,96`, 100/100/100 and 26/26/26) are
+still RGB literals. They are not Prusa's, they are not 2.1 palette values, and F2 owns the sweep
+over the literals in `App/`; they are listed here so that sweep does not miss them.
+
 ## Changed in the same commit as the binaries
 
 Do not do these before `render_icons.py` has run: the `.ico` is named by an `rc` file the Windows
@@ -81,8 +117,8 @@ runtime lookups are a silent no-icon rather than a build error.
 
 | File:line | Refers to | What to change |
 |---|---|---|
-| `slic3r-app-desktop/src/Slic3r/App/Desktop/SplashScreen.cpp:46` | `WX::get_bmp_bundle("PrusaSlicer", 400)` | the fallback bitmap when the splash JPEG fails to load; the stem is the SVG name |
-| `slic3r-app-desktop/src/Slic3r/App/Desktop/SplashScreen.cpp:191` | `load_svg("PrusaSlicer")` | the logo drawn on the splash banner |
+| `slic3r-app-desktop/src/Slic3r/App/Desktop/SplashScreen.cpp:67` | `WX::get_bmp_bundle("PrusaSlicer", 400)` | the fallback bitmap when the splash JPEG fails to load; the stem is the SVG name |
+| `slic3r-app-desktop/src/Slic3r/App/Desktop/SplashScreen.cpp:212` | `load_svg("PrusaSlicer")` | the logo drawn on the splash banner |
 | `slic3r-render/src/Slic3r/App/Render/ImguiIconHelper.cpp:98` | `{Icon::PrusaSlicerIcon, "PrusaSlicer"}` | the main-menu mark and the Welcome dialog top bar (`WelcomeDialog.cpp:1451`, `MenuBuilder.cpp:294`, `DoubleSliderForLayers.cpp:2009`) |
 | `slic3r-shared/src/Slic3r/App/TestRenderModule.cpp:119` | `icons/PrusaSlicer-gcodeviewer.svg` | the G-code viewer splash mark, see the gaps below |
 | `slic3r-app-desktop/src/Slic3r/App/Desktop/MainFrame.cpp:155` | `var("PrusaSlicer_128px.png")` | the non-Windows window icon |
@@ -118,7 +154,7 @@ Accurate statements about where this software came from. They are not ours to re
 
 | Place | What it says |
 |---|---|
-| `slic3r-app-desktop/src/Slic3r/App/Desktop/SplashScreen.cpp:286-296` | `{} is based on Slic3r by Alessandro Ranellucci and the RepRap community.` plus the line changed above |
+| `slic3r-app-desktop/src/Slic3r/App/Desktop/SplashScreen.cpp:312-319` | `{} is based on Slic3r by Alessandro Ranellucci and the RepRap community.` plus the line changed above |
 | `src/platform/msw/PrusaSlicer.rc.in:9,15`, `slic3r-app-launcher.rc.in:9,15`, `PrusaSlicer-gcodeviewer.rc.in:9,15` | `CompanyName` and `LegalCopyright` in the exe's version resource |
 | `src/platform/osx/Info.plist.in:8` | `CFBundleGetInfoString` copyright line |
 | `LICENSE`, the file headers, `README.md` | AGPLv3 and the copyright notices |
@@ -139,23 +175,24 @@ do not change them.
 
 ### Still to decide
 
-User-visible, but each needs a decision rather than a substitution.
+User-visible, but each needs a decision rather than a substitution. The splash wordmark and the
+Prusa orange that used to be in this list were done in M1.12b, above; neither needed a binary.
 
 | Place | Text | Note |
 |---|---|---|
-| `slic3r-app-desktop/src/Slic3r/App/Desktop/SplashScreen.cpp:207-208` | draws the wordmark as `Prusa` + `Slicer` in two colours | this is Prusa's logotype, the one piece of logo the app still shows on screen. Change the two literals to `Resin` and `Slicer` and the two-tone layout still works; not done here because it is a drawing change that has to be eyeballed. |
-| `slic3r-app-desktop/src/Slic3r/App/Desktop/SplashScreen.cpp:115` | `m_highlighted_text_color(wxColour(237, 107, 33))` | Prusa orange. PLAN 2.1 rule 1 puts palette hex values in `Theme.cpp` only, so this cannot be moved onto a token from here; it belongs to F2, which is already tasked with the stray RGB literals in `App/`. |
 | `slic3r-shared/src/Slic3r/App/WelcomeDialog.cpp:1049,1065` | "when PrusaSlicer crashes, a report is automatically sent to Prusa Research" | only the first word is wrong; where the reports actually go is a crash-reporting decision, not a string one. |
 | `slic3r-shared/src/Slic3r/App/Init.cpp:41-49` | the injected-DLL warning names the PrusaSlicer process and links an upstream issue | Windows only, and the strings are plain `L()` rather than `_u8L()`. |
 | `slic3r-shared/src/Slic3r/Biz/Network/HttpCurl.cpp:71` | "PrusaSlicer detected system SSL certificate store in:" | a Windows-only system dialog |
 | `slic3r-shared/src/Slic3r/Biz/Config/Legacy/PrintConfig.cpp:2843,3182,3723,6068,6127` | FFF tooltips that name PrusaSlicer | already deferred to a translation pass by `name-audit.md` |
-| `src/platform/unix/*.desktop:2` | `Name=PrusaSlicer` and `Name=PrusaSlicer (@SLIC3R_BUILD_ID@)` | user-visible. `CMakeLists.txt` substitutes `@SLIC3R_BUILD_ID@` into the `.in`, so the generated entry already says "PrusaSlicer (ResinSlicer-3.0.0-...)"; making the generated one read `@SLIC3R_APP_NAME@` is safe, the checked-in copy is a separate decision |
+| `src/platform/unix/PrusaSlicer.desktop:2` | `Name=PrusaSlicer` in the checked-in copy | M1.12b changed the generated one (`com.prusa3d.PrusaSlicer.desktop.in`) to `@SLIC3R_APP_NAME@`; this copy is not read by any build, so renaming it is a separate decision |
 
 ### Gaps found while auditing
 
-- `SplashScreen.cpp:42` loads `splashscreen-gcodepreview.jpg` for the G-code viewer splash. That file
-  does not exist, so that path already falls through to the line 46 fallback. M1.12 renders the
-  editor splash only.
+- `splashscreen-gcodepreview.jpg` is still not in the tree, so the G-code viewer has no splash
+  artwork of its own. M1.12b made that path fall back to the editor `splashscreen.jpg` instead of the
+  bundled icon, which is a placeholder and not a splash; making it a splash is a second piece of
+  artwork. M1.12 renders the editor splash only, and the desktop shell only ever asks for the editor
+  one (`DesktopApp.cpp:255`), so neither is on screen today.
 - `PrusaSlicer-gcodeviewer.svg` and `PrusaSlicer-gcodeviewer-mac_128px.png` are still Prusa
   artwork. The G-code viewer is a second app identity and needs its own mark; out of scope here.
   Its `src/platform/msw/PrusaSlicer-gcodeviewer.rc.in:24` points at
@@ -177,7 +214,9 @@ User-visible, but each needs a decision rather than a substitution.
 
 1. `python doc/sla-fork/tools/render_icons.py --check`, then run it.
 2. Look at the 16 px entry of `PrusaSlicer.ico` and the splash. The 16 px entry is the one that
-   has to survive.
+   has to survive. On the splash, check the wordmark M1.12b redrew (`Resin` + `Slicer`, the second
+   word now in `AccentPrimary`) for centring in the banner, in both themes: that drawing is the one
+   change here nobody has seen.
 3. `git status` should show only the four binaries in `resources/icons/` as modified.
 4. Commit the binaries, then do the "Changed in the same commit as the binaries" table, then
    re-check that nothing still greps as the old artwork.
