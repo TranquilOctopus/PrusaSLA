@@ -72,6 +72,18 @@ struct SupportTreeConfig
     // but it will be derived from this value.
     double pillar_widening_factor = .5;
 
+    // The radius a branch of the branching tree may not grow fatter than, as a
+    // multiple of the radius of the head it carries. The widening above is
+    // proportional to the weight of a node, which is the length of the longest
+    // chain of branches merged into it, so a trunk deep in the tree ends up as
+    // fat as the whole subtree it holds up, and the pillar of a tall model is
+    // the fattest thing in it. The cap can only cut that widening: the radius it
+    // is measured from is the radius of the head, which is the thinnest a branch
+    // ever is, so no value of the key can make a branch thinner than its head.
+    // Zero means no cap, which is the tree as it was built before the key
+    // existed. (M4.5a)
+    double pillar_radius_cap = 0.;
+
     // Radius in mm of the pillar base.
     double base_radius_mm = 2.0;
 

@@ -224,6 +224,9 @@ sla::SupportTreeConfig make_support_cfg(const SLAPrintObjectConfigView& c)
         scfg.pillar_connection_mode = c.get<Domain::sla::PillarConnectionMode>("branchingsupport_pillar_connection_mode");
         scfg.ground_facing_only = c.get<bool>("branchingsupport_buildplate_only");
         scfg.pillar_widening_factor = c.get<double>("branchingsupport_pillar_widening_factor");
+        // How much fatter than the head it carries a branch may get. Zero, the
+        // default, is the tree as it was built before the key existed. (M4.5a)
+        scfg.pillar_radius_cap = c.get<double>("branchingsupport_pillar_radius_cap");
         scfg.base_radius_mm = 0.5*c.get<double>("branchingsupport_base_diameter");
         scfg.base_height_mm = c.get<double>("branchingsupport_base_height");
         scfg.base_shape = c.get<Domain::sla::SupportBaseShape>("branchingsupport_base_shape");
@@ -678,6 +681,7 @@ const std::map<std::string, std::vector<Step>> invalidated_by{
     {"branchingsupport_object_elevation", steps({propagate(slaposObjectSlice)})},
     {"branchingsupport_pillar_connection_mode", steps({propagate(slaposSupportTree)})},
     {"branchingsupport_pillar_diameter", steps({propagate(slaposSupportTree)})},
+    {"branchingsupport_pillar_radius_cap", steps({propagate(slaposSupportTree)})},
     {"branchingsupport_pillar_widening_factor", steps({propagate(slaposSupportTree)})},
     {"branchingsupport_small_pillar_diameter_percent", steps({propagate(slaposSupportTree)})},
     {"delay_after_exposure", steps({propagate(slapsMergeSlicesAndEval)})},
