@@ -19,7 +19,7 @@ struct HollowingInfillConfig
 {
     Domain::sla::HollowingInfillType type = Domain::sla::HollowingInfillType::None;
     double spacing_mm                     = 3.; // axis to axis distance of two neighbouring struts
-    double strut_mm                       = 0.4; // the side of a square strut
+    double strut_mm                       = 0.5; // the side of a square strut
 };
 
 // The axes of the struts of one direction inside the interval [from, to]: as many as fit at the
