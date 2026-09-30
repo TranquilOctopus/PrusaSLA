@@ -17,8 +17,10 @@
 #include "Slic3r/Biz/Format/STL.hpp"
 #include "Slic3r/Biz/Platform/JobManager/JobManager.hpp"
 #include "Slic3r/Biz/Preset/IO/BundleLoader.hpp"
+#include "Slic3r/Biz/Preset/PresetInteractor.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/Biz/ResultExport/ExportNameParser.hpp"
+#include "Slic3r/Biz/ResinProfile/ChituboxCfgExport.hpp"
 #include "Slic3r/Biz/ResinProfile/ResinImportReport.hpp"
 #include "Slic3r/Biz/ResinProfile/ResinProfileImportInteractor.hpp"
 #include "Slic3r/Biz/Slicing/SlicingInteractor.hpp"
@@ -26,9 +28,12 @@
 #include "Slic3r/Biz/PresetUpdater/IPresetUpdaterResultListener.hpp"
 #include "Slic3r/Directories.hpp"
 #include "Slic3r/Domain/BedInstance.hpp"
+#include "Slic3r/Domain/Config.hpp"
 #include "Slic3r/Domain/FullConfigFDM.hpp"
 #include "Slic3r/Domain/FullConfigSLA.hpp"
 #include "Slic3r/Domain/Preset/Bundle.hpp"
+#include "Slic3r/Domain/Preset/EvaluatedPreset.hpp"
+#include "Slic3r/Domain/PrinterTechnology.hpp"
 #include "Slic3r/Domain/Project.hpp"
 #include "Slic3r/Domain/Workbench.hpp"
 #include "Slic3r/Log.hpp"
@@ -781,6 +786,93 @@ static bool perform_resin_profile_import(
 }
 
 /**
+ * @brief Writes a resin preset of the selected printer out as a Chitubox .cfg
+ * (--export-resin-profile), the M3.5/M3.6 mapping table run in reverse.
+ *
+ * The preset is named the way the user knows it, by its name or by its id, and is looked up among
+ * the resins the selected printer offers, so 'printer-profile' decides which presets can be
+ * exported. Which of the two mapping tables it gets is decided by the printer model and the
+ * preset's use_tilt, the same way the import picks the table it maps onto, so a preset that goes
+ * out into a file and comes back in is mapped the same way both times.
+ *
+ * A setting the .cfg format has no key for is not written, and is named in the console instead: a
+ * value is never dropped without a word.
+ *
+ * @return True when the file was written, which is what the exit code of the command line is.
+ */
+static bool perform_resin_profile_export(
+    CLIRuntime& runtime,
+    const std::string& preset_name,
+    const std::optional<std::string>& output_path
+)
+{
+    Biz::Preset::PresetInteractor& presets = runtime.project_interactor().preset_interactor();
+    const Domain::Preset::SelectedPreset& selected = presets.selected_printer_preset();
+
+    if (selected.technology() != Domain::PrinterTechnology::SLA) {
+        boost::nowide::cerr << "The selected printer is not an SLA printer, it has no resin preset."
+                            << std::endl;
+        return false;
+    }
+    if (selected.materials.empty()) {
+        boost::nowide::cerr << "The selected printer has no resin." << std::endl;
+        return false;
+    }
+    if (!output_path.has_value() || output_path.value().empty()) {
+        boost::nowide::cerr << "--output is where the .cfg is written." << std::endl;
+        return false;
+    }
+
+    const Domain::SelectionId project_id = runtime.project_interactor().selected_project_id();
+    const Domain::Preset::EvaluatedMaterialPreset::Preset* found = nullptr;
+    for (const auto& entry : presets.get_material_presets(
+             project_id, selected.hw_config.id, selected.printer.id, selected.print.id, 0))
+    {
+        const Domain::Preset::EvaluatedMaterialPreset::Preset& preset = entry.first.get();
+        if (preset.name == preset_name || preset.id == preset_name) {
+            found = &preset;
+            break;
+        }
+    }
+    if (found == nullptr) {
+        boost::nowide::cout << "the printer \"" << selected.printer.name << "\" has no resin preset named \""
+                            << preset_name << "\"" << std::endl;
+        return false;
+    }
+
+    const Domain::ConfigBox& material = found->config_box();
+    const Domain::ConfigItem* model_item = selected.printer.config_box().items.find("printer_model");
+    std::string model;
+    if (model_item != nullptr && model_item->holds_alternative<std::string>())
+        model = model_item->get<std::string>();
+
+    const Biz::ResinProfile::ChituboxCfgExport exported = Biz::ResinProfile::export_chitubox_cfg_report(
+        material.items,
+        Biz::ResinProfile::export_printer_class(material.items, model),
+        found->name
+    );
+
+    boost::nowide::ofstream out;
+    out.open(output_path.value(), std::ios::out | std::ios::trunc);
+    if (!out.is_open()) {
+        boost::nowide::cerr << "Cannot open file " << output_path.value() << " for writing" << std::endl;
+        return false;
+    }
+    out << exported.text;
+    out.close();
+
+    boost::nowide::cout << "exported \"" << found->name << "\" as " << exported.keys.size() -
+                           exported.skipped.size() << " keys to " << output_path.value() << std::endl;
+    if (!exported.skipped.empty()) {
+        boost::nowide::cout << "no Chitubox key for: ";
+        for (std::size_t i = 0; i < exported.skipped.size(); ++i)
+            boost::nowide::cout << (i == 0 ? "" : ", ") << exported.skipped[i];
+        boost::nowide::cout << std::endl;
+    }
+    return true;
+}
+
+/**
  * @brief Exports the model of every project (--export-stl/--export-obj/--export-3mf).
  */
 static bool perform_model_exports(
@@ -914,6 +1006,16 @@ bool process_actions(
             action.import_resin_profile.value(),
             action.import_resin_profile_dry_run,
             action.import_resin_profile_report
+        );
+    }
+
+    if (action.export_resin_profile.has_value()) {
+        // Its own action as well: it reads one preset of the selected printer and writes a file,
+        // it needs no model and nothing else of the bundle.
+        return perform_resin_profile_export(
+            runtime,
+            action.export_resin_profile.value(),
+            misc.output
         );
     }
 

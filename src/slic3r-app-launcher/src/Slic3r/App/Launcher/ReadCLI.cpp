@@ -471,6 +471,14 @@ void add_action_options(CLI::App& app, App::InitParams& params)
     )
         ->type_name("FILE");
 
+    app.add_option(
+           "--export-resin-profile",
+           params.action.export_resin_profile,
+           "Write a resin preset of the selected printer out as a Chitubox .cfg, the reverse of "
+           "--import-resin-profile. The name is the preset name (or its id); use 'output' to name the file."
+    )
+        ->type_name("PRESET-NAME");
+
     app.add_flag(
         "--query-print-tool-filament-profiles",
         params.action.query_print_tool_filament_profiles,
