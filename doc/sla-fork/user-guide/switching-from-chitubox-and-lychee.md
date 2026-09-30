@@ -44,8 +44,10 @@ happens to spell the Chitubox way, such as `layerHeight`, carries over today. Tr
 way of seeing what a file contains rather than as a way of loading a resin. If you have exported a
 Prusa archive from Lychee, it opens and the same applies to it.
 
-An archive is also capped at 8 MB, which a job with many layers goes past; the review then says
-*File too large (max 8 MB)*.
+An archive is of any size: only its `config.ini` and `prusaslicer.ini` are opened, a few
+kilobytes each, so a job of a few hundred megabytes of layer images reads like a small one. Each
+of those two is capped at 1 MB on its own, and an entry that claims to be larger is refused by
+name.
 
 ### Why `.cfgx` and `.lyr` are not read yet
 
@@ -297,7 +299,8 @@ not use yet, so they arrive as *Unknown* rather than silently:
   profile name key, `currProfile`, and it is that name the base material is matched against.
 - There is no printer picker in the review dialog. Pick the printer in the sidebar first; the
   import goes into the selected one or it does not happen.
-- A single file is capped at 8 MB and a folder import at 1000 files.
+- A single text profile (`.cfg`) is capped at 8 MB and a folder import at 1000 files. A sliced
+  archive (`.sl1`, `.sl1s`) has no cap on the file: only its two ini entries are read.
 - The table shows at most 500 rows, so a `.cfg` with a very long machine section is cut off there.
 
 ## See also
