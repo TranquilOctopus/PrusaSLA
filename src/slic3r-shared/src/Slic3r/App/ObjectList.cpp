@@ -12,13 +12,16 @@
 #include "Slic3r/App/IsSlaActive.hpp"
 #include "Slic3r/App/Imgui/ImguiExtension.hpp"
 #include "Slic3r/App/Render/ImguiRender.hpp"
+#include "Slic3r/App/SlaObjectUseRows.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
+#include "Slic3r/Biz/SLAResultCache.hpp"
 #include "Slic3r/App/Plater/BedThumbnailTexture.hpp"
 #include "Slic3r/App/Scene/IGizmoController.hpp"
 #include "Slic3r/App/Scene/IGizmo.hpp"
 
 #include "Slic3r/Assert.hpp"
 #include "libslic3r/ExtruderCandidates.hpp"
+#include "libslic3r/SLAResult.hpp"
 
 #ifndef IMGUI_DEFINE_MATH_OPERATORS
 #define IMGUI_DEFINE_MATH_OPERATORS
@@ -493,6 +496,11 @@ void ObjectList::render(const Yoga::Vec2f& pos, const Yoga::Vec2f& size)
             m_total_beds_cnt++;
         }
     }
+
+    // The resin per model is dropped at the start of every frame, so a new slice reaches the
+    // tooltips at once and nothing of an older print is left behind (M1.11d).
+    m_sla_resin_tooltips.clear();
+    m_sla_resin_tooltips_bed = Domain::INVALID_ID;
     size_t n = 0, i = m_total_beds_cnt;
     while (i > 0) {
         n = n * 10 + 8;
@@ -1199,6 +1207,48 @@ bool ObjectList::render_wipe_tower_node(const Domain::BedInstance* bed)
     return is_changed_selection;
 }
 
+/// What the model of this row cures on its own, e.g. "12.4 ml, 0.62" (M1.11d). The slicer splits
+/// the resin of the plate between the models, so the object list shows the share of the model as a
+/// tooltip on its row, and the sidebar summary shows the same figures as a table (M1.11a).
+///
+/// Empty when there is nothing to show: no bed (a model out of any bed), a plate that has not been
+/// sliced yet, or a model the slicer found no resin for. The figures of the whole bed are built
+/// once per frame and once per bed, not once per row.
+std::string ObjectList::sla_resin_tooltip(const Domain::ModelObject*  object,
+                                          std::optional<size_t>        bed_instance_id)
+{
+    if (object == nullptr || !bed_instance_id.has_value()) {
+        return {};
+    }
+
+    if (m_sla_resin_tooltips_bed != *bed_instance_id) {
+        m_sla_resin_tooltips.clear();
+        m_sla_resin_tooltips_bed = *bed_instance_id;
+
+        const std::optional<Biz::SLAResultRef> result = m_project_interactor->sla_result_cache().get_result(
+            {m_project_interactor->selected_project_id(), *bed_instance_id}
+        );
+        if (!result.has_value() || !result->get().export_data) {
+            return {};
+        }
+
+        const SlaObjectUseRows rows = build_sla_object_use_rows(result->get().export_data->object_resin_use,
+                                                                result->get().export_data->config);
+        for (const SlaObjectUseRow& row : rows.rows) {
+            m_sla_resin_tooltips.emplace(row.object_id, sla_object_use_value_text(row));
+        }
+    }
+
+    const auto it = m_sla_resin_tooltips.find(object->id());
+    if (it == m_sla_resin_tooltips.end()) {
+        return {};
+    }
+
+    // TRN: Tooltip of a model in the object list, what this model of the plate cures on its own.
+    // {0} is its volume and its cost, e.g. "12.4 ml, 0.62".
+    return fmt::format(fmt::runtime(_u8L("Resin: {0}")), it->second);
+}
+
 bool ObjectList::render_object_node(
     const Domain::ModelObject* object,
     std::optional<size_t> config_container_id,
@@ -1243,6 +1293,19 @@ bool ObjectList::render_object_node(
             (icon_str(Render::Icon::ObjectIcon) + name),
             has_overrides(object, is_sla_config)
         );
+
+    // What this model cures on its own, as a tooltip on its row: the object list is a table of
+    // icons and has no room for a second line of figures (M1.11d). Empty for FFF, for a model that
+    // is not on the bed on screen, and for a plate that has not been sliced, which is when there is
+    // no per model resin to show at all. It has to be asked while the node is the last item, so it
+    // sits right behind the tree node.
+    if (is_sla_config) {
+        const std::string resin =
+            sla_resin_tooltip(object, bed ? std::optional<size_t>(bed->id().id) : std::nullopt);
+        if (!resin.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            Imgui::tooltip(resin);
+        }
+    }
 
     bool is_changed_selection = handle_selection(sel_element);
     if (is_changed_selection) {

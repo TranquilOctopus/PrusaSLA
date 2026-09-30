@@ -13,6 +13,7 @@
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
 
 #include "libslic3r/SerializedConfig.hpp"
+#include "libslic3r/SLA/ObjectResinUse.hpp"
 
 namespace Slic3r::Biz::Slicing {
 
@@ -127,6 +128,11 @@ struct SLAResultData
     // where they come from, doc/sla-fork/profiling/print-time.md has the formula.
     std::optional<double> print_time_s;
     std::vector<double> layer_print_times_s;
+
+    // M1.11d: the resin every model object cures, its body, its support tree and its share of the
+    // raft, which adds up to the volume of the print. The rule the raft is shared by is written up
+    // with SLA::object_resin_use() in libslic3r/SLA/ObjectResinUse.hpp.
+    std::vector<::Slic3r::SLA::ObjectResinUse> object_resin_use;
 };
 
 // Result of slicing steps

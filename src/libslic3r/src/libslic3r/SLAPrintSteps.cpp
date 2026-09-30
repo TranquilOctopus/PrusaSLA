@@ -40,6 +40,7 @@
 #include <libslic3r/SLA/CavityDetection.hpp>
 #include <libslic3r/SLA/IslandDetection.hpp>
 #include <libslic3r/SLA/LayerStats.hpp>
+#include <libslic3r/SLA/ObjectResinUse.hpp>
 #include <libslic3r/SLA/SupportTree.hpp>
 #include <libslic3r/ElephantFootCompensation.hpp>
 #include <libslic3r/CSGMesh/ModelToCSGMesh.hpp>
@@ -1102,14 +1103,17 @@ void SLAPrint::Steps::slice_supports(SLAPrintObject &po) {
     apply_printer_corrections(po, soSupport);
 }
 
-// get polygons for all instances in the object
-static ExPolygons get_all_polygons(const SliceRecord& record, const SLAPrintObject::Instances& instances, SliceOrigin o)
+// Put the polygons of a slice record where the instances of the object stand on the plate. Every
+// instance gets its own copy, rotated and shifted, which is what the printer input is assembled
+// from. The raft outline of an object is placed the same way (M1.11d), so that the resin it is
+// charged for sits inside the support slices it is part of.
+static ExPolygons place_polygons(
+    const ExPolygons&                input_polygons,
+    const SLAPrintObject::Instances& instances,
+    bool                             is_lefthanded
+)
 {
-    if (!record.print_obj()) return {};
-
     ExPolygons polygons;
-    auto &input_polygons = record.get_slice(o);
-    bool is_lefthanded = record.print_obj()->is_left_handed();
     polygons.reserve(input_polygons.size() * instances.size());
 
     for (const ExPolygon& polygon : input_polygons) {
@@ -1159,6 +1163,14 @@ static ExPolygons get_all_polygons(const SliceRecord& record, const SLAPrintObje
     }
 
     return polygons;
+}
+
+// get polygons for all instances in the object
+static ExPolygons get_all_polygons(const SliceRecord& record, const SLAPrintObject::Instances& instances, SliceOrigin o)
+{
+    if (!record.print_obj()) return {};
+
+    return place_polygons(record.get_slice(o), instances, record.print_obj()->is_left_handed());
 }
 
 void SLAPrint::Steps::initialize_printer_input()
@@ -1520,14 +1532,58 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
     LayersInfo layers_info(printer_input.size());
     const double delta_fade_time = (init_exp_time - exp_time) / (fade_layers_cnt + 1);
 
+    // What every model object occupies on every layer, so that the resin each of them cures can be
+    // told apart (M1.11d). The raft is part of the support slices and is shared by the models that
+    // stand on it, so it is sliced on its own here, on the grid the supports were sliced on, and
+    // handed over apart: otherwise two models sharing a raft would be charged for it twice and the
+    // models would no longer add up to the print.
+    const PrintObjects& objects = m_print->objects();
+    std::vector<std::vector<ExPolygons>> pad_slices(objects.size());
+    {
+        sla::JobController raft_ctl;
+        raft_ctl.stopcondition = [this]() { return canceled(); };
+        raft_ctl.cancelfn = [this]() { throw_if_canceled(); };
+
+        for (size_t idx = 0; idx < objects.size(); ++idx) {
+            const SLAPrintObject* po = objects[idx];
+            if (po->m_slice_index.empty() || !po->m_preview || !po->m_preview->pad)
+                continue;
+
+            std::vector<float> heights;
+            heights.reserve(po->m_slice_index.size());
+            for (const SLAPrintObject::SliceRecord& rec : po->m_slice_index)
+                heights.emplace_back(rec.slice_level());
+
+            // The tree is left out on purpose: only the pad, sliced the way the supports were.
+            pad_slices[idx] = sla::slice(
+                indexed_triangle_set{},
+                po->m_preview->pad->its,
+                heights,
+                float(po->config().get<double>("slice_closing_radius")),
+                raft_ctl);
+        }
+    }
+    // Which raft slices belong to which print object, so that the layer loop finds them by record.
+    const std::map<const SLAPrintObject*, size_t> object_index = [&objects] {
+        std::map<const SLAPrintObject*, size_t> index;
+        for (size_t idx = 0; idx < objects.size(); ++idx)
+            index.emplace(objects[idx], idx);
+        return index;
+    }();
+
+    // The per layer entries of object_resin_use(), filled by the layer loop below.
+    std::vector<std::vector<SLA::ObjectLayerUse>> object_layers(printer_input.size());
+
     // Going to parallel:
     auto printlayerfn = [
             // functions and read only vars
             area_fill, display_area, exp_time, init_exp_time, fast_tilt, slow_tilt, hv_tilt,
             &config, delta_fade_time, is_prusa_print, first_slow_layers, below, above,
+            &pad_slices, &object_index,
             // write vars
             &layers = m_print->m_printer_input,
-            &layers_info](size_t sliced_layer_cnt)
+            &layers_info,
+            &object_layers](size_t sliced_layer_cnt)
     {
         PrintLayer &layer = layers[sliced_layer_cnt];
 
@@ -1562,14 +1618,48 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
 
         supports_polygons.reserve(c);
 
+        std::vector<SLA::ObjectLayerUse>& layer_uses = object_layers[sliced_layer_cnt];
+        layer_uses.reserve(layer.slices().size());
+
         for(const SliceRecord& record : layer.slices()) {
-            const SLAPrintObject::Instances& instances = record.print_obj()->m_instances;
-            ExPolygons modelslices = get_all_polygons(record, instances, soModel);
-            for(ExPolygon& p_tmp : modelslices) model_polygons.emplace_back(std::move(p_tmp));
+            const SLAPrintObject* print_obj = record.print_obj();
+            const SLAPrintObject::Instances& instances = print_obj->m_instances;
+            const bool is_lefthanded = print_obj->is_left_handed();
 
-            ExPolygons supportslices = get_all_polygons(record, instances, soSupport);
-            for(ExPolygon& p_tmp : supportslices) supports_polygons.emplace_back(std::move(p_tmp));
+            ExPolygons modelslices = place_polygons(record.get_slice(soModel), instances, is_lefthanded);
+            ExPolygons supportslices = place_polygons(record.get_slice(soSupport), instances, is_lefthanded);
 
+            // The same slices per object, with the raft taken out of the supports, for the resin
+            // each model cures (M1.11d).
+            SLA::ObjectLayerUse use;
+            use.layer_index     = sliced_layer_cnt;
+            use.layer_height_mm = l_height;
+            const Domain::ModelObject* model_object = print_obj->model_object();
+            if (model_object != nullptr) {
+                use.object_id = model_object->id();
+                use.name      = model_object->name();
+            }
+            use.model = std::move(modelslices);
+
+            const size_t slice_idx  = record.get_slice_idx(soSupport);
+            const auto object_it    = object_index.find(print_obj);
+            if (slice_idx != SliceRecord::NONE && object_it != object_index.end()
+                && slice_idx < pad_slices[object_it->second].size())
+            {
+                use.raft    = place_polygons(pad_slices[object_it->second][slice_idx], instances, is_lefthanded);
+                use.support = diff_ex(supportslices, use.raft);
+            } else {
+                use.support = std::move(supportslices);
+            }
+
+            for (const ExPolygon& polygon : use.model)
+                model_polygons.emplace_back(polygon);
+            for (const ExPolygon& polygon : use.support)
+                supports_polygons.emplace_back(polygon);
+            for (const ExPolygon& polygon : use.raft)
+                supports_polygons.emplace_back(polygon);
+
+            layer_uses.emplace_back(std::move(use));
         }
 
         model_polygons = union_ex(model_polygons);
@@ -1656,6 +1746,26 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
     execution::for_each(execution::ex_tbb, size_t(0), printer_input.size(), printlayerfn,
                         execution::max_concurrency(execution::ex_tbb));
 
+    // The resin each model object cures, from the per object slices the layer loop above assembled.
+    // The models add up to the print: a body is only charged where no other body covers the same
+    // resin and a support only where no body stands on it, exactly as the plate totals are counted
+    // in layers_info. The rule the raft is shared by is written up in SLA/ObjectResinUse.hpp.
+    std::vector<SLA::ObjectResinUse> per_object_resin_use;
+    {
+        std::vector<SLA::ObjectLayerUse> per_object_layers;
+        size_t entries = 0;
+        for (const std::vector<SLA::ObjectLayerUse>& layer : object_layers)
+            entries += layer.size();
+        per_object_layers.reserve(entries);
+        for (std::vector<SLA::ObjectLayerUse>& layer : object_layers) {
+            for (SLA::ObjectLayerUse& use : layer)
+                per_object_layers.emplace_back(std::move(use));
+            layer.clear();
+            layer.shrink_to_fit();
+        }
+        per_object_resin_use = SLA::object_resin_use(per_object_layers, sqr(SCALING_FACTOR));
+    }
+
     // Detect islands: connected regions in layer N that have no overlap with layer N-1.
     // Layer 0 never produces islands.
     std::vector<ExPolygons> all_layer_polygons;
@@ -1712,7 +1822,6 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
     if (count_faded_layers < 0)
         count_faded_layers = 0;
     print_statistics.count_faded_layers = count_faded_layers;
-    const PrintObjects& objects = m_print->objects();
     bool hollowing_enable = std::any_of(objects.begin(), objects.end(),
         [](const SLAPrintObject *po) { return po->config().get<bool>("hollowing_enable"); });
 
@@ -1859,6 +1968,7 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
                 ret.push_back(layer.total_s());
             return ret;
         }(),
+        .object_resin_use = std::move(per_object_resin_use),
     }),
     .slices  = std::move(slices),
     .heights = std::move(heights),

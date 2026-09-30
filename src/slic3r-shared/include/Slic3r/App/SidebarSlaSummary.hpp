@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Slic3r/App/SlaIssueRows.hpp"
+#include "Slic3r/App/SlaObjectUseRows.hpp"
 #include "Slic3r/App/Yoga/Window.hpp"
 #include "Slic3r/Biz/Platform/ListenerScope.hpp"
 #include "Slic3r/Biz/ISelectedConfigContainerChangedListener.hpp"
@@ -55,6 +56,10 @@ private:
     // no model of the plate has a surface along its axis. Both the row name and the button above
     // read it, so they cannot disagree about the model the cavity is in.
     std::optional<Slic3r::Biz::Sla::DrainHoleSuggestion> suggest_drain_hole(const SlaIssueRow& issue_row) const;
+    // The per model table under the figures: what every model of the plate cures on its own. It is
+    // only built when there is more than one model, and it keeps whatever the user opened it to,
+    // because a refresh replaces the rows but not the choice to look at them.
+    void add_object_use_rows(const SlaObjectUseRows& object_use_rows);
 
     Biz::ProjectInteractor& m_project_interactor;
     Biz::ListenerScope<Biz::ISelectedConfigContainerChangedListener, Biz::ProjectInteractor, SidebarSlaSummary> m_config_container_listener_scope;
@@ -68,6 +73,9 @@ private:
     // The bed the rows were built for, so a click jumps to a layer of the bed that is on screen.
     Domain::SlicingId m_current_slicing_id{};
     Yoga::Item* m_rows_container{nullptr};
+    // Whether the user has opened the per model table. Kept across the refreshes so that a new
+    // slice does not fold a table the user is reading away.
+    bool m_object_use_expanded{false};
 };
 
 // Already inside Slic3r::App: a qualified name here would nest as Slic3r::App::Slic3r::App::...

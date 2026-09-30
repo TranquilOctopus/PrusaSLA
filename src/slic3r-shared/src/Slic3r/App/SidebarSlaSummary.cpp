@@ -53,6 +53,33 @@ struct DrainHoleCandidates
     std::vector<Slic3r::Biz::Sla::DrainHoleCandidate> candidates;
 };
 
+/// The models of a bed the printer prints, each of them named once, in the order they stand on the
+/// plate. Several instances of one model are one row, the way the slicer reports them.
+std::vector<std::string> model_names_of_bed(const Domain::Project& project, Domain::SelectionId bed_instance_id)
+{
+    std::vector<std::string> names;
+    const Domain::BedInstance* bed_instance = project.find_bed_instance_by_id(bed_instance_id);
+    if (bed_instance == nullptr) {
+        return names;
+    }
+
+    std::vector<Domain::ObjectID> seen;
+    for (const Domain::ModelInstance* instance : bed_instance->model_instances) {
+        if (instance == nullptr || !instance->is_printable()) {
+            continue;
+        }
+        const Domain::ModelObject* model_object = instance->get_object();
+        if (model_object == nullptr
+            || std::find(seen.begin(), seen.end(), model_object->id()) != seen.end()) {
+            continue;
+        }
+        seen.push_back(model_object->id());
+        names.push_back(model_object->name);
+    }
+
+    return names;
+}
+
 } // namespace
 
 SidebarSlaSummary::SidebarSlaSummary(Biz::ProjectInteractor& project_interactor) :
@@ -173,6 +200,7 @@ void SidebarSlaSummary::refresh()
     std::optional<size_t> layer_count;
     std::optional<double> print_time_s;
     SlaIssueRows issue_rows;
+    SlaObjectUseRows object_use_rows;
     if (bed_economics.has_result) {
         const SLAResultCache& sla_cache = m_project_interactor.sla_result_cache();
         const SlicingId slicing_id{project_id, bed_instance_id};
@@ -186,9 +214,19 @@ void SidebarSlaSummary::refresh()
                 // The estimate the engine made for a printer without a tilt (M1.11c); it is empty
                 // for a print that has not been sliced yet, which is the en dash case.
                 print_time_s = sla_result.export_data->print_time_s;
-                issue_rows = build_sla_issue_rows(sla_result.export_data->issues);
+                issue_rows   = build_sla_issue_rows(sla_result.export_data->issues);
+                // What every model of the plate cures on its own (M1.11d).
+                object_use_rows = build_sla_object_use_rows(sla_result.export_data->object_resin_use,
+                                                            sla_result.export_data->config);
             }
         }
+    }
+
+    // Before the first slice there is no per model resin to show, but the models of the bed are
+    // known and the table then reads as the en dash it is, the same one the figures above carry.
+    if (object_use_rows.empty()) {
+        object_use_rows = unsliced_sla_object_use_rows(
+            model_names_of_bed(m_project_interactor.selected_project(), bed_instance_id));
     }
 
     // Build rows
@@ -232,7 +270,54 @@ void SidebarSlaSummary::refresh()
     // Estimated print time row, beside the layer count it is summed from (M1.11c).
     add_row(_u8L("Print time"), SidebarSlaSummaryFormat::format_print_time(print_time_s));
 
+    add_object_use_rows(object_use_rows);
+
     add_issue_rows(issue_rows);
+}
+
+void SidebarSlaSummary::add_object_use_rows(const SlaObjectUseRows& object_use_rows)
+{
+    // One model on the plate says nothing the figures above do not, and an empty plate has no table
+    // at all. The whole window is hidden for FFF, which never gets here with rows.
+    if (!object_use_rows.show()) {
+        return;
+    }
+
+    m_rows_container->emplace_back<Separator>();
+
+    LayoutButton* toggle = m_rows_container->emplace_back<LayoutButton>(object_use_rows.title());
+    toggle->set_checkable(true);
+    toggle->set_checked(m_object_use_expanded);
+    toggle->set_content_justify_content(YGJustifyFlexStart);
+    toggle->set_content_padding({4.f, 2.f});
+    toggle->set_flex_shrink(0_fpx);
+    toggle->set_tooltip(_u8L("Show what every model of the plate cures on its own"));
+
+    Item* rows = m_rows_container->emplace_back<Item>();
+    rows->set_orientation(Orientation::Vertical);
+    rows->set_gap(3_fpx);
+    rows->set_visible(m_object_use_expanded);
+
+    toggle->callbacks().checked_changed = [this, rows](bool checked)
+    {
+        m_object_use_expanded = checked;
+        rows->set_visible(checked);
+    };
+
+    for (const SlaObjectUseRow& row : object_use_rows.rows) {
+        Item* line = rows->emplace_back<Item>();
+        line->set_orientation(Orientation::Horizontal);
+        line->set_justify_content(YGJustifySpaceBetween);
+        line->set_gap(10_fpx);
+        line->set_flex_shrink(0_fpx);
+
+        Text* name = line->emplace_back<Text>(row.object_name);
+        name->set_font_type(Render::ImguiFontType::Regular);
+
+        Text* value = line->emplace_back<Text>(sla_object_use_value_text(row));
+        value->set_font_type(Render::ImguiFontType::Regular);
+        value->set_text_color(m_theme->color_imgui(Platform::Color::Text));
+    }
 }
 
 void SidebarSlaSummary::add_issue_rows(const SlaIssueRows& issue_rows)

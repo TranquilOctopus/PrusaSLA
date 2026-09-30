@@ -6,7 +6,11 @@
 #include "MultiSelections.hpp"
 
 #include <Slic3r/Domain/ElementRef.hpp>
+#include <Slic3r/Domain/ObjectID.hpp>
+#include <Slic3r/Domain/SelectionId.hpp>
 
+#include <map>
+#include <optional>
 #include <set>
 #include <string>
 
@@ -117,6 +121,9 @@ private:
         const Domain::ModelVolume* volume = nullptr
     );
     void render_slicing_state_marker(size_t bed_instance_id);
+    // What the model of a row cures on its own (M1.11d), empty when the plate has no per model resin.
+    std::string
+    sla_resin_tooltip(const Domain::ModelObject* object, std::optional<size_t> bed_instance_id);
     void render_infos_selectable(
         const std::set<Render::Icon>& infos,
         const Domain::ModelObject* object,
@@ -185,6 +192,11 @@ private:
 
     bool m_is_edit_name_input_hovered{false};
     float m_horizontal_padding{10.f};
+
+    // The figures of the resin per model of the bed on screen, built once per frame for the bed that
+    // is asked for first, keyed by model (M1.11d).
+    std::map<Domain::ObjectID, std::string> m_sla_resin_tooltips;
+    Domain::SelectionId m_sla_resin_tooltips_bed{Domain::INVALID_ID};
 
     Domain::Vec2f m_inner_padding;
     ImGuiMultiSelectFlags m_multi_selection_flags;

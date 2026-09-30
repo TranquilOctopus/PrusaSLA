@@ -383,6 +383,8 @@ set(SLIC3R_SOURCES
     src/libslic3r/SLA/CavityDetection.hpp
     src/libslic3r/SLA/IslandDetection.cpp
     src/libslic3r/SLA/IslandDetection.hpp
+    src/libslic3r/SLA/ObjectResinUse.cpp
+    include/libslic3r/SLA/ObjectResinUse.hpp
     src/libslic3r/SLA/LayerStats.cpp
     include/libslic3r/SLA/LayerStats.hpp
     src/libslic3r/SLA/OrientCrossSection.cpp
