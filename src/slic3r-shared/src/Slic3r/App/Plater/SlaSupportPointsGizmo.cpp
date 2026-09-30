@@ -241,6 +241,17 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
             this->apply_support_geometry_to_selected(SupportGeometryField::StemTaper);
         }
     };
+    // The per-point "may this support end on the model" switch (M2.26). Like the geometry above it
+    // is a value of its own, written on the points that are selected.
+    m_dialog->callbacks().on_model_changed = [this](SupportOnModel on_model)
+    {
+        if (m_syncing_dialog) {
+            return;
+        }
+        if (m_edit_state.has_value()) {
+            this->apply_support_on_model_to_selected(on_model);
+        }
+    };
     m_dialog->callbacks().preset_light = [this]() { this->apply_preset_light(); };
     m_dialog->callbacks().preset_medium = [this]() { this->apply_preset_medium(); };
     m_dialog->callbacks().preset_heavy = [this]() { this->apply_preset_heavy(); };
@@ -1646,11 +1657,31 @@ void SlaSupportPointsGizmo::apply_support_geometry_to_selected(SupportGeometryFi
     commit_edited_points_live();
 }
 
+void SlaSupportPointsGizmo::apply_support_on_model_to_selected(SupportOnModel on_model)
+{
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+    take_undo_snapshot();
+    m_edit_state->editing.apply_support_on_model_to_selected(on_model);
+    // The points now carry the new state, so the control keeps showing it.
+    update_selected_support_geometry();
+    update_point_visuals();
+    // The tree the preview shows is built from the points, so a change of where a pillar ends
+    // has to reach the model like any other edit of a point (M2.26).
+    commit_edited_points_live();
+}
+
 void SlaSupportPointsGizmo::update_selected_support_geometry()
 {
     DialogSyncGuard guard(*this);
     m_dialog->set_support_geometry(
         m_edit_state.has_value() ? m_edit_state->editing.selected_support_geometry() : std::nullopt
+    );
+    // The "may rest on the model" switch has a value of its own, so it is shown for a selection
+    // that agrees on it even when the selection shows no geometry at all (M2.26).
+    m_dialog->set_support_on_model(
+        m_edit_state.has_value() ? m_edit_state->editing.selected_support_on_model() : std::nullopt
     );
 }
 

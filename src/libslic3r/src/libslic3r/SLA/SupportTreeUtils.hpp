@@ -1,6 +1,7 @@
 #ifndef SLASUPPORTTREEUTILS_H
 #define SLASUPPORTTREEUTILS_H
 
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 
@@ -394,6 +395,42 @@ inline StemGeometry stem_geometry(const SupportableMesh            &sm,
         ret.taper_mm = double(sp->stem_taper);
 
     return ret;
+}
+
+// Whether the pillar of this support point may end on the model surface instead of
+// having to reach the build plate (M2.26). Without a switch of its own the point
+// follows the object's support_buildplate_only, which is what every point did
+// before the switch existed. Allow permits a model anchor even on an object whose
+// supports must not end on the model, Forbid forbids it even on an object whose
+// supports may.
+inline bool may_rest_on_model(const SupportableMesh            &sm,
+                              const Domain::SLA::SupportPoint *sp)
+{
+    bool ret = !sm.cfg.ground_facing_only;
+
+    if (sp != nullptr) {
+        switch (sp->on_model) {
+        case Domain::SLA::SupportPoint::OnModel::Allow: ret = true; break;
+        case Domain::SLA::SupportPoint::OnModel::Forbid: ret = false; break;
+        case Domain::SLA::SupportPoint::OnModel::Inherit:
+        default: break;
+        }
+    }
+
+    return ret;
+}
+
+// Whether any point of the object may end on the model. The trees ask this before
+// they sample the model surface as a place to anchor a support on (M2.26): a point
+// that allows a model anchor of its own needs the model points even on an object
+// whose supports must not end on the model.
+inline bool any_may_rest_on_model(const SupportableMesh &sm)
+{
+    return sm.pts != nullptr &&
+           std::any_of(sm.pts->begin(), sm.pts->end(),
+                       [&sm](const Domain::SLA::SupportPoint &sp) {
+                           return may_rest_on_model(sm, &sp);
+                       });
 }
 
 template<class Ex>

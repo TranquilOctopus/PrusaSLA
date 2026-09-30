@@ -189,6 +189,15 @@ void SlaSupportPointsEditing::apply_support_geometry_to_selected(SupportGeometry
     }
 }
 
+void SlaSupportPointsEditing::apply_support_on_model_to_selected(SupportOnModel on_model)
+{
+    for (size_t idx : selected_point_indices) {
+        if (idx < points.size()) {
+            points[idx].on_model = on_model;
+        }
+    }
+}
+
 std::vector<size_t> SlaSupportPointsEditing::points_in_rectangle(
     const std::vector<Domain::Vec2d>& screen_positions,
     Domain::Vec2d rect_min,

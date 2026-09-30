@@ -177,6 +177,27 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     m_stem_taper_slider->callbacks().value_changed = [this](double value)
     { m_callbacks.stem_taper_changed(value); };
 
+    // The per-point "may this support end on the model" switch (M2.26). It is not a dimension of
+    // the support but where its pillar ends, so it sits with the geometry of the point, after the
+    // stem. Inherit is what a point without a switch of its own gets, i.e. the object's own
+    // setting decides.
+    add_row_with_combo_box(_u8L("Support on model"), settings, &m_on_model_combo);
+    m_on_model_combo->set_items({_u8L("Inherit"), _u8L("Allow"), _u8L("Forbid")});
+    m_on_model_combo->callbacks().selection_changed = [this](int index)
+    {
+        switch (index) {
+        case 1:
+            m_callbacks.on_model_changed(SupportOnModel::Allow);
+            break;
+        case 2:
+            m_callbacks.on_model_changed(SupportOnModel::Forbid);
+            break;
+        default:
+            m_callbacks.on_model_changed(SupportOnModel::Inherit);
+            break;
+        }
+    };
+
     add_row_with_slider(
         content(),
         &m_clipping_plane_slider,
@@ -377,6 +398,30 @@ void SlaSupportPointsDialog::set_support_geometry(const std::optional<SlaSupport
     m_knot_diameter_slider->set_value(geometry->knot_diameter_mm);
     m_stem_sides_slider->set_value(geometry->stem_sides);
     m_stem_taper_slider->set_value(geometry->stem_taper);
+}
+
+void SlaSupportPointsDialog::set_support_on_model(const std::optional<SupportOnModel>& on_model)
+{
+    if (!on_model.has_value()) {
+        // Nothing is selected, or the selected points disagree: a dropdown has no empty state of
+        // its own, so it says the one word the app uses for this.
+        m_on_model_combo->set_override_label(_u8L("Mixed"));
+        return;
+    }
+
+    m_on_model_combo->set_override_label(std::string());
+    switch (*on_model) {
+    case SupportOnModel::Allow:
+        m_on_model_combo->set_current_index(1);
+        break;
+    case SupportOnModel::Forbid:
+        m_on_model_combo->set_current_index(2);
+        break;
+    case SupportOnModel::Inherit:
+    default:
+        m_on_model_combo->set_current_index(0);
+        break;
+    }
 }
 
 void SlaSupportPointsDialog::set_active_preset(int index)

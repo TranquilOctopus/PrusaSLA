@@ -5,13 +5,16 @@
 namespace Slic3r::Domain::SLA {
 
 // The point is compared field by field, so a change of any dimension the support tree is built
-// from counts as a change: the per-point tip and stem geometry (M2.16c) sits next to the sizes.
+// from counts as a change: the per-point tip and stem geometry (M2.16c) sits next to the sizes,
+// and so does the per-point "may rest on the model" switch, which changes where the pillar ends
+// (M2.26).
 static bool near(float a, float b) { return std::abs(a - b) < float(EPSILON); }
 
 bool SupportPoint::operator==(const SupportPoint& sp) const
 {
     return pos == sp.pos && type == sp.type && tip_shape == sp.tip_shape &&
-           stem_sides == sp.stem_sides && near(head_front_radius, sp.head_front_radius) &&
+           on_model == sp.on_model && stem_sides == sp.stem_sides &&
+           near(head_front_radius, sp.head_front_radius) &&
            near(pillar_diameter, sp.pillar_diameter) && near(base_diameter, sp.base_diameter) &&
            near(base_height, sp.base_height) && near(tip_length, sp.tip_length) &&
            near(contact_depth, sp.contact_depth) && near(stem_taper, sp.stem_taper) &&

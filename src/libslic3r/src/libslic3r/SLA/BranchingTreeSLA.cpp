@@ -315,10 +315,13 @@ bool BranchingTreeBuilder::add_mesh_bridge(const branchingtree::Node &from,
 
     sla::Junction fromj = {from.pos.cast<double>(), get_radius(from)};
 
-    auto anchor = m_sm.cfg.ground_facing_only ?
-                      std::optional<Anchor>{} : // If no mesh connections are allowed
+    // A point that allows a model anchor of its own (M2.26) gets one even on an
+    // object whose supports must not end on the model, and one that forbids it
+    // gets none, however the object is set up.
+    auto anchor = may_rest_on_model(m_sm, leaf_point(from)) ?
                       calculate_anchor_placement(beam_ex_policy , m_sm, fromj,
-                                                 to.pos.cast<double>());
+                                                 to.pos.cast<double>()) :
+                      std::optional<Anchor>{}; // If no mesh connections are allowed
 
     if (anchor) {
         sla::Junction toj = {anchor->junction_point(), anchor->r_back_mm};
@@ -448,10 +451,12 @@ void create_branching_tree(SupportTreeBuilder &builder, const SupportableMesh &s
                      .max_slope(sm.cfg.bridge_slope)
                      .max_branch_length(sm.cfg.max_bridge_length_mm);
 
-    auto meshpts = sm.cfg.ground_facing_only ?
-                       std::vector<branchingtree::Node>{} :
+    // The model surface is sampled as a place to anchor a support on, which is
+    // only done when a support may end on the model at all (M2.26).
+    auto meshpts = any_may_rest_on_model(sm) ?
                        branchingtree::sample_mesh(its,
-                                                  props.sampling_radius());
+                                                  props.sampling_radius()) :
+                       std::vector<branchingtree::Node>{};
 
     auto bedpts  = branchingtree::sample_bed(props.bed_shape(),
                                              float(props.ground_level()),

@@ -183,8 +183,12 @@ private:
     void apply_base_height_to_selected();
     void apply_preset_mini();
     void apply_support_geometry_to_selected(SupportGeometryField field);
+    // Writes the per-point "may this support end on the model" state on the selected points and
+    // asks for the tree again, because it changes where their pillars end (M2.26).
+    void apply_support_on_model_to_selected(SupportOnModel on_model);
     // Shows the tip shape, knot, stem cross-section and stem taper of the selected points, empty
-    // when nothing is selected or the points disagree on one of them (M2.16c).
+    // when nothing is selected or the points disagree on one of them (M2.16c), and the per-point
+    // "may rest on the model" state, which is a value of its own (M2.26).
     void update_selected_support_geometry();
     // The tip shape, knot, stem cross-section and stem taper a new point takes, from the Supports &
     // raft settings of @p model_object.

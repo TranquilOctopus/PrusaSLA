@@ -491,6 +491,9 @@ public:
     inline const std::vector<Bridge> &bridges() const { return m_bridges; }
     inline const std::vector<Bridge> &crossbridges() const { return m_crossbridges; }
     inline const std::vector<Pedestal> &pedestals() const { return m_pedestals; }
+    // The places where a pillar was anchored on the model body instead of the plate, which is
+    // what a support point marked with the per point switch of M2.26 asks for.
+    inline const std::vector<Anchor> &anchors() const { return m_anchors; }
     
     template<class T> inline IntegerOnly<T, const Pillar&> pillar(T id) const
     {
