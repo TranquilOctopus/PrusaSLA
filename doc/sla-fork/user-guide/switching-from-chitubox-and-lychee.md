@@ -37,6 +37,12 @@ every key of both is kept for the report. The two files spell the same setting d
 (`expTime` and `exposure_time`), and the reader resolves that into one set of material settings
 before the mapping runs.
 
+A file ResinSlicer wrote itself carries the number of bottom layers the print used, which the SL1
+format has no key for: `numBottom` in `config.ini` and `bottom_layer_count` in `prusaslicer.ini`,
+the two spellings the reader resolves into one setting, so such a file does not lose the count on
+the way out ([the format notes](../formats/sl1.md)). It is reported rather than written, like the
+other settings of an archive.
+
 **Limitation today.** The mapping table is written in Chitubox key names, so the settings of an
 archive are reported rather than written: `expTime`, `expTimeFirst`, `faded_layers`, `numFade` and
 `bottom_layer_count` all come out as *Unknown*. Of a sliced archive, only a setting the file

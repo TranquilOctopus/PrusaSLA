@@ -41,6 +41,51 @@ std::string to_ini(const ConfMap &m)
     return ret;
 }
 
+// The bottom layer count is the one setting of a job that neither file of an SL1 archive has
+// a key for: the firmware's config.ini has one exposure for the first layer and one for the
+// rest, and the legacy serialization behind prusaslicer.ini has no bottom_layer_count key at
+// all. So the writer states it under the name of the setting itself in the embedded profile,
+// which is the spelling the resin reader (SlicedArchiveResinReader) looks for first, and
+// numBottom in config.ini, next to the other counts, for the reader of a file with no
+// embedded profile. A printer reads neither: the SL1 format has no bottom layer count
+// (doc/sla-fork/formats/sl1.md).
+const std::string bottom_layer_opt{"bottom_layer_count"};
+const std::string bottom_layer_printer_opt{"numBottom"};
+
+/// Whether an ini text already states a key. The key has to start a line, so a comment or a
+/// value that happens to contain the name does not count as one.
+bool ini_has_key(const std::string &ini, const std::string &key)
+{
+    // One leading newline, so that the first line of the text is a line like any other.
+    const std::string text = "\n" + ini;
+    const std::string needle = "\n" + key;
+
+    for (size_t pos = text.find(needle); pos != std::string::npos;
+         pos = text.find(needle, pos + 1)) {
+        const size_t after = pos + needle.size();
+        if (after < text.size()) {
+            const char sep = text[after];
+            if (sep == ' ' || sep == '\t' || sep == '=' || sep == '\r')
+                return true;
+        }
+    }
+
+    return false;
+}
+
+/// An ini text with one more `key = value` line, unless it states the key already.
+std::string with_ini_key(const std::string &ini, const std::string &key, const std::string &value)
+{
+    if (ini_has_key(ini, key))
+        return ini;
+
+    std::string ret = ini;
+    if (!ret.empty() && ret.back() != '\n')
+        ret += '\n';
+    ret += key + " = " + value + "\n";
+    return ret;
+}
+
 const std::vector<std::string> ms_opts{
     "delay_before_exposure",
     "delay_after_exposure",
@@ -169,9 +214,13 @@ void fill_iniconf(ConfMap &m, const Domain::ConfigView &cfg, const Domain::SLA::
                             stats.support_used_material) / 1000;
     m["usedMaterial"] = std::to_string(used_material);
     m["numFade"]      = std::to_string(stats.count_faded_layers);
-    m["numSlow"]      = std::to_string(stats.slow_layers_count);
-    m["numFast"]      = std::to_string(stats.fast_layers_count);
-    m["printTime"]    = std::to_string(stats.estimated_print_time);
+    // numFade is the transition (fade) count, which is a different thing: the exposure is
+    // faded in over it, and it is not the count the bottom_* settings cover. The count the
+    // print used is this fork's numBottom, which the firmware has no key for.
+    m[bottom_layer_printer_opt] = std::to_string(Domain::sla_bottom_layer_count(cfg));
+    m["numSlow"]                = std::to_string(stats.slow_layers_count);
+    m["numFast"]                = std::to_string(stats.fast_layers_count);
+    m["printTime"]              = std::to_string(stats.estimated_print_time);
     m["hollow"] = stats.hollowing_enable ? "1" : "0";
     m["action"] = "print";
 }
@@ -219,6 +268,13 @@ void store_sl1(const std::string& file_path, const Slicing::SLAResultData& data)
 
     iniconf["jobDir"] = project;
 
+    // The embedded profile keeps every key the legacy serialization has and gains the one it
+    // has no key for, under the name of the setting, so the count the print used is in the
+    // archive under both spellings. It is the value fill_iniconf() just wrote rather than a
+    // second reading of the config, so the two files cannot state different counts.
+    const std::string profile_ini =
+        with_ini_key(serialized_config.ini, bottom_layer_opt, iniconf.at(bottom_layer_printer_opt));
+
     try {
         zipper.add_entry("config.ini");
         zipper << to_ini(iniconf);
@@ -226,7 +282,7 @@ void store_sl1(const std::string& file_path, const Slicing::SLAResultData& data)
         zipper << tilt_options_to_json(print_config, iniconf);
 
         zipper.add_entry("prusaslicer.ini");
-        zipper << serialized_config.ini;
+        zipper << profile_ini;
         zipper.add_entry("prusaslicer.json");
         zipper << serialized_config.json;
 
