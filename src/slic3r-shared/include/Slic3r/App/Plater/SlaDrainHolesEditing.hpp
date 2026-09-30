@@ -5,9 +5,26 @@
 
 #include <optional>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace Slic3r::App::Plater {
+
+/// The position and the normal of a drain hole in the frame the drain holes of a model object are
+/// stored in, computed from a raycast hit on one of its volumes exactly like the hollow gizmo does.
+///
+/// The normal is the one the engine cuts with, pointing INTO the material. sla::to_mesh cuts the
+/// hole as a cylinder that starts at the position and runs along the normal, and
+/// sla::transform_drainhole_points pulls its near cap a millimetre back along the same direction to
+/// bury it, so a normal that points out of the model cuts nothing. A raycast hands back the outward
+/// facet normal, which is the opposite one, so it is negated here. The legacy GLGizmoHollow negated
+/// it the same way, and the 3MF files it wrote carry the negated normal, so the convention on disk
+/// is the one that is stored and the files of both slicers keep cutting the same way.
+std::pair<Domain::Vec3d, Domain::Vec3d> drain_hole_pos_normal_in_object_mesh(
+    const Domain::Transform3d& volume_to_mesh,
+    const Domain::Vec3d& volume_pos,
+    const Domain::Vec3d& volume_normal
+);
 
 struct SlaDrainHolesEditing
 {

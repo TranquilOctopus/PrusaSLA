@@ -4,6 +4,33 @@
 
 namespace Slic3r::App::Plater {
 
+std::pair<Domain::Vec3d, Domain::Vec3d> drain_hole_pos_normal_in_object_mesh(
+    const Domain::Transform3d& volume_to_mesh,
+    const Domain::Vec3d& volume_pos,
+    const Domain::Vec3d& volume_normal
+)
+{
+    const Domain::Vec3d mesh_pos = volume_to_mesh * volume_pos;
+
+    // The raycast hands back an unnormalized facet normal in the frame of the volume. A normal goes
+    // through the inverse transpose of the linear part of the transformation, so a non-uniformly
+    // scaled volume still gets one that is perpendicular to the surface, and the direction is all
+    // that is taken from it.
+    const auto normal_matrix        = volume_to_mesh.linear().inverse().transpose();
+    const Domain::Vec3d mesh_normal = normal_matrix * volume_normal;
+
+    // Nothing to cut along: a facet the raycaster could not make a normal for and the gizmo had no
+    // facet normal to fall back on either, or a singular volume transformation. This picks -Z, the
+    // same last resort the gizmo used, which is into the material of a model standing on the plate.
+    // Written so that a NaN norm lands here as well.
+    if (!(mesh_normal.norm() > 1e-12)) {
+        return {mesh_pos, -Domain::Vec3d::UnitZ()};
+    }
+
+    // Into the material, see the header.
+    return {mesh_pos, -mesh_normal.normalized()};
+}
+
 std::optional<size_t> SlaDrainHolesEditing::find_nearest_hole(
     const Domain::Vec3d& mesh_pos, double max_distance_mm) const
 {

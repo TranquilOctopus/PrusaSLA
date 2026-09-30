@@ -1044,14 +1044,15 @@ std::optional<SlaHollowGizmo::VolumeHitPoint> SlaHollowGizmo::raycast_mouse(cons
     return hit;
 }
 
-std::pair<Domain::Vec3d, Domain::Vec3d> SlaHollowGizmo::hit_to_object_pos_normal(const VolumeHitPoint& hit) const
+std::pair<Domain::Vec3d, Domain::Vec3d>
+SlaHollowGizmo::hit_to_object_pos_normal(const VolumeHitPoint& hit) const
 {
     const auto& paintable_volume = m_paintable_volumes[hit.volume_idx];
-    const Domain::Vec3d mesh_pos = paintable_volume.model_volume.get_matrix() * hit.volume_hit_position;
 
-    // Both the raycast normal and a computed facet normal are in the volume's local frame,
-    // like hit.volume_hit_position. Convert once to object mesh space with the inverse transpose
-    // so non-uniform volume scaling keeps normals perpendicular to the surface.
+    // Both the raycast normal and a computed facet normal are in the volume's local frame, like
+    // hit.volume_hit_position. The raycaster can come back without a normal for the facet it hit,
+    // so one is computed from the triangle here. Carrying both into the frame of the object mesh
+    // and pointing the normal into the material is what the pure helper the editor shares does.
     Domain::Vec3d volume_normal = hit.volume_hit_normal;
     if (volume_normal.norm() < 1e-6) {
         const auto& its = paintable_volume.scene_mesh.triangles();
@@ -1063,13 +1064,12 @@ std::pair<Domain::Vec3d, Domain::Vec3d> SlaHollowGizmo::hit_to_object_pos_normal
             volume_normal = (v1 - v0).cross(v2 - v0).cast<double>();
         }
     }
-    if (volume_normal.norm() < 1e-6) {
-        volume_normal = Domain::Vec3d::UnitZ();
-    }
-    const auto normal_matrix = paintable_volume.model_volume.get_matrix().linear().inverse().transpose();
-    Domain::Vec3d mesh_normal = (normal_matrix * volume_normal).normalized();
 
-    return {mesh_pos, mesh_normal};
+    return drain_hole_pos_normal_in_object_mesh(
+        paintable_volume.model_volume.get_matrix(),
+        hit.volume_hit_position,
+        volume_normal
+    );
 }
 
 Scene::GizmoActivationState SlaHollowGizmo::on_mouse(Scene::GizmoEventContext& ctx, bool only_active)

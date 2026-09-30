@@ -6,6 +6,11 @@
 // the inner surface and the distance to the outer model is measured for each of them. The observed
 // min / mean / max are reported for every case so a regression shows how far it moved, not only
 // that a bound was crossed.
+//
+// The one test at the end is about the drain holes rather than the wall: what the hollow gizmo
+// stores when the user clicks a hole onto the surface, and whether cutting that hole opens the
+// cavity it is placed on.
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -17,6 +22,7 @@
 #include <utility>
 #include <vector>
 
+#include <Slic3r/App/Plater/SlaDrainHolesEditing.hpp>
 #include <Slic3r/Biz/Algorithms/AABBMesh.hpp>
 #include <Slic3r/Biz/Algorithms/TriangleMesh.hpp>
 #include <Slic3r/Domain/TriangleMesh.hpp>
@@ -27,6 +33,7 @@
 #include <libslic3r/SLA/Hollowing.hpp>
 
 using namespace Slic3r;
+using Catch::Approx;
 
 namespace TriMesh = Slic3r::Biz::Algorithms::TriangleMesh;
 
@@ -284,4 +291,141 @@ TEST_CASE("Hollowing: the wall survives the accuracy extremes", "[SLA][Hollowing
         for (const HollowParams& params : accuracy_sweep())
             check_wall(model, params);
     }
+}
+
+TEST_CASE(
+    "Hollowing: a drain hole placed by the hollow gizmo vents the cavity",
+    "[SLA][Hollowing][DrainHole]"
+)
+{
+    // The convention the engine cuts with. sla::to_mesh builds the cutter as a cylinder that starts
+    // at the position of the hole and runs along its normal, and
+    // sla::transform_drainhole_points pulls the near cap a millimetre back along that same normal
+    // to bury it, so a normal pointing out of the model cuts nothing. A raycast hands back the
+    // outward facet normal, so the hole the gizmo stores has to carry the opposite one. This is the
+    // click: the hit point and the outward facet normal in the middle of the bottom face of the 20mm
+    // cube, in the frame of its only volume. The volume stands where the model puts it, unrotated
+    // and unscaled, so its transformation onto the object is the identity. The hit is off the
+    // diagonal of that face, which runs from (0,0) to (20,20), so a ray down its axis meets one
+    // triangle of the face and not the edge of two.
+    constexpr double click_x = 12.;
+    constexpr double click_y = 9.;
+
+    const auto [mesh_pos, mesh_normal] = App::Plater::drain_hole_pos_normal_in_object_mesh(
+        Domain::Transform3d::Identity(),
+        Domain::Vec3d(click_x, click_y, 0.),
+        Domain::Vec3d(0., 0., -1.)
+    );
+
+    INFO(
+        "the click became a hole at "
+        << mesh_pos.transpose()
+        << " pointing "
+        << mesh_normal.transpose()
+    );
+    CHECK(mesh_pos.x() == Approx(click_x).margin(1e-9));
+    CHECK(mesh_pos.y() == Approx(click_y).margin(1e-9));
+    CHECK(mesh_pos.z() == Approx(0.).margin(1e-9));
+
+    // Into the material, which on the bottom of a model standing on the plate is up. The other way
+    // round the cutter would start below the floor and run away from the model with it.
+    INFO(
+        "the hole normal points "
+        << mesh_normal.transpose()
+        << ", the cutter starts at the position and runs along that normal for the height of the hole"
+    );
+    CHECK(mesh_normal.x() == Approx(0.).margin(1e-9));
+    CHECK(mesh_normal.y() == Approx(0.).margin(1e-9));
+    CHECK(mesh_normal.z() == Approx(1.).margin(1e-9));
+
+    // The hole the gizmo's editing state would hold: 3mm wide and reaching 10mm into the wall, which
+    // is more than the 2mm wall of the hollowed cube below, so it is meant to go all the way through.
+    Domain::SLA::DrainHole hole;
+    hole.pos    = mesh_pos.cast<float>();
+    hole.normal = mesh_normal.cast<float>();
+    hole.radius = 3.f;
+    hole.height = 10.f;
+    hole.failed = false;
+
+    // The hole goes through the transformation of the object on its way to the cutter, which pulls
+    // the near cap a millimetre back and makes the hole that much deeper. The slicing step does the
+    // same before it drills, so the test does it here.
+    Domain::SLA::DrainHoles holes{hole};
+    sla::transform_drainhole_points(holes, Domain::Transform3d::Identity());
+
+    const Model model = cube_model();
+
+    sla::HollowingConfig cfg;
+    cfg.min_thickness    = 2.;
+    cfg.quality          = 0.5;
+    cfg.closing_distance = 0.5;
+
+    sla::InteriorPtr interior = sla::generate_interior(range(model.parts), cfg);
+    REQUIRE(interior);
+
+    // The shell: the outer surface with the cavity surface merged into it, which is what
+    // hollow_mesh gives and what bounds a volume with the cavity as a void inside it. A copy is kept
+    // undrilled, to be the control for the ray at the end.
+    indexed_triangle_set hollowed = model.outer;
+    sla::hollow_mesh(hollowed, *interior);
+    REQUIRE(Domain::its_volume(hollowed) > 0.f);
+
+    const indexed_triangle_set undrilled = hollowed;
+
+    std::vector<size_t> failed_holes;
+    const int drill_result = sla::hollow_mesh_and_drill(
+        hollowed,
+        *interior,
+        holes,
+        [&failed_holes](size_t i) { failed_holes.push_back(i); }
+    );
+
+    INFO(
+        "the drill reported "
+        << drill_result
+        << " and reported "
+        << failed_holes.size()
+        << " holes as failed"
+    );
+    CHECK((drill_result & static_cast<int>(sla::HollowMeshResult::DrillingFailed)) == 0);
+    CHECK((drill_result & static_cast<int>(sla::HollowMeshResult::FaultyMesh)) == 0);
+    CHECK(failed_holes.empty());
+
+    // The cavity and the outside have to reach each other through the floor, which is all a drain
+    // hole is for. A ray straight down the axis of the hole says whether they can: it starts in the
+    // middle of the floor, between the outside at z = 0 and the floor of the cavity at z = 2mm, so
+    // it is in the very material the hole has to open, and it can meet no wall on its way out while
+    // the hole is there. The same ray against the undrilled copy of the same shell is the control
+    // for that: there it has to meet the floor, which is what tells the empty result above is the
+    // hole and not a mesh that was empty to begin with.
+    const Domain::Vec3d in_the_floor(click_x, click_y, 1.);
+    const Domain::Vec3d downwards(0., 0., -1.);
+
+    const AABBMesh drilled_mesh(hollowed);
+    const AABBMesh undrilled_mesh(undrilled);
+    const std::vector<AABBMesh::hit_result> drilled_hits =
+        drilled_mesh.query_ray_hits(in_the_floor, downwards);
+    const std::vector<AABBMesh::hit_result> undrilled_hits =
+        undrilled_mesh.query_ray_hits(in_the_floor, downwards);
+
+    size_t drilled_crossings   = 0;
+    size_t undrilled_crossings = 0;
+    for (const AABBMesh::hit_result& hit : drilled_hits) {
+        if (hit.is_hit()) {
+            ++drilled_crossings;
+        }
+    }
+    for (const AABBMesh::hit_result& hit : undrilled_hits) {
+        if (hit.is_hit()) {
+            ++undrilled_crossings;
+        }
+    }
+
+    INFO(
+        "a ray down the axis of the hole met "
+        << drilled_crossings << " surfaces of the drilled shell and "
+        << undrilled_crossings << " of the same shell with the hole not cut into it"
+    );
+    CHECK(undrilled_crossings >= size_t(1));
+    CHECK(drilled_crossings == size_t(0));
 }
