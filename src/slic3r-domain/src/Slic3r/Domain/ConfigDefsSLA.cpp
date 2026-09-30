@@ -1025,6 +1025,22 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->tooltip = L("Hollow out a model to have an empty interior");
     def->init_fn = init_with(false);
 
+    // M4.8h: the threshold of the post-slice hollowing suggestion. It is read by the frontend from
+    // the sliced print, so it changes no step (see the invalidated_by entry in SLAPrint.cpp).
+    def = defs.add("hollowing_suggest_min_volume", typeid(double));
+    def->location = Print;
+    def->label = L("Suggest hollowing above");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Hollowing_Hollowing;
+    def->category = ConfigItemDef::Category::Print_Hollowing;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("After slicing, tell which models would save resin if they were hollowed, but "
+                     "only when a model needs at least this much resin on its own. Zero turns the "
+                     "suggestion off, a hollow model is never suggested.");
+    def->units = {L("ml")};
+    def->min = 0;
+    def->max = 1000;
+    def->init_fn = init_with(20.);
+
     def = defs.add("hollowing_min_thickness", typeid(double));
     def->location = Print;
     def->overrides_in = Locations{ Object };

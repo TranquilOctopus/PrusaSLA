@@ -49,6 +49,32 @@ enum class ResultType
     Files     // Last steps prepared files for store
 };
 
+/// What one model object costs on the printed layers, layer by layer: the cured volume of its body
+/// and the outline of that body on every layer, filled in merge_slices_and_eval_stats(). It is
+/// what the post-slice hollowing suggestion of App/SlaHollowingSuggestion.hpp is estimated from, so
+/// that nothing has to be sliced a second time to tell how much resin a shell would save.
+struct ObjectSliceStats
+{
+    Domain::ObjectID object_id{};
+    std::string name;
+    /// The object is printed hollow already, so there is nothing to suggest for it.
+    bool hollowed = false;
+    /// The cured volume of the body in mm³, supports and raft excluded, summed over the layers.
+    double volume_mm3 = 0.;
+    /// The smallest cross section dimension of the body at half the height of the object, in mm:
+    /// the thinnest a wall would have to be to get through. Zero when the object has no cross
+    /// section there, which the caller reads as "no suggestion".
+    double min_section_mm = 0.;
+    /// The area of the body on a layer, index = layer, in mm².
+    std::vector<float> layer_areas_mm2;
+    /// The length of the outline of that area on a layer, index = layer, in mm.
+    std::vector<float> layer_perimeters_mm;
+    /// The thickness of a layer in mm, index = layer. The same for every object of the print; it
+    /// is repeated per object so that the areas, the outlines and the thicknesses of one object
+    /// are one table and cannot be lined up wrong.
+    std::vector<float> layer_thicknesses_mm;
+};
+
 /**
 @brief Issue found on backend during slicing
 NOTE: originally it was divided on critical and non-critical warning levels,
@@ -120,6 +146,9 @@ struct SLAResultData
     std::vector<float> layer_peel_force;
     // Reserved for M4.8/M5.8: print-level issue list (islands, cups, trapped resin, etc.)
     std::vector<Sla::SlaIssue> issues;
+    // M4.8h: what every model object costs on the printed layers, so the hollowing suggestion can
+    // be estimated from the slice that was just made. One entry per model object of the print.
+    std::vector<Sla::ObjectSliceStats> object_slice_stats;
 
     // M1.11c: the estimated print time of a printer without a tilt, in seconds: the whole print in
     // print_time_s (empty while there is no print to estimate) and the time of every layer in

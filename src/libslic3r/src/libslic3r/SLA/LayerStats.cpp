@@ -2,12 +2,58 @@
 
 #include <libslic3r/ExPolygon.hpp>
 #include "Slic3r/Biz/Algorithms/ExPolygon.hpp"
+#include "Slic3r/Biz/Algorithms/Geometry/ConvexHull.hpp"
 #include "Slic3r/Biz/Algorithms/Polyline.hpp"
 #include "Slic3r/Biz/Algorithms/Scaling.hpp"
+
+#include <algorithm>
+#include <cmath>
 
 namespace Slic3r::SLA {
 
 using Domain::sla::VatFilmType;
+
+namespace {
+
+// The caliper of a convex polygon in mm: the smallest distance between two parallel lines that
+// enclose it. Such a pair always has one of the two lines along an edge of the polygon, so the
+// caliper is the smallest, over the edges, of the width of the polygon measured from that edge.
+// The hull of a cross section of a model has few vertices and this runs once per print, so the
+// widths are measured the plain way instead of with rotating calipers.
+double convex_caliper_mm(const Domain::Polygon& hull)
+{
+    const size_t count = hull.size();
+    if (count < 3) {
+        return 0.; // a point or a segment has no width to speak of
+    }
+
+    double smallest = 0.;
+    for (size_t i = 0; i < count; ++i) {
+        const Domain::Vec2d a     = unscale(hull[i]);
+        const Domain::Vec2d b     = unscale(hull[(i + 1) % count]);
+        const Domain::Vec2d edge  = b - a;
+        const double length       = edge.norm();
+        if (length <= 0.) {
+            continue;
+        }
+        // The distance of a point from the line of the edge, taken unsigned so that the winding of
+        // the hull does not matter.
+        double widest = 0.;
+        for (size_t j = 0; j < count; ++j) {
+            const Domain::Vec2d p = unscale(hull[j]);
+            widest = std::max(
+                widest,
+                std::abs(edge.x() * (p.y() - a.y()) - edge.y() * (p.x() - a.x())) / length
+            );
+        }
+        if (smallest == 0. || widest < smallest) {
+            smallest = widest;
+        }
+    }
+    return smallest;
+}
+
+} // namespace
 
 PeelForceCoefficients peel_force_coefficients(VatFilmType film)
 {
@@ -144,6 +190,25 @@ std::vector<size_t> layers_over_peel_force(const std::vector<float>& peel_force_
             over.push_back(layer);
     }
     return over;
+}
+
+double min_cross_section_mm(const Domain::ExPolygons& slices)
+{
+    double smallest = 0.;
+    for (const Domain::ExPolygon& slice : slices) {
+        // The contour only: a hole of the layer is empty space inside the model, not material a
+        // wall would have to be printed in. The hull of the contour is what the caliper is
+        // measured on, so a region with a narrow neck is as thin as that neck.
+        const Domain::Polygon hull = Biz::Algorithms::Geometry::convex_hull(slice.contour);
+        const double caliper        = convex_caliper_mm(hull);
+        if (caliper <= 0.) {
+            continue; // no polygon with a shape, nothing to measure
+        }
+        if (smallest == 0. || caliper < smallest) {
+            smallest = caliper;
+        }
+    }
+    return smallest;
 }
 
 } // namespace Slic3r::SLA
