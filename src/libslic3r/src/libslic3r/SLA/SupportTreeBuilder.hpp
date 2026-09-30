@@ -183,9 +183,11 @@ struct Pillar: public SupportTreeNode {
 struct Pedestal: public SupportTreeNode {
     Vec3d pos;
     double height, r_bottom, r_top;
+    Domain::sla::SupportBaseShape shape = Domain::sla::SupportBaseShape::Cone;
 
-    Pedestal(const Vec3d &p, double h, double rbottom, double rtop)
-        : pos{p}, height{h}, r_bottom{rbottom}, r_top{rtop}
+    Pedestal(const Vec3d &p, double h, double rbottom, double rtop,
+             Domain::sla::SupportBaseShape s = Domain::sla::SupportBaseShape::Cone)
+        : pos{p}, height{h}, r_bottom{rbottom}, r_top{rtop}, shape{s}
     {}
 };
 
@@ -308,7 +310,11 @@ public:
         return pillar.id;
     }
     
-    void add_pillar_base(long pid, double baseheight = 3, double radius = 2);
+    // 'shape' is the foot the pillar gets: a cone (what this has always built), a straight
+    // cylinder of the base diameter or a thin flat disc. A caller that leaves it out gets the
+    // cone.
+    void add_pillar_base(long pid, double baseheight = 3, double radius = 2,
+                         Domain::sla::SupportBaseShape shape = Domain::sla::SupportBaseShape::Cone);
 
     template<class...Args> const Anchor& add_anchor(Args&&...args)
     {

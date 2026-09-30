@@ -2,7 +2,7 @@
 
 Generated from `lychee-features.md` (21 rows in 7 groups). Each row maps a Lychee option to our closest equivalent.
 
-Refreshed 2026-09-30 against what is merged: M2.12 (per-point sizes), M2.13 (tip geometry), M2.14a-d (raft type, UI, single source of truth), M2.14b1 (raft edge taper), M2.15 (bracing), M2.16 (stem geometry) and M2.18a-c (presets). Evidence is file names only; line numbers move with every commit.
+Refreshed 2026-09-30 against what is merged: M2.12 (per-point sizes), M2.13 (tip geometry), M2.14a-d (raft type, UI, single source of truth), M2.14b1 (raft edge taper), M2.15 (bracing), M2.16 (stem geometry), M2.18a-c (presets), M2.22 (placement) and M2.23 (base shape). Evidence is file names only; line numbers move with every commit.
 
 | # | Lychee option | Our equivalent (config key or UI place) | Status | Evidence | Note |
 |---|---|---|---|---|---|
@@ -19,7 +19,7 @@ Refreshed 2026-09-30 against what is merged: M2.12 (per-point sizes), M2.13 (tip
 | 11 | **Stem: Support on model** — stems that start on model instead of raft | `support_max_weight_on_model`; `support_buildplate_only` | partial | ConfigDefsSLA.cpp | Unchanged: `support_max_weight_on_model` limits the total branch length ending on the model, `support_buildplate_only` switches model supports off. No per-point "start on model" toggle. |
 | 12 | **Stem: Support on support / branching** — stems that join into other stems | `support_tree_type = Branching`; `support_max_bridges_on_pillar`; `support_max_pillar_link_distance`; `support_pillar_connection_mode` | covered | ConfigDefsSLA.cpp; BranchingTreeSLA.cpp | Branching tree type enables pillar-to-pillar links. Bridging/linking params control density/length. |
 | 13 | **Base: Base (foot) diameter** — diameter where stem meets raft/plate | `support_base_diameter` (global/per-object); per-point `base_diameter` in `SupportPoint` (0 = global) | partial | ConfigDefsSLA.cpp; SupportPoint.hpp; DefaultSupportTree.cpp; BranchingTreeSLA.cpp | The default tree honours the per-point value (M2.12), and a preset point gets its own base in both trees (M2.18c), but the branching tree still takes its base diameter from the global config, which M2.18c records as left. |
-| 14 | **Base: Base height and shape** — cone or cylinder foot, and its height | `support_base_height` (global/per-object); per-point `base_height` in `SupportPoint` (0 = global) | partial | ConfigDefsSLA.cpp; SupportPoint.hpp; DefaultSupportTree.cpp | Height covered globally and per point (M2.12). The shape is always a cone: no cylinder or flat foot. |
+| 14 | **Base: Base height and shape** — cone or cylinder foot, and its height | `support_base_height` (global/per-object); per-point `base_height` in `SupportPoint` (0 = global); `support_base_shape` (Cone / Cylinder / Flat disc); per-point `base_shape` in `SupportPoint` (Default = global) | covered | ConfigDefsSLA.cpp; SupportPoint.hpp; SupportTreeUtils.hpp; DefaultSupportTree.cpp; BranchingTreeSLA.cpp; PrusaFile.cpp | Height covered globally and per point (M2.12). M2.23 adds the shape: a cone (the default, the mesh of today bit for bit), a straight cylinder of the base diameter and height, or a flat disc of at most 0.5 mm under a straight pillar. Both trees build all three, and a point may ask for a shape of its own; the per-point value is stored and saved in the 3MF but has no UI control yet. |
 | 15 | **Bracing: Braces / cross-braces** — automatic links between stems | `support_pillar_connection_mode` (zigzag/cross/dynamic); `support_brace_enable` | covered | ConfigDefsSLA.cpp; DefaultSupportTree.cpp | The connection mode still picks the pattern; `support_brace_enable` (M2.15) switches the bracing off as a whole, neither pillar-to-pillar nor pinhead-to-pillar. |
 | 16 | **Bracing: Brace diameter, spacing, angle, pattern** — brace size and layout | Pattern: `support_pillar_connection_mode`; Angle: `support_critical_angle`; Spacing: `support_max_pillar_link_distance`; Diameter: `support_brace_diameter` (0 = as thick as the pillar); start: `support_brace_start_height` | covered | ConfigDefsSLA.cpp; DefaultSupportTree.cpp | All four covered. Since M2.15 the brace diameter is a setting of its own, next to `support_brace_enable` and `support_brace_start_height`, which leaves the bottom of the pillars unbraced. |
 | 17 | **Raft: Raft type** — standard, skate, grid/honeycomb, none | `raft_type` (None / Full plate / Around object / Skate) mapped onto `pad_enable`, `pad_wall_height`, `pad_wall_thickness`, `pad_brim_size`, `pad_wall_slope`, `pad_object_gap` | partial | ConfigDefsSLA.cpp; RaftPreset.hpp; RaftPreset.cpp; SlaRaftSettings.hpp; SLAPrint.cpp; Pad.cpp | The dropdown, its per-type knob filtering and the raft wording are in (M2.14c) and `raft_type` is the single source of truth, so `pad_enable` and `pad_around_object` are hidden (M2.14d). "Standard" is Full plate, Skate is a named bundle, None prints no raft. Grid and honeycomb infill are M2.14b2, still open. |
@@ -34,8 +34,8 @@ Refreshed 2026-09-30 against what is merged: M2.12 (per-point sizes), M2.13 (tip
 
 | Status | Count |
 |---|---|
-| **covered** | 10 (rows 1, 2, 5, 8, 12, 15, 16, 19, 20, 21) |
-| **partial** | 11 (rows 3, 4, 6, 7, 9, 10, 11, 13, 14, 17, 18) |
+| **covered** | 11 (rows 1, 2, 5, 8, 12, 14, 15, 16, 19, 20, 21) |
+| **partial** | 10 (rows 3, 4, 6, 7, 9, 10, 11, 13, 17, 18) |
 | **missing** | 0 |
 
 Row 11 is partial because the related configs exist. Rows 6, 7, 9 and 10 are partial because M2.13 and M2.16 store and persist the value on the support point, but no mesh builder and no UI reads it yet.
@@ -52,7 +52,7 @@ Row 11 is partial because the related configs exist. Rows 6, 7, 9 and 10 are par
 6. **Stem cross-section geometry (round/square/polygon)** → **M2.16** stores `stem_sides` per point; the mesh builder still makes round pillars → no todo yet
 7. **Stem taper (variable diameter along length)** → **M2.16** stores `stem_taper` per point; the mesh builder still makes constant-diameter pillars → no todo yet
 8. **Per-point "support on model" toggle** → no todo yet
-9. **Base shape choice (cone vs. cylinder)** → no todo yet (M2.14 turned out to be the raft, not the foot)
+9. **Base shape choice (cone vs. cylinder)** → **M2.23** (closed: `support_base_shape` with Cone / Cylinder / Flat disc, a per-point `base_shape` override, and both trees building the foot)
 10. **Independent brace diameter** (separate from pillar diameter) → **M2.15 bracing** (closed: `support_brace_diameter`, with `support_brace_enable` and `support_brace_start_height`)
 11. **Raft type selection (standard/skate/grid/honeycomb/none)** → **M2.14a** (the four types) and **M2.14d** (one source of truth); grid/honeycomb → **M2.14b2**, open
 12. **Separate raft floor thickness** (distinct from wall thickness) → no todo yet (M2.14a gives the wall thickness and the wall height; M2.14b3 is the interface layer, which is a different thing)

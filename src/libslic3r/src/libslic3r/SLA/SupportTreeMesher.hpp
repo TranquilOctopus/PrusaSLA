@@ -2,6 +2,7 @@
 #define SUPPORTTREEMESHER_HPP
 
 #include <stddef.h>
+#include <algorithm>
 #include <tuple>
 #include <cstddef>
 
@@ -50,6 +51,9 @@ indexed_triangle_set halfcone(double       baseheight,
                               const Vec3d &pt    = Vec3d::Zero(),
                               size_t       steps = 45);
 
+// The thinnest a flat disc pillar base may get, no matter which base height is configured.
+inline constexpr double flat_base_height_mm = 0.5;
+
 indexed_triangle_set get_mesh(const Head &h, size_t steps);
 
 inline indexed_triangle_set get_mesh(const Pillar &p, size_t steps)
@@ -66,6 +70,28 @@ inline indexed_triangle_set get_mesh(const Pillar &p, size_t steps)
 
 inline indexed_triangle_set get_mesh(const Pedestal &p, size_t steps)
 {
+    if (p.height <= 0. || steps <= 0)
+        return {};
+
+    // A cylinder is a straight foot of the base diameter and height, a flat disc a thin foot
+    // of that diameter: however tall the base is configured, a disc stays at most
+    // flat_base_height_mm thick, and the pillar above it runs straight down into it.
+    if (p.shape == Domain::sla::SupportBaseShape::Cylinder ||
+        p.shape == Domain::sla::SupportBaseShape::Flat) {
+        const double h = p.shape == Domain::sla::SupportBaseShape::Flat ?
+                             std::min(p.height, flat_base_height_mm) :
+                             p.height;
+
+        if (p.r_bottom <= 0. || h <= 0.)
+            return {};
+
+        indexed_triangle_set mesh = cylinder(p.r_bottom, h, steps);
+        Vec3f pos = p.pos.cast<float>();
+        for (auto &v : mesh.vertices) v += pos;
+
+        return mesh;
+    }
+
     return halfcone(p.height, p.r_bottom, p.r_top, p.pos, steps);
 }
 

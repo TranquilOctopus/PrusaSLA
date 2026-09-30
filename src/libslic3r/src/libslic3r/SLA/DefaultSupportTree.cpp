@@ -378,6 +378,8 @@ bool DefaultSupportTree::create_ground_pillar(const Junction &hjp,
     double base_height_override = 0.;
     double base_radius_override = 0.;
     double full_pillar_radius = m_sm.cfg.head_back_radius_mm;
+    // A point may ask for a foot of a shape of its own, the others get the configured one.
+    Domain::sla::SupportBaseShape base_shape = m_sm.cfg.base_shape;
     [[maybe_unused]] uint8_t stem_sides = 0;   // see note below: not yet honoured
     [[maybe_unused]] double stem_taper = 0.;   // see note below: not yet honoured
     if (head_id >= 0 && size_t(head_id) < m_sm.pts->size()) {
@@ -385,6 +387,7 @@ bool DefaultSupportTree::create_ground_pillar(const Junction &hjp,
         const BaseSize base = base_size(m_sm, &sp);
         base_height_override = base.height;
         base_radius_override = base.radius;
+        base_shape = base.shape;
         if (sp.stem_sides != 0) stem_sides = sp.stem_sides;
         if (sp.stem_taper > 0.f) stem_taper = double(sp.stem_taper);
         full_pillar_radius = head_back_radius(m_sm, sp);
@@ -400,7 +403,8 @@ bool DefaultSupportTree::create_ground_pillar(const Junction &hjp,
                                                       head_id,
                                                       base_height_override,
                                                       base_radius_override,
-                                                      full_pillar_radius);
+                                                      full_pillar_radius,
+                                                      base_shape);
     // stem_sides and stem_taper are stored on the point but not yet used: the pillar mesh
     // builder only makes round, untapered pillars. Honouring them needs a mesh-builder change.
 

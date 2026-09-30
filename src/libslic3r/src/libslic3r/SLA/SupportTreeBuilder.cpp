@@ -73,13 +73,14 @@ SupportTreeBuilder &SupportTreeBuilder::operator=(const SupportTreeBuilder &o)
     return *this;
 }
 
-void SupportTreeBuilder::add_pillar_base(long pid, double baseheight, double radius)
+void SupportTreeBuilder::add_pillar_base(long pid, double baseheight, double radius,
+                                         Domain::sla::SupportBaseShape shape)
 {
     std::lock_guard<Mutex> lk(m_mutex);
     assert(pid >= 0 && size_t(pid) < m_pillars.size());
     Pillar& pll = m_pillars[size_t(pid)];
     m_pedestals.emplace_back(pll.endpt, std::min(baseheight, pll.height),
-                             std::max(radius, pll.r_start), pll.r_start);
+                             std::max(radius, pll.r_start), pll.r_start, shape);
 
     m_pedestals.back().id = m_pedestals.size() - 1;
     m_meshcache_valid = false;

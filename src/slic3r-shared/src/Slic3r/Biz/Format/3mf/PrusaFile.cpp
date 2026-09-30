@@ -1188,6 +1188,7 @@ constexpr std::string_view IS_NEW_ISLAND     = "island";    // is new island
 constexpr std::string_view PILLAR_DIAMETER   = "pd";        // pillar (stem) diameter
 constexpr std::string_view BASE_DIAMETER     = "bd";        // base diameter
 constexpr std::string_view BASE_HEIGHT       = "bh";        // base height
+constexpr std::string_view BASE_SHAPE        = "bs";        // base shape
 constexpr std::string_view TYPE              = "t";         // support point type
 constexpr std::string_view TIP_LENGTH        = "tl";        // tip length
 constexpr std::string_view CONTACT_DEPTH     = "cd";        // contact depth
@@ -1195,9 +1196,13 @@ constexpr std::string_view TIP_SHAPE         = "ts";        // tip shape
 constexpr std::string_view STEM_SIDES        = "ss";        // stem sides
 constexpr std::string_view STEM_TAPER        = "st";        // stem taper
 constexpr std::string_view KNOT_RADIUS       = "kr";        // knot radius
-NamesType NAMES{{POSITION, HEAD_FRONT_RADIUS, IS_NEW_ISLAND, PILLAR_DIAMETER, BASE_DIAMETER, BASE_HEIGHT, TYPE, TIP_LENGTH, CONTACT_DEPTH, TIP_SHAPE, STEM_SIDES, STEM_TAPER, KNOT_RADIUS}};
+NamesType NAMES{{POSITION, HEAD_FRONT_RADIUS, IS_NEW_ISLAND, PILLAR_DIAMETER, BASE_DIAMETER, BASE_HEIGHT, BASE_SHAPE, TYPE, TIP_LENGTH, CONTACT_DEPTH, TIP_SHAPE, STEM_SIDES, STEM_TAPER, KNOT_RADIUS}};
 
 static constexpr std::array<std::string_view, 3> TIP_SHAPE_NAMES = {"default", "cone", "ball"};
+
+// Indexed by SupportPoint::BaseShape. The Default value is never written, it only keeps the
+// names of the three real shapes at the indices the point uses.
+static constexpr std::array<std::string_view, 4> BASE_SHAPE_NAMES = {"default", "cone", "cylinder", "flat"};
 
 json to_json(const Domain::SLA::SupportPoints &points) {
     json r = json::array();
@@ -1211,6 +1216,8 @@ json to_json(const Domain::SLA::SupportPoints &points) {
             p_json[BASE_DIAMETER] = p.base_diameter;
         if (p.base_height > 0.f)
             p_json[BASE_HEIGHT] = p.base_height;
+        if (p.base_shape != Domain::SLA::SupportPoint::BaseShape::Default)
+            p_json[BASE_SHAPE] = BASE_SHAPE_NAMES[static_cast<size_t>(p.base_shape)];
         if (p.type != Domain::SLA::SupportPointType::manual_add)
             p_json[TYPE] = static_cast<json::number_integer_t>(p.type);
         if (p.is_island())
@@ -1250,6 +1257,15 @@ void load(const json &pts_json, Domain::SLA::SupportPoints &pts, Read3mfIssues& 
         from_json(pt_json, PILLAR_DIAMETER,   pt.pillar_diameter,   collected_issues, RT::project_sla_support_point_radius_issue);
         from_json(pt_json, BASE_DIAMETER,     pt.base_diameter,     collected_issues, RT::project_sla_support_point_radius_issue);
         from_json(pt_json, BASE_HEIGHT,       pt.base_height,       collected_issues, RT::project_sla_support_point_radius_issue);
+        std::string base_shape_str;
+        if (from_json(pt_json, BASE_SHAPE, base_shape_str, collected_issues, RT::project_sla_support_point_base_shape_issue)) {
+            for (size_t i = 0; i < BASE_SHAPE_NAMES.size(); ++i) {
+                if (base_shape_str == BASE_SHAPE_NAMES[i]) {
+                    pt.base_shape = static_cast<Domain::SLA::SupportPoint::BaseShape>(i);
+                    break;
+                }
+            }
+        }
         from_json(pt_json, IS_NEW_ISLAND,     is_island,            collected_issues, RT::project_sla_support_point_is_new_island_issue);
         from_json(pt_json, TYPE,              type_int,             collected_issues, RT::project_sla_support_point_type_issue);
         from_json(pt_json, TIP_LENGTH,        pt.tip_length,        collected_issues, RT::project_sla_support_point_radius_issue);

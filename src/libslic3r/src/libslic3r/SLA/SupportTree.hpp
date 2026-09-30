@@ -73,6 +73,10 @@ struct SupportTreeConfig
     // The height of the pillar base cone in mm.
     double base_height_mm = 1.0;
 
+    // The shape of the pillar base: a cone that flares gradually, a straight cylinder of the
+    // base diameter or a thin flat disc under a straight pillar.
+    Domain::sla::SupportBaseShape base_shape = Domain::sla::SupportBaseShape::Cone;
+
     // The default angle for connecting support sticks and junctions.
     double bridge_slope = M_PI/4;
 

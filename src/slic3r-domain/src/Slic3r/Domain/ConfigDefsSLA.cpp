@@ -1654,6 +1654,24 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->min = 0;
         def->init_fn = init_with(1.);
 
+        def = defs.add(prefix.first + "support_base_shape", typeid(EnumWrapper));
+        def->label = prefix.second;
+        def->location = Print;
+        def->overrides_in = Locations{ Object };
+        def->row_group = L("Support base shape");
+        def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
+        def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : ConfigItemDef::Category::Print_Supports;
+        def->gui_type = ConfigItemDef::GUIType::combobox;
+        def->tooltip = L("The shape of the pillar base where it meets the raft or the build plate. "
+            "A cone flares gradually, a cylinder is a straight foot of the base diameter and height, "
+            "and a flat disc is a thin foot of at most 0.5 mm under a pillar that runs straight down.");
+        def->init_fn = init_with(
+            sla::SupportBaseShape::Cone,
+            {{int(sla::SupportBaseShape::Cone), "cone", L("Cone")},
+             {int(sla::SupportBaseShape::Cylinder), "cylinder", L("Cylinder")},
+             {int(sla::SupportBaseShape::Flat), "flat", L("Flat disc")}}
+        );
+
         def = defs.add(prefix.first + "support_base_safety_distance", typeid(double));
         def->label = prefix.second;
         def->location = Print;

@@ -1,6 +1,8 @@
 #ifndef SUPPORTTREEUTILSLEGACY_HPP
 #define SUPPORTTREEUTILSLEGACY_HPP
 
+#include <optional>
+
 #include "SupportTreeUtils.hpp"
 
 // Old functions are gathered here that are used in DefaultSupportTree
@@ -105,7 +107,9 @@ std::pair<bool, long> create_ground_pillar(
     long                   head_id = SupportTreeNode::ID_UNSET,
     double                 base_height_override = 0.,
     double                 base_radius_override = 0.,
-    double                 full_pillar_radius = 0.)
+    double                 full_pillar_radius = 0.,
+    // The shape of the foot the pillar gets. Left empty the globally configured one is used.
+    std::optional<Domain::sla::SupportBaseShape> base_shape = std::nullopt)
 {
     Vec3d  jp           = pinhead_junctionpt, endp = jp, dir = sourcedir;
     long   pillar_id    = SupportTreeNode::ID_UNSET;
@@ -225,7 +229,8 @@ std::pair<bool, long> create_ground_pillar(
     if (can_add_base) {
         double base_h = (base_height_override > 0. ? base_height_override : sm.cfg.base_height_mm);
         double base_r = (base_radius_override > 0. ? base_radius_override : sm.cfg.base_radius_mm);
-        builder.add_pillar_base(pillar_id, base_h, base_r);
+        builder.add_pillar_base(pillar_id, base_h, base_r,
+                                base_shape.value_or(sm.cfg.base_shape));
     }
 
     return {true, pillar_id};

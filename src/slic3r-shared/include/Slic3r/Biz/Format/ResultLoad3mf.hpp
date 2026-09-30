@@ -188,6 +188,7 @@ enum class Read3mfIssueType: unsigned short {
     project_sla_support_point_tip_length_issue,
     project_sla_support_point_contact_depth_issue,
     project_sla_support_point_tip_shape_issue,
+    project_sla_support_point_base_shape_issue,
     project_sla_support_point_stem_sides_issue,
     project_sla_support_point_stem_taper_issue,
     project_sla_support_point_knot_radius_issue,
