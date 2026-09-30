@@ -45,4 +45,6 @@ __pycache__/
 /pad_chull.svg
 /parallel_plates.obj
 /start_gcode_*_debug.txt
+# SLA benchmark harness default output (M0.13, tests/sla_print/sla_benchmark_tests.cpp)
+/sla_benchmark.json
 /src/slic3r-shared/test/data/resin_import_scratch/
