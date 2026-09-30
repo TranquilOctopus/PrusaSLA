@@ -28,6 +28,21 @@ PeelForceCoefficients peel_force_coefficients(VatFilmType film)
     return PeelForceCoefficients{};
 }
 
+std::string_view vat_film_name(VatFilmType film)
+{
+    switch (film) {
+    case VatFilmType::nFEP:
+        return "nFEP";
+    case VatFilmType::PFA:
+        return "PFA";
+    case VatFilmType::ACF:
+        return "ACF";
+    case VatFilmType::FEP:
+        break;
+    }
+    return "FEP";
+}
+
 PeelForceCoefficients PeelForceSettings::coefficients() const
 {
     PeelForceCoefficients out = peel_force_coefficients(film);

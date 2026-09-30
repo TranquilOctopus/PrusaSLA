@@ -28,12 +28,25 @@ struct Problems
 /**
  * @brief Build the checklist lines from data already gathered from the slice result.
  *
- * Only islands are reported from @p issues; other issue kinds have no pre-export meaning.
- * Unsupported object names are truncated, a count of the remaining ones is appended.
+ * One line per problem, in the order a user reads them: the models that cannot be printed at all,
+ * the islands that can fall off, the resin that cannot drain, the cups that hold a vacuum against
+ * the film, and the layers that are hard to peel. The two cavity lines name how many were found,
+ * the largest one by volume and the models they were found on; the peel line names how many layers
+ * are over the limit, the worst of them and the vat film the estimate was made with. Layer numbers
+ * are the 0-based ones the slicer reports, as the earlier lines already were. A list of model
+ * names is truncated, a count of the remaining ones is appended.
+ *
+ * The lines inform, they change nothing: no drain hole is added and the export is not blocked, the
+ * dialog that shows them points at the sidebar issues list, where the details and the drain hole
+ * suggestion are.
+ *
+ * @param vat_film The vat film of the slice, named in the peel line. Defaults to the FEP the
+ *                 config defaults to, for a call that has no config to read.
  */
 Problems format_problems(
     const std::vector<std::string>&                 unsupported_object_names,
-    const std::vector<Biz::Slicing::Sla::SlaIssue>& issues);
+    const std::vector<Biz::Slicing::Sla::SlaIssue>& issues,
+    const std::string&                              vat_film = "FEP");
 
 /**
  * @brief Collect the checklist problems of the currently selected build plate.
