@@ -43,6 +43,7 @@ public:
     Scene::ToolType type() const override;
     std::unique_ptr<GizmoWindow> release_ui_window() override;
 
+    void on_activated() override;
     void on_deactivated() override;
     void on_model_reloaded(Domain::SelectionId project_id) override;
 
@@ -55,6 +56,9 @@ public:
     Domain::TriangleSelector::TriangleStateType get_right_button_state_type() const override;
 
 protected:
+    /// FFF and SLA: the SLA support point generator reads the facets this tool paints (M2.30b).
+    bool supports_technology(Domain::PrinterTechnology technology) const override;
+
     Domain::FacetsAnnotationKind get_facets_annotation_kind() const override;
     const Domain::FacetsAnnotation& get_facets_annotation(
         const Domain::ModelVolume& model_volume
@@ -70,6 +74,9 @@ protected:
     void on_painting_stroke_applied() override;
 
 private:
+    /// The technology of the selected printer, which the wording and the rows of the dialog follow.
+    Domain::PrinterTechnology active_technology() const;
+
     void select_facets_by_angle(float threshold_deg);
     void auto_generate_support_painting();
     void start_automatic_painting(Domain::SlicingId slicing_id, Domain::ObjectID model_object_id);

@@ -77,7 +77,9 @@ TEST_CASE("is_tool_visible_for_technology returns correct visibility for SLA pri
     REQUIRE_FALSE(is_tool_visible_for_technology(ToolType::PaintOnFuzzySkinGizmo, PrinterTechnology::SLA));
     REQUIRE_FALSE(is_tool_visible_for_technology(ToolType::MultiMaterialPaintingGizmo, PrinterTechnology::SLA));
     REQUIRE_FALSE(is_tool_visible_for_technology(ToolType::VariableLayerHeightGizmo, PrinterTechnology::SLA));
-    REQUIRE_FALSE(is_tool_visible_for_technology(ToolType::PaintOnSupportsGizmo, PrinterTechnology::SLA));
+
+    // The paint on supports tool is shared with the SLA support point generator (M2.30b)
+    REQUIRE(is_tool_visible_for_technology(ToolType::PaintOnSupportsGizmo, PrinterTechnology::SLA));
 
     // Common tools should be visible for SLA
     REQUIRE(is_tool_visible_for_technology(ToolType::Translation, PrinterTechnology::SLA));

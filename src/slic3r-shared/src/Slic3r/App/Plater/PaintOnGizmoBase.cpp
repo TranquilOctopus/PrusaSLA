@@ -1343,7 +1343,14 @@ bool PaintOnGizmoBase::enabled() const
             .find_config_container(m_project_interactor.selected_config_container_id());
 
     return config_container != nullptr
-        && config_container->print_technology() == PrinterTechnology::FFF;
+        && this->supports_technology(config_container->print_technology());
+}
+
+/// Every paint gizmo of an FFF only feature says FFF. The support paint tool says FFF and SLA
+/// (M2.30b): the SLA support point generator reads the very facets the tool paints.
+bool PaintOnGizmoBase::supports_technology(PrinterTechnology /*technology*/) const
+{
+    return false;
 }
 
 void PaintOnGizmoBase::provide_gizmo_controller(Scene::IGizmoController& gizmo_controller)

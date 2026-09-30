@@ -151,12 +151,12 @@ bool is_tool_visible_for_technology(Scene::ToolType tool, Domain::PrinterTechnol
         return technology == Domain::PrinterTechnology::SLA;
     }
 
-    // FFF-only tools
+    // FFF-only tools. The paint on supports tool is not one of them: it is offered for SLA as well,
+    // because the SLA support point generator reads the facets it paints (M2.30b).
     if (tool == Scene::ToolType::PaintOnSeamsGizmo
         || tool == Scene::ToolType::PaintOnFuzzySkinGizmo
         || tool == Scene::ToolType::MultiMaterialPaintingGizmo
-        || tool == Scene::ToolType::VariableLayerHeightGizmo
-        || tool == Scene::ToolType::PaintOnSupportsGizmo) {
+        || tool == Scene::ToolType::VariableLayerHeightGizmo) {
         return technology == Domain::PrinterTechnology::FFF;
     }
 

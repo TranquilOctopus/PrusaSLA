@@ -5,9 +5,12 @@
 #include "Slic3r/App/Plater/GizmoWindow.hpp"
 #include "Slic3r/Biz/Algorithms/TriangleSelector.hpp"
 #include "Slic3r/App/Yoga/SliderWithInput.hpp"
+#include "Slic3r/Domain/PrinterTechnology.hpp"
 
 namespace Slic3r::App::Yoga {
 class ToggleButton;
+class Text;
+class Separator;
 } // namespace Slic3r::App::Yoga
 
 namespace Slic3r::App::Plater {
@@ -55,6 +58,16 @@ public:
 
     void set_automatic_painting_running(bool running);
 
+    /**
+     * @brief Word the dialog for a printer technology and show the rows that technology has.
+     *
+     * The SLA paint tool paints the very facets the FFF one paints, but they are the input of the SLA
+     * support point generator, so its brushes are named after the supports and the block brush says
+     * that a floating island keeps its point. The automatic painting button needs a slice of the bed
+     * and is therefore FFF only.
+     */
+    void set_technology(Domain::PrinterTechnology technology);
+
 private:
     void update_visibility();
 
@@ -88,6 +101,14 @@ private:
     Yoga::Item* m_brush_shape_row      = nullptr;
     Yoga::Item* m_brush_radius_row     = nullptr;
     Yoga::Item* m_smart_fill_angle_row = nullptr;
+
+    Yoga::Item* m_help_container                   = nullptr;
+    Yoga::Text* m_paint_help_label                 = nullptr;
+    Yoga::Text* m_block_help_label                 = nullptr;
+    Yoga::Text* m_remove_help_label                = nullptr;
+    Yoga::Text* m_block_hint                       = nullptr;
+    Yoga::Item* m_automatic_painting_row           = nullptr;
+    Yoga::Separator* m_automatic_painting_separator = nullptr;
 
     Callbacks m_callbacks;
 };

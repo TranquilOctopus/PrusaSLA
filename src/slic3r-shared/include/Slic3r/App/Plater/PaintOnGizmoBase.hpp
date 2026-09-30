@@ -165,6 +165,14 @@ protected:
     ) const = 0;
 
     /**
+     * @brief The printer technologies this paint tool works with, read by enabled().
+     *
+     * FFF only by default, the tool of an FFF only feature. The support paint tool answers FFF and
+     * SLA, see PaintOnSupportsGizmo.
+     */
+    virtual bool supports_technology(Domain::PrinterTechnology technology) const;
+
+    /**
      * @brief Called after a finished painting stroke gets applied to the model.
      */
     virtual void on_painting_stroke_applied() {}

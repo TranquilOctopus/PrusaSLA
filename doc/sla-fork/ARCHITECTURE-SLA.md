@@ -379,6 +379,17 @@ the configured density. The paint is built by `generate_support_points_for_tool`
 `prepare_for_generate_supports` step, so the tool and the slice time agree. A facet that has no area
 in a layer (a vertical wall) paints nothing in that layer, as in the FFF path.
 
+The paint tool itself is the FFF `PaintOnSupportsGizmo`, offered for SLA as well:
+`is_tool_visible_for_technology(PaintOnSupportsGizmo, SLA)` is true, `PaintOnGizmoBase::enabled()`
+asks the new `PaintOnGizmoBase::supports_technology()` and the support tool answers true for both
+technologies (every other paint gizmo stays FFF only). The wording and the rows that depend on the
+technology are in `App/Plater/PaintSupportsRules.hpp` + `.cpp`: the SLA brushes are "Paint supports"
+and "Block supports", the block brush says that a floating island keeps its support point, and the
+"Automatic painting" row is hidden because it needs the FFF support spot search, which is a slice.
+Painting writes `ModelVolume::supported_facets` through `SceneInteractor::modify_facets_annotations`,
+which marks the bed modified (no slice for SLA); the points come from the Auto support button and the
+M2.21 preview service draws the tree.
+
 Parity checklists against the legacy gizmos: `doc/sla-fork/parity/support-points.md` and
 `doc/sla-fork/parity/hollow.md`.
 
