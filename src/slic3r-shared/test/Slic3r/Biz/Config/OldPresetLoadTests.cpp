@@ -392,12 +392,12 @@ TEST_CASE_METHOD(
 {
     using Slic3r::Domain::sla::RaftType;
 
-    fixture.select_printer(Slic3r::Test::m5_printer);
+    select_printer(Slic3r::Test::m5_printer);
 
     SECTION("a raft around the object is still a raft around the object")
     {
-        fixture.select_print("Old raft around object");
-        const Slic3r::Domain::ConfigBox* box = fixture.print_config("Old raft around object");
+        select_print("Old raft around object");
+        const Slic3r::Domain::ConfigBox* box = print_config("Old raft around object");
         REQUIRE(box != nullptr);
         // The checkboxes of that age are still read and still say what they said.
         CHECK(box->items.opt("pad_enable").get<bool>());
@@ -407,8 +407,8 @@ TEST_CASE_METHOD(
 
     SECTION("a full plate raft is still a full plate raft")
     {
-        fixture.select_print("Old full plate raft");
-        const Slic3r::Domain::ConfigBox* box = fixture.print_config("Old full plate raft");
+        select_print("Old full plate raft");
+        const Slic3r::Domain::ConfigBox* box = print_config("Old full plate raft");
         REQUIRE(box != nullptr);
         CHECK(box->items.opt("pad_enable").get<bool>());
         CHECK_FALSE(box->items.opt("pad_around_object").get<bool>());
@@ -417,8 +417,8 @@ TEST_CASE_METHOD(
 
     SECTION("a preset that asked for no raft does not get one")
     {
-        fixture.select_print("Old no raft");
-        const Slic3r::Domain::ConfigBox* box = fixture.print_config("Old no raft");
+        select_print("Old no raft");
+        const Slic3r::Domain::ConfigBox* box = print_config("Old no raft");
         REQUIRE(box != nullptr);
         CHECK_FALSE(box->items.opt("pad_enable").get<bool>());
         CHECK(box->items.opt("raft_type").get<RaftType>() == RaftType::None);
@@ -426,8 +426,8 @@ TEST_CASE_METHOD(
 
     SECTION("raft_type wins over the checkboxes it replaced")
     {
-        fixture.select_print("New raft type");
-        const Slic3r::Domain::ConfigBox* box = fixture.print_config("New raft type");
+        select_print("New raft type");
+        const Slic3r::Domain::ConfigBox* box = print_config("New raft type");
         REQUIRE(box != nullptr);
         // The preset asks for a full plate raft and leaves the two inherited checkboxes at a raft
         // around the object, which is what raft_type is there to overrule.
@@ -449,19 +449,19 @@ TEST_CASE_METHOD(
     using Slic3r::Domain::sla_effective_initial_layer_height;
     using Slic3r::Domain::sla_effective_layer_height;
 
-    fixture.select_printer(Slic3r::Test::m5_printer);
-    fixture.select_print("Old raft around object");
+    select_printer(Slic3r::Test::m5_printer);
+    select_print("Old raft around object");
 
     SECTION("a resin without the layer settings falls back to the print preset")
     {
-        fixture.select_resin("Old resin");
-        const Slic3r::Domain::ConfigBox* box = fixture.resin_config("Old resin");
+        select_resin("Old resin");
+        const Slic3r::Domain::ConfigBox* box = resin_config("Old resin");
         REQUIRE(box != nullptr);
         // None of the three is in the preset, so each option keeps its unset value.
         CHECK(box->items.opt("resin_layer_height").get<double>() == Catch::Approx(0.));
         CHECK(box->items.opt("initial_layer_height").get<double>() == Catch::Approx(0.));
 
-        const Slic3r::Domain::ConfigView view = fixture.config_view();
+        const Slic3r::Domain::ConfigView view = config_view();
         // The print preset of that age carries layer_height 0.05 and faded_layers 8.
         CHECK(sla_effective_layer_height(view) == Catch::Approx(0.05));
         CHECK(sla_effective_faded_layers(view) == 8);
@@ -471,8 +471,8 @@ TEST_CASE_METHOD(
 
     SECTION("a resin that brings its own layer height decides it for the print")
     {
-        fixture.select_resin("Resin with its own layer height");
-        const Slic3r::Domain::ConfigView view = fixture.config_view();
+        select_resin("Resin with its own layer height");
+        const Slic3r::Domain::ConfigView view = config_view();
         CHECK(sla_effective_layer_height(view) == Catch::Approx(0.03));
         // Zero transition layers is a value, not an unset one, so the print preset cannot win.
         CHECK(sla_effective_faded_layers(view) == 0);
@@ -488,12 +488,12 @@ TEST_CASE_METHOD(
     "[Config][Sla][Hidden][Legacy]"
 )
 {
-    fixture.select_printer(Slic3r::Test::m5_printer);
+    select_printer(Slic3r::Test::m5_printer);
 
     // The print box: the two raft checkboxes, hidden when raft_type replaced them.
     {
-        fixture.select_print("Old raft around object");
-        const Slic3r::Domain::ConfigBox* print = fixture.print_config("Old raft around object");
+        select_print("Old raft around object");
+        const Slic3r::Domain::ConfigBox* print = print_config("Old raft around object");
         REQUIRE(print != nullptr);
         CHECK(print->items.opt("pad_enable").get<bool>());
         CHECK(print->items.opt("pad_around_object").get<bool>());
@@ -501,7 +501,7 @@ TEST_CASE_METHOD(
 
     // The resin box: material_source_note, which nothing reads but a third-party printer needs.
     {
-        const Slic3r::Domain::ConfigBox* resin = fixture.resin_config("Old resin");
+        const Slic3r::Domain::ConfigBox* resin = resin_config("Old resin");
         REQUIRE(resin != nullptr);
         CHECK(resin->items.opt("material_source_note").get<std::string>()
               == "a note an old resin preset carried");
@@ -512,8 +512,8 @@ TEST_CASE_METHOD(
     {
         // The config of a container is built out of the printer, the print preset and one resin,
         // so a resin has to be selected before the box can be read at all.
-        fixture.select_resin("Old resin");
-        const Slic3r::Domain::ConfigPackSLA config = fixture.sla_config();
+        select_resin("Old resin");
+        const Slic3r::Domain::ConfigPackSLA config = sla_config();
         const Slic3r::Domain::ConfigItems& printer = config.sla_printer_settings.items;
         CHECK(printer.opt("min_exposure_time").get<double>() == Catch::Approx(1.));
         CHECK(printer.opt("max_exposure_time").get<double>() == Catch::Approx(120.));
@@ -537,10 +537,10 @@ TEST_CASE_METHOD(
 
     SECTION("a preset of another version keeps everything it still means")
     {
-        fixture.select_printer(Slic3r::Test::m5_printer);
-        fixture.select_print("Old keys and an upstream key");
+        select_printer(Slic3r::Test::m5_printer);
+        select_print("Old keys and an upstream key");
 
-        const Slic3r::Domain::ConfigBox* box = fixture.print_config("Old keys and an upstream key");
+        const Slic3r::Domain::ConfigBox* box = print_config("Old keys and an upstream key");
         REQUIRE(box != nullptr);
         // support_type and support_xy_size are gone, and no setting was lost with them.
         CHECK(box->find("support_type").item == nullptr);
@@ -597,7 +597,7 @@ TEST_CASE_METHOD(
     using Slic3r::Domain::Preset::EvaluatedMaterialPreset;
     using Slic3r::Domain::Preset::EvaluatedPrintPreset;
 
-    PresetInteractor& presets = fixture.project_interactor.preset_interactor();
+    PresetInteractor& presets = project_interactor.preset_interactor();
     const PresetItemObservableList& printers = presets.printer_presets();
 
     // The list of printers is collected before anything is selected, so the walk below cannot be
@@ -625,7 +625,7 @@ TEST_CASE_METHOD(
 
         // Every print preset of the vendor resolves, its inherits chain and all.
         const auto prints = presets.get_print_presets(
-            fixture.project_interactor.selected_project_id(),
+            project_interactor.selected_project_id(),
             selected.hw_config.id,
             selected.printer.id
         );
@@ -643,7 +643,7 @@ TEST_CASE_METHOD(
 
         // And every resin of the vendor.
         const auto resins = presets.get_material_presets(
-            fixture.project_interactor.selected_project_id(),
+            project_interactor.selected_project_id(),
             selected.hw_config.id,
             selected.printer.id,
             selected.print.id,
