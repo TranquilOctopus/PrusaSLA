@@ -22,6 +22,7 @@ add_executable(${_TEST_NAME}_tests ${_TEST_NAME}_tests_main.cpp
     sla_raster_memory_tests.cpp
     sla_layers_to_mesh_tests.cpp
     sla_island_coverage_tests.cpp
+    sla_local_island_coverage_tests.cpp
     sla_support_tool_tests.cpp
     sla_support_preset_tests.cpp
     sla_benchmark_tests.cpp
@@ -32,7 +33,7 @@ add_executable(${_TEST_NAME}_tests ${_TEST_NAME}_tests_main.cpp
 # mold linker for successful linking needs also to link TBB library and link it before libslic3r.
 target_link_libraries(${_TEST_NAME}_tests test_common TBB::tbb TBB::tbbmalloc libslic3r slic3r-shared)
 # TODO This temporarily allows using private header files from slic3r-shared in all tests, the
-# same hack tests/CMakeLists.txt does for libslic3r. sla_benchmark_tests.cpp reads the model
+# same hack tests/CMakeLists.txt does for libslic3r. sla_bench_manifest.hpp reads the model
 # manifest through the Biz Yaml wrapper, which lives in slic3r-shared's private sources.
 target_include_directories(${_TEST_NAME}_tests PRIVATE "$<TARGET_PROPERTY:slic3r-shared,SOURCE_DIR>/src")
 set_property(TARGET ${_TEST_NAME}_tests PROPERTY FOLDER "tests")
