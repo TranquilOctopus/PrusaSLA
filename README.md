@@ -139,17 +139,17 @@ branch, one commit, the box ticked in the same commit.
 
 ## Progress
 
-**214 of 272 todos done (79%)** · updated 2026-09-30 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**236 of 278 todos done (85%)** · updated 2026-09-30 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
 | M0: Foundation | 14/15 | `███████████░` 93% |
-| M1: Look, feel and SLA-first shell | 41/43 | `███████████░` 95% |
-| M2: SLA editing tools (porting the legacy gizmos) | 72/79 | `███████████░` 91% |
-| M3: Resin profile import (Chitubox, Lychee and others) | 16/28 | `███████░░░░░` 57% |
-| M4: Engine quality (measure first; every PR includes before/after metrics) | 20/29 | `████████░░░░` 69% |
-| M5: Formats and inspection | 33/40 | `██████████░░` 82% |
-| M6: Quality gates and release | 13/21 | `███████░░░░░` 62% |
+| M1: Look, feel and SLA-first shell | 43/44 | `████████████` 98% |
+| M2: SLA editing tools (porting the legacy gizmos) | 75/79 | `███████████░` 95% |
+| M3: Resin profile import (Chitubox, Lychee and others) | 24/28 | `██████████░░` 86% |
+| M4: Engine quality (measure first; every PR includes before/after metrics) | 22/32 | `████████░░░░` 69% |
+| M5: Formats and inspection | 37/42 | `███████████░` 88% |
+| M6: Quality gates and release | 16/21 | `█████████░░░` 76% |
 | M7: Excellent auto-supports *(parked)* | 5/17 | `████░░░░░░░░` 29% |
 
 ### Waiting on you
@@ -168,49 +168,38 @@ branch, one commit, the box ticked in the same commit.
 
 </details>
 
-<details><summary>M1: Look, feel and SLA-first shell — 2 open</summary>
+<details><summary>M1: Look, feel and SLA-first shell — 1 open</summary>
 
 - [ ] **M1.1b** Runtime screen audit with an SLA printer selected, following the R1–R10 checklist in `ux/journeys.md`. Reco…
-- [ ] **M1.12** Branding artwork: replace `resources/icons/splashscreen.jpg` and the `PrusaSlicer.*` app icons (ico, icns,…
 
 </details>
 
-<details><summary>M2: SLA editing tools (porting the legacy gizmos) — 7 open</summary>
+<details><summary>M2: SLA editing tools (porting the legacy gizmos) — 4 open</summary>
 
 - [ ] **M2.9** Plater SLA visuals: resin tint, support and pad materials, and overlay styling (PLAN F3).
   - [ ] **M2.9b** Resin tint and translucency: the model follows the material's `material_colour` (PLAN 2.1 rule 4) and a tra…
   - [ ] **M2.9c** Overlay styling: support point glyphs, island markers and the clipping-cap (hollow and drain hole) previews…
 - [ ] **M2.14b** Raft shapes the pad generator cannot make today: grid or honeycomb infill, a tapered skate profile, and a s…
-- [ ] **M2.17j** A model with no support points under a raft that can hold it still fails to slice: with supports off and a…
-- [ ] **M2.21c** The support preview still clones the model mesh on the main thread, once per burst of edits instead of once…
-- [ ] **M2.23c** A flat disc foot in the branching tree still gets that tree's small-pillar widening above the disc, so the…
 
 </details>
 
-<details><summary>M3: Resin profile import (Chitubox, Lychee and others) — 12 open</summary>
+<details><summary>M3: Resin profile import (Chitubox, Lychee and others) — 4 open</summary>
 
 - [ ] **M3.1** Put a few real `.cfg`, `.cfgx`, `.lyr` and `.lyp` files in `local-samples/`, exported from your own Chitubo… *(needs you)*
 - [ ] **M3.2** Add `local-samples/` to `.gitignore`. Document the observed structure of each sample format in `doc/sla-for…
-- [ ] **M3.8c** `fill_iniconf` in `SL1.cpp` never records `bottom_layer_count`, so `SlicedArchiveResinReader` imports a sli…
-- [ ] **M3.8d** Opening a zip through miniz reads the whole central directory into memory, so how many entries an archive m…
-- [ ] **M3.10e** The `.cfg` reader reads no vendor or brand key, so the vendor field of the import report is empty for a Chi…
-- [ ] **M3.10f** The M3.9 JSON report carries a mapping row's value but not its unit, so a script has to know the unit of a…
-- [ ] **M3.11b** The datasheet form checks that a number is a positive number but not the range the option it writes allows,…
-- [ ] **M3.11c** The review row of the price names a per-litre price where the datasheet stated a per-bottle one, so the row…
 - [ ] **M3.12** `ChituboxCfgxReader`, if M3.2 marked it feasible; otherwise close this todo with a link to the M3.2 finding.
 - [ ] **M3.13** `LycheeLyrReader` (and `.lyp` printer hints), if M3.2 marked it feasible; otherwise close it with a link to…
-- [ ] **M3.15b** The `.cfg` export leaves `bottle_cost` in `skipped`, so a price cannot go back at all: keep the bottle volu…
-- [ ] **M3.15c** The `.cfg` export is reachable from the CLI only, so the app has no button for it: add an "Export resin pro…
 
 </details>
 
-<details><summary>M4: Engine quality (measure first; every PR includes before/after metrics) — 9 open</summary>
+<details><summary>M4: Engine quality (measure first; every PR includes before/after metrics) — 10 open</summary>
 
 - [ ] **M4.1** Tracy profiling run over the benchmark set. Write a hotspot report in `doc/sla-fork/profiling/`. No code ch…
 - [ ] **M4.2** Re-rank M4.3–M4.10 based on the M4.1 report. *(needs you)*
 - [ ] **M4.3** Support point generation: regression tests for `tests/data/sla_islands/*.svg` and the benchmark set (PLAN B2).
 - [ ] **M4.4** Support point generation: fix the worst unsupported-island cases found in M4.3.
 - [ ] **M4.5** Branching tree: reduce support volume with no new unsupported points (PLAN B3).
+  - [ ] **M4.5b** A/B the key and the existing widening factor on the benchmark set with the M0.13 harness, record the suppor…
 - [ ] **M4.6** Pad robustness when printing directly on the plate, plus pad generation speed (PLAN B4).
 - [ ] **M4.6b** Decide whether a raft around an object that is printed directly on the build plate should still need the "r… *(needs you)*
 - [ ] **M4.7** Hollowing performance and wall thickness tolerance test (PLAN B5).
@@ -218,24 +207,19 @@ branch, one commit, the box ticked in the same commit.
 
 </details>
 
-<details><summary>M5: Formats and inspection — 7 open</summary>
+<details><summary>M5: Formats and inspection — 5 open</summary>
 
 - [ ] **M5.3.pw-b** Anycubic newer formats (`.pm5`, `.pm5s`, `.pm7`) — **`.pm5` first: it is the format the maintainer's Photon…
 - [ ] **M5.3.pw-b3** The `.pm5` we write has never been compared field by field with the maintainer's own Photon Mono M5 sample:… *(needs you)*
 - [ ] **M5.3.samples** Provide one sliced sample archive per target printer (from Chitubox/Lychee/Photon Workshop) and list the pr… *(needs you)*
   - [ ] **M5.4d** Check the orientation of the `.pm5` we write for the Photon Mono M5 against a real Photon Workshop file, si…
-- [ ] **M5.4e** The registry-wide orientation test leaves the two portrait rows with `display_mirror_y` unsliced: slice tho…
 - [ ] **M5.4f** No printer has confirmed any row of the orientation table, and all six `community-sla` printers inherit `di… *(needs you)*
-- [ ] **M5.5c** No test covers the destination logic, because `PhysicalPrinterInteractor` has no fixture: build one over a…
 
 </details>
 
-<details><summary>M6: Quality gates and release — 8 open</summary>
+<details><summary>M6: Quality gates and release — 5 open</summary>
 
 - [ ] **M6.2a** The visual regression has never been run end to end: build the app, choose the three fixture scenes and bot… *(needs you)*
-- [ ] **M6.2b** `--render-view preview` draws the sliced print the way the objects list thumbnails do, not the Preview tab…
-- [ ] **M6.2c** A render is the scene and not the window, so the sidebars and the preview overlays (the layer image window,…
-- [ ] **M6.2d** Nothing runs the tool in CI yet: add a job beside M0.14's that renders the fixtures, runs `visual_diff.py`…
 - [ ] **M6.4** End-to-end walk through the M1.1 journeys on an integrated build, filing new todos for gaps. *(needs you)*
 - [ ] **M6.5** Retune default presets after the M4 changes.
 - [ ] **M6.6** Fork README and user guide.
