@@ -156,7 +156,12 @@ void SlaUnsupportedNotification::recreate_notification(Domain::SelectionId proje
         message += unsupported_objects[i]->name;
     }
     if (unsupported_objects.size() > max_names) {
-        message += fmt::format(fmt::runtime(_u8L(", … and {0} more")), unsupported_objects.size() - max_names);
+        // The ellipsis is spelled as bytes and kept out of the translatable string: the translation
+        // lookup converts a narrow string through the UI locale, which drops the bytes above 0x7F.
+        message += ", ";
+        message += "\xE2\x80\xA6";
+        message += " ";
+        message += fmt::format(fmt::runtime(_u8L("and {0} more")), unsupported_objects.size() - max_names);
     }
     message += "\n";
     message += _u8L("Open the support tool to add supports, or ignore this if the model should sit on the build plate.");
