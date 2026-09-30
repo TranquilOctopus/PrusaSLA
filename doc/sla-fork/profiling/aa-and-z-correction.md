@@ -62,8 +62,10 @@ through `fill_iniconf` (`SL1.cpp:144`).
 
 `config.ini` has **no** anti-aliasing or grey-level key at all: `layerHeight`,
 `expTime`, `expTimeFirst`, `expUserProfile`, `printerModel`, `printerVariant`,
-`fileCreationTimestamp`, `prusaSlicerVersion`, `usedMaterial`, `numFade`, `numSlow`,
-`numFast`, `printTime`, `hollow`, `action`, `jobDir`. The printer is expected to read
+`fileCreationTimestamp`, `prusaSlicerVersion`, `usedMaterial`, `numFade`, `numBottom`,
+`numSlow`, `numFast`, `printTime`, `hollow`, `action`, `jobDir` (`numBottom` is a key of
+this fork's, which the SL1 format has no name for; see
+[../formats/sl1.md](../formats/sl1.md)). The printer is expected to read
 the PNG's own bit depth, which is 8. Nothing to keep consistent here; the test only
 pins that a thresholded layer really comes out binary and an anti-aliased one really
 comes out greyscale.

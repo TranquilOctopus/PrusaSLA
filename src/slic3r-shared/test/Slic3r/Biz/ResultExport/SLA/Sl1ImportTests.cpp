@@ -1,11 +1,13 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 
+#include "Slic3r/Biz/ResinProfile/SlicedArchiveResinReader.hpp"
 #include "Slic3r/Biz/SlaFixture.hpp"
 #include "Slic3r/Biz/ResultExport/SLA/SL1.hpp"
 #include "Slic3r/Biz/ResultExport/SLA/SL1Import.hpp"
 #include "Slic3r/Biz/ResultExport/SLA/Zipper.hpp"
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
+#include "Slic3r/Domain/SlaLayerHeight.hpp"
 #include "Slic3r/TestUtils/TestTempDir.hpp"
 
 #include <boost/filesystem.hpp>
@@ -18,6 +20,7 @@ namespace fs = boost::filesystem;
 
 using Slic3r::Biz::PrintHost::Sla::import_sl1_archive;
 using Slic3r::Biz::PrintHost::Sla::store_sl1;
+using Slic3r::Biz::ResinProfile::SlicedArchiveResinReader;
 using Slic3r::Domain::Vec3d;
 using Catch::Approx;
 
@@ -104,6 +107,62 @@ TEST_CASE("SL1 import round trip", "[import][sla][sl1]")
     REQUIRE(bbox.max(0) == Approx(120.).margin(tol_xy));
     REQUIRE(bbox.max(1) == Approx(70.).margin(tol_xy));
     REQUIRE(bbox.max(2) == Approx(0.5 * layer_count).margin(tol_z));
+}
+
+TEST_CASE("SL1 archive keeps the bottom layer count", "[export][sla][sl1][resin_profile]")
+{
+    Slic3r::Test::SlaSlicingFixture fixture;
+
+    // One cube, sliced coarse and without supports or a raft, so the export is quick: what
+    // this case reads back is the metadata of the archive, not its layers.
+    auto model = Slic3r::Test::generate_cubes(1, 1);
+    REQUIRE(model.objects.size() == 1);
+
+    auto config = Slic3r::Domain::ConfigPackSLA{};
+    // 20 mm of cube in 1 mm layers.
+    config.sla_print_settings.items.opt("layer_height").set(1.0);
+    config.sla_material_settings.items.opt("initial_layer_height").set(1.0);
+    config.sla_print_settings.items.opt("supports_enable").set(false);
+    config.sla_print_settings.items.opt("pad_enable").set(false);
+    config.sla_print_settings.items.opt("raft_type").set(Slic3r::Domain::sla::RaftType::None);
+    // The count the bottom_* settings of the print cover, which is a setting of its own and
+    // not the transition count that numFade states.
+    config.sla_material_settings.items.opt("bottom_layer_count").set(6);
+
+    auto sla_result = fixture.slice_sla_model(model, config);
+    REQUIRE(sla_result != nullptr);
+    REQUIRE(sla_result->files.type == Slic3r::Biz::Slicing::Sla::FileDataType::sl1_png);
+
+    // What the print used, so the test says what the count is against.
+    const int used = Slic3r::Domain::sla_bottom_layer_count(sla_result->config);
+    REQUIRE(used == 6);
+
+    Tests::TestTempDir        temp_dir;
+    const fs::path            sl1_path = temp_dir.path() / "bottom.sl1";
+    REQUIRE_NOTHROW(store_sl1(sl1_path.string(), *sla_result));
+
+    const SlicedArchiveResinReader reader;
+    const auto                     profile = reader.read(sl1_path);
+    const std::string              failure = profile.has_value() ? "" : profile.error();
+    INFO(failure);
+    REQUIRE(profile.has_value());
+
+    // The count comes back, in both spellings: the one of the embedded profile, which the
+    // reader looks for first, and the fork key of the printer config, which is all a file
+    // without an embedded profile has.
+    REQUIRE(profile->material.bottom_layer_count == used);
+    REQUIRE(profile->raw_values.at("bottom_layer_count") == std::to_string(used));
+    REQUIRE(profile->raw_values.at("numBottom") == std::to_string(used));
+
+    // The transition count is a different setting, and the reader keeps the two apart.
+    REQUIRE(profile->material.faded_layer_count ==
+            Slic3r::Domain::sla_effective_faded_layers(sla_result->config));
+
+    // Every key the printer reads is still there, with the value it had.
+    REQUIRE(profile->raw_values.count("expTime") == 1);
+    REQUIRE(profile->raw_values.count("printerModel") == 1);
+    REQUIRE(profile->raw_values.at("numFade") ==
+            std::to_string(sla_result->print_statistics->count_faded_layers));
 }
 
 TEST_CASE("SL1 import reports what is wrong with the archive", "[import][sla][sl1]")

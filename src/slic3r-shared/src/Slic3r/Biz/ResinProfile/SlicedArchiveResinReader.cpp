@@ -40,8 +40,11 @@ const char *const INITIAL_EXPOSURE_KEYS[]     = {"initial_exposure_time", "expTi
 const char *const LAYER_HEIGHT_KEYS[]         = {"layer_height", "layerHeight"};
 const char *const INITIAL_LAYER_HEIGHT_KEYS[] = {"initial_layer_height", "initialLayerHeight"};
 // An SL1 job has no bottom layers of its own: the tank is exposed layer by layer from the
-// bottom up, and the count only turns up in a profile that names it.
-const char *const BOTTOM_LAYER_KEYS[]     = {"bottom_layer_count"};
+// bottom up, so the count turns up only where a profile names it, or under the numBottom key
+// this fork's writer adds to config.ini, which is what a .sl1 of ours carries when it holds
+// no embedded profile (doc/sla-fork/formats/sl1.md). numFade is the transition (fade) count
+// and is read as faded_layer_count, never as this.
+const char *const BOTTOM_LAYER_KEYS[]     = {"bottom_layer_count", "numBottom"};
 const char *const FADED_LAYER_KEYS[]      = {"faded_layers", "numFade"};
 const char *const SLOW_LAYER_KEYS[]       = {"numSlow"};
 const char *const FAST_LAYER_KEYS[]       = {"numFast"};
