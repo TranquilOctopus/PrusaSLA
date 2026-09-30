@@ -1,27 +1,38 @@
 // M6.1: robustness meshes. The SLA pipeline has to survive meshes it cannot print: an empty
-// shell, a single triangle, flipped normals, a model 1500 mm away from the origin. None of them
-// may crash the slicer and none of them may hang it.
+// shell, a single triangle, flipped normals, non-manifold edges, a vertex that is not a number,
+// a model a hundred kilometres from the origin. None of them may crash the slicer and none of them
+// may hang it.
 //
 // Every mesh here is built in code (no files from tests/data) and every case runs the same two
-// stages: the support tool (points, then tree and raft) and a full SLAPrint slice.
+// stages: the support tool (points, then tree and raft) and a full SLAPrint slice. Both stages run
+// on a worker thread under a watchdog. A stage that is still going when its budget runs out is
+// asked to stop (the support tool has a stop function, the slice gets the stop token of the
+// print), and a stage that neither finishes nor takes the stop fails the test instead of hanging
+// the test binary.
 #include <catch2/catch_test_macros.hpp>
 
+#include <atomic>
 #include <chrono>
-#include <condition_variable>
 #include <cmath>
+#include <condition_variable>
 #include <cstddef>
+#include <functional>
 #include <future>
+#include <limits>
 #include <memory>
 #include <mutex>
+#include <sstream>
 #include <string>
-#include <thread>
 #include <utility>
 #include <vector>
 
 #include "libslic3r/SLASupportTool.hpp"
+#include "libslic3r/CanceledException.hpp"
 #include "libslic3r/ConfigViews.hpp"
 #include "libslic3r/IThumbnailImageGenerator.hpp"
 #include "libslic3r/SLAPrint.hpp"
+#include "libslic3r/SlicingStatus.hpp"
+#include "jthread/JThread.hpp"
 
 #include "Slic3r/Exception.hpp"
 #include "Slic3r/Biz/Algorithms/ModelObject.hpp"
@@ -47,20 +58,34 @@ namespace {
 
 // indexed_triangle_set comes from admesh/stl.h and lives in the global namespace.
 using ::indexed_triangle_set;
+using Slic3r::Biz::JThread::StopSource;
+using Slic3r::Biz::JThread::StopToken;
 using Slic3r::Domain::BoundingBox3d;
 using Slic3r::Domain::Index3;
 using Slic3r::Domain::TriangleMesh;
-using Slic3r::Domain::Vec3f;
 using Slic3r::Domain::Vec3d;
+using Slic3r::Domain::Vec3f;
+
+// The engine's own way of saying "this model cannot be sliced": a message for the bed. Nothing else
+// may escape a stage.
+using EngineRefusal = Slic3r::Biz::Slicing::Exception;
 
 // The support generator has run for minutes on a mesh far from the origin (see the last case), so
 // every support call gets a deadline instead of a hope. A call that runs out of time is reported
 // as stopped, not as a failure: the deadline bounds the test, it does not assert a speed.
 const std::chrono::seconds support_deadline{60};
 
-// The slice has no stop function, so it runs on a worker thread with this budget instead. It is
-// generous: nothing in this file is expected to take minutes.
+// A few seconds of slack over the stop function, so a support call that ends on the deadline is
+// seen as finished rather than as a hang.
+const std::chrono::seconds support_slack{5};
+
+// The slice has no deadline of its own, so it runs on a worker thread with this budget instead. It
+// is generous: nothing in this file is expected to take minutes.
 const std::chrono::seconds slice_deadline{60};
+
+// How much longer a stage may run after it has been asked to stop. Unwinding a slice takes a
+// moment: it stops at the next place that polls its stop token.
+const std::chrono::seconds cancel_grace{30};
 
 // ---------------------------------------------------------------------------------------------
 // Meshes, built in code
@@ -103,11 +128,74 @@ indexed_triangle_set open_box_its(double x, double y, double z)
     return its;
 }
 
+// A closed box with a square hole in the middle of its top face: the top is a ring of eight
+// triangles around the hole, so the shell is closed but the surface has a hole in it.
+indexed_triangle_set holed_box_its(double x, double y, double z)
+{
+    indexed_triangle_set its = open_box_its(x, y, z);
+
+    // The rim of the hole, halfway between the corners and the middle of the top face.
+    const float fx = float(x), fy = float(y), fz = float(z);
+    const int h = int(its.vertices.size());
+    its.vertices.insert(its.vertices.end(),
+                        {{fx / 4.f, fy / 4.f, fz},
+                         {3 * fx / 4.f, fy / 4.f, fz},
+                         {3 * fx / 4.f, 3 * fy / 4.f, fz},
+                         {fx / 4.f, 3 * fy / 4.f, fz}});
+    its.indices.insert(its.indices.end(), {{4, 5, h + 1}, {4, h + 1, h},
+                                          {5, 6, h + 2}, {5, h + 2, h + 1},
+                                          {6, 7, h + 3}, {6, h + 3, h + 2},
+                                          {7, 4, h}, {7, h, h + 3}});
+    return its;
+}
+
 // A box with the winding of one face reversed, so that face points into the volume.
 indexed_triangle_set flipped_face_box_its(double x, double y, double z)
 {
     indexed_triangle_set its = box_its(x, y, z);
     std::swap(its.indices[8][0], its.indices[8][2]); // the first triangle of the back face
+    return its;
+}
+
+// A box with every face turned inwards: the whole volume has a negative orientation.
+indexed_triangle_set inverted_box_its(double x, double y, double z)
+{
+    indexed_triangle_set its = box_its(x, y, z);
+    for (Index3& face : its.indices)
+        std::swap(face[0], face[2]);
+    return its;
+}
+
+// A box with a fin glued to the edge between the corners 0 and 1. That edge now belongs to three
+// faces, which no closed surface can do.
+indexed_triangle_set non_manifold_box_its(double x, double y, double z)
+{
+    indexed_triangle_set its = box_its(x, y, z);
+    const int tip = int(its.vertices.size());
+    its.vertices.push_back(Vec3f{float(x) / 2.f, -float(y), float(z)});
+    its.indices.push_back(Index3{0, 1, tip});
+    return its;
+}
+
+// A cube whose faces are each present twice.
+indexed_triangle_set duplicated_faces_box_its(double x, double y, double z)
+{
+    indexed_triangle_set its = box_its(x, y, z);
+    const std::vector<Index3> faces = its.indices;
+    its.indices.insert(its.indices.end(), faces.begin(), faces.end());
+    return its;
+}
+
+// A box with one of its triangles repeated at the very same coordinates, with a second, identical
+// set of vertices: two coincident faces, as a mesh from a broken exporter carries.
+indexed_triangle_set duplicate_triangle_its(double x, double y, double z)
+{
+    indexed_triangle_set its = box_its(x, y, z);
+    const Index3 face = its.indices.front();
+    const Vec3f a = its.vertices[face[0]], b = its.vertices[face[1]], c = its.vertices[face[2]];
+    const int base = int(its.vertices.size());
+    its.vertices.insert(its.vertices.end(), {a, b, c});
+    its.indices.push_back(Index3{base, base + 1, base + 2});
     return its;
 }
 
@@ -123,24 +211,52 @@ indexed_triangle_set overlapping_cubes_its(double size)
     return its;
 }
 
-// A cube whose faces are each present twice.
-indexed_triangle_set duplicated_faces_box_its(double x, double y, double z)
+// Two cubes that pass through each other: a vertical bar and a horizontal one, both centred. Every
+// face of either shell is crossed by the other shell, and no vertex is shared.
+indexed_triangle_set crossing_cubes_its(double size)
 {
-    indexed_triangle_set its = box_its(x, y, z);
-    const std::vector<Index3> faces = its.indices;
-    its.indices.insert(its.indices.end(), faces.begin(), faces.end());
-    return its;
+    const float third = float(size) / 3.f;
+    indexed_triangle_set vertical = box_its(third, third, size);
+    for (Vec3f& v : vertical.vertices)
+        v += Vec3f{third, third, 0.f};
+    indexed_triangle_set horizontal = box_its(size, third, third);
+    for (Vec3f& v : horizontal.vertices)
+        v += Vec3f{0.f, third, third};
+    Slic3r::Domain::its_merge(vertical, horizontal);
+    return vertical;
 }
 
-// One triangle in the XY plane, and one whose three points lie on a line.
+// Two cubes that only touch, along a whole face. Welding them makes every edge of the shared face
+// an edge of four triangles.
+indexed_triangle_set touching_cubes_its(double size)
+{
+    indexed_triangle_set first = box_its(size, size, size);
+    indexed_triangle_set second = box_its(size, size, size);
+    for (Vec3f& v : second.vertices)
+        v += Vec3f{float(size), 0.f, 0.f};
+    Slic3r::Domain::its_merge(first, second);
+    return first;
+}
+
+// One triangle in the XY plane.
 indexed_triangle_set single_triangle_its()
 {
     return {{{0, 1, 2}}, {{0.f, 0.f, 0.f}, {10.f, 0.f, 0.f}, {0.f, 10.f, 0.f}}};
 }
 
+// One triangle whose three points lie on a line: it covers no area at all.
 indexed_triangle_set degenerate_triangle_its()
 {
     return {{{0, 1, 2}}, {{0.f, 0.f, 0.f}, {5.f, 0.f, 0.f}, {10.f, 0.f, 0.f}}};
+}
+
+// A box with a vertex that is not a coordinate: one NaN and one infinity.
+indexed_triangle_set non_finite_its(double x, double y, double z)
+{
+    indexed_triangle_set its = box_its(x, y, z);
+    its.vertices[1][0] = std::numeric_limits<float>::quiet_NaN();
+    its.vertices[6][2] = std::numeric_limits<float>::infinity();
+    return its;
 }
 
 TriangleMesh make_mesh(indexed_triangle_set its)
@@ -149,10 +265,32 @@ TriangleMesh make_mesh(indexed_triangle_set its)
 }
 
 // ---------------------------------------------------------------------------------------------
+// One mesh in the robustness set
+// ---------------------------------------------------------------------------------------------
+
+struct RobustnessCase
+{
+    const char* name;                               // what is wrong with the mesh
+    std::function<indexed_triangle_set()> build;    // the mesh itself
+
+    Slic3r::Domain::Vec3d offset{0., 0., 0.};       // where the object stands
+    double layer_height{0.05};                      // mm
+    bool supports{true};                            // supports and raft on or off
+    bool must_have_no_points{false};                // nothing to generate from this mesh
+    bool must_be_rejected{false};                   // the engine has to refuse it cleanly
+    std::chrono::seconds slice_budget{slice_deadline};
+};
+
+RobustnessCase robustness_case(const char* name, std::function<indexed_triangle_set()> build)
+{
+    return RobustnessCase{name, std::move(build)};
+}
+
+// ---------------------------------------------------------------------------------------------
 // Model and config
 // ---------------------------------------------------------------------------------------------
 
-// A model with one object holding `mesh`, standing on the plate and moved to `offset`.
+// A model with one object holding `mesh`, moved to `offset`.
 struct MeshModel
 {
     Slic3r::Domain::Model model;
@@ -163,14 +301,16 @@ struct MeshModel
         const BoundingBox3d bb = mesh.bounding_box();
         const float dx = float(bb.max.x() - bb.min.x());
         const float dy = float(bb.max.y() - bb.min.y());
+        const bool has_footprint = std::isfinite(dx) && std::isfinite(dy) && dx > 0.f && dy > 0.f;
 
         object = model.add_object();
         object->name = "robustness.stl";
 
         // The slice takes the support points from the object instead of generating them, and an
         // object without points is sliced without supports. Put points on the bottom face so that
-        // the tree and the raft are built for every case that has a footprint to put them on.
-        if (dx > 0.f && dy > 0.f) {
+        // the tree and the raft are built for every case that has a footprint to put them on. A
+        // box that does not measure anything (or measures NaN) gets none.
+        if (has_footprint) {
             const float x0 = float(bb.min.x()), y0 = float(bb.min.y()), z = float(bb.min.z());
             const auto island = [](Vec3f p) {
                 return Slic3r::Domain::SLA::SupportPoint{p, 0.2f,
@@ -195,13 +335,13 @@ struct SlaConfig
     Slic3r::Domain::PartialObjectConfigSLAPtr object_settings;
 };
 
-// Supports on, raft on (raft_type defaults to Full), a 0.05 mm layer.
-SlaConfig make_sla_config()
+// Supports and raft on (pad_enable defaults to Full), a 0.05 mm layer.
+SlaConfig make_sla_config(double layer_height, bool supports)
 {
     Slic3r::Domain::ConfigPackSLA pack;
-    pack.sla_print_settings.items.opt("layer_height").set(0.05);
-    pack.sla_print_settings.items.opt("supports_enable").set(true);
-    pack.sla_print_settings.items.opt("pad_enable").set(true);
+    pack.sla_print_settings.items.opt("layer_height").set(layer_height);
+    pack.sla_print_settings.items.opt("supports_enable").set(supports);
+    pack.sla_print_settings.items.opt("pad_enable").set(supports);
     pack.sla_print_settings.items.opt("support_object_elevation").set(10.0);
 
     SlaConfig cfg;
@@ -288,12 +428,12 @@ struct SupportResult
     bool stopped{false};
 };
 
-// Generates the support points and builds the tree and the raft for `mesh` placed at `offset`.
-SupportResult run_support_tool(TriangleMesh mesh, const Vec3d& offset = {0., 0., 0.})
+// Generates the support points and builds the tree and the raft for the mesh of `test_case`.
+SupportResult run_support_tool(const TriangleMesh& mesh, const RobustnessCase& test_case)
 {
-    MeshModel model{std::move(mesh), offset};
-    SlaConfig config = make_sla_config();
-    const Slic3r::Domain::Transform3d trafo = object_to_world(offset);
+    MeshModel model{mesh, test_case.offset};
+    SlaConfig config = make_sla_config(test_case.layer_height, test_case.supports);
+    const Slic3r::Domain::Transform3d trafo = object_to_world(test_case.offset);
     Deadline deadline;
 
     SupportResult result;
@@ -365,28 +505,43 @@ public:
     void handle_enqueued_requests() override {}
 };
 
+// The stop token of a print running on a worker thread. The pipeline polls it (PrintBase throws
+// CanceledException at the next place that checks), so it is how the watchdog asks a slice that is
+// past its deadline to stop.
+struct PrintStop
+{
+    StopSource source{std::make_unique<std::atomic<bool>>(false)};
+
+    void request_stop() { source->store(true); }
+    StopToken token() { return StopToken{source}; }
+};
+
 struct SliceResult
 {
-    bool finished{false};        // the pipeline ran to the end
-    bool reported_error{false}; // the engine refused the model, which the app shows on the bed
-    bool geometry_finite{true};  // no NaN in the support or raft geometry it produced
+    bool finished{false};              // the pipeline ran to the end
+    bool canceled{false};              // the watchdog stopped it
+    bool reported_error{false};        // the engine refused the model, as it shows on the bed
+    bool unexpected_exception{false};  // something that is not an engine refusal got out
+    bool geometry_finite{true};        // no NaN in the support or raft geometry it produced
     std::string error;
     size_t layers{0};
     size_t support_facets{0};
     size_t raft_facets{0};
 };
 
-// Slices `mesh` placed at `offset` with the standard SLA preset.
+// Slices the mesh of `test_case` with the standard SLA preset.
 //
-// A model the engine cannot slice is not a robustness failure: it throws a Slic3r::Exception, which
-// BackgroundProcess turns into an error on the bed (BackgroundProcess.cpp:269). That is a handled
-// outcome and is reported here. Anything else escaping the slice, or the slice never returning, is
-// what this file is after - and it is not caught, so it takes the test down.
-SliceResult run_slice(TriangleMesh mesh, const Vec3d& offset = {0., 0., 0.})
+// A model the engine cannot slice is not a robustness failure: it throws a Slic3r::RuntimeError or
+// a Slic3r::Biz::Slicing::Exception, which BackgroundProcess turns into an error on the bed
+// (BackgroundProcess.cpp:269). That is a handled outcome and is reported here. Anything else
+// escaping the slice is recorded as an unexpected exception, and the slice never returning is what
+// the watchdog above is for.
+SliceResult run_slice(const TriangleMesh& mesh, const RobustnessCase& test_case,
+                      const std::shared_ptr<PrintStop>& stop)
 {
     SliceResult result;
 
-    MeshModel model{std::move(mesh), offset};
+    MeshModel model{mesh, test_case.offset};
     Slic3r::Domain::Bed bed;
     Slic3r::Domain::BedInstance bed_instance{bed};
     for (const Slic3r::Domain::ModelObject* object : model.model.objects) {
@@ -395,10 +550,10 @@ SliceResult run_slice(TriangleMesh mesh, const Vec3d& offset = {0., 0., 0.})
     }
 
     Slic3r::Domain::ConfigPackSLA config;
-    config.sla_print_settings.items.opt("layer_height").set(0.05);
-    config.sla_material_settings.items.opt("initial_layer_height").set(0.05);
-    config.sla_print_settings.items.opt("supports_enable").set(true);
-    config.sla_print_settings.items.opt("pad_enable").set(true);
+    config.sla_print_settings.items.opt("layer_height").set(test_case.layer_height);
+    config.sla_material_settings.items.opt("initial_layer_height").set(test_case.layer_height);
+    config.sla_print_settings.items.opt("supports_enable").set(test_case.supports);
+    config.sla_print_settings.items.opt("pad_enable").set(test_case.supports);
 
     const auto hw_config =
         Slic3r::Test::create_dummy_hw_config(1, 0, Slic3r::Domain::PrinterTechnology::SLA);
@@ -407,6 +562,7 @@ SliceResult run_slice(TriangleMesh mesh, const Vec3d& offset = {0., 0., 0.})
 
     Slic3r::SLAPrint print{
         [](Slic3r::Biz::Slicing::SLAResult&&) {}, [](const Slic3r::Biz::Slicing::Sla::Object&) {}};
+    print.stop_token = stop->token();
 
     try {
         print.update(model.model, config, bed_instance, preset_metadata,
@@ -414,8 +570,22 @@ SliceResult run_slice(TriangleMesh mesh, const Vec3d& offset = {0., 0., 0.})
 
         NoopThumbnailGenerator thumbnail_generator;
         print.slice(Slic3r::Domain::SlicingId{0, 0}, thumbnail_generator, std::nullopt);
-    } catch (const Slic3r::Exception& e) {
+    } catch (const Slic3r::Biz::Slicing::CanceledException&) {
+        result.canceled = true;
+        return result;
+    } catch (const Slic3r::RuntimeError& e) {
         result.reported_error = true;
+        result.error = e.what();
+        return result;
+    } catch (const EngineRefusal& e) {
+        // The engine's own error carries the reason in its Error, not in what().
+        std::ostringstream message;
+        message << e.what() << ": " << e.error();
+        result.reported_error = true;
+        result.error = message.str();
+        return result;
+    } catch (const std::exception& e) {
+        result.unexpected_exception = true;
         result.error = e.what();
         return result;
     }
@@ -430,23 +600,43 @@ SliceResult run_slice(TriangleMesh mesh, const Vec3d& offset = {0., 0., 0.})
     return result;
 }
 
-// The checks every case makes on the slice: the pipeline came back, one way or the other, and the
-// geometry it built is a set of coordinates.
-void check_slice_result(const SliceResult& result)
+// The checks every case makes on the slice: the pipeline came back, one way or the other, a refusal
+// carries a message for the user, and nothing but an engine refusal got out.
+void check_slice_result(const SliceResult& result, bool must_be_rejected, bool deadline_fired)
 {
-    if (result.reported_error)
+    INFO("layers: " << result.layers << ", support facets: " << result.support_facets
+                    << ", raft facets: " << result.raft_facets);
+    if (result.unexpected_exception)
+        INFO("an exception that is not an engine refusal got out: " << result.error);
+    CHECK_FALSE(result.unexpected_exception);
+
+    if (result.reported_error) {
         INFO("the engine reported: " << result.error);
-    // Catch2 decomposes the expression itself, so the disjunction has to be parenthesized.
-    CHECK((result.finished || result.reported_error));
-    if (result.finished) {
-        INFO("layers: " << result.layers << ", support facets: " << result.support_facets
-                        << ", raft facets: " << result.raft_facets);
-        CHECK(result.geometry_finite);
+        // A refusal without a message leaves the user with nothing to act on.
+        CHECK_FALSE(result.error.empty());
     }
+
+    if (result.canceled) {
+        // Nothing cancels a slice but the watchdog.
+        CHECK(deadline_fired);
+    }
+
+    if (must_be_rejected) {
+        CHECK(result.reported_error);
+        return;
+    }
+
+    if (!result.finished && !result.reported_error && !result.canceled)
+        INFO("the pipeline came back without finishing and without an error");
+
+    // Catch2 decomposes the expression itself, so the disjunction has to be parenthesized.
+    CHECK((result.finished || result.reported_error || result.canceled));
+    if (result.finished)
+        CHECK(result.geometry_finite);
 }
 
 // ---------------------------------------------------------------------------------------------
-// A job on a worker thread, so that a hang is a failing test and not a test binary that never
+// A stage on a worker thread, so that a hang is a failing test and not a test binary that never
 // returns
 // ---------------------------------------------------------------------------------------------
 
@@ -457,15 +647,19 @@ struct WorkerState
     bool finished{false};
 };
 
-// Runs `job` on a worker thread and waits for it. Returns false if the job was still running after
-// `budget`, in which case the thread is detached and left to finish on its own: the test fails and
-// the process still exits. The job has to own everything it touches, the thread outlives nothing
-// this function owns.
+// Runs `job` on a worker thread and waits `budget` for it. Returns true if the job finished inside
+// the budget. If it did not, `on_timeout` is called (that is where a running slice is asked to
+// stop) and the job is given `cancel_grace` more to unwind. False means the job is still running
+// after the cancel: a hang, and a failing test.
+//
+// The job owns everything it touches and the worker state is shared, so a thread that outlives this
+// function has nothing left to write to.
 template <typename Job>
-bool run_on_worker(Job&& job, std::chrono::seconds budget)
+bool run_with_watchdog(Job&& job, std::chrono::seconds budget,
+                       const std::function<void()>& on_timeout)
 {
     auto state = std::make_shared<WorkerState>();
-    std::thread worker{[state, job = std::forward<Job>(job)]() mutable {
+    const auto work = [state, job = std::forward<Job>(job)]() mutable {
         try {
             job();
         } catch (...) {
@@ -476,7 +670,8 @@ bool run_on_worker(Job&& job, std::chrono::seconds budget)
             state->finished = true;
         }
         state->done.notify_all();
-    }};
+    };
+    std::future<void> future = std::async(std::launch::async, work);
 
     bool finished = false;
     {
@@ -485,159 +680,257 @@ bool run_on_worker(Job&& job, std::chrono::seconds budget)
     }
 
     if (finished)
-        worker.join();
-    else
-        worker.detach();
+        return true;
+
+    on_timeout();
+
+    {
+        std::unique_lock<std::mutex> lock{state->mutex};
+        finished = state->done.wait_for(lock, cancel_grace, [&state] { return state->finished; });
+    }
+
+    if (!finished) {
+        // The future of std::async waits for its task in the destructor, which is exactly what must
+        // not happen for a job that does not stop. The task holds nothing but its own state, so the
+        // future is leaked and the thread ends when the process does.
+        new std::future<void>{std::move(future)};
+    }
 
     return finished;
 }
 
-// The result of both stages, in a block that outlives a worker thread that overran its budget.
-struct BothStages
+// ---------------------------------------------------------------------------------------------
+// One case: both stages, each under its own watchdog
+// ---------------------------------------------------------------------------------------------
+
+struct CaseResults
 {
     SupportResult support;
     SliceResult slice;
 };
 
+CaseResults run_case(const RobustnessCase& test_case)
+{
+    // The job copies what it needs: a thread that outlives this function must not read the
+    // caller's storage.
+    const RobustnessCase c{test_case};
+    const TriangleMesh mesh = make_mesh(c.build());
+
+    auto support = std::make_shared<SupportResult>();
+    const bool support_finished = run_with_watchdog(
+        [support, mesh, c] { *support = run_support_tool(mesh, c); },
+        support_deadline + support_slack, {});
+
+    if (!support_finished)
+        FAIL("the support tool is still running " << (support_deadline + support_slack).count()
+             << " s after it started, although it was given a stop function");
+    check_support_result(*support, c.must_have_no_points);
+
+    auto slice = std::make_shared<SliceResult>();
+    auto stop = std::make_shared<PrintStop>();
+    auto deadline_fired = std::make_shared<std::atomic<bool>>(false);
+    const bool slice_finished = run_with_watchdog(
+        [slice, stop, mesh, c] { *slice = run_slice(mesh, c, stop); },
+        c.slice_budget,
+        [stop, deadline_fired] {
+            deadline_fired->store(true);
+            stop->request_stop();
+        });
+
+    if (!slice_finished)
+        FAIL("the slice is still running " << c.slice_budget.count() << " s after it started, "
+             << "and it did not stop when it was asked to");
+
+    check_slice_result(*slice, c.must_be_rejected, deadline_fired->load());
+    return CaseResults{*support, *slice};
+}
+
 } // namespace
 
 TEST_CASE("Robustness: an empty mesh gives no supports and nothing to slice", "[SLA][robustness]")
 {
-    SupportResult support;
-    REQUIRE_NOTHROW(support = run_support_tool(make_mesh({})));
-    check_support_result(support, /*expect_empty*/ true);
+    RobustnessCase test_case =
+        robustness_case("an empty mesh", [] { return indexed_triangle_set{}; });
+    test_case.must_have_no_points = true;
+    INFO("mesh: " << test_case.name);
 
-    SliceResult slice;
-    REQUIRE_NOTHROW(slice = run_slice(make_mesh({})));
-    check_slice_result(slice);
+    const CaseResults results = run_case(test_case);
     // Nothing to support and nothing to raft.
-    CHECK(slice.support_facets == 0);
-    CHECK(slice.raft_facets == 0);
+    CHECK(results.slice.support_facets == 0);
+    CHECK(results.slice.raft_facets == 0);
 }
 
 TEST_CASE("Robustness: a single triangle neither crashes nor hangs", "[SLA][robustness]")
 {
-    SupportResult support;
-    REQUIRE_NOTHROW(support = run_support_tool(make_mesh(single_triangle_its())));
-    check_support_result(support, /*expect_empty*/ false);
-
-    SliceResult slice;
-    REQUIRE_NOTHROW(slice = run_slice(make_mesh(single_triangle_its())));
-    check_slice_result(slice);
+    RobustnessCase test_case =
+        robustness_case("a single triangle", single_triangle_its);
+    INFO("mesh: " << test_case.name);
+    run_case(test_case);
 }
 
 TEST_CASE("Robustness: a degenerate triangle neither crashes nor hangs", "[SLA][robustness]")
 {
-    SupportResult support;
-    REQUIRE_NOTHROW(support = run_support_tool(make_mesh(degenerate_triangle_its())));
-    check_support_result(support, /*expect_empty*/ false);
-
-    SliceResult slice;
-    REQUIRE_NOTHROW(slice = run_slice(make_mesh(degenerate_triangle_its())));
-    check_slice_result(slice);
+    RobustnessCase test_case =
+        robustness_case("a degenerate, zero area triangle", degenerate_triangle_its);
+    INFO("mesh: " << test_case.name);
+    run_case(test_case);
 }
 
 TEST_CASE("Robustness: an open box neither crashes nor hangs", "[SLA][robustness]")
 {
-    SupportResult support;
-    REQUIRE_NOTHROW(support = run_support_tool(make_mesh(open_box_its(20., 20., 20.))));
-    check_support_result(support, /*expect_empty*/ false);
+    RobustnessCase test_case = robustness_case(
+        "a box with its top face missing", [] { return open_box_its(20., 20., 20.); });
+    INFO("mesh: " << test_case.name);
+    run_case(test_case);
+}
 
-    SliceResult slice;
-    REQUIRE_NOTHROW(slice = run_slice(make_mesh(open_box_its(20., 20., 20.))));
-    check_slice_result(slice);
+TEST_CASE("Robustness: a box with a hole in a face neither crashes nor hangs", "[SLA][robustness]")
+{
+    RobustnessCase test_case = robustness_case(
+        "a box with a square hole in its top face", [] { return holed_box_its(20., 20., 20.); });
+    INFO("mesh: " << test_case.name);
+    run_case(test_case);
 }
 
 TEST_CASE("Robustness: a box with a flipped face neither crashes nor hangs", "[SLA][robustness]")
 {
-    SupportResult support;
-    REQUIRE_NOTHROW(support = run_support_tool(make_mesh(flipped_face_box_its(20., 20., 20.))));
-    check_support_result(support, /*expect_empty*/ false);
-
-    SliceResult slice;
-    REQUIRE_NOTHROW(slice = run_slice(make_mesh(flipped_face_box_its(20., 20., 20.))));
-    check_slice_result(slice);
+    RobustnessCase test_case = robustness_case(
+        "a box with one face turned inwards", [] { return flipped_face_box_its(20., 20., 20.); });
+    INFO("mesh: " << test_case.name);
+    run_case(test_case);
 }
 
-TEST_CASE("Robustness: two overlapping cubes in one volume neither crash nor hang", "[SLA][robustness]")
+TEST_CASE("Robustness: a box with every normal inverted neither crashes nor hangs", "[SLA][robustness]")
 {
-    SupportResult support;
-    REQUIRE_NOTHROW(support = run_support_tool(make_mesh(overlapping_cubes_its(20.))));
-    check_support_result(support, /*expect_empty*/ false);
+    RobustnessCase test_case = robustness_case(
+        "a box with every face turned inwards", [] { return inverted_box_its(20., 20., 20.); });
+    INFO("mesh: " << test_case.name);
+    run_case(test_case);
+}
 
-    SliceResult slice;
-    REQUIRE_NOTHROW(slice = run_slice(make_mesh(overlapping_cubes_its(20.))));
-    check_slice_result(slice);
+TEST_CASE("Robustness: a mesh with a non-manifold edge neither crashes nor hangs", "[SLA][robustness]")
+{
+    RobustnessCase test_case = robustness_case(
+        "a box with three faces on one edge", [] { return non_manifold_box_its(20., 20., 20.); });
+    INFO("mesh: " << test_case.name);
+    run_case(test_case);
 }
 
 TEST_CASE("Robustness: a cube with duplicated faces neither crashes nor hangs", "[SLA][robustness]")
 {
-    SupportResult support;
-    REQUIRE_NOTHROW(support = run_support_tool(make_mesh(duplicated_faces_box_its(20., 20., 20.))));
-    check_support_result(support, /*expect_empty*/ false);
+    RobustnessCase test_case = robustness_case(
+        "a cube with its faces twice", [] { return duplicated_faces_box_its(20., 20., 20.); });
+    INFO("mesh: " << test_case.name);
+    run_case(test_case);
+}
 
-    SliceResult slice;
-    REQUIRE_NOTHROW(slice = run_slice(make_mesh(duplicated_faces_box_its(20., 20., 20.))));
-    check_slice_result(slice);
+TEST_CASE("Robustness: a mesh with a duplicate triangle neither crashes nor hangs", "[SLA][robustness]")
+{
+    RobustnessCase test_case =
+        robustness_case("a box with one triangle twice at the same coordinates",
+                        [] { return duplicate_triangle_its(20., 20., 20.); });
+    INFO("mesh: " << test_case.name);
+    run_case(test_case);
+}
+
+TEST_CASE("Robustness: two overlapping cubes in one volume neither crash nor hang", "[SLA][robustness]")
+{
+    RobustnessCase test_case = robustness_case(
+        "two cubes merged into one overlapping volume", [] { return overlapping_cubes_its(20.); });
+    INFO("mesh: " << test_case.name);
+    run_case(test_case);
+}
+
+TEST_CASE("Robustness: two crossing shells neither crash nor hang", "[SLA][robustness]")
+{
+    RobustnessCase test_case =
+        robustness_case("two crossing cubes", [] { return crossing_cubes_its(40.); });
+    INFO("mesh: " << test_case.name);
+    run_case(test_case);
+}
+
+TEST_CASE("Robustness: two cubes touching at a face neither crash nor hang", "[SLA][robustness]")
+{
+    RobustnessCase test_case =
+        robustness_case("two cubes touching along a face", [] { return touching_cubes_its(20.); });
+    INFO("mesh: " << test_case.name);
+    run_case(test_case);
 }
 
 TEST_CASE("Robustness: a tiny 0.05 mm cube neither crashes nor hangs", "[SLA][robustness]")
 {
-    SupportResult support;
-    REQUIRE_NOTHROW(support = run_support_tool(make_mesh(box_its(0.05, 0.05, 0.05))));
-    check_support_result(support, /*expect_empty*/ false);
-
-    SliceResult slice;
-    REQUIRE_NOTHROW(slice = run_slice(make_mesh(box_its(0.05, 0.05, 0.05))));
-    check_slice_result(slice);
+    RobustnessCase test_case =
+        robustness_case("a 0.05 mm cube", [] { return box_its(0.05, 0.05, 0.05); });
+    INFO("mesh: " << test_case.name);
+    run_case(test_case);
 }
 
 TEST_CASE("Robustness: a 0.02 mm thin plate neither crashes nor hangs", "[SLA][robustness]")
 {
-    SupportResult support;
-    REQUIRE_NOTHROW(support = run_support_tool(make_mesh(box_its(20., 20., 0.02))));
-    check_support_result(support, /*expect_empty*/ false);
-
-    SliceResult slice;
-    REQUIRE_NOTHROW(slice = run_slice(make_mesh(box_its(20., 20., 0.02))));
-    check_slice_result(slice);
+    RobustnessCase test_case =
+        robustness_case("a 20 x 20 x 0.02 mm plate", [] { return box_its(20., 20., 0.02); });
+    INFO("mesh: " << test_case.name);
+    run_case(test_case);
 }
 
-TEST_CASE("Robustness: a tall thin needle neither crashes nor hangs", "[SLA][robustness]")
+TEST_CASE("Robustness: a 0.1 mm needle neither crashes nor hangs", "[SLA][robustness]")
 {
     // 150 mm is about the maximum print height of the machines this slicer drives.
-    SupportResult support;
-    REQUIRE_NOTHROW(support = run_support_tool(make_mesh(box_its(0.5, 0.5, 150.))));
-    check_support_result(support, /*expect_empty*/ false);
-
-    SliceResult slice;
-    REQUIRE_NOTHROW(slice = run_slice(make_mesh(box_its(0.5, 0.5, 150.))));
-    check_slice_result(slice);
+    RobustnessCase test_case =
+        robustness_case("a 0.1 x 0.1 x 150 mm needle", [] { return box_its(0.1, 0.1, 150.); });
+    INFO("mesh: " << test_case.name);
+    run_case(test_case);
 }
 
-TEST_CASE("Robustness: a cube 1500 mm from the origin neither crashes nor hangs", "[SLA][robustness]")
+TEST_CASE("Robustness: a one metre mesh neither crashes nor hangs", "[SLA][robustness]")
+{
+    // A metre cube at a 0.05 mm layer height is twenty thousand layers of a plate the size of the
+    // bed. The mesh is what is being tested here, not the layer count, so it is sliced with a layer
+    // height that keeps the number of layers in the tens.
+    RobustnessCase test_case =
+        robustness_case("a one metre cube", [] { return box_its(1000., 1000., 1000.); });
+    test_case.layer_height = 100.;
+    INFO("mesh: " << test_case.name);
+    run_case(test_case);
+}
+
+TEST_CASE("Robustness: a cube far from the origin neither crashes nor hangs", "[SLA][robustness]")
 {
     // The support generator has taken minutes on a mesh with coordinates around 1364 mm
-    // (tests/data/overhang.obj, hidden in the island coverage test). Both stages therefore run on
-    // a worker thread: the support one with a stop function that fires after the deadline, the
-    // slice one with a deadline of its own, since the slice has no stop function.
-    const Vec3d offset{1500., 0., 0.};
-    const TriangleMesh mesh = make_mesh(box_its(20., 20., 20.));
+    // (tests/data/overhang.obj, hidden in the island coverage test), and this one is a hundred
+    // times further out. Both stages therefore get a longer budget, and the watchdog cancels the
+    // slice if it does not come back on its own.
+    RobustnessCase test_case =
+        robustness_case("a cube 100 km from the origin", [] { return box_its(20., 20., 20.); });
+    test_case.offset = Vec3d{100000., 0., 0.};
+    test_case.slice_budget = std::chrono::seconds{180};
+    INFO("mesh: " << test_case.name);
+    run_case(test_case);
+}
 
-    auto stages = std::make_shared<BothStages>();
+TEST_CASE("Robustness: a model floating above the plate without supports neither crashes nor hangs",
+          "[SLA][robustness]")
+{
+    // Nothing holds the object up and nothing was generated to hold it up: the layers start in
+    // mid-air, well above the plate.
+    RobustnessCase test_case = robustness_case(
+        "a cube 50 mm above the plate, supports off", [] { return box_its(20., 20., 20.); });
+    test_case.offset = Vec3d{0., 0., 50.};
+    test_case.supports = false;
+    INFO("mesh: " << test_case.name);
+    run_case(test_case);
+}
 
-    // A few seconds of slack over the stop function, so a run that ends on the deadline is still
-    // seen as finished rather than as a hang.
-    const bool support_finished = run_on_worker(
-        [stages, mesh, offset] { stages->support = run_support_tool(mesh, offset); },
-        support_deadline + std::chrono::seconds{5});
-
-    REQUIRE(support_finished);
-    REQUIRE_NOTHROW(check_support_result(stages->support, /*expect_empty*/ false));
-
-    const bool slice_finished = run_on_worker(
-        [stages, mesh, offset] { stages->slice = run_slice(mesh, offset); }, slice_deadline);
-
-    REQUIRE(slice_finished);
-    REQUIRE_NOTHROW(check_slice_result(stages->slice));
+TEST_CASE("Robustness: a mesh with a vertex that is not a number is refused", "[SLA][robustness]")
+{
+    // A NaN and an infinity among the vertices. Nothing about this mesh can be sliced: the engine
+    // has to say so with a message instead of slicing garbage, and the support tool has to come
+    // back with nothing rather than with a point at infinity.
+    RobustnessCase test_case =
+        robustness_case("a box with a NaN and an infinity among its vertices",
+                        [] { return non_finite_its(20., 20., 20.); });
+    test_case.must_have_no_points = true;
+    test_case.must_be_rejected = true;
+    INFO("mesh: " << test_case.name);
+    run_case(test_case);
 }

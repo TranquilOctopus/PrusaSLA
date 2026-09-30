@@ -7,6 +7,8 @@
 #include "libslic3r/Model.hpp"
 #include "libslic3r/Thread.hpp"
 
+#include <cmath>
+
 #include <tbb/parallel_for.h>
 #include <boost/filesystem/path.hpp>
 #include <Slic3r/Assert.hpp>
@@ -24,6 +26,7 @@
 #include "Slic3r/Biz/Parser/PlaceholderParser.hpp"
 #include "Slic3r/Biz/Algorithms/Scaling.hpp"
 #include "Slic3r/Exception.hpp"
+#include "Slic3r/LegacyFormat.hpp"
 #include "libslic3r/InstanceTransformations.hpp"
 
 #include "libslic3r/ModelUtils.hpp"
@@ -1015,6 +1018,33 @@ InstanceTrafos get_instance_trafos(const SLAPrintObject& object) {
     return instance_trafos;
 }
 
+namespace {
+
+// A vertex that is not a number (a NaN, an infinity) makes every step of the pipeline meaningless:
+// the bounding box of such a mesh cannot even be compared (the box helpers assert on it) and
+// scaled() of it is not a level, so the slice index would run from one end of the coordinate range
+// to the other. Return the first object that carries such a vertex, nullptr if there is none.
+const Domain::ModelObject* first_object_with_non_finite_vertex(const Domain::Model& model)
+{
+    for (const Domain::ModelObject* object : model.objects) {
+        if (!object)
+            continue;
+        for (const Domain::ModelVolume* volume : object->volumes) {
+            if (!volume || !volume->mesh_ptr())
+                continue;
+            for (const Domain::Vec3f& vertex : volume->mesh().its.vertices) {
+                const bool is_number = std::isfinite(vertex.x()) && std::isfinite(vertex.y())
+                                    && std::isfinite(vertex.z());
+                if (!is_number)
+                    return object;
+            }
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
 Biz::Slicing::ApplyStatus::Status SLAPrint::update(
     Domain::Model& model,
     const ConfigPack& config,
@@ -1375,6 +1405,16 @@ void SLAPrint::slice(
             this->cleanup();
         }
     };
+
+    // Refuse a model that cannot be sliced before the first step reads it: a vertex that is not a
+    // number takes the bounding box of the object (and with it the layer count of the slice index)
+    // out of the range of coordinates. This is the one place where the caller is guaranteed to have
+    // a try around it, so the app shows the message on the bed instead of dying in a comparison.
+    const Domain::ModelObject* broken = first_object_with_non_finite_vertex(m_model);
+    if (broken != nullptr)
+        throw Slic3r::RuntimeError(format(
+            _u8L("Model named: %s has a vertex that is not a number (NaN or infinity) and cannot "
+                 "be sliced. Repairing the model might fix the problem."), broken->name));
 
     m_generate_support_points_for.reset();
     if (slice_until_step.has_value()
