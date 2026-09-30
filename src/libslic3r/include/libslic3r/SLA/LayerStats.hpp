@@ -81,4 +81,17 @@ std::vector<float> peel_force_estimate(const std::vector<Domain::ExPolygons>& la
 /// reports nothing, which is how a peel_force_warning of zero turns the check off.
 std::vector<size_t> layers_over_peel_force(const std::vector<float>& peel_force_n, double threshold_n);
 
+/**
+ * @brief The smallest dimension of a cross section, in mm: the caliper of the thinnest part.
+ *
+ * This is the width a wall has to fit into to hollow a model, so it answers "can this shape take
+ * a wall of this thickness at all". Every polygon of the layer is measured on its own and the
+ * smallest of them is the answer, because a model of several separate blobs on a layer is as thin
+ * as its thinnest blob. The caliper of a polygon is the smallest distance between two parallel
+ * lines that enclose it, computed over the edges of its convex hull, so a concave region is as
+ * thin as its narrowest neck. Zero when the layer holds no polygon with a shape, and the empty
+ * layer therefore reads as "no cross section", never as a thin one.
+ */
+double min_cross_section_mm(const Domain::ExPolygons& slices);
+
 } // namespace Slic3r::SLA

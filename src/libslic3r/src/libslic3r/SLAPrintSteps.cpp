@@ -14,6 +14,7 @@
 #include <optional>
 #include <set>
 #include <tuple>
+#include <unordered_map>
 #include <vector>
 #include <cassert>
 
@@ -24,6 +25,7 @@
 #include "Slic3r/Domain/SLA/PrintTime.hpp"
 #include "Slic3r/Exception.hpp"
 #include "Slic3r/Biz/Algorithms/ExPolygon.hpp"
+#include "Slic3r/Biz/Algorithms/Polyline.hpp"
 #include "Slic3r/Biz/Algorithms/Execution/Execution.hpp"
 #include "Slic3r/Biz/Algorithms/Execution/ExecutionTBB.hpp"
 #include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
@@ -1489,6 +1491,47 @@ static std::vector<SLA::ObjectLayer> object_layers_of(const SLAPrint::PrintLayer
     return out;
 }
 
+// What one model object costs on the printed layers (M4.8h), layer by layer: the area of its body
+// and the length of the outline of that area, and the cross section of the layer at half the height.
+// Filled in printlayerfn() below, out of the same per object polygons the merged layer is built of,
+// so the table costs an area and a perimeter pass and not a second set of clipper runs.
+struct ObjectSliceAccumulator
+{
+    Domain::ObjectID object_id;
+    std::string name;
+    // The body of the object is printed hollow already, so there is nothing left to hollow out.
+    bool hollowed = false;
+    std::vector<double> layer_area_mm2;
+    std::vector<double> layer_perimeter_mm;
+    // The body of the object on the layer at half the height, and nothing on any other layer: that
+    // is the cross section the hollowing rule of the frontend measures.
+    ExPolygons mid_height_slices;
+};
+
+// One accumulator per model object of the print. The slot of every object in @p slots is where its
+// accumulator ended up, so that the layer loop can find it from the print object of a slice record.
+static std::vector<ObjectSliceAccumulator>
+object_slice_accumulators(const PrintObjects& objects,
+                          size_t layer_count,
+                          std::unordered_map<const SLAPrintObject*, size_t>& slots)
+{
+    std::vector<ObjectSliceAccumulator> out;
+    out.reserve(objects.size());
+    for (const SLAPrintObject* po : objects) {
+        if (po == nullptr || po->model_object() == nullptr)
+            continue;
+        ObjectSliceAccumulator accumulator;
+        accumulator.object_id          = po->model_object()->id();
+        accumulator.name               = po->model_object()->name();
+        accumulator.hollowed           = po->config().get<bool>("hollowing_enable");
+        accumulator.layer_area_mm2     .assign(layer_count, 0.);
+        accumulator.layer_perimeter_mm .assign(layer_count, 0.);
+        slots[po] = out.size();
+        out.push_back(std::move(accumulator));
+    }
+    return out;
+}
+
 // Merging the slices from all the print objects into one slice grid and
 // calculating print statistics from the merge result.
 void SLAPrint::Steps::merge_slices_and_eval_stats() {
@@ -1520,14 +1563,24 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
     LayersInfo layers_info(printer_input.size());
     const double delta_fade_time = (init_exp_time - exp_time) / (fade_layers_cnt + 1);
 
+    // M4.8h: what every model object costs on the layers, measured while the layers are merged. The
+    // cross section the hollowing rule needs is the one at half the height of the print, which is
+    // the layer in the middle of the layer list.
+    std::unordered_map<const SLAPrintObject*, size_t> object_stats_slot;
+    std::vector<ObjectSliceAccumulator> object_stats =
+        object_slice_accumulators(m_print->objects(), printer_input.size(), object_stats_slot);
+    const size_t mid_height_layer = printer_input.size() / 2;
+
     // Going to parallel:
     auto printlayerfn = [
             // functions and read only vars
             area_fill, display_area, exp_time, init_exp_time, fast_tilt, slow_tilt, hv_tilt,
             &config, delta_fade_time, is_prusa_print, first_slow_layers, below, above,
+            &object_stats_slot, mid_height_layer,
             // write vars
             &layers = m_print->m_printer_input,
-            &layers_info](size_t sliced_layer_cnt)
+            &layers_info,
+            &object_stats](size_t sliced_layer_cnt)
     {
         PrintLayer &layer = layers[sliced_layer_cnt];
 
@@ -1565,6 +1618,31 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
         for(const SliceRecord& record : layer.slices()) {
             const SLAPrintObject::Instances& instances = record.print_obj()->m_instances;
             ExPolygons modelslices = get_all_polygons(record, instances, soModel);
+
+            // M4.8h: this is also what the object of the record costs on this layer. Measured
+            // before the polygons are moved away, off the same ones, so the per object table
+            // costs no clipper run of its own.
+            const auto slot = object_stats_slot.find(record.print_obj());
+            if (slot != object_stats_slot.end()) {
+                ObjectSliceAccumulator& stats = object_stats[slot->second];
+                double area_scaled = 0.;
+                double length_scaled = 0.;
+                for (const ExPolygon& polygon : modelslices) {
+                    area_scaled += Algorithms::ExPolygon::area(polygon);
+                    length_scaled += Algorithms::Polyline::length(polygon.contour.points);
+                    for (const auto& hole : polygon.holes)
+                        length_scaled += Algorithms::Polyline::length(hole.points);
+                }
+                stats.layer_area_mm2[sliced_layer_cnt] += area_scaled * sqr(SCALING_FACTOR);
+                stats.layer_perimeter_mm[sliced_layer_cnt] += length_scaled * SCALING_FACTOR;
+                if (sliced_layer_cnt == mid_height_layer) {
+                    // Only one layer of the print is kept, the cross section at half the height,
+                    // which is where the hollowing rule looks for room for a wall.
+                    for (const ExPolygon& polygon : modelslices)
+                        stats.mid_height_slices.emplace_back(polygon);
+                }
+            }
+
             for(ExPolygon& p_tmp : modelslices) model_polygons.emplace_back(std::move(p_tmp));
 
             ExPolygons supportslices = get_all_polygons(record, instances, soSupport);
@@ -1680,6 +1758,37 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
     // closed at both ends, which is a hollow print whose drain hole is missing or too small).
     const SLA::CavityAnalysis cavities =
         SLA::detect_cavities(all_layer_polygons, layer_thicknesses_mm);
+
+    // What every model object costs on the printed layers (M4.8h), out of the table printlayerfn
+    // filled in: the cured volume of the body and its outline on every layer, plus the smallest
+    // cross section at half the height. The hollowing suggestion of the frontend is estimated from
+    // it, so nothing has to be sliced again to say how much resin a wall would save. An object with
+    // no body on any layer (nothing of it was printed) has nothing to hollow and is left out. Two
+    // instances of one model are measured on their own, so a plate of two copies is as thin as the
+    // thinnest copy rather than as wide as the pair.
+    std::vector<Sla::ObjectSliceStats> object_slice_stats;
+    object_slice_stats.reserve(object_stats.size());
+    for (ObjectSliceAccumulator& stats : object_stats) {
+        Sla::ObjectSliceStats entry;
+        entry.object_id            = stats.object_id;
+        entry.name                 = stats.name;
+        entry.hollowed             = stats.hollowed;
+        entry.min_section_mm       = SLA::min_cross_section_mm(stats.mid_height_slices);
+        entry.layer_thicknesses_mm = layer_thicknesses_mm;
+        double volume_mm3          = 0.;
+        entry.layer_areas_mm2.reserve(stats.layer_area_mm2.size());
+        entry.layer_perimeters_mm.reserve(stats.layer_perimeter_mm.size());
+        for (size_t layer = 0; layer < stats.layer_area_mm2.size(); ++layer) {
+            const double thickness = layer < layer_thicknesses_mm.size() ? layer_thicknesses_mm[layer] : 0.f;
+            volume_mm3 += stats.layer_area_mm2[layer] * thickness;
+            entry.layer_areas_mm2.push_back(static_cast<float>(stats.layer_area_mm2[layer]));
+            entry.layer_perimeters_mm.push_back(static_cast<float>(stats.layer_perimeter_mm[layer]));
+        }
+        if (volume_mm3 > 0.) {
+            entry.volume_mm3 = volume_mm3;
+            object_slice_stats.push_back(std::move(entry));
+        }
+    }
 
     // Name the model every island belongs to (M4.8g). The layers above are merged over all the
     // objects, so the model of an island is the one that holds most of its area on that layer.
@@ -1849,6 +1958,7 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
         .layer_areas = std::move(layer_areas),
         .layer_peel_force = std::move(layer_peel_force),
         .issues = std::move(issues),
+        .object_slice_stats = std::move(object_slice_stats),
         .print_time_s = print_time_estimate.valid
             ? std::optional<double>(print_time_estimate.total_s)
             : std::nullopt,
