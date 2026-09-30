@@ -33,6 +33,7 @@
 #include <libslic3r/SLA/Pad.hpp>
 #include <libslic3r/SLA/SupportPointGenerator.hpp>
 #include <libslic3r/SLA/ZCorrection.hpp>
+#include <libslic3r/SLA/CavityDetection.hpp>
 #include <libslic3r/SLA/IslandDetection.hpp>
 #include <libslic3r/SLA/LayerStats.hpp>
 #include <libslic3r/SLA/SupportTree.hpp>
@@ -1595,6 +1596,22 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
     }
     std::vector<SLA::IslandHit> island_hits = SLA::detect_islands(all_layer_polygons, MIN_ISLAND_AREA_MM2);
 
+    // The thickness of each layer in mm, for the volumes of the cavities detected below (M4.8e).
+    std::vector<float> layer_thicknesses_mm;
+    layer_thicknesses_mm.reserve(printer_input.size());
+    for (const PrintLayer& layer : printer_input) {
+        float thickness = 0.f;
+        const auto& slice_records = layer.slices();
+        if (!slice_records.empty())
+            thickness = slice_records.front().get().layer_height();
+        layer_thicknesses_mm.push_back(thickness);
+    }
+
+    // Detect suction cups (a region closed on top and open below) and trapped resin (a region
+    // closed at both ends, which is a hollow print whose drain hole is missing or too small).
+    const SLA::CavityAnalysis cavities =
+        SLA::detect_cavities(all_layer_polygons, layer_thicknesses_mm);
+
     auto& print_statistics = m_print->m_print_statistics;
     print_statistics = create_stats(layers_info, is_prusa_print);
     if (printer_input.empty()) // set as invalid
@@ -1634,7 +1651,7 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
 
     // Convert island hits to SlaIssue entries.
     std::vector<Sla::SlaIssue> issues;
-    issues.reserve(island_hits.size());
+    issues.reserve(island_hits.size() + cavities.cups.size() + cavities.trapped_resin.size());
     for (const auto& hit : island_hits) {
         // Get the Z coordinate for this layer.
         float layer_z = 0.0f;
@@ -1648,6 +1665,48 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
             .layer = hit.layer_index,
             .object_id = Domain::ObjectID{}, // Merged layers cannot attribute to a single object.
             .position = Domain::Vec3d(hit.centroid.x(), hit.centroid.y(), layer_z),
+            .note = note_ss.str()
+        });
+    }
+
+    // The Z of the bottom of a layer, where the opening of a cup and the floor of a cavity are.
+    // The layer numbers in the notes are the 0 based slice layer indices, the way SlaIssue carries
+    // them; the sidebar counts them from one when it shows them.
+    const auto layer_bottom_z = [&heights, &layer_thicknesses_mm](size_t layer_index) {
+        float z = 0.f;
+        if (layer_index < heights.size())
+            z = heights[layer_index];
+        if (layer_index < layer_thicknesses_mm.size())
+            z -= layer_thicknesses_mm[layer_index];
+        return z;
+    };
+
+    // Convert the cups and the trapped cavities to SlaIssue entries.
+    for (const auto& cup : cavities.cups) {
+        std::ostringstream note_ss;
+        note_ss << std::fixed << std::setprecision(2) << "cup, " << cup.opening_area_mm2
+                << " mm2 opening, layers " << cup.first_layer << "-" << cup.last_layer << ", "
+                << cup.volume_mm3 << " mm3";
+        issues.emplace_back(Sla::SlaIssue{
+            .kind = Sla::SlaIssue::Kind::Cup,
+            .layer = cup.first_layer,
+            .object_id = Domain::ObjectID{},
+            .position = Domain::Vec3d(cup.opening_centroid.x(), cup.opening_centroid.y(),
+                                      layer_bottom_z(cup.first_layer)),
+            .note = note_ss.str()
+        });
+    }
+    for (const auto& trapped : cavities.trapped_resin) {
+        std::ostringstream note_ss;
+        note_ss << std::fixed << std::setprecision(2) << "trapped resin, layers "
+                << trapped.first_layer << "-" << trapped.last_layer << ", " << trapped.volume_mm3
+                << " mm3";
+        issues.emplace_back(Sla::SlaIssue{
+            .kind = Sla::SlaIssue::Kind::TrappedResin,
+            .layer = trapped.first_layer,
+            .object_id = Domain::ObjectID{},
+            .position = Domain::Vec3d(trapped.centroid.x(), trapped.centroid.y(),
+                                      layer_bottom_z(trapped.first_layer)),
             .note = note_ss.str()
         });
     }
