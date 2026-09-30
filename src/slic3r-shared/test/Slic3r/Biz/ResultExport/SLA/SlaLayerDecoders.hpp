@@ -1,8 +1,8 @@
 #pragma once
 
 // Decoders for the layer images the SLA archive writers produce, so a test can look at the
-// picture the printer's display receives. Nothing in the product reads .goo, .pwmx or .pm5 back,
-// so the two run-length schemes are decoded here, from the encoders in
+// picture the printer's display receives. Nothing in the product reads .ctb, .goo, .pwmx or .pm5
+// back, so the three run-length schemes are decoded here, from the encoders in
 // src/libslic3r/src/libslic3r/Format/. The PNG and SVG writers need no decoder of their own:
 // the image library is already there, and the vector one is parsed for its bounding box.
 
@@ -49,6 +49,39 @@ struct LayerPlacement
         return width > 0. && height > 0. && max_x >= min_x && max_y >= min_y;
     }
 };
+
+// ---------------------------------------------------------------------------
+// CTB format decoder (from libslic3r/src/libslic3r/Format/CtbSLA.cpp CtbSLARasterEncoder)
+// ---------------------------------------------------------------------------
+// One control byte per run, in raster order. A control byte 0x00..0xFD is a run of (control + 1)
+// pixels of the value byte after it; a control byte 0xFF is a literal block whose length byte is
+// followed by that many raw pixel bytes. There is no end marker and no checksum: the layer
+// definition carries the byte count.
+inline std::vector<uint8_t> decode_ctb_layer(const std::vector<uint8_t>& encoded, size_t expected_pixels)
+{
+    std::vector<uint8_t> pixels;
+    pixels.reserve(expected_pixels);
+
+    size_t i = 0;
+    while (i < encoded.size() && pixels.size() < expected_pixels) {
+        const uint8_t control = encoded[i++];
+        if (control == 0xFF) {
+            if (i >= encoded.size())
+                break;
+            const size_t literal = encoded[i++];
+            for (size_t n = 0; n < literal && i < encoded.size(); ++n)
+                pixels.push_back(encoded[i++]);
+        } else {
+            if (i >= encoded.size())
+                break;
+            const uint8_t value = encoded[i++];
+            const size_t run = std::min<size_t>(size_t(control) + 1, expected_pixels - pixels.size());
+            pixels.insert(pixels.end(), run, value);
+        }
+    }
+
+    return pixels;
+}
 
 // ---------------------------------------------------------------------------
 // GOO format decoder (from libslic3r/src/libslic3r/Format/GooSLA.cpp GooSLARasterEncoder)

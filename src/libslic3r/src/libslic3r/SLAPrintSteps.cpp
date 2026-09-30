@@ -70,6 +70,7 @@
 #include "libslic3r/Format/SL1_SVG.hpp"
 #include "libslic3r/Format/AnycubicSLA.hpp"
 #include "libslic3r/Format/GooSLA.hpp"
+#include "libslic3r/Format/CtbSLA.hpp"
 #include "Slic3r/Biz/Algorithms/BoundingBox.hpp"
 
 using namespace Slic3r::Biz;
@@ -1686,6 +1687,8 @@ Sla::FileDataType get_output_type(const SLAPrintConfigView& cfg)
         return Sla::FileDataType::anycubic;
     } else if (archive_format == "goo") { // Elegoo GOO
         return Sla::FileDataType::goo;
+    } else if (archive_format == "ctb") { // Chitubox CTB, unencrypted v2/v3 only
+        return Sla::FileDataType::ctb;
     } else if (archive_format == "pm5") { // Anycubic PM5
         return Sla::FileDataType::pm5;
     } else {
@@ -1738,6 +1741,7 @@ void SLAPrint::Steps::rasterize()
         case FileDataType::pm5: // pm5 layer encoding is unconfirmed; reusing Anycubic rasterizer for now
             rasterizer_ptr = create_anycubic_rasterizer(printer_config); break;
         case FileDataType::goo: rasterizer_ptr = create_goo_rasterizer(printer_config); break;
+        case FileDataType::ctb: rasterizer_ptr = create_ctb_rasterizer(printer_config); break;
         default:
             throw Biz::Slicing::Exception{
                 Biz::Slicing::Error{Biz::Slicing::ErrorCode::UnsupportedOutputFormat}

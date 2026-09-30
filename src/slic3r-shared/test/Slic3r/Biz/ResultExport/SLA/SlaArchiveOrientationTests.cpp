@@ -21,6 +21,7 @@ using Slic3r::Biz::PrintHost::Sla::SlaArchiveFormatRegistry;
 using Slic3r::Biz::Slicing::Sla::FileDataType;
 using Slic3r::Domain::SLADisplayOrientation;
 using Slic3r::Domain::Vec3d;
+using Slic3r::Test::Sla::decode_ctb_layer;
 using Slic3r::Test::Sla::decode_goo_layer;
 using Slic3r::Test::Sla::decode_png_layer;
 using Slic3r::Test::Sla::decode_pw0_layer;
@@ -215,6 +216,12 @@ static LayerPlacement written_layer_placement(
     case FileDataType::goo:
         return placement_of_pixels(
             decode_goo_layer(layer, pixels_x * pixels_y),
+            pixels_x,
+            pixels_y
+        );
+    case FileDataType::ctb:
+        return placement_of_pixels(
+            decode_ctb_layer(layer, pixels_x * pixels_y),
             pixels_x,
             pixels_y
         );
