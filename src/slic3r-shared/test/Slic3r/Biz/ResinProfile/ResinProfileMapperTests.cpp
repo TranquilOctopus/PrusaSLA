@@ -429,6 +429,9 @@ TEST_CASE(
         const MappedField& row = row_of(result, expected.source_key);
 
         CHECK(row.status == expected.status);
+        // The value the file had is on the row as well, so a converted or a rejected value can be
+        // read off it without the note.
+        CHECK(row.source_value == expected.source_value);
         CHECK(row.target_key == expected.target_key);
         CHECK(row.value == expected.written_value);
         CHECK_FALSE(row.note.empty());
@@ -528,6 +531,96 @@ TEST_CASE("ResinProfileMapper - mm/min speeds become mm/s", "[resin_profile][map
 }
 
 TEST_CASE(
+    "ResinProfileMapper - a row carries the value of the file and the unit of both sides",
+    "[resin_profile][mapper]"
+)
+{
+    SECTION("a speed is shown as the file had it and as it is written")
+    {
+        const MappingResult result = map_resin_profile(
+            profile_of({{"normalLayerLiftSpeed", "150"}}),
+            TargetPrinterClass::GenericMsla
+        );
+
+        // 150 mm/min against the 2.5 mm/s that is written, so the conversion can be read off the
+        // row rather than out of the note.
+        const MappedField& row = row_of(result, "normalLayerLiftSpeed");
+        CHECK(row.source_value == "150");
+        CHECK(row.source_unit == "mm/min");
+        CHECK(row.value == "2.5");
+        CHECK(row.target_unit == "mm/s");
+    }
+
+    SECTION("a value that is copied keeps the same unit on both sides")
+    {
+        const MappingResult result = map_resin_profile(
+            profile_of({{"normalExposureTime", "2.5"}}),
+            TargetPrinterClass::Tilt
+        );
+
+        const MappedField& row = row_of(result, "normalExposureTime");
+        CHECK(row.source_value == "2.5");
+        CHECK(row.source_unit == "s");
+        CHECK(row.value == "2.5");
+        CHECK(row.target_unit == "s");
+    }
+
+    SECTION("a key that is not a quantity carries no unit")
+    {
+        const MappingResult result = map_resin_profile(
+            profile_of({{"currProfile", "Grey resin"}}),
+            TargetPrinterClass::Tilt
+        );
+
+        const MappedField& row = row_of(result, "currProfile");
+        CHECK(row.source_value == "Grey resin");
+        CHECK(row.source_unit.empty());
+        CHECK(row.target_unit.empty());
+    }
+
+    SECTION("a row that writes nothing has the value of the file but no target unit")
+    {
+        const MappingResult result = map_resin_profile(
+            profile_of({{"normalLayerLiftHeight", "5"}}),
+            TargetPrinterClass::Tilt
+        );
+
+        const MappedField& row = row_of(result, "normalLayerLiftHeight");
+        CHECK(row.source_value == "5");
+        CHECK(row.source_unit == "mm");
+        CHECK(row.value.empty());
+        CHECK(row.target_unit.empty());
+    }
+
+    SECTION("a value that is not a number is still the value the file had")
+    {
+        const MappingResult result = map_resin_profile(
+            profile_of({{"normalExposureTime", "two point five"}}),
+            TargetPrinterClass::Tilt
+        );
+
+        const MappedField& row = row_of(result, "normalExposureTime");
+        CHECK(row.source_value == "two point five");
+        CHECK(row.source_unit == "s");
+        CHECK(row.value.empty());
+        CHECK(row.target_unit.empty());
+    }
+
+    SECTION("a key nobody knows keeps its value and gets no unit of its own")
+    {
+        const MappingResult result = map_resin_profile(
+            profile_of({{"someFutureChituboxKey", "42"}}),
+            TargetPrinterClass::Tilt
+        );
+
+        const MappedField& row = row_of(result, "someFutureChituboxKey");
+        CHECK(row.source_value == "42");
+        CHECK(row.source_unit.empty());
+        CHECK(row.value.empty());
+    }
+}
+
+TEST_CASE(
     "ResinProfileMapper - a price per litre becomes the cost of one bottle",
     "[resin_profile][mapper]"
 )
@@ -594,8 +687,9 @@ TEST_CASE(
     CHECK(row.status == MappingStatus::Unknown);
     CHECK(row.target_key.empty());
     CHECK(row.value.empty());
-    // The value is kept in the report, so nothing is lost silently.
-    CHECK(row.note.find("42") != std::string::npos);
+    // The value is kept in the report, so nothing is lost silently: it is a field of the row of its
+    // own rather than a sentence of the note.
+    CHECK(row.source_value == "42");
     CHECK(result.material_values.count("someFutureChituboxKey") == 0);
 }
 

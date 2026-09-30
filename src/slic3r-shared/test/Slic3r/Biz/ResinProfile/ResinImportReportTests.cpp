@@ -31,28 +31,31 @@ const std::string& expected_folder_report()
         R"({"file":"a_grey.cfg","ok":true,"error":"","preset_name":"Grey resin",)"
         R"("base_preset":"Generic Fast Resin","mapping":[)"
         R"({"key":"bottomLayerCount","target_key":"bottom_layer_count",)"
-        R"("value":"8","status":"Exact","note":"A tilt printer has no block of bottom layers, )"
-        R"(it fades the exposure over 3 to 20 layers, so the count becomes the transition layer )"
-        R"(count and is clamped. A generic MSLA printer keeps the count and prints it with the )"
-        R"(bottom_* settings."},)"
+        R"("source_value":"8","value":"8","status":"Exact","note":"A tilt printer has no block of )"
+        R"(bottom layers, it fades the exposure over 3 to 20 layers, so the count becomes the )"
+        R"(transition layer count and is clamped. A generic MSLA printer keeps the count and prints )"
+        R"(it with the bottom_* settings."},)"
         R"({"key":"bottomLayerExposureTime","target_key":"initial_exposure_time",)"
-        R"("value":"30","status":"Exact","note":"Both in seconds, no conversion."},)"
-        R"({"key":"currProfile","target_key":"","value":"","status":"Converted",)"
-        R"("note":"Used as the suggested preset name; never written to the material."},)"
-        R"({"key":"layerHeight","target_key":"resin_layer_height","value":"0.05",)"
-        R"("status":"Exact","note":"Layer height is a resin setting; 0 would mean )"
+        R"("source_value":"30","value":"30","status":"Exact","note":"Both in seconds, no )"
+        R"(conversion."},)"
+        R"({"key":"currProfile","target_key":"","source_value":"Grey resin","value":"",)"
+        R"("status":"Converted","note":"Used as the suggested preset name; never written to the )"
+        R"(material."},)"
+        R"({"key":"layerHeight","target_key":"resin_layer_height","source_value":"0.05",)"
+        R"("value":"0.05","status":"Exact","note":"Layer height is a resin setting; 0 would mean )"
         R"(\"use the print preset's layer height\"."},)"
-        R"({"key":"lightOffTime","target_key":"delay_before_exposure","value":"1,1",)"
-        R"("status":"Approximated","note":"The light-off time is written as a delay before )"
-        R"(exposure, the same below and above the area fill. The meaning is not verified yet )"
+        R"({"key":"lightOffTime","target_key":"delay_before_exposure","source_value":"1",)"
+        R"("value":"1,1","status":"Approximated","note":"The light-off time is written as a delay )"
+        R"(before exposure, the same below and above the area fill. The meaning is not verified yet )"
         R"((M3.1/M3.2)."},)"
-        R"({"key":"machineName","target_key":"","value":"","status":"Converted",)"
-        R"("note":"A printer hint, used to suggest a matching printer; never written to )"
-        R"(the material."},)"
-        R"({"key":"normalExposureTime","target_key":"exposure_time","value":"3.5",)"
-        R"("status":"Exact","note":"Both in seconds, no conversion."},)"
-        R"({"key":"startGcode","target_key":"","value":"","status":"Not applicable",)"
-        R"("note":"Foreign G-code is never imported, it belongs to the machine profile."})"
+        R"({"key":"machineName","target_key":"","source_value":"Photon Mono M5","value":"",)"
+        R"("status":"Converted","note":"A printer hint, used to suggest a matching printer; never )"
+        R"(written to the material."},)"
+        R"({"key":"normalExposureTime","target_key":"exposure_time","source_value":"3.5",)"
+        R"("value":"3.5","status":"Exact","note":"Both in seconds, no conversion."},)"
+        R"({"key":"startGcode","target_key":"","source_value":"G28","value":"",)"
+        R"("status":"Not applicable","note":"Foreign G-code is never imported, it belongs to the )"
+        R"(machine profile."})"
         R"(]},)"
         R"({"file":"b_broken.cfg","ok":false,"error":"Unrecognized resin profile format",)"
         R"("preset_name":"","base_preset":"","mapping":[]})"
@@ -72,17 +75,19 @@ const std::string& expected_failed_report()
 /// @brief One mapping row, so that the test below can list them in an order of its own.
 MappedField field(
     std::string source_key,
+    std::string source_value,
     std::string target_key,
     std::string value,
     MappingStatus status
 )
 {
     return {
-        .source_key = std::move(source_key),
-        .target_key = std::move(target_key),
-        .value      = std::move(value),
-        .status     = status,
-        .note       = "",
+        .source_key   = std::move(source_key),
+        .source_value = std::move(source_value),
+        .target_key   = std::move(target_key),
+        .value        = std::move(value),
+        .status       = status,
+        .note         = "",
     };
 }
 
@@ -136,9 +141,9 @@ TEST_CASE("Resin import report sorts the mapping rows by key", "[resin_profile][
     result.ok          = true;
     result.preset_name = "Grey resin";
     result.mapping.report = {
-        field("startGcode", "", "", MappingStatus::NotApplicable),
-        field("layerHeight", "resin_layer_height", "0.05", MappingStatus::Exact),
-        field("bottomLayerCount", "bottom_layer_count", "8", MappingStatus::Exact),
+        field("startGcode", "G28", "", "", MappingStatus::NotApplicable),
+        field("layerHeight", "0.05", "resin_layer_height", "0.05", MappingStatus::Exact),
+        field("bottomLayerCount", "8", "bottom_layer_count", "8", MappingStatus::Exact),
     };
 
     const nlohmann::ordered_json report =
@@ -152,6 +157,29 @@ TEST_CASE("Resin import report sorts the mapping rows by key", "[resin_profile][
     const std::vector<std::string> sorted{"bottomLayerCount", "layerHeight", "startGcode"};
     REQUIRE(keys.size() == sorted.size());
     CHECK(keys == sorted);
+}
+
+TEST_CASE(
+    "Resin import report carries the value the file had next to the value that is written",
+    "[resin_profile][import][report]"
+)
+{
+    // 150 mm/min becomes 2.5 mm/s, and a script reading the report has to be able to tell the two
+    // apart, so the row carries the value of the file under source_value of its own.
+    ResinImportResult result;
+    result.file           = "grey.cfg";
+    result.ok             = true;
+    result.preset_name    = "Grey resin";
+    result.mapping.report = {
+        field("normalLayerLiftSpeed", "150", "lift_speed", "2.5", MappingStatus::Converted),
+    };
+
+    const nlohmann::ordered_json report =
+        nlohmann::ordered_json::parse(resin_import_report_json({result}));
+
+    const nlohmann::ordered_json& row = report.at("results").at(0).at("mapping").at(0);
+    CHECK(row.at("source_value").get<std::string>() == "150");
+    CHECK(row.at("value").get<std::string>() == "2.5");
 }
 
 TEST_CASE(

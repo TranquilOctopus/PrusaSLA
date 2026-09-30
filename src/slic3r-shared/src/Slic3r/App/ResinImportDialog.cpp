@@ -1,10 +1,12 @@
 #include "Slic3r/App/ResinImportDialog.hpp"
 
+#include "Slic3r/App/Imgui/ImguiExtension.hpp"
 #include "Slic3r/App/Navigator.hpp"
 #include "Slic3r/App/Theme.hpp"
 #include "Slic3r/App/Yoga/ComboBox.hpp"
 #include "Slic3r/App/Yoga/InputTextField.hpp"
 #include "Slic3r/App/Yoga/Item.hpp"
+#include "Slic3r/App/Yoga/LambdaItem.hpp"
 #include "Slic3r/App/Yoga/LayoutButton.hpp"
 #include "Slic3r/App/Yoga/Rectangle.hpp"
 #include "Slic3r/App/Yoga/ScrollArea.hpp"
@@ -15,6 +17,8 @@
 #include "Slic3r/Biz/Preset/PresetInteractor.hpp"
 #include "Slic3r/Biz/Preset/PresetSelectionCheck.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
+
+#include <imgui/imgui.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -38,6 +42,9 @@ constexpr float full_width_percent = 100.f;
 /// @brief How many report rows the dialog builds. A file with more keys than this is not likely, and
 /// a bound keeps the table from growing without end.
 constexpr std::size_t max_reported_rows = 500;
+/// @brief How wide the tooltip of a note wraps, in font heights. The notes of the mapping table are
+/// a paragraph each, and an unwrapped one would run off the screen.
+constexpr float note_tooltip_wrap_width = 40.f;
 
 /// @brief The tokens a badge is drawn in, the "UI color token" column of the mapping table in
 /// doc/sla-fork/ROADMAP.md. No colour value is written here: those live in the palette table of
@@ -66,13 +73,23 @@ BadgeTokens badge_tokens(MappingBadge badge)
     return {Platform::Color::Text, Platform::ColorGroup::Disabled};
 }
 
-/// @brief What a row writes on the target side: the key and its value, empty when it writes nothing.
-std::string imported_as(const MappingRow& row)
+/// @brief The whole of @p note as the tooltip of the one line the table shows for it. The note is
+/// what makes an approximation auditable, so none of it is lost: the line under the row is one line
+/// tall and elides what does not fit, and the rest is here. Rendered by an item that draws nothing
+/// and is placed after the note line, so the item it asks about is that line.
+void add_note_tooltip(Item* parent, const std::string& note)
 {
-    if (!row.writes_value()) {
-        return {};
-    }
-    return row.value.empty() ? row.target_key : row.target_key + " = " + row.value;
+    LambdaItem* hover = parent->emplace_back<LambdaItem>(
+        [note](const Vec2f&, const Vec2f&)
+        {
+            if (ImGui::IsItemHovered()) {
+                Imgui::tooltip(note, ImGui::GetFontSize() * note_tooltip_wrap_width);
+            }
+        }
+    );
+    hover->set_position_type(YGPositionTypeAbsolute);
+    hover->set_width(0.f);
+    hover->set_height(0.f);
 }
 
 } // namespace
@@ -365,7 +382,8 @@ void ResinImportDialog::build_table()
     for (const MappingRow& row : m_rows) {
         // One key per block: what the file said, what becomes of it and the status of that, then
         // the note of the row under it. The note is what makes an approximation auditable, so it is
-        // shown rather than kept in a tooltip.
+        // shown rather than kept in a tooltip: the line is one line tall, and the whole of it is
+        // the tooltip of that line.
         Item* block = m_table->emplace_back<Item>();
         block->set_orientation(Orientation::Vertical);
         block->set_gap(0.f);
@@ -374,12 +392,13 @@ void ResinImportDialog::build_table()
         line->set_gap(row_gap);
         line->set_align_items(YGAlignCenter);
 
-        Text* source = line->emplace_back<Text>(row.source_key);
+        // Both sides of a row carry a value: the one the file had and the one that is written, each
+        // with its unit, so a conversion or a clamp can be read off the row.
+        Text* source = line->emplace_back<Text>(source_as(row));
         source->set_flex_grow(1.f);
         source->set_text_color(m_theme->color_imgui(Platform::Color::Text));
 
-        const std::string target_text = imported_as(row);
-        Text* target                  = line->emplace_back<Text>(target_text);
+        Text* target = line->emplace_back<Text>(target_as(row));
         target->set_flex_grow(1.f);
         // A row that writes nothing is dimmed, so the values that do land read first.
         target->set_text_color(
@@ -403,7 +422,12 @@ void ResinImportDialog::build_table()
                 m_theme->color_imgui(Platform::Color::Text, Platform::ColorGroup::Disabled)
             );
             note->set_font_size(0.85_rem);
-            note->set_wrap_mode(Text::WrapMode::Wrap);
+            note->set_width_percent(full_width_percent);
+            note->set_flex_shrink(0.f);
+            // One line, however long the note is: a .cfg carries a machine section as well, and a
+            // wrapped paragraph per row would bury the values above it.
+            note->set_wrap_mode(Text::WrapMode::WrapElide);
+            add_note_tooltip(block, row.note);
         }
     }
 
