@@ -122,6 +122,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Plater/SlaSupportOnModel.cpp
         include/Slic3r/App/Plater/SlaSupportPointsDialog.hpp
         src/Slic3r/App/Plater/SlaSupportPointsDialog.cpp
+        include/Slic3r/App/Plater/SlaSupportToolShortcuts.hpp
+        src/Slic3r/App/Plater/SlaSupportToolShortcuts.cpp
         include/Slic3r/App/Plater/SlaHollowDialog.hpp
         src/Slic3r/App/Plater/SlaHollowDialog.cpp
         include/Slic3r/App/Plater/SlaHollowGizmo.hpp
@@ -1675,6 +1677,8 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/App/Plater/SlaToolTypesTests.cpp
 
             test/Slic3r/App/Plater/SlaSupportPointsGizmoTests.cpp
+
+            test/Slic3r/App/Plater/SlaSupportToolShortcutsTests.cpp
 
             test/Slic3r/App/Plater/SlaSupportGeometryTests.cpp
 

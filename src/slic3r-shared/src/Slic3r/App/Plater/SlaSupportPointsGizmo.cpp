@@ -1,5 +1,6 @@
 #include "Slic3r/App/Plater/SlaSupportPointsGizmo.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsEditing.hpp"
+#include "Slic3r/App/Plater/SlaSupportToolShortcuts.hpp"
 
 #include "Slic3r/App/Plater/SlaSupportPointsDialog.hpp"
 #include "Slic3r/App/Plater/PlaterScenePresenter.hpp"
@@ -36,6 +37,7 @@
 
 #include <Eigen/Geometry>
 #include <fmt/format.h>
+#include <imgui/imgui.h>
 #include <magic_enum/magic_enum_flags.hpp>
 #include <spdlog/spdlog.h>
 
@@ -1929,21 +1931,59 @@ void SlaSupportPointsGizmo::on_keyboard(Scene::GizmoKeyEventContext& ctx)
         return;
     }
 
-    Platform::KeyCode code = evt.code();
-
-    // Ctrl+A: Select all
-    if (code == Platform::KeyCode::A && Platform::ctrl_down(evt.key_modifiers())) {
-        if (evt.type() == Platform::KeyboardEvent::Type::KeyDown) {
-            select_all_points();
-        }
+    // A shortcut acts on the key press, a release asks for nothing.
+    if (evt.type() != Platform::KeyboardEvent::Type::KeyDown) {
         return;
     }
 
-    // Delete or Backspace: Delete selected points
-    if ((code == Platform::KeyCode::Delete || code == Platform::KeyCode::Backspace) &&
-        evt.type() == Platform::KeyboardEvent::Type::KeyDown) {
-        delete_selected_points();
+    SupportToolKeyEvent key;
+    key.code        = evt.code();
+    key.modifiers   = evt.key_modifiers();
+    key.tool_active = m_gizmo_active;
+    // A text field owns the keys while it has the focus, so a number typed into one of the tool's
+    // own inputs does not pick a preset. The canvas already drops those keys before they get here
+    // (AbstractRenderCanvas::emit_enqueued_events), this is the tool asking about it anyway.
+    key.text_field_focus = ImGui::GetIO().WantTextInput;
+    key.has_selection    = !m_edit_state->editing.selected_point_indices.empty();
+
+    switch (support_tool_action_for(key)) {
+    case SupportToolAction::None:
         return;
+    case SupportToolAction::PresetMini:
+        apply_preset_mini();
+        break;
+    case SupportToolAction::PresetLight:
+        apply_preset_light();
+        break;
+    case SupportToolAction::PresetMedium:
+        apply_preset_medium();
+        break;
+    case SupportToolAction::PresetHeavy:
+        apply_preset_heavy();
+        break;
+    case SupportToolAction::AutoSupportSelection:
+        auto_support({m_selected_object_id});
+        break;
+    case SupportToolAction::AutoSupportAll:
+        auto_support();
+        break;
+    case SupportToolAction::ToggleSupportOnModel:
+        apply_support_on_model_to_selected(
+            support_tool_toggled_on_model(m_edit_state->editing.selected_support_on_model())
+        );
+        break;
+    case SupportToolAction::ClearSelection:
+        clear_selection();
+        // The selection was the tool's own answer to Escape, so the tool keeps open and the next
+        // Escape, with nothing selected, closes it.
+        ctx.consume();
+        break;
+    case SupportToolAction::SelectAllPoints:
+        select_all_points();
+        break;
+    case SupportToolAction::DeleteSelectedPoints:
+        delete_selected_points();
+        break;
     }
 }
 
