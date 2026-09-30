@@ -164,6 +164,33 @@ TEST_CASE("ChituboxCfgReader - unknown keys are kept, not an error", "[resin_pro
     REQUIRE(profile.raw_values.at("someKeyWeHaveNeverSeen") == "42");
 }
 
+TEST_CASE(
+    "ChituboxCfgReader - the format has no vendor key, so none is read",
+    "[resin_profile][chitubox]"
+)
+{
+    // The finding of doc/sla-fork/formats/chitubox-cfg.md (M3.10e): nothing in the reader's key
+    // table, in the mapping table or in a file read so far names a vendor or a brand, and no real
+    // Chitubox file has been read (M3.1). So a key that looks like one is kept as a key of the file
+    // and is never read as the vendor: a guessed spelling would end up in the vendor of a saved
+    // preset, where a user would take it for what the file said.
+    const ForeignResinProfile profile = read_ok(
+        MINIMAL +
+        "resinVendor: Anycubic\n"
+        "materialBrand: Anycubic\n"
+        "brandName: Anycubic\n"
+    );
+
+    CHECK_FALSE(profile.material.material_vendor.has_value());
+    // Every key of the file survives, so a real vendor key would show up as a row of the report
+    // rather than disappear, which is how M3.1 would find it.
+    CHECK(profile.raw_values.at("resinVendor") == "Anycubic");
+    CHECK(profile.raw_values.at("materialBrand") == "Anycubic");
+    CHECK(profile.raw_values.at("brandName") == "Anycubic");
+    // A vendor is not a printer either, so none of them becomes the printer hint.
+    CHECK_FALSE(profile.printer_hint.has_value());
+}
+
 TEST_CASE("ChituboxCfgReader - a garbage numeric value warns but still parses", "[resin_profile][chitubox]")
 {
     const ForeignResinProfile profile = read_ok("normalExposureTime:abc\n");

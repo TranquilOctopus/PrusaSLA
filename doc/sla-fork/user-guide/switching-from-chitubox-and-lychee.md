@@ -339,8 +339,10 @@ not use yet, so they arrive as *Unknown* rather than silently:
 - The note under a row is a sentence or two, and the table shows it on one line, elided. Hovering
   the line shows all of it.
 - A `.cfg` names no vendor, so the vendor is empty in the source line. The resin name comes from the
-  profile name key, `currProfile`, and it is that name the base material is matched against. No
-  vendor or brand key of the `.cfg` format is known yet, so nothing is guessed at one.
+  profile name key, `currProfile`, and it is that name the base material is matched against. The
+  format notes in [chitubox-cfg.md](../formats/chitubox-cfg.md) record that no key of the format
+  that has been seen names a vendor or a brand, so nothing is guessed at one. A key that did would
+  be kept and shown in the table as *Unknown* rather than dropped, which is how it would be found.
 - There is no printer picker in the review dialog. Pick the printer in the sidebar first; the
   import goes into the selected one or it does not happen.
 - There is no button for writing a profile back out; that is the `--export-resin-profile` command
