@@ -32,6 +32,7 @@
 #include "Slic3r/Biz/CGAL/Algorithms/MeshBoolean.hpp"
 
 #include "libslic3r/SLA/Hollowing.hpp"
+#include "libslic3r/SLA/HollowingLattice.hpp"
 #include "libslic3r/SLA/Pad.hpp"
 #include "libslic3r/SLAResult.hpp"
 #include "libslic3r/SLA/SupportTree.hpp"
@@ -481,6 +482,11 @@ bool is_pad_enabled(const SLAPrintObjectConfigView &c);
 bool is_pad_around_object(const SLAPrintObjectConfigView &c);
 
 bool is_zero_elevation(const SLAPrintObjectConfigView &c);
+
+// The lattice left standing inside the cavity of a hollow print, as hollowing_infill and its two
+// knobs ask for it. None (the default, and what a config without the keys means) is the plain
+// cavity of today.
+sla::HollowingInfillConfig make_hollowing_infill_cfg(const SLAPrintObjectConfigView &c);
 
 sla::SupportTreeConfig make_support_cfg(const SLAPrintObjectConfigView& c);
 

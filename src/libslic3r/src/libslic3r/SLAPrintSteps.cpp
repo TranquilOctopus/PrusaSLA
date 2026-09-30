@@ -62,6 +62,7 @@
 #include "libslic3r/Polygon.hpp"
 #include "libslic3r/PrintBase.hpp"
 #include "libslic3r/SLA/Hollowing.hpp"
+#include "libslic3r/SLA/HollowingLattice.hpp"
 #include "libslic3r/SLA/JobController.hpp"
 #include "libslic3r/SLA/RasterBase.hpp"
 #include "libslic3r/SLA/RasterMemory.hpp"
@@ -589,6 +590,13 @@ void SLAPrint::Steps::hollow_model(SLAPrintObject &po)
     namespace TriMesh = Biz::Algorithms::TriangleMesh;
     TriMesh::its_compactify_vertices(m);
     TriMesh::its_merge_vertices(m);    
+
+    // Leave the infill lattice standing in the cavity: what is subtracted from the model is the
+    // cavity without the struts, so the struts are printed as solid material inside the print. It
+    // happens after the simplification above, so a strut is the box the lattice is made of and not
+    // something the edge collapse has touched. The drain holes are cut in the next step, so a strut
+    // that stands across one is opened by the hole and cannot plug it.
+    sla::subtract_lattice_from_cavity(m, make_hollowing_infill_cfg(po.m_config), ctl);
 
     // Put the interior into the target mesh as a negative
     po.m_mesh_to_slice.emplace(slaposHollowing,

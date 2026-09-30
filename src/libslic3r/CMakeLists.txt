@@ -339,6 +339,8 @@ set(SLIC3R_SOURCES
     src/libslic3r/SLA/DefaultSupportTree.cpp
     src/libslic3r/SLA/DefaultSupportTree.hpp
     src/libslic3r/SLA/Hollowing.cpp
+    src/libslic3r/SLA/HollowingLattice.cpp
+    src/libslic3r/SLA/HollowingLattice.hpp
     src/libslic3r/SLA/Pad.cpp
     src/libslic3r/SLA/RasterBase.cpp
     src/libslic3r/SLA/RasterBase.hpp
