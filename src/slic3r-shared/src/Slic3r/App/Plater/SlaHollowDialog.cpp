@@ -1,7 +1,9 @@
 #include "Slic3r/App/Plater/SlaHollowDialog.hpp"
 
+#include "Slic3r/App/SlaHollowingInfillSettings.hpp"
 #include "Slic3r/App/Yoga/SliderWithInput.hpp"
 #include "Slic3r/App/Yoga/LayoutButton.hpp"
+#include "Slic3r/App/Yoga/ComboBox.hpp"
 #include "Slic3r/App/Yoga/Text.hpp"
 #include "Slic3r/App/Yoga/Item.hpp"
 #include "Slic3r/App/Yoga/ToggleButton.hpp"
@@ -46,6 +48,53 @@ SlaHollowDialog::SlaHollowDialog() : GizmoWindow()
     m_min_thickness_slider->set_validator_precision(1);
     m_min_thickness_slider->callbacks().value_changed = [this](double value)
     { m_callbacks.min_thickness_changed(value); };
+
+    // The lattice that stiffens the cavity, right below the wall it stands in (M2.29b). The two
+    // knobs are only worth showing once a pattern is chosen, which is what set_infill() decides.
+    add_row_with_combo_box(
+        _u8L("Infill"),
+        content(),
+        &m_infill_combo
+    );
+    // TRN SlaHollowGizmo: ComboBox "Infill" (the structure left standing inside the cavity)
+    m_infill_combo->set_items({_u8L("None"), _u8L("Grid"), _u8L("Cubic")});
+    m_infill_combo->callbacks().selection_changed = [this](int index)
+    {
+        // The rows of the two knobs follow the pattern, so a plain cavity does not offer them.
+        set_infill(index);
+        m_callbacks.infill_changed(index);
+    };
+
+    m_infill_spacing_row = add_row_with_slider(
+        content(),
+        &m_infill_spacing_slider,
+        _u8L("Infill spacing"),
+        _u8L("mm")
+    );
+    m_infill_spacing_slider->set_begin_value(0.5);
+    m_infill_spacing_slider->set_end_value(30.0);
+    m_infill_spacing_slider->set_step(0.1);
+    m_infill_spacing_slider->set_validator_precision(1);
+    m_infill_spacing_slider->callbacks().value_changed = [this](double value)
+    { m_callbacks.infill_spacing_changed(value); };
+
+    m_infill_strut_row = add_row_with_slider(
+        content(),
+        &m_infill_strut_slider,
+        _u8L("Infill strut"),
+        _u8L("mm")
+    );
+    m_infill_strut_slider->set_begin_value(0.1);
+    m_infill_strut_slider->set_end_value(10.0);
+    m_infill_strut_slider->set_step(0.1);
+    m_infill_strut_slider->set_validator_precision(1);
+    m_infill_strut_slider->callbacks().value_changed = [this](double value)
+    { m_callbacks.infill_strut_changed(value); };
+
+    // The tool opens on the pattern of today, a cavity without a lattice, so the two knobs of a
+    // lattice that is not cut are not shown until one is picked.
+    m_infill_spacing_row->set_visible(false);
+    m_infill_strut_row->set_visible(false);
 
     add_row_with_slider(
         content(),
@@ -135,6 +184,9 @@ void SlaHollowDialog::set_enable(bool enabled)
 {
     m_enable_checkbox->set_checked(enabled);
     m_min_thickness_slider->set_enabled(enabled);
+    m_infill_combo->set_enabled(enabled);
+    m_infill_spacing_slider->set_enabled(enabled);
+    m_infill_strut_slider->set_enabled(enabled);
     m_quality_slider->set_enabled(enabled);
     m_closing_distance_slider->set_enabled(enabled);
 }
@@ -147,6 +199,30 @@ void SlaHollowDialog::set_preview_enabled(bool enabled)
 void SlaHollowDialog::set_min_thickness(double thickness_mm)
 {
     m_min_thickness_slider->set_value(thickness_mm);
+}
+
+void SlaHollowDialog::set_infill(int index)
+{
+    m_infill_combo->set_current_index(index);
+
+    // A plain cavity holds no lattice, so the two knobs of a lattice that is not cut change
+    // nothing: the same rule the object settings panel uses for them.
+    const std::optional<Domain::sla::HollowingInfillType> infill = hollowing_infill_of_index(index);
+    const bool patterned =
+        infill.has_value()
+        && Domain::SLA::hollowing_infill_uses_setting(*infill, "hollowing_infill_spacing");
+    m_infill_spacing_row->set_visible(patterned);
+    m_infill_strut_row->set_visible(patterned);
+}
+
+void SlaHollowDialog::set_infill_spacing(double spacing_mm)
+{
+    m_infill_spacing_slider->set_value(spacing_mm);
+}
+
+void SlaHollowDialog::set_infill_strut(double strut_mm)
+{
+    m_infill_strut_slider->set_value(strut_mm);
 }
 
 void SlaHollowDialog::set_quality(double quality)

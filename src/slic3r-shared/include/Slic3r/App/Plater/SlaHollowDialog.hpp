@@ -5,6 +5,7 @@
 namespace Slic3r::App::Yoga {
 class SliderWithInput;
 class LayoutButton;
+class ComboBox;
 class Text;
 class ToggleButton;
 } // namespace Slic3r::App::Yoga
@@ -21,6 +22,9 @@ public:
         std::function<void()> preview = []() {};
         std::function<void(bool)> enable_changed = [](bool) {};
         std::function<void(double)> min_thickness_changed = [](double) {};
+        std::function<void(int)> infill_changed = [](int) {};
+        std::function<void(double)> infill_spacing_changed = [](double) {};
+        std::function<void(double)> infill_strut_changed = [](double) {};
         std::function<void(double)> quality_changed = [](double) {};
         std::function<void(double)> closing_distance_changed = [](double) {};
         std::function<void(double)> hole_radius_changed = [](double) {};
@@ -34,6 +38,11 @@ public:
     void set_enable(bool enabled);
     void set_preview_enabled(bool enabled);
     void set_min_thickness(double thickness_mm);
+    /// The index of the hollowing infill pattern, see hollowing_infill_patterns(). It also shows
+    /// and hides the two rows of the pattern, so a plain cavity only offers the pattern itself.
+    void set_infill(int index);
+    void set_infill_spacing(double spacing_mm);
+    void set_infill_strut(double strut_mm);
     void set_quality(double quality);
     void set_closing_distance(double distance_mm);
     void set_hole_radius(double radius_mm);
@@ -47,6 +56,11 @@ public:
 private:
     Yoga::ToggleButton* m_enable_checkbox = nullptr;
     Yoga::SliderWithInput* m_min_thickness_slider = nullptr;
+    Yoga::ComboBox* m_infill_combo = nullptr;
+    Yoga::SliderWithInput* m_infill_spacing_slider = nullptr;
+    Yoga::SliderWithInput* m_infill_strut_slider = nullptr;
+    Yoga::Item* m_infill_spacing_row = nullptr;
+    Yoga::Item* m_infill_strut_row = nullptr;
     Yoga::SliderWithInput* m_quality_slider = nullptr;
     Yoga::SliderWithInput* m_closing_distance_slider = nullptr;
     Yoga::SliderWithInput* m_hole_radius_slider = nullptr;

@@ -1,5 +1,6 @@
 #include "Slic3r/App/Plater/SlaHollowGizmo.hpp"
 #include "Slic3r/App/Plater/SlaHollowDialog.hpp"
+#include "Slic3r/App/SlaHollowingInfillSettings.hpp"
 #include "Slic3r/App/Plater/SlaDrainHolesEditing.hpp"
 #include "Slic3r/App/Plater/PlaterScenePresenter.hpp"
 #include "Slic3r/App/AppServices.hpp"
@@ -306,6 +307,12 @@ SlaHollowGizmo::SlaHollowGizmo(
             }
         }
     };
+    m_dialog->callbacks().infill_changed = [this](int index)
+    { on_infill_changed(index); };
+    m_dialog->callbacks().infill_spacing_changed = [this](double value)
+    { on_infill_spacing_changed(value); };
+    m_dialog->callbacks().infill_strut_changed = [this](double value)
+    { on_infill_strut_changed(value); };
     m_dialog->callbacks().quality_changed = [this](double value)
     {
         m_current_quality = value;
@@ -473,6 +480,7 @@ void SlaHollowGizmo::on_scene_selection_changed(
 
     m_dialog->set_enable(m_current_enable);
     m_dialog->set_min_thickness(m_current_min_thickness);
+    sync_infill_controls();
     m_dialog->set_quality(m_current_quality);
     m_dialog->set_closing_distance(m_current_closing_distance);
 
@@ -696,6 +704,9 @@ bool SlaHollowGizmo::read_hollowing_config(const Domain::ModelObject* model_obje
     if (!model_object) {
         m_current_enable = false;
         m_current_min_thickness = 3.0;
+        m_current_infill = Domain::sla::HollowingInfillType::None;
+        m_current_infill_spacing = 3.0;
+        m_current_infill_strut = 0.5;
         m_current_quality = 0.5;
         m_current_closing_distance = 2.0;
         return false;
@@ -728,10 +739,117 @@ bool SlaHollowGizmo::read_hollowing_config(const Domain::ModelObject* model_obje
 
     m_current_enable = enable;
     m_current_min_thickness = min_thickness;
+    read_infill_config(model_object);
     m_current_quality = quality;
     m_current_closing_distance = closing_distance;
 
     return true;
+}
+
+void SlaHollowGizmo::read_infill_config(const Domain::ModelObject* model_object)
+{
+    // The lattice of the cavity, with the values a config without the keys means: an empty cavity,
+    // the spacing and the strut the keys start at.
+    Domain::sla::HollowingInfillType infill = Domain::sla::HollowingInfillType::None;
+    double spacing = 3.0;
+    double strut = 0.5;
+
+    auto infill_result = model_object->object_settings_sla.find("hollowing_infill");
+    if (infill_result.item && infill_result.item->holds_alternative<Domain::EnumWrapper>()) {
+        infill = infill_result.item->get<Domain::sla::HollowingInfillType>();
+    }
+
+    auto spacing_result = model_object->object_settings_sla.find("hollowing_infill_spacing");
+    if (spacing_result.item) {
+        spacing = spacing_result.item->get<double>();
+    }
+
+    auto strut_result = model_object->object_settings_sla.find("hollowing_infill_strut");
+    if (strut_result.item) {
+        strut = strut_result.item->get<double>();
+    }
+
+    m_current_infill = infill;
+    m_current_infill_spacing = spacing;
+    m_current_infill_strut = strut;
+}
+
+void SlaHollowGizmo::sync_infill_controls()
+{
+    // The sliders of the lattice report a value they are given, so the keys of a new selection are
+    // shown in the tool without being written back to it.
+    m_syncing_dialog = true;
+    m_dialog->set_infill(hollowing_infill_index(m_current_infill));
+    m_dialog->set_infill_spacing(m_current_infill_spacing);
+    m_dialog->set_infill_strut(m_current_infill_strut);
+    m_syncing_dialog = false;
+}
+
+void SlaHollowGizmo::on_infill_changed(int index)
+{
+    if (m_syncing_dialog) {
+        return;
+    }
+
+    const std::optional<Domain::sla::HollowingInfillType> infill = hollowing_infill_of_index(index);
+    if (!infill.has_value() || *infill == m_current_infill) {
+        return;
+    }
+
+    m_current_infill = *infill;
+    apply_infill_change();
+}
+
+void SlaHollowGizmo::on_infill_spacing_changed(double spacing_mm)
+{
+    if (m_syncing_dialog || spacing_mm == m_current_infill_spacing) {
+        return;
+    }
+
+    m_current_infill_spacing = spacing_mm;
+    apply_infill_change();
+}
+
+void SlaHollowGizmo::on_infill_strut_changed(double strut_mm)
+{
+    if (m_syncing_dialog || strut_mm == m_current_infill_strut) {
+        return;
+    }
+
+    m_current_infill_strut = strut_mm;
+    apply_infill_change();
+}
+
+void SlaHollowGizmo::apply_infill_change()
+{
+    if (!m_selected_object_id.valid()) {
+        return;
+    }
+
+    // The plate is marked modified and nothing is sliced: the lattice is a change of what is
+    // printed, and the hollowing step only runs when the tool's Preview button is pressed.
+    m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SetPartSettingsValue);
+    const Domain::ElementRef object_ref{m_selected_object_id.id, m_selected_instance_id};
+    m_project_interactor.scene_interactor().modify_sla_object_settings(
+        object_ref,
+        [this](Domain::ModelObject& model_object) { write_infill_config(&model_object); }
+    );
+}
+
+void SlaHollowGizmo::write_infill_config(Domain::ModelObject* model_object)
+{
+    if (!model_object) {
+        return;
+    }
+
+    // Writing an override enables it, which is what gets the lattice into the print: an override
+    // that is not enabled is not read by the slicing.
+    model_object->object_settings_sla.overrides.set("hollowing_infill", m_current_infill);
+    model_object->object_settings_sla.overrides.set(
+        "hollowing_infill_spacing",
+        m_current_infill_spacing
+    );
+    model_object->object_settings_sla.overrides.set("hollowing_infill_strut", m_current_infill_strut);
 }
 
 void SlaHollowGizmo::write_hollowing_config(Domain::ModelObject* model_object, bool enable, double min_thickness, double quality, double closing_distance)

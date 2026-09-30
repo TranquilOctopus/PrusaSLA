@@ -1377,16 +1377,18 @@ void SceneInteractor::modify_sla_support_points(
     const std::function<void(ModelObject&)>& modifier
 )
 {
-    Project& project          = m_workbench.project(m_selected_project_id);
-    ModelObject* model_object = project.find_object_by_id(object_ref.object_id);
-    ASSERT(model_object != nullptr);
-
-    modifier(*model_object);
-
-    this->notify_object_print_changed(object_ref, *model_object);
+    this->modify_sla_object_settings(object_ref, modifier);
 }
 
 void SceneInteractor::modify_sla_drain_holes(
+    const Domain::ElementRef& object_ref,
+    const std::function<void(ModelObject&)>& modifier
+)
+{
+    this->modify_sla_object_settings(object_ref, modifier);
+}
+
+void SceneInteractor::modify_sla_object_settings(
     const Domain::ElementRef& object_ref,
     const std::function<void(ModelObject&)>& modifier
 )

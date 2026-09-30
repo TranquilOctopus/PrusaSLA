@@ -336,6 +336,19 @@ public:
         const std::function<void(Domain::ModelObject&)>& modifier
     );
 
+    /**
+     * @brief Change what is printed of the given object without moving it, for a key of the object
+     *        settings the object overrides (the hollowing infill lattice of M2.29b is three of
+     *        them). The object is passed to the modifier and the plate is marked modified after it,
+     *        exactly as for the support points and the drain holes.
+     * @param object_ref Reference to the object to modify (only object_id is used).
+     * @param modifier Called with the ModelObject to change its object settings.
+     */
+    void modify_sla_object_settings(
+        const Domain::ElementRef& object_ref,
+        const std::function<void(Domain::ModelObject&)>& modifier
+    );
+
     void edit_name(const Domain::ElementRef& id, const std::string& new_name);
     void set_printable(const Domain::ElementRef& id, bool is_printable);
     void set_selected_instances_printable(bool is_printable);
