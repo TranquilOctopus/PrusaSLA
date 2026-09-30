@@ -44,6 +44,7 @@ class NumberEntryDialog;
 class CrashedProjectsDialog;
 class ProjectSaver;
 class PresetUpdaterDialog;
+class SlaHollowingNotification;
 } // namespace Slic3r::App
 
 namespace Slic3r::App::Lua {
@@ -334,6 +335,7 @@ private:
     std::unique_ptr<SlaUnsupportedNotification> m_sla_unsupported_notification;
     std::unique_ptr<SlaFirstModelNotification> m_sla_first_model_notification;
     std::unique_ptr<SlaArchiveSettingsNotification> m_sla_archive_settings_notification;
+    std::unique_ptr<SlaHollowingNotification> m_sla_hollowing_notification;
 
     std::shared_ptr<ThumbnailStore> m_thumbnail_store;
     std::shared_ptr<ThumbnailStoreUpdater> m_thumbnail_store_updater;

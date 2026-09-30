@@ -1,8 +1,10 @@
 #include "Slic3r/App/Plater/PaintOnSupportsDialog.hpp"
 
 #include "Slic3r/App/Plater/PaintOnSupportsGizmo.hpp"
+#include "Slic3r/App/Plater/PaintSupportsRules.hpp"
 #include "Slic3r/App/Yoga/LayoutButton.hpp"
 #include "Slic3r/App/Yoga/SliderWithInput.hpp"
+#include "Slic3r/App/Yoga/Text.hpp"
 #include "Slic3r/App/Yoga/ToggleButton.hpp"
 #include "Slic3r/App/Yoga/Validator.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
@@ -171,19 +173,59 @@ PaintOnSupportsDialog::PaintOnSupportsDialog() : GizmoWindow()
 
     this->add_separator(this->content());
 
-    add_row_with_button(content(), &m_automatic_painting_button, _u8L("Automatic painting"));
+    m_automatic_painting_separator = this->add_separator(this->content());
+    m_automatic_painting_row =
+        add_row_with_button(content(), &m_automatic_painting_button, _u8L("Automatic painting"));
     m_automatic_painting_button->callbacks().action = [this]()
     { m_callbacks.automatic_painting(); };
 
     this->add_separator(this->content());
 
-    m_help_factory.init(add_non_shrinked_wrap(content(), Orientation::Vertical, gap_size()));
-    m_help_factory.add_item({GizmoHelpFactory::HelpIcon{Render::Icon::MouseLeft}}, _u8L("Paint"));
-    m_help_factory.add_item({GizmoHelpFactory::HelpIcon{Render::Icon::MouseRight}}, _u8L("Block"));
-    m_help_factory.add_item(
+    m_help_container = add_non_shrinked_wrap(content(), Orientation::Vertical, gap_size());
+    m_help_factory.init(m_help_container);
+    // The labels are kept, because the wording of the brushes follows the printer technology: the
+    // facets the tool paints are the input of the FFF support painting or of the SLA support point
+    // generator (M2.30b).
+    m_paint_help_label = m_help_factory.add_item(
+        {GizmoHelpFactory::HelpIcon{Render::Icon::MouseLeft}}, _u8L("Paint")
+    );
+    m_block_help_label = m_help_factory.add_item(
+        {GizmoHelpFactory::HelpIcon{Render::Icon::MouseRight}}, _u8L("Block")
+    );
+    m_remove_help_label = m_help_factory.add_item(
         {{"SHIFT"}, GizmoHelpFactory::HelpIcon{Render::Icon::MouseLeft}},
         _u8L("Remove")
     );
+
+    // What the block brush does and the one thing it never does. Empty and hidden for FFF, whose
+    // brushes have no automatic support point generator behind them.
+    m_block_hint = m_help_container->emplace_back<Text>(std::string());
+    m_block_hint->set_flex_shrink(0);
+    m_block_hint->set_wrap_mode(Text::WrapMode::Wrap);
+    m_block_hint->set_visible(false);
+}
+
+void PaintOnSupportsDialog::set_technology(const Domain::PrinterTechnology technology)
+{
+    const PaintSupportsStrings strings = paint_supports_strings(technology);
+
+    this->set_title(strings.tool_name);
+    m_paint_help_label->set_text(strings.paint);
+    m_block_help_label->set_text(strings.block);
+    m_remove_help_label->set_text(strings.remove);
+
+    if (strings.block_hint.empty()) {
+        m_block_hint->set_visible(false);
+    } else {
+        m_block_hint->set_text(strings.block_hint);
+        m_block_hint->set_visible(true);
+    }
+
+    // The automatic painting button paints the spots of the FFF support search, which is a slice of
+    // the bed up to that step. An SLA print is never sliced from a tool or a UI action.
+    const bool automatic_painting = paint_supports_automatic_painting_visible(technology);
+    m_automatic_painting_row->set_visible(automatic_painting);
+    m_automatic_painting_separator->set_visible(automatic_painting);
 }
 
 void PaintOnSupportsDialog::set_brush_radius(const double brush_radius)

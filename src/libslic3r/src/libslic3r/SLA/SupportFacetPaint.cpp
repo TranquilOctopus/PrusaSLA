@@ -30,11 +30,11 @@ constexpr double blocker_region_margin_mm = 0.2;
 /// The facets of every part that are painted as @p state, placed in the frame of the merged mesh the
 /// support points are generated in. A part with nothing painted is skipped, so an unpainted model
 /// costs one empty triangle set per state.
-Domain::indexed_triangle_set painted_facets(const SupportToolModelMesh &parts,
-                                            const Domain::Transform3d &object_to_world,
-                                            TriangleStateType         state)
+indexed_triangle_set painted_facets(const SupportToolModelMesh &parts,
+                                    const Domain::Transform3d &object_to_world,
+                                    TriangleStateType         state)
 {
-    Domain::indexed_triangle_set result;
+    indexed_triangle_set result;
     for (const SupportToolModelMesh::Part &part : parts.parts) {
         if (part.mesh == nullptr || part.painting.triangles_to_split.empty())
             continue;
@@ -42,7 +42,7 @@ Domain::indexed_triangle_set painted_facets(const SupportToolModelMesh &parts,
         // The strict read is the one of the FFF support painting (PrintObject::
         // project_and_append_custom_facets): the paint tool splits the triangles it brushes over, and
         // only the strict read gives the pieces of a split triangle.
-        Domain::indexed_triangle_set facets =
+        indexed_triangle_set facets =
             Biz::Algorithms::FacetsAnnotation::get_facets_strict(part.painting, *part.mesh, state);
         if (facets.empty())
             continue;
@@ -88,9 +88,9 @@ std::vector<float> layer_slabs(const std::vector<float> &heights)
 /// the top projection, and a facet that faces down from the bottom of it, which is entry i+1 of the
 /// bottom projection. The two of them are the two halves of the slab of the layer, so layer i is
 /// entry i of the top projection together with entry i+1 of the bottom one.
-std::vector<Domain::ExPolygons> painted_facet_regions(const Domain::indexed_triangle_set &facets,
-                                                      const std::vector<float>           &heights,
-                                                      const std::function<void(void)> &throw_on_cancel)
+std::vector<Domain::ExPolygons> painted_facet_regions(const indexed_triangle_set &facets,
+                                                     const std::vector<float>           &heights,
+                                                     const std::function<void(void)> &throw_on_cancel)
 {
     const std::vector<float> slabs = layer_slabs(heights);
     if (facets.empty() || slabs.empty())
@@ -130,12 +130,12 @@ std::vector<Domain::ExPolygons> painted_facet_regions(const Domain::indexed_tria
 }
 
 /// The regions of one state in every layer, and whether there is any region at all.
-void collect_painted_regions(const Domain::indexed_triangle_set   &facets,
-                             const std::vector<float>             &heights,
-                             const std::function<void(void)>      &throw_on_cancel,
-                             bool                                  into_blockers,
-                             std::vector<SupportFacetPaint::Layer> &out,
-                             bool                                 &has_regions)
+void collect_painted_regions(const indexed_triangle_set   &facets,
+                            const std::vector<float>             &heights,
+                            const std::function<void(void)>      &throw_on_cancel,
+                            bool                                  into_blockers,
+                            std::vector<SupportFacetPaint::Layer> &out,
+                            bool                                 &has_regions)
 {
     has_regions = false;
     std::vector<Domain::ExPolygons> regions = painted_facet_regions(facets, heights, throw_on_cancel);
@@ -183,9 +183,9 @@ SupportFacetPaint support_facet_paint(const SupportToolModelMesh        &parts,
     SupportFacetPaint paint;
     // Every rule that reads the paint is off when nothing is painted, so the empty paint is returned
     // before the layers are even allocated.
-    const Domain::indexed_triangle_set enforcer_facets =
+    const indexed_triangle_set enforcer_facets =
         painted_facets(parts, object_to_world, TriangleStateType::ENFORCER);
-    const Domain::indexed_triangle_set blocker_facets =
+    const indexed_triangle_set blocker_facets =
         painted_facets(parts, object_to_world, TriangleStateType::BLOCKER);
     if (enforcer_facets.empty() && blocker_facets.empty())
         return paint;

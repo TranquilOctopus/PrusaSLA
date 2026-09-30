@@ -91,6 +91,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Plater/PaintOnSupportsGizmo.cpp
         include/Slic3r/App/Plater/PaintOnSupportsDialog.hpp
         src/Slic3r/App/Plater/PaintOnSupportsDialog.cpp
+        include/Slic3r/App/Plater/PaintSupportsRules.hpp
+        src/Slic3r/App/Plater/PaintSupportsRules.cpp
         include/Slic3r/App/Plater/PaintOnSeamsGizmo.hpp
         src/Slic3r/App/Plater/PaintOnSeamsGizmo.cpp
         include/Slic3r/App/Plater/PaintOnSeamsDialog.hpp
@@ -253,8 +255,10 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/SidebarSlaSummary.cpp
         include/Slic3r/App/SlaIssueRows.hpp
         src/Slic3r/App/SlaIssueRows.cpp
-        include/Slic3r/App/SlaObjectUseRows.hpp
+include/Slic3r/App/SlaObjectUseRows.hpp
         src/Slic3r/App/SlaObjectUseRows.cpp
+        include/Slic3r/App/SlaHollowingSuggestion.hpp
+        src/Slic3r/App/SlaHollowingSuggestion.cpp
         include/Slic3r/App/SlaLayerKeys.hpp
         src/Slic3r/App/SlaLayerKeys.cpp
         include/Slic3r/App/SlaLayerJump.hpp
@@ -1665,7 +1669,9 @@ if(SLIC3R_BUILD_TESTS)
 
             test/Slic3r/App/SlaIssueRowsTests.cpp
 
-            test/Slic3r/App/SlaObjectUseRowsTests.cpp
+test/Slic3r/App/SlaObjectUseRowsTests.cpp
+
+            test/Slic3r/App/SlaHollowingSuggestionTests.cpp
 
             test/Slic3r/App/SlaLayerKeysTests.cpp
 
@@ -1692,6 +1698,8 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/App/Plater/SurfaceMesh.cpp
 
             test/Slic3r/App/Plater/SlaToolTypesTests.cpp
+
+            test/Slic3r/App/Plater/PaintSupportsTests.cpp
 
             test/Slic3r/App/Plater/SlaSupportPointsGizmoTests.cpp
 

@@ -732,6 +732,10 @@ const std::map<std::string, std::vector<Step>> invalidated_by{
     {"hollowing_infill_strut", steps({propagate(slaposHollowing)})},
     {"hollowing_min_thickness", steps({propagate(slaposHollowing)})},
     {"hollowing_quality", steps({propagate(slaposHollowing)})},
+    // M4.8h: the threshold of the hollowing suggestion. The per object volumes the suggestion is
+    // estimated from are collected at the merge step and do not depend on it, and the frontend
+    // applies it to the result it already has, so nothing has to run again.
+    {"hollowing_suggest_min_volume", steps({})},
     {"initial_exposure_time", steps({propagate(slapsMergeSlicesAndEval)})},
     {"initial_layer_height", all_steps()},
     {"layer_height", steps({propagate(slaposObjectSlice)})},

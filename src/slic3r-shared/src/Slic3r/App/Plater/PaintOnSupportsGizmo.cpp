@@ -3,8 +3,10 @@
 #include "Slic3r/App/AppServices.hpp"
 #include "Slic3r/App/DisplayStrings.hpp"
 #include "Slic3r/App/IDialogManager.hpp"
+#include "Slic3r/App/IsSlaActive.hpp"
 #include "Slic3r/App/Plater/PaintOnGizmoBase.hpp"
 #include "Slic3r/App/Plater/PaintOnSupportsDialog.hpp"
+#include "Slic3r/App/Plater/PaintSupportsRules.hpp"
 #include "Slic3r/App/Plater/PlaterScenePresenter.hpp"
 #include "Slic3r/App/Render/Device.hpp"
 #include "Slic3r/App/Scene/Clipper.hpp"
@@ -38,6 +40,7 @@ using Slic3r::Domain::ModelInstance;
 using Slic3r::Domain::ModelObject;
 using Slic3r::Domain::ModelVolume;
 using Slic3r::Domain::ObjectID;
+using Slic3r::Domain::PrinterTechnology;
 using Slic3r::Domain::Project;
 using Slic3r::Domain::SelectionId;
 using Slic3r::Domain::SlicingId;
@@ -255,6 +258,7 @@ PaintOnSupportsGizmo::PaintOnSupportsGizmo(
     m_dialog->set_paint_on_overhangs_only_value(m_paint_on_overhangs_only);
     m_dialog->set_split_triangles_value(m_triangle_splitting_enabled);
     m_dialog->set_automatic_painting_running(m_automatic_painting_slicing_id.has_value());
+    m_dialog->set_technology(this->active_technology());
 
     m_dialog->callbacks().tool_type_changed = [this](const PaintOnGizmoBase::ToolType tool_type)
     { this->set_tool_type(tool_type); };
@@ -316,6 +320,15 @@ PaintOnSupportsGizmo::PaintOnSupportsGizmo(
 
 PaintOnSupportsGizmo::~PaintOnSupportsGizmo() = default;
 
+void PaintOnSupportsGizmo::on_activated()
+{
+    // The printer may have been changed since the tool was built, and the dialog is the one place
+    // where the wording of the brushes and the rows of the technology are shown.
+    m_dialog->set_technology(this->active_technology());
+
+    PaintOnGizmoBase::on_activated();
+}
+
 void PaintOnSupportsGizmo::on_deactivated()
 {
     if (m_automatic_painting_slicing_id.has_value()) {
@@ -353,6 +366,18 @@ Scene::ToolType PaintOnSupportsGizmo::type() const
 GizmoWindowPtr PaintOnSupportsGizmo::release_ui_window()
 {
     return m_dialog.release();
+}
+
+PrinterTechnology PaintOnSupportsGizmo::active_technology() const
+{
+    return App::selected_printer_technology(m_project_interactor);
+}
+
+bool PaintOnSupportsGizmo::supports_technology(const PrinterTechnology /*technology*/) const
+{
+    // Both technologies paint the same facets: FFF into the support painting, SLA into the input of
+    // the automatic support point generator.
+    return true;
 }
 
 FacetsAnnotationKind PaintOnSupportsGizmo::get_facets_annotation_kind() const
@@ -450,6 +475,13 @@ void PaintOnSupportsGizmo::select_facets_by_angle(const float threshold_deg)
 void PaintOnSupportsGizmo::auto_generate_support_painting()
 {
     using Slicing::StatusCode;
+
+    // The automatic painting paints the spots of the FFF support search, which needs a slice of the
+    // bed up to that step. The dialog hides the button for SLA and this is the rule behind it: only
+    // the Slice button slices (M2.30b).
+    if (!paint_supports_automatic_painting_visible(this->active_technology())) {
+        return;
+    }
 
     if (m_automatic_painting_slicing_id.has_value() || m_paintable_volumes.empty()) {
         return;
