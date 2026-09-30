@@ -267,6 +267,77 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->max = 1;
     def->init_fn = init_with(1.);
 
+    // The vat film and the peel force model that reads it, see doc/sla-fork/profiling/peel-force.md.
+    // The film decides the coefficients, the two coefficients below only override it when they are
+    // set, and the warning picks how many layers are called high.
+    def = defs.add("vat_film_type", typeid(EnumWrapper));
+    def->location = Printer;
+    def->label = L("Vat film");
+    def->option_group = ConfigItemDef::OptionGroup::Printer_General_Advanced;
+    def->category = ConfigItemDef::Category::Printer_General;
+    def->order = 20;
+    def->gui_type = ConfigItemDef::GUIType::combobox;
+    def->tooltip = L("The material of the film at the bottom of the vat. It decides the "
+                     "coefficients of the peel force estimate shown per layer, because a stiffer "
+                     "film is harder to peel: FEP holds on the longest, nFEP a little less, PFA is "
+                     "stiff but thin and ACF gives way early because it inflates instead of "
+                     "stretching. The estimate is a rough model, not a measurement.");
+    def->init_fn = init_with(
+        sla::VatFilmType::FEP,
+        {{int(sla::VatFilmType::FEP), "FEP", L("FEP")},
+         {int(sla::VatFilmType::nFEP), "nFEP", L("nFEP")},
+         {int(sla::VatFilmType::PFA), "PFA", L("PFA")},
+         {int(sla::VatFilmType::ACF), "ACF", L("ACF")}}
+    );
+
+    def = defs.add("peel_area_coefficient", typeid(double));
+    def->location = Printer;
+    def->label = L("Peel force per area");
+    def->option_group = ConfigItemDef::OptionGroup::Printer_General_Advanced;
+    def->category = ConfigItemDef::Category::Printer_General;
+    def->order = 21;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("How many newtons of peel force one square millimetre of cured layer is "
+                     "estimated to cost, used to scale the peel force estimate to your printer. "
+                     "Zero takes the value of the vat film above. The default is a rough figure "
+                     "from the literature, so tune this only if you measured a peel force of your "
+                     "own and know which layer produced it.");
+    def->units = {L("N/mm2")};
+    def->min = 0;
+    def->max = 100;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("peel_perimeter_coefficient", typeid(double));
+    def->location = Printer;
+    def->label = L("Peel force per perimeter");
+    def->option_group = ConfigItemDef::OptionGroup::Printer_General_Advanced;
+    def->category = ConfigItemDef::Category::Printer_General;
+    def->order = 22;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("How many newtons of peel force one millimetre of layer boundary is "
+                     "estimated to cost. The film is lifted off the part along its whole outline, "
+                     "so a thin comb of the same area as a solid block costs more to peel. Zero "
+                     "takes the value of the vat film above.");
+    def->units = {L("N/mm")};
+    def->min = 0;
+    def->max = 100;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("peel_force_warning", typeid(double));
+    def->location = Printer;
+    def->label = L("Peel force warning");
+    def->option_group = ConfigItemDef::OptionGroup::Printer_General_Advanced;
+    def->category = ConfigItemDef::Category::Printer_General;
+    def->order = 23;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("The estimated peel force in newtons above which a layer is called high and "
+                     "is listed as an issue. A negative value takes the default of the vat film "
+                     "above, zero reports no layer at all.");
+    def->units = {L("N")};
+    def->min = -1;
+    def->max = 1000;
+    def->init_fn = init_with(-1.);
+
 
     def = defs.add("material_colour", typeid(std::string));
     def->location = Material;

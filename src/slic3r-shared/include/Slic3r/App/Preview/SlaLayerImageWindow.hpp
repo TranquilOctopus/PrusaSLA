@@ -49,6 +49,8 @@ private:
         float height
     );
     std::string layer_stats_text() const;
+    // The peel force in N above which a layer is called high, 0 when the slicer found no warning.
+    double peel_warning_n() const;
     void on_prev_layer();
     void on_next_layer();
     // Turns a click on the fitted layer image into slice mm and opens the native resolution zoom on it.

@@ -71,4 +71,17 @@ CavityAnalysis detect_cavities(const std::vector<Domain::ExPolygons>& layers,
                                const std::vector<float>& layer_thicknesses_mm,
                                const CavityDetectionOptions& opts = {});
 
+/**
+ * @brief The area of the cup openings that are open on each layer, in mm².
+ *
+ * @param cups The cups detect_cavities() found.
+ * @param layer_count As many entries as the layers are wanted.
+ * @return One area per layer, the sum of the opening areas of the cups that are open on it.
+ *
+ * A cup is open on every layer from the one holding its opening up to the one below its roof,
+ * because the vacuum it holds is pinned against the vat film on each of those peels. This is the
+ * suction term of the peel force estimate of SLA/LayerStats.hpp.
+ */
+std::vector<float> cup_suction_area_mm2(const std::vector<CupHit>& cups, size_t layer_count);
+
 } // namespace Slic3r::SLA

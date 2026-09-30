@@ -93,6 +93,9 @@ std::vector<std::string> get_all_sla_config_keys() {
     keys.push_back("pad_wall_height");
     keys.push_back("pad_wall_slope");
     keys.push_back("pad_wall_thickness");
+    keys.push_back("peel_area_coefficient");
+    keys.push_back("peel_force_warning");
+    keys.push_back("peel_perimeter_coefficient");
     keys.push_back("raft_edge_taper");
     keys.push_back("raft_infill");
     keys.push_back("raft_infill_spacing");
@@ -179,6 +182,7 @@ std::vector<std::string> get_all_sla_config_keys() {
     keys.push_back("tower_hop_height");
     keys.push_back("tower_speed");
     keys.push_back("use_tilt");
+    keys.push_back("vat_film_type");
     keys.push_back("zcorrection_layers");
 
     keys.push_back("bottom_layer_count");

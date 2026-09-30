@@ -30,7 +30,7 @@ struct OutputFiles
 /// Reserved for M4.8/M5.8: per-print issue list (islands, cups, trapped resin, etc.)
 struct SlaIssue
 {
-    enum class Kind { Island, Cup, TrappedResin, Other };
+    enum class Kind { Island, Cup, TrappedResin, HighPeelForce, Other };
     Kind kind = Kind::Other;
     size_t layer = 0;
     Domain::ObjectID object_id{};
