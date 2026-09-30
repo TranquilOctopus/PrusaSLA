@@ -1,14 +1,25 @@
-# SLA CI (PLAN G1, todo M0.14)
+# CI (PLAN G1 and G4, todos M0.14 and M6.3)
 
-`.github/workflows/sla-ci.yml` is the fork's CI: it builds the deps, builds and runs the two test
-binaries, runs the M0.13 benchmark harness over the committed models, and puts the metrics diff on
-the pull request. **It has never been run.** Nothing in this file has been executed on a runner; the
-steps are marked below with what to watch on the first run.
+Two things live in `.github/workflows`, and both of them are run by hand:
 
-It is manual on purpose. Actions minutes can cost money on a personal fork, so there is no `push`
-trigger and no schedule: a run only happens when a person asks for one, by hand or with a label.
+- **`sla-ci.yml`** (PLAN G1, [M0.14](ROADMAP.md)), the fork's CI: it builds the deps, builds and
+  runs the two test binaries, runs the M0.13 benchmark harness over the committed models, and puts
+  the metrics diff on the pull request.
+- **`upstream_rehearsal.yml`** (PLAN G4, [M6.3](ROADMAP.md)), the optional wrapper around the
+  upstream merge rehearsal: a script that merges `upstream/master` into a fork branch in a
+  throwaway worktree and writes a conflict report. The script is local first; the workflow is one
+  way to run it and publish the report. It is a file of its own rather than a job in `sla-ci.yml`,
+  so the two concerns stay apart.
 
-## What a run does
+Manual is the point in both cases. Actions minutes can cost money on a personal fork, so neither
+file has a `push` trigger and neither has a `schedule`: a run only happens when a person asks for
+one, from the Actions tab, from the `run-ci` label on a pull request, or with `gh workflow run`.
+**Neither workflow has ever been run.** Nothing in either file has been executed on a runner; the
+steps worth watching on a first run are listed per workflow below.
+
+## sla-ci.yml
+
+### What a run does
 
 | Step | What it does |
 |---|---|
@@ -20,14 +31,14 @@ trigger and no schedule: a run only happens when a person asks for one, by hand 
 | Run both | logs in the `sla-test-output` artifact, plus a short job summary |
 | Benchmark | `sla_print_tests "[benchmark]"` over the committed `tests/data` models, `sla_benchmark.json` |
 | Metrics diff | `doc/sla-fork/tools/bench_diff.py` against `doc/sla-fork/baseline.json` when it exists |
-| Comment | a second job posts that table on the pull request and updates it on later pushes |
+| Comment | a second job posts that table on the pull request (pull request runs only) and updates it on later pushes |
 
 The benchmark step sets `SLA_BENCH_FILTER=testdata` and deliberately leaves `SLA_BENCH_DIR` unset,
 so the harness runs its built in set: the six small models in `tests/data`, which are in the
 repository. `local-samples/` is never used, read or uploaded; the M0.12 corpus is not in the
 repository and never may be.
 
-## How to trigger it
+### How to trigger it
 
 **By hand.** Repository -> Actions -> *SLA CI (manual)* -> *Run workflow*. The one input is
 *Fail the run when a benchmark layer_hash changes* (off by default, see the baseline section).
@@ -49,7 +60,7 @@ With the GitHub CLI: `gh label create run-ci --color 0e8a16 --description "Run S
 Pull requests from forks never run, even with the label: the workflow file would come from the fork
 and the comment job holds a write token. Push the branch to this repository instead.
 
-## What it costs
+### What it costs
 
 A run is Linux minutes from the `ubuntu-24.04` runner pool, and most of it is the build.
 
@@ -73,7 +84,7 @@ spending limit. If the repository is public, Linux runners are free and this is 
 are only billed to private repositories. `concurrency` is already set to cancel in progress, so a
 chain of pushes to a labelled pull request costs one run, not one per push.
 
-## Timeouts and failure behaviour
+### Timeouts and failure behaviour
 
 - The job is capped at `timeout-minutes: 360`, which is GitHub's maximum, so it is a hard limit
   rather than a decision. The deps build step is capped at 150 minutes and the application build at
@@ -85,7 +96,7 @@ chain of pushes to a labelled pull request costs one run, not one per push.
 - The upload and the job summary run whatever happened, so a failed run still has its output in the
   artifact and in the summary.
 
-## The baseline and the `layer_hash` gate
+### The baseline and the `layer_hash` gate
 
 `bench_diff.py` exits 1 when a `layer_hash` changed, which is a real change in the sliced geometry.
 The workflow does **not** turn that into a failed run by default. The reason is the first Linux run:
@@ -108,7 +119,7 @@ The order that gets the gate switched on:
    to be reproducible for a commit. Record it and decide then whether the baseline is per platform
    or the hash needs to be platform neutral.
 
-## Steps to check on the first run
+### Steps to check on the first run
 
 These are the ones the author could not verify without running it, all of them read-and-think rather
 than tested:
@@ -139,29 +150,17 @@ than tested:
   somewhere else, wx is not found; the cache key does not carry the path on purpose, because a
   second prefix copy is far bigger than it is worth.
 
-## Not covered
+### Not covered
 
 - Windows and macOS, and the app, the wx shell and the visual regression renders: this job builds
-  the two test binaries and nothing else. The visual regression tool (M6.2) and the nightly merge
-  rehearsal (M6.3, which needs this todo) still have no job.
+  the two test binaries and nothing else. The visual regression tool (M6.2) still has no job.
 - The benchmark on a pull request uses the committed test models, not the M0.12 corpus, because the
   corpus is not in the repository. A metrics diff over the real corpus stays a local run.
+- The nightly upstream merge rehearsal (M6.3) has its own workflow file rather than a job here.
 - Formatting, static analysis and the upstream platform builds: the workflows inherited from
   upstream are untouched and still call `PrusaSlicer-Actions`.
-# CI and the upstream merge rehearsal
 
-Two things live here, both run by hand:
-
-- **the upstream merge rehearsal** ([M6.3](ROADMAP.md), PLAN G4): a script that merges
-  `upstream/master` into the fork branch in a throwaway worktree and writes a conflict report,
-- **the optional workflow** (`.github/workflows/upstream_rehearsal.yml`) that runs that script and
-  uploads the report. It is `workflow_dispatch` only.
-
-The main CI workflow (build, both test binaries, a metrics diff comment) is still
-[M0.14](ROADMAP.md) and is not written yet. When it lands, the rehearsal job can move into that
-file; until then it is its own small workflow.
-
-## The rehearsal script
+## The upstream merge rehearsal
 
 `doc/sla-fork/tools/upstream_rehearsal.py`, standard library only, no build and no test run.
 
@@ -215,7 +214,7 @@ git remote set-url --push upstream DISABLED   # a push is impossible by accident
 A conflict is not a failure of the tool, so the workflow uploads the report `if: always()` and only
 fails the job when it is told to (`fail_on_conflicts`).
 
-## What the report says
+### What the report says
 
 Markdown (and the same thing as JSON with `--json`):
 
@@ -234,15 +233,30 @@ The areas are `engine SLA` (`src/libslic3r/`), `config defs` (`ConfigDefs*`, `Co
 `src/slic3r-domain/`, `src/slic3r-biz-*`, `src/slic3r-render/`), `build` (`CMakeLists.txt`,
 `*.cmake`, `cmake/`, `CMakePresets.json`, `version.inc`, `.github/workflows/`) and `other`.
 
-## Running it in CI
+### The report builder's tests
 
-The workflow is manual: **Actions → Upstream merge rehearsal → Run workflow**. Inputs: the branch
-(default `sla/main`), the upstream URL and branch, and whether a conflict should fail the job. The
-checkout is a full clone (`fetch-depth: 0`), because a shallow one has no merge base, and the job
-adds the upstream remote itself, since a CI checkout only knows the fork. The report goes into the
-job summary and into the artifact `upstream-rehearsal-<run id>`, as Markdown, JSON and the raw log.
+The report builder is a pure function of a plain dict, so it is tested on a made up conflict list,
+with no git command and no merge:
 
-A nightly run is one scheduled line on top of `workflow_dispatch`:
+```bash
+python doc/sla-fork/tools/test_upstream_rehearsal.py
+python -m unittest discover -s doc/sla-fork/tools -p "test_upstream_rehearsal.py"
+```
+
+The CI job runs that before the rehearsal, so a broken report fails the run before it fetches
+anything.
+
+### The workflow
+
+Manual, like the other one: **Actions -> Upstream merge rehearsal -> Run workflow**. Inputs: the
+branch (default `sla/main`), the upstream URL and branch, and whether a conflict should fail the
+job. The checkout is a full clone (`fetch-depth: 0`), because a shallow one has no merge base, and
+the job adds the upstream remote itself, since a CI checkout only knows the fork. The report goes
+into the job summary and into the artifact `upstream-rehearsal-<run id>`, as Markdown, JSON and the
+raw log.
+
+A nightly run is one scheduled line on top of `workflow_dispatch`, which is the follow-up now that
+M0.14 has landed:
 
 ```yaml
 on:
@@ -255,15 +269,12 @@ Nothing was run yet: the first rehearsal is a person's job. PLAN G4 also asks fo
 test run of the merged tree. That is not in the script (it would need the whole build, which is
 what the M0.14 runner is for) and is still open.
 
-## Tests
+## The upstream workflows are left alone
 
-The report builder is a pure function of a plain dict, so it is tested on a made up conflict list,
-with no git command and no merge:
-
-```bash
-python doc/sla-fork/tools/test_upstream_rehearsal.py
-python -m unittest discover -s doc/sla-fork/tools -p "test_upstream_rehearsal.py"
-```
-
-The CI job runs that before the rehearsal, so a broken report fails the run before it fetches
-anything.
+Everything else in `.github/workflows` comes from upstream and is untouched, for mergeability: the
+platform builds `build_windows.yml`, `build_osx.yml` and `build_flatpak.yml` and
+`clang_format.yml` all run on **every push**, and `static_analysis.yml` runs **nightly**; they all
+call the reusable workflows of `PrusaSlicer-Actions`. On this fork they should not run at all, so
+GitHub Actions is best disabled for the repository, or restricted to the two workflows above in the
+repository's Actions settings. Nothing in this file changes them, and a merge from upstream brings
+them back untouched.
