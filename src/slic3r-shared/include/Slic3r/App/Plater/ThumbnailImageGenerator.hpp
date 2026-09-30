@@ -43,11 +43,12 @@ public:
      * The same path the objects list thumbnails go through, without the queue and without the
      * window: the scene is rendered into a framebuffer, read back and flipped, so the result is
      * the 3D view alone and its size is the one asked for. Prepare draws the bed, Preview the
-     * sliced print.
+     * Preview view itself, with that view's scene and that view's camera.
      *
-     * Returns an empty vector when the project or the bed is gone, or when a preview is asked for
-     * a bed that has not been sliced. Has to run on the main thread with the render context
-     * current, like the queued thumbnails do.
+     * Returns an empty vector when the project or the bed is gone, when a preview is asked for a
+     * bed that has not been sliced, when the Preview view is not there to be asked (see
+     * set_fixture_view_source) or when the view has nothing in its scene yet. Has to run on the
+     * main thread with the render context current, like the queued thumbnails do.
      */
     [[nodiscard]] Domain::Images render_view(
         Domain::SelectionId project_id,
@@ -56,7 +57,22 @@ public:
         FixtureView view
     );
 
+    /**
+     * @brief The 3D view a render of the Preview view draws, which is the Preview view itself.
+     *
+     * The Prepare view is a scene of the workbench and the generator already has it, but the
+     * Preview view has a scene of its own (roadmap M6.2b). The app sets this once the Preview
+     * module is there; until then a render of the preview has nothing to draw and says so.
+     */
+    void set_fixture_view_source(App::IFixtureViewSource* fixture_view_source)
+    {
+        m_fixture_view_source = fixture_view_source;
+    }
+
 private:
+    /// The Preview view of the print, drawn with its own scene and its own camera.
+    [[nodiscard]] Domain::Images render_preview_view(const Domain::Sizes& sizes);
+
     struct Item
     {
         Biz::Slicing::ThumbnailImageRequests requests;
@@ -71,6 +87,7 @@ private:
     const Domain::Workbench* m_workbench{nullptr};
     Render::Device* m_device{nullptr};
     Scene::IProjectSceneProvider* m_scene_provider{nullptr};
+    App::IFixtureViewSource* m_fixture_view_source{nullptr};
     std::unique_ptr<ThumbnailRenderer> m_renderer;
     std::deque<Item> m_queue;
 };

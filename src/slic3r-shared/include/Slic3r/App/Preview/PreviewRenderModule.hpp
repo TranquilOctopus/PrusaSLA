@@ -198,6 +198,17 @@ public:
         return m_gizmo_manager->commands();
     }
 
+    /**
+     * @name The render of the Preview view (roadmap M6.2b)
+     * @{
+     */
+
+    /// The Preview view, which --render-view preview renders as itself, or nullptr while the view
+    /// is not initialized yet.
+    [[nodiscard]] App::IFixtureViewSource* fixture_view_source() { return m_scene_presenter.get(); }
+
+    /**@}*/
+
     const Platform::ICommand& command(const char* name) const override
     {
         if (gizmo_commands().contains(name)) {

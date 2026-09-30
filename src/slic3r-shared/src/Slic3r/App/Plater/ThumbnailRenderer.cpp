@@ -25,7 +25,11 @@ using Domain::Image;
 using Domain::Images;
 using Biz::Algorithms::ImageUtils::flip_vertical;
 
-Images ThumbnailRenderer::generate_thumbnails(const ThumbnailRendererParams& params, Scene::Camera& camera)
+Images ThumbnailRenderer::generate_thumbnails(
+    const ThumbnailRendererParams& params,
+    Scene::Camera& camera,
+    Scene::ISceneRenderCustomizer* customizer
+)
 {
     if (params.sizes.empty())
         PANIC("No thumbnail sizes specified");
@@ -38,7 +42,9 @@ Images ThumbnailRenderer::generate_thumbnails(const ThumbnailRendererParams& par
     // we need to modify the camera viewport, which changes for every thumbnail to produce
     // we may also modify the camera zoom, if params.zoom_aabb is set
     Scene::Scene* scene = const_cast<Scene::Scene*>(&params.scene);
-    Scene::MinimalSceneRenderCustomizer render_customizer;
+    Scene::MinimalSceneRenderCustomizer default_customizer;
+    Scene::ISceneRenderCustomizer* render_customizer =
+        customizer != nullptr ? customizer : &default_customizer;
 
     for (const auto& size : params.sizes) {
         if (size.width * size.height > 0) {
@@ -69,7 +75,7 @@ Images ThumbnailRenderer::generate_thumbnails(const ThumbnailRendererParams& par
             cmd_buffer->set_viewport(viewport);
             cmd_buffer->clear_buffers(true, true);
 
-            scene->render(m_device, *cmd_buffer, &render_customizer, &camera);
+            scene->render(m_device, *cmd_buffer, render_customizer, &camera);
 
             if (fb_data.num_samples > 1) {
                 // resolve framebuffer if multisampling is enabled

@@ -65,6 +65,29 @@ void PreviewScenePresenter::screen_resized(const Render::Rect& viewport)
     update_cameras([&viewport](auto& cam) { cam.set_viewport(viewport); });
 }
 
+Platform::CameraSynchData PreviewScenePresenter::current_camera_synch_data() const
+{
+    Platform::CameraSynchData data;
+    scene().camera().update_synch_data(data);
+    scene().camera_trackball().update_synch_data(data);
+    return data;
+}
+
+bool PreviewScenePresenter::fixture_render_has_print() const
+{
+    if (m_projects.empty())
+        return false;
+
+    // The bed is in the scene from the start; what a render of this view is about is the print the
+    // slice put there, which is a node that draws something and is not the bed.
+    bool has_print = false;
+    Scene::visit(scene().root(), [&has_print](const Scene::Node& node) {
+        if (node.has_render_component() && !node.has_tag_of_type<Scene::BedNodeTag>())
+            has_print = true;
+    });
+    return has_print;
+}
+
 void PreviewScenePresenter::on_selected_project_changed(size_t index)
 {
     m_selected_project_id = index;

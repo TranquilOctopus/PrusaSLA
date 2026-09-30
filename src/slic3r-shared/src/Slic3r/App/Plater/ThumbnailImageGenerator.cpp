@@ -154,6 +154,9 @@ Domain::Images ThumbnailImageGenerator::render_view(
         SPDLOG_ERROR("The thumbnail generator is not initialized, cannot render a fixture view.");
         return Domain::Images();
     }
+    if (fixture_view_scene(view) == FixtureViewScene::Preview)
+        return render_preview_view(sizes);
+
     const Domain::Project* project = m_workbench->find_project_by_id(project_id);
     if (project == nullptr) {
         SPDLOG_ERROR("Project {} is gone, cannot render a fixture view.", project_id);
@@ -170,10 +173,46 @@ Domain::Images ThumbnailImageGenerator::render_view(
 
     // A perspective camera, which is what the plater shows; the objects list asks for an
     // orthographic one.
-    const Scene::CameraProjectionType camera_type = Scene::CameraProjectionType::Perspective;
-    if (view == FixtureView::Preview)
-        return m_renderer->generate_gcode_thumbnails(params, *project, bed_instance_id, camera_type);
-    return m_renderer->generate_bed_thumbnails(params, *project, bed_instance_id, false, camera_type);
+    return m_renderer->generate_bed_thumbnails(
+        params,
+        *project,
+        bed_instance_id,
+        false,
+        Scene::CameraProjectionType::Perspective
+    );
+}
+
+Domain::Images ThumbnailImageGenerator::render_preview_view(const Domain::Sizes& sizes)
+{
+    if (m_fixture_view_source == nullptr) {
+        SPDLOG_ERROR("The Preview view of the fixture cannot be rendered: no view to draw.");
+        return Domain::Images();
+    }
+
+    // The Preview view, not the bed of the Prepare tab: a render of it that drew the plater scene
+    // would miss every change in the view, which is the whole point of the view (M6.2b). A view
+    // that has no print in it yet draws an empty bed, which is a reference of nothing.
+    if (!m_fixture_view_source->fixture_render_has_print()) {
+        SPDLOG_ERROR("The Preview view of the fixture has no print in its scene yet.");
+        return Domain::Images();
+    }
+    const Scene::Scene& scene = m_fixture_view_source->fixture_render_scene();
+
+    ThumbnailRendererParams params{
+        .scene        = scene,
+        .pixel_format = Domain::PixelFormat::RGBA8,
+        .sizes        = sizes,
+    };
+
+    // The camera of the view, and not a framed one: the renderer gives it the viewport of the
+    // size, and the rest is where the view is looking from.
+    Scene::Camera camera;
+    set_fixture_view_camera(m_fixture_view_source->fixture_render_camera(), camera);
+
+    // The customizer of the view too, so the render draws the passes the view draws and not only
+    // the plain opaque and transparent ones.
+    Scene::ISceneRenderCustomizer& customizer = m_fixture_view_source->fixture_render_customizer();
+    return m_renderer->generate_thumbnails(params, camera, &customizer);
 }
 
 } // namespace Slic3r::App::Plater

@@ -8,6 +8,10 @@
 
 #include <nlohmann/json.hpp>
 
+#include "Slic3r/App/Platform/CameraSynchData.hpp"
+#include "Slic3r/App/Scene/Camera.hpp"
+#include "Slic3r/App/Scene/CameraHelper.hpp"
+#include "Slic3r/App/Scene/CameraTrackballController.hpp"
 #include "Slic3r/App/Theme.hpp"
 #include "Slic3r/App/ThemeTypes.hpp"
 #include "Slic3r/Biz/Algorithms/PNGReadWrite.hpp"
@@ -29,6 +33,31 @@ std::optional<FixtureView> fixture_view_from_string(std::string_view name)
 std::string fixture_view_to_string(FixtureView view)
 {
     return view == FixtureView::Preview ? "preview" : "prepare";
+}
+
+FixtureViewScene fixture_view_scene(FixtureView view)
+{
+    return view == FixtureView::Preview ? FixtureViewScene::Preview : FixtureViewScene::Plater;
+}
+
+std::string fixture_view_scene_to_string(FixtureViewScene scene)
+{
+    return scene == FixtureViewScene::Preview ? "preview" : "plater";
+}
+
+FixtureRenderCoverage fixture_render_coverage(FixtureView)
+{
+    // The same limit for both views, which is the point of naming it: the render is offscreen, so
+    // there is no window to be in and no overlay or cursor drawn over it (roadmap M6.2c).
+    return FixtureRenderCoverage();
+}
+
+void set_fixture_view_camera(const Platform::CameraSynchData& data, Scene::Camera& camera)
+{
+    // A trackball of its own, because the view keeps the one it is being rotated with: this camera
+    // belongs to a render and is thrown away with it.
+    Scene::CameraTrackballController trackball{camera};
+    Scene::synchronize_camera(data, camera, trackball);
 }
 
 std::optional<Domain::Size> parse_render_size(std::string_view text)
@@ -139,9 +168,15 @@ std::string render_sidecar(FixtureView view, const Domain::Image& image, const T
     nlohmann::ordered_json sidecar;
     sidecar["tool"]                        = "M6.2 visual regression render";
     sidecar["view"]                        = fixture_view_to_string(view);
+    sidecar["scene"]                       = fixture_view_scene_to_string(fixture_view_scene(view));
     sidecar["width"]                       = image.width();
     sidecar["height"]                      = image.height();
     sidecar["composited_background_token"] = "SceneBgBottom";
+    const FixtureRenderCoverage coverage   = fixture_render_coverage(view);
+    sidecar["covers"]["view"]              = coverage.view;
+    sidecar["covers"]["window"]            = coverage.window;
+    sidecar["covers"]["overlays"]          = coverage.overlays;
+    sidecar["covers"]["cursor"]            = coverage.cursor;
     nlohmann::ordered_json lightness;
     for (const RoleLightness& role : scene_lightness(theme)) {
         lightness[role.role] = nlohmann::ordered_json{
