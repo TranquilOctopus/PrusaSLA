@@ -656,8 +656,14 @@ inline long build_ground_connection(SupportTreeBuilder &builder,
 //        ret = builder.add_pillar(head_id, h);
 //    } else
 
-    ret = builder.add_pillar(gp, h, conn.path.back().r, conn.pillar_base->r_top,
-                             conn.stem);
+    // This tree widens a pillar towards the plate, so the cone it ends in is wider than the
+    // pillar above it. A flat disc foot is meant to be the whole foot, so the widening is
+    // skipped for it and the pillar runs straight down into the disc (M2.23c). add_pillar_base
+    // makes the disc at least as wide as that pillar, so the disc is the widest part of it.
+    const double end_r = conn.pillar_base->shape == Domain::sla::SupportBaseShape::Flat ?
+                             conn.path.back().r : conn.pillar_base->r_top;
+
+    ret = builder.add_pillar(gp, h, conn.path.back().r, end_r, conn.stem);
 
     if (conn.pillar_base->r_top >= full_r)
         builder.add_pillar_base(ret, conn.pillar_base->height, conn.pillar_base->r_bottom,

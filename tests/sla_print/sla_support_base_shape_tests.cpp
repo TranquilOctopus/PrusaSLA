@@ -327,6 +327,69 @@ TEST_CASE("BranchingSupportTree::A point may ask for a base shape of its own", "
     CHECK(foot_volume(cylinder_builder) > foot_volume(cone_builder));
 }
 
+// A flat disc is meant to be the whole foot. This tree widens a pillar towards the plate, and
+// that widening sat between the disc and the plate, so what reached the plate was a disc with a
+// cone on it rather than the disc alone. The widening is skipped for a disc, the pillar runs
+// straight down into it, and the disc is at least as wide as that pillar (M2.23c).
+TEST_CASE("BranchingSupportTree::A flat disc foot is not widened above it", "[suptreetree]")
+{
+    Slic3r::sla::SupportableMesh disc_sm =
+        make_supportable_mesh(make_points(), SupportBaseShape::Flat);
+    Slic3r::sla::SupportableMesh cone_sm =
+        make_supportable_mesh(make_points(), SupportBaseShape::Cone);
+
+    Slic3r::sla::SupportTreeBuilder disc_builder;
+    Slic3r::sla::create_branching_tree(disc_builder, disc_sm);
+    Slic3r::sla::SupportTreeBuilder cone_builder;
+    Slic3r::sla::create_branching_tree(cone_builder, cone_sm);
+
+    const Slic3r::sla::Pedestal *disc = first_pedestal(disc_builder);
+    REQUIRE(disc != nullptr);
+    REQUIRE(!disc_builder.pillars().empty());
+    REQUIRE(!cone_builder.pillars().empty());
+
+    // No pillar of the disc tree flares out towards the plate, and nothing reaches past the
+    // disc there: the disc is the whole foot.
+    for (const Slic3r::sla::Pillar &pillar : disc_builder.pillars()) {
+        CHECK(pillar.r_end == Approx(pillar.r_start));
+        CHECK(disc->r_bottom >= pillar.r_end);
+    }
+
+    // The cone foot keeps the widening of the tree, which is what a disc has to give up.
+    for (const Slic3r::sla::Pillar &pillar : cone_builder.pillars())
+        CHECK(pillar.r_end > pillar.r_start);
+}
+
+// The shape of the foot alone decides that, whatever route the tree found: the same route ends
+// in a widened pillar for a cone or a cylinder foot and in a straight one for a flat disc.
+TEST_CASE("The foot shape alone decides the widening of the pillar above it", "[suptreetree]")
+{
+    // A route that starts in a node of radius 0.4 above the ground and ends in a pedestal whose
+    // top is the widened 0.9 this tree ends its pillars in.
+    constexpr double node_radius = 0.4;
+    constexpr double widened     = 0.9;
+
+    auto end_radius_of = [=](SupportBaseShape shape) {
+        Slic3r::sla::SupportableMesh sm = make_supportable_mesh(make_points());
+
+        Slic3r::sla::GroundConnection conn;
+        conn.path.emplace_back(
+            Slic3r::sla::Junction{Slic3r::Domain::Vec3d{8., 20., 0.}, node_radius});
+        conn.pillar_base = Slic3r::sla::Pedestal{Slic3r::Domain::Vec3d{8., 20., 0.},
+                                                 base_height, base_radius, widened, shape};
+
+        Slic3r::sla::SupportTreeBuilder builder;
+        Slic3r::sla::build_ground_connection(builder, sm, conn);
+        REQUIRE(builder.pillarcount() == size_t(1));
+
+        return builder.pillars().front().r_end;
+    };
+
+    CHECK(end_radius_of(SupportBaseShape::Cone) == Approx(widened));
+    CHECK(end_radius_of(SupportBaseShape::Cylinder) == Approx(widened));
+    CHECK(end_radius_of(SupportBaseShape::Flat) == Approx(node_radius));
+}
+
 TEST_CASE("The support_base_shape setting sits with the other base settings", "[suptreetree]")
 {
     // The dropdown lives next to the base diameter and height, in the group that shows them,
