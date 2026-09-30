@@ -2,23 +2,43 @@
 // JSON, so engine changes (support point generation, support tree, pad, slicing speed) can be
 // compared before and after.
 //
-// Hidden test. Run it from the repository root:
+// Hidden test `[benchmark]`, and the run is driven entirely by the environment:
 //
-//     build-default\tests\sla_print\Release\sla_print_tests.exe "[benchmark]"
-//
-// Models: the small set from tests/data plus every .stl/.obj in the folder named by
-// SLA_BENCH_DIR (the M0.12 corpus lives outside the repo). Each model is benchmarked as loaded,
-// only centred on the plate, with the default SLA config. SLA_BENCH_OUT names the output file,
-// default sla_benchmark.json in the working directory.
-//
-//     set SLA_BENCH_DIR=D:\corpus & set SLA_BENCH_OUT=after.json
+//     set SLA_BENCH_DIR=local-samples\benchmark models
+//     set SLA_BENCH_OUT=doc\sla-fork\before.json
 //     build-default\tests\sla_print\Release\sla_print_tests.exe "[benchmark]"
 //     python doc/sla-fork/tools/bench_diff.py before.json after.json
 //
+//   SLA_BENCH_DIR       folder holding the M0.12 corpus. When the folder has a manifest.yaml the
+//                       manifest decides which models run; without one every .stl and .obj in the
+//                       folder runs.
+//   SLA_BENCH_OUT       metrics JSON to write, sla_benchmark.json in the working directory when
+//                       unset.
+//   SLA_BENCH_FILTER    comma separated ids and categories, unset or empty runs all of them, e.g.
+//                       set SLA_BENCH_FILTER=bm01,bm07,miniature
+//
+// manifest.yaml, the model set of M0.12, in the folder named by SLA_BENCH_DIR:
+//
+//     models:
+//       - {id: bm01, file: "5.stl", category: miniature}
+//       - {id: bm02, file: "figure.stl", category: large_figure}
+//
+// A model is named in the JSON by its `id` and its `category` and by nothing else. The file name
+// and the folder never go into the JSON, also not inside an error message: the corpus is not
+// redistributable, so a committed baseline may only name the models by id.
+//
 // Every model runs the same pipeline: support points, support tree and pad through the support
 // tool (SLASupportTool.hpp), then a full SLAPrint slice with those points. The key order is
-// fixed so two runs can be diffed. t_total_ms covers the whole per model run, the island
-// counting included; peak_working_set_bytes is process wide and never decreases.
+// fixed so two runs can be diffed. t_total_ms covers the whole per model run, the layer hash and
+// the island counting included; peak_working_set_bytes is process wide and never decreases.
+//
+// layer_hash is a hash of the sliced layers and must be identical on two runs of the same commit,
+// so nothing that moves between runs goes into it: no pointer values, no unordered container
+// iteration order and no timings. The thread count is deliberately not pinned. The support tool
+// and the slicer both hand out whole layers to TBB workers and each layer is built on its own
+// (`make_expolygons` is called per layer, see slice_mesh_ex in TriangleMeshSlicer.cpp), so the
+// geometry of a layer does not depend on how many workers there are, and pinning the arena would
+// only make the timings meaningless.
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -35,9 +55,11 @@
 #include <iomanip>
 #include <iostream>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -58,9 +80,11 @@
 #include "Slic3r/Biz/Format/OBJ.hpp"
 #include "Slic3r/Biz/Format/STL.hpp"
 #include "Slic3r/Biz/Slicing/BackgroundProcess.hpp"
+#include "Slic3r/Biz/Yaml/Yaml.hpp"
 #include "Slic3r/Domain/Bed.hpp"
 #include "Slic3r/Domain/BedInstance.hpp"
 #include "Slic3r/Domain/ConfigPack.hpp"
+#include "Slic3r/Domain/ExPolygon.hpp"
 #include "Slic3r/Domain/FullConfigSLA.hpp"
 #include "Slic3r/Domain/Model.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
@@ -70,6 +94,7 @@
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
 #include "Slic3r/Domain/SlicingId.hpp"
 #include "Slic3r/Domain/TriangleMesh.hpp"
+#include "Slic3r/Domain/Types.hpp"
 #include "Slic3r/TestUtils/HwConfigUtils.hpp"
 #include "libslic3r/IThumbnailImageGenerator.hpp"
 #include "libslic3r/SLAPrint.hpp"
@@ -77,6 +102,27 @@
 #include "libslic3r/SLA/IslandDetection.hpp"
 
 #include "test_utils.hpp"
+
+namespace Bench {
+
+// The manifest is optional per field, so a model without a category is still runnable. `id` and
+// `file` are required: an id is what the JSON calls the model and a file is what gets loaded.
+struct ManifestEntry
+{
+    std::string                id;
+    std::string                file;
+    std::optional<std::string> category;
+};
+
+struct Manifest
+{
+    std::vector<ManifestEntry> models;
+};
+
+} // namespace Bench
+
+STRUCT_DESC_SIMPLE(Bench::ManifestEntry, id, file, category);
+STRUCT_DESC_SIMPLE(Bench::Manifest, models);
 
 namespace {
 
@@ -94,6 +140,9 @@ constexpr double ISLAND_MIN_AREA_MM2 = 0.1;
 // Vertical distance within which a support point counts as covering an island.
 constexpr double ISLAND_POINT_DZ_MM = 0.5;
 
+// Run when SLA_BENCH_DIR has no manifest.yaml, so that the harness still does something useful
+// before M0.12 has chosen the corpus. These are committed in the repository, so unlike the
+// corpus they are named by their file name.
 constexpr const char* BENCH_MODELS[] = {
     "20mm_cube.obj",
     "A_upsidedown.obj",
@@ -101,6 +150,22 @@ constexpr const char* BENCH_MODELS[] = {
     "frog_legs.obj",
     "pyramid.obj",
     "bridge.obj",
+};
+constexpr const char* BENCH_MODELS_CATEGORY = "testdata";
+// The corpus of a folder scanned without a manifest. Those models are not named in the JSON at
+// all, the start log line maps the run index to the file so a local run stays usable.
+constexpr const char* CORPUS_CATEGORY = "corpus";
+constexpr const char* MANIFEST_FILE = "manifest.yaml";
+
+/// One model to benchmark. file_name and folder stay inside the harness: only id and category
+/// reach the JSON.
+struct ModelSpec
+{
+    std::string id;
+    std::string category;
+    std::string file_name;
+    std::string folder;
+    bool        from_test_data = false;
 };
 
 /// A JSON value with a fixed key order. Just enough for the metrics file, and it keeps the key
@@ -229,24 +294,56 @@ private:
     std::vector<Json>        m_items;
 };
 
+/// FNV-1a, 64 bit. Everything that goes into the layer hash goes through this: integers only, no
+/// raw bytes of a struct, so the value does not depend on padding, endianness or the allocator.
+class Fnv1a
+{
+public:
+    template <typename T>
+        requires std::is_integral_v<T>
+    void feed(T value)
+    {
+        feed_bytes(uint64_t(value));
+    }
+
+    void feed(const std::string& text)
+    {
+        for (char c : text) feed_bytes(uint8_t(c));
+    }
+
+    uint64_t value() const { return m_hash; }
+
+private:
+    void feed_bytes(uint64_t value)
+    {
+        for (int byte = 0; byte < 8; ++byte) {
+            m_hash ^= (value >> (byte * 8)) & 0xffu;
+            m_hash *= 0x100000001b3ull;
+        }
+    }
+
+    uint64_t m_hash = 0xcbf29ce484222325ull;
+};
+
 /// The per model numbers, in the order they are written to the JSON.
 struct ModelMetrics
 {
-    std::string name;
-    std::string source;
+    std::string id;
+    std::string category;
     std::string error;
-    size_t   triangles                     = 0;
-    size_t   support_points                = 0;
-    size_t   support_tree_triangles        = 0;
-    double   support_tree_volume_mm3       = 0.;
-    double   pad_volume_mm3                = 0.;
-    size_t   layer_count                   = 0;
-    size_t   islands_detected              = 0;
-    size_t   islands_without_support_point = 0;
-    double   t_points_ms                   = 0.;
-    double   t_tree_pad_ms                 = 0.;
-    double   t_slice_ms                    = 0.;
-    double   t_total_ms                    = 0.;
+    size_t      triangles                     = 0;
+    size_t      support_points                = 0;
+    size_t      support_tree_triangles        = 0;
+    double      support_tree_volume_mm3       = 0.;
+    double      pad_volume_mm3                = 0.;
+    size_t      layer_count                   = 0;
+    uint64_t    layer_hash                    = 0;
+    size_t      islands_detected              = 0;
+    size_t      islands_without_support_point = 0;
+    double      t_points_ms                   = 0.;
+    double      t_tree_pad_ms                 = 0.;
+    double      t_slice_ms                    = 0.;
+    double      t_total_ms                    = 0.;
     std::optional<uint64_t> peak_working_set_bytes;
 };
 
@@ -266,6 +363,37 @@ std::optional<uint64_t> peak_working_set_bytes()
         return static_cast<uint64_t>(counters.PeakWorkingSetSize);
 #endif
     return std::nullopt;
+}
+
+std::string to_hex(uint64_t value)
+{
+    static constexpr char digits[] = "0123456789abcdef";
+    std::string                     out = "0x";
+    for (int shift = 60; shift >= 0; shift -= 4)
+        out += digits[size_t((value >> shift) & 0xfu)];
+    return out;
+}
+
+std::string trim(const std::string& text)
+{
+    const auto is_space = [](unsigned char c) { return std::isspace(c) != 0; };
+    auto       first    = text.begin();
+    while (first != text.end() && is_space(*first)) ++first;
+    auto last = text.end();
+    while (last != first && is_space(*(last - 1))) --last;
+    return std::string(first, last);
+}
+
+std::string lower(std::string text)
+{
+    std::transform(text.begin(), text.end(), text.begin(),
+                   [](unsigned char c) { return char(std::tolower(c)); });
+    return text;
+}
+
+std::string lower_extension(const std::filesystem::path& path)
+{
+    return lower(path.extension().string());
 }
 
 /// The models are benchmarked as loaded, so the only placement is onto the plate.
@@ -309,36 +437,79 @@ class NoopThumbnailGenerator : public Slic3r::Biz::Slicing::IThumbnailImageGener
     void handle_enqueued_requests() override {}
 };
 
+void collect_points(const Slic3r::Domain::ExPolygon& poly,
+                    std::vector<std::pair<int64_t, int64_t>>& out)
+{
+    for (const Slic3r::Domain::Point& p : poly.contour) out.emplace_back(int64_t(p.x()), int64_t(p.y()));
+    for (const Slic3r::Domain::Polygon& hole : poly.holes)
+        for (const Slic3r::Domain::Point& p : hole) out.emplace_back(int64_t(p.x()), int64_t(p.y()));
+}
+
+/// The layer hash and the island statistics of a sliced print, from one pass over the layers.
+///
+/// The hash takes the layer count, then per layer its level, its polygon count and all of its
+/// points. The points go in sorted, so the value does not depend on the order Clipper emitted the
+/// polygons and their points in, and so no parallel run can change it; what is given up is which
+/// point belongs to which contour, which a benchmark hash does not need. The coordinates are
+/// coord_t, an exact integer on a 1 nm grid, so nothing is rounded and nothing is approximated.
+struct LayerAnalysis
+{
+    uint64_t layer_hash                    = 0;
+    size_t   islands_detected              = 0;
+    size_t   islands_without_support_point = 0;
+};
+
 /// Islands of the sliced model layers, and how many of them have no support point near them.
 /// The same rule as sla_island_coverage_tests.cpp: a point covers an island when it sits within
 /// 0.5 mm of the layer and within sqrt(area) + 1 mm of the island centroid. The layers and the
 /// support points are both in the un-lifted frame, so the z values are comparable.
-void count_islands(const SLAPrint& print, const Slic3r::Domain::SLA::SupportPoints& points,
-                   size_t& islands, size_t& uncovered)
+LayerAnalysis analyse_layers(const SLAPrint& print, const Slic3r::Domain::SLA::SupportPoints& points)
 {
+    Fnv1a hasher;
+
     std::vector<Slic3r::Domain::ExPolygons> layers;
     std::vector<double>                     layer_z;
 
+    hasher.feed(uint64_t(print.print_layers().size()));
+
     for (const SLAPrint::PrintLayer& layer : print.print_layers()) {
         Slic3r::Domain::ExPolygons polys;
-        double z = 0.;
-        bool   first = true;
+        double                      z     = 0.;
+        bool                        first = true;
+
+        std::vector<std::pair<int64_t, int64_t>> flat;
+
         for (const auto& record_ref : layer.slices()) {
             const SLAPrintObject::SliceRecord& record = record_ref.get();
             if (first) {
                 z     = record.slice_level();
                 first = false;
             }
-            for (const Slic3r::Domain::ExPolygon& poly : record.get_slice(Slic3r::soModel))
+            for (const Slic3r::Domain::ExPolygon& poly : record.get_slice(Slic3r::soModel)) {
                 polys.push_back(poly);
+                collect_points(poly, flat);
+            }
         }
+
+        hasher.feed(int64_t(layer.level()));
+        hasher.feed(uint64_t(polys.size()));
+        hasher.feed(uint64_t(flat.size()));
+        std::sort(flat.begin(), flat.end());
+        for (const auto& point : flat) {
+            hasher.feed(point.first);
+            hasher.feed(point.second);
+        }
+
         layers.emplace_back(std::move(polys));
         layer_z.push_back(z);
     }
 
+    LayerAnalysis analysis;
+    analysis.layer_hash = hasher.value();
+
     const std::vector<Slic3r::SLA::IslandHit> hits =
         Slic3r::SLA::detect_islands(layers, ISLAND_MIN_AREA_MM2);
-    islands = hits.size();
+    analysis.islands_detected = hits.size();
 
     for (const Slic3r::SLA::IslandHit& hit : hits) {
         if (hit.layer_index >= layer_z.size()) continue;
@@ -358,19 +529,20 @@ void count_islands(const SLAPrint& print, const Slic3r::Domain::SLA::SupportPoin
             }
         }
 
-        if (!covered) ++uncovered;
+        if (!covered) ++analysis.islands_without_support_point;
     }
+
+    return analysis;
 }
 
 /// Support points, support tree, pad and a full slice of one model.
-ModelMetrics run_model(const std::string& name, const std::string& source,
-                       Slic3r::Domain::TriangleMesh mesh)
+ModelMetrics run_model(const ModelSpec& spec, Slic3r::Domain::TriangleMesh mesh)
 {
     using Slic3r::Domain::Transform3d;
 
     ModelMetrics metrics;
-    metrics.name   = name;
-    metrics.source = source;
+    metrics.id       = spec.id;
+    metrics.category = spec.category;
 
     const auto total_start = std::chrono::steady_clock::now();
 
@@ -381,7 +553,7 @@ ModelMetrics run_model(const std::string& name, const std::string& source,
     // was loaded in.
     Slic3r::Domain::Model model;
     Slic3r::Domain::ModelObject* object = model.add_object();
-    object->name = name;
+    object->name = spec.id;
     Slic3r::Biz::Algorithms::ModelObject::add_volume(object, mesh);
     object->add_instance();
 
@@ -441,7 +613,10 @@ ModelMetrics run_model(const std::string& name, const std::string& source,
     metrics.t_slice_ms = ms_since(slice_start);
 
     metrics.layer_count = print.print_layers().size();
-    count_islands(print, points, metrics.islands_detected, metrics.islands_without_support_point);
+    const LayerAnalysis analysis = analyse_layers(print, points);
+    metrics.layer_hash                    = analysis.layer_hash;
+    metrics.islands_detected              = analysis.islands_detected;
+    metrics.islands_without_support_point = analysis.islands_without_support_point;
 
     metrics.t_total_ms = ms_since(total_start);
 
@@ -451,14 +626,15 @@ ModelMetrics run_model(const std::string& name, const std::string& source,
 Json to_json(const ModelMetrics& metrics)
 {
     Json json = Json::object();
-    json.set("name", Json::string(metrics.name));
-    json.set("source", Json::string(metrics.source));
+    json.set("id", Json::string(metrics.id));
+    json.set("category", Json::string(metrics.category));
     json.set("triangles", Json::integer((long long) metrics.triangles));
     json.set("support_points", Json::integer((long long) metrics.support_points));
     json.set("support_tree_triangles", Json::integer((long long) metrics.support_tree_triangles));
     json.set("support_tree_volume_mm3", Json::number(metrics.support_tree_volume_mm3));
     json.set("pad_volume_mm3", Json::number(metrics.pad_volume_mm3));
     json.set("layer_count", Json::integer((long long) metrics.layer_count));
+    json.set("layer_hash", Json::string(to_hex(metrics.layer_hash)));
     json.set("islands_detected", Json::integer((long long) metrics.islands_detected));
     json.set("islands_without_support_point",
              Json::integer((long long) metrics.islands_without_support_point));
@@ -471,14 +647,6 @@ Json to_json(const ModelMetrics& metrics)
                  Json::integer((long long) *metrics.peak_working_set_bytes));
     if (!metrics.error.empty()) json.set("error", Json::string(metrics.error));
     return json;
-}
-
-std::string lower_extension(const std::filesystem::path& path)
-{
-    std::string ext = path.extension().string();
-    std::transform(ext.begin(), ext.end(), ext.begin(),
-                   [](unsigned char c) { return char(std::tolower(c)); });
-    return ext;
 }
 
 /// Every .stl and .obj in the folder, sorted by file name so the run is reproducible.
@@ -494,21 +662,121 @@ std::vector<std::filesystem::path> models_in(const std::filesystem::path& dir)
     return paths;
 }
 
+/// The models of a manifest.yaml, in the order of the file. Ids have to be unique, they are what
+/// the JSON and bench_diff.py key on.
+std::vector<ModelSpec> read_manifest(const std::filesystem::path& path, const std::string& folder)
+{
+    namespace Yaml = Slic3r::Biz::Yaml;
+
+    Bench::Manifest manifest;
+    try {
+        const Yaml::YamlAdapter::Document doc = Yaml::parse_file(path.string().c_str());
+        manifest                              = Yaml::parse_struct_unwrap<Bench::Manifest>(doc);
+    } catch (const std::exception& e) {
+        FAIL("SLA_BENCH_DIR/" << MANIFEST_FILE << ": " << e.what());
+    }
+
+    std::vector<ModelSpec> models;
+    models.reserve(manifest.models.size());
+    for (const Bench::ManifestEntry& entry : manifest.models) {
+        ModelSpec spec;
+        spec.id        = trim(entry.id);
+        spec.category  = entry.category ? trim(*entry.category) : std::string{};
+        spec.file_name = trim(entry.file);
+        spec.folder    = folder;
+        if (spec.category.empty()) spec.category = "uncategorized";
+
+        // Catch2 has no && and no || inside an assertion, so one check per line.
+        REQUIRE_FALSE(spec.id.empty());
+        REQUIRE_FALSE(spec.file_name.empty());
+        models.push_back(std::move(spec));
+    }
+
+    return models;
+}
+
+/// The committed test models. They are in the repository, so unlike the corpus they are named by
+/// their file name.
+std::vector<ModelSpec> builtin_models()
+{
+    std::vector<ModelSpec> models;
+    for (const char* model : BENCH_MODELS) {
+        ModelSpec spec;
+        spec.id             = model;
+        spec.category       = BENCH_MODELS_CATEGORY;
+        spec.file_name      = model;
+        spec.from_test_data = true;
+        models.push_back(std::move(spec));
+    }
+    return models;
+}
+
+/// The corpus of SLA_BENCH_DIR without a manifest: the committed test models plus every .stl and
+/// .obj in the folder. The corpus models are not redistributable, so they get an index instead of
+/// a name and the start log line maps the index to the file.
+std::vector<ModelSpec> models_without_manifest(const std::filesystem::path& dir)
+{
+    std::vector<ModelSpec> models = builtin_models();
+
+    const std::vector<std::filesystem::path> paths = models_in(dir);
+    for (size_t i = 0; i < paths.size(); ++i) {
+        ModelSpec spec;
+        spec.id        = "corpus_" + std::string(i < 9 ? "0" : "") + std::to_string(i + 1);
+        spec.category  = CORPUS_CATEGORY;
+        spec.file_name = paths[i].filename().string();
+        spec.folder    = dir.string();
+        models.push_back(std::move(spec));
+    }
+
+    return models;
+}
+
 Slic3r::Domain::TriangleMesh load_model_file(const std::filesystem::path& path)
 {
     Slic3r::Domain::TriangleMesh mesh;
     if (lower_extension(path) == ".stl") {
         auto loaded = Slic3r::Biz::load_stl(path.string());
-        if (!loaded) throw std::runtime_error(path.string() + ": " + loaded.error());
+        if (!loaded) throw std::runtime_error(loaded.error());
         mesh = std::move(*loaded);
     } else {
         auto loaded = Slic3r::Biz::load_obj(path.string());
-        if (!loaded) throw std::runtime_error(path.string() + ": " + loaded.error());
+        if (!loaded) throw std::runtime_error(loaded.error());
         mesh = std::move(*loaded);
     }
 
-    if (mesh.empty()) throw std::runtime_error(path.string() + ": the mesh is empty");
+    if (mesh.empty()) throw std::runtime_error("the mesh is empty");
     return mesh;
+}
+
+/// The ids and categories SLA_BENCH_FILTER selects, lower cased so the comparison is forgiving.
+std::set<std::string> read_filter()
+{
+    std::set<std::string> filter;
+    const char*           env = std::getenv("SLA_BENCH_FILTER");
+    if (!env || env[0] == '\0') return filter;
+
+    std::stringstream stream{env};
+    std::string        item;
+    while (std::getline(stream, item, ',')) {
+        const std::string trimmed = lower(trim(item));
+        if (!trimmed.empty()) filter.insert(trimmed);
+    }
+
+    return filter;
+}
+
+/// The error text goes into the JSON, so the file name and the folder are replaced by the id: a
+/// loader that quotes the path in its message must not leak the corpus into a committed baseline.
+std::string describe_error(const std::string& message, const ModelSpec& spec)
+{
+    std::string text = message;
+    for (const std::string& secret : {spec.folder, spec.file_name}) {
+        if (secret.empty()) continue;
+        for (size_t pos = text.find(secret); pos != std::string::npos;
+             pos          = text.find(secret, pos + spec.id.size()))
+            text.replace(pos, secret.size(), spec.id);
+    }
+    return text;
 }
 
 } // namespace
@@ -522,39 +790,67 @@ TEST_CASE("SLA benchmark harness", "[.][SLA][benchmark]")
 
     const char* dir_env = std::getenv("SLA_BENCH_DIR");
 
-    // The model list: tests/data first, then the optional corpus folder.
-    std::vector<std::pair<std::string, std::string>> models; // (file name, source folder)
-
-    for (const char* model : BENCH_MODELS) models.emplace_back(model, "tests/data");
+    // The model list: the manifest of SLA_BENCH_DIR when there is one, else the built in set
+    // followed by every model in the folder.
+    std::vector<ModelSpec> models;
 
     if (dir_env && dir_env[0] != '\0') {
         const std::filesystem::path dir{dir_env};
         INFO("SLA_BENCH_DIR: " << dir.string());
         REQUIRE(std::filesystem::is_directory(dir));
-        for (const std::filesystem::path& path : models_in(dir))
-            models.emplace_back(path.filename().string(), dir.string());
+
+        const std::filesystem::path manifest = dir / MANIFEST_FILE;
+        if (std::filesystem::is_regular_file(manifest)) {
+            models = read_manifest(manifest, dir.string());
+        } else {
+            models = models_without_manifest(dir);
+        }
+    } else {
+        models = builtin_models();
     }
 
     REQUIRE_FALSE(models.empty());
 
+    // bench_diff.py keys on the id, so two models of one run may not share one.
+    std::set<std::string> ids;
+    for (const ModelSpec& spec : models) REQUIRE(ids.insert(spec.id).second);
+
+    const std::set<std::string> filter = read_filter();
+    if (!filter.empty()) {
+        std::vector<ModelSpec> kept;
+        for (ModelSpec& spec : models)
+            if (filter.count(lower(spec.id)) || filter.count(lower(spec.category)))
+                kept.push_back(std::move(spec));
+        models = std::move(kept);
+    }
+
+    std::cout << "[Benchmark] " << models.size() << " model(s)"
+              << (filter.empty() ? "" : " after SLA_BENCH_FILTER") << ", layer_height_mm="
+              << BENCH_LAYER_HEIGHT_MM << std::endl;
+
     std::vector<ModelMetrics> results;
     results.reserve(models.size());
 
-    for (const auto& model : models) {
-        const std::string& name   = model.first;
-        const std::string& source = model.second;
+    for (size_t i = 0; i < models.size(); ++i) {
+        const ModelSpec& spec = models[i];
+
+        // The file name is fine on the console, it is only the JSON that may not name it.
+        std::cout << "[Benchmark] start " << (i + 1) << "/" << models.size() << " " << spec.id
+                  << " [" << spec.category << "] " << spec.file_name << std::endl;
+
+        const auto model_start = std::chrono::steady_clock::now();
 
         ModelMetrics metrics;
-        metrics.name   = name;
-        metrics.source = source;
+        metrics.id       = spec.id;
+        metrics.category = spec.category;
 
         try {
-            Slic3r::Domain::TriangleMesh mesh =
-                source == "tests/data" ? load_model(name)
-                                       : load_model_file(std::filesystem::path(source) / name);
-            metrics = run_model(name, source, std::move(mesh));
+            const std::filesystem::path path = std::filesystem::path(spec.folder) / spec.file_name;
+            Slic3r::Domain::TriangleMesh  mesh =
+                spec.from_test_data ? load_model(spec.file_name) : load_model_file(path);
+            metrics = run_model(spec, std::move(mesh));
         } catch (const std::exception& e) {
-            metrics.error = e.what();
+            metrics.error = describe_error(e.what(), spec);
         } catch (...) {
             metrics.error = "unknown error";
         }
@@ -562,20 +858,26 @@ TEST_CASE("SLA benchmark harness", "[.][SLA][benchmark]")
         metrics.peak_working_set_bytes = peak_working_set_bytes();
 
         if (!metrics.error.empty()) {
-            WARN("Benchmark failed for " << name << ": " << metrics.error);
+            WARN("Benchmark failed for " << spec.id << ": " << metrics.error);
+            std::cout << "[Benchmark] end   " << (i + 1) << "/" << models.size() << " " << spec.id
+                      << " failed after " << ms_since(model_start)
+                      << " ms: " << metrics.error << std::endl;
         } else {
-            std::cout << "[Benchmark] " << name
+            std::cout << "[Benchmark] " << spec.id
                       << ": triangles=" << metrics.triangles
                       << ", support_points=" << metrics.support_points
                       << ", support_tree_triangles=" << metrics.support_tree_triangles
                       << ", support_tree_volume_mm3=" << metrics.support_tree_volume_mm3
                       << ", pad_volume_mm3=" << metrics.pad_volume_mm3
                       << ", layers=" << metrics.layer_count
+                      << ", layer_hash=" << to_hex(metrics.layer_hash)
                       << ", islands=" << metrics.islands_detected
                       << ", islands_without_support_point=" << metrics.islands_without_support_point
                       << ", points=" << metrics.t_points_ms << " ms"
                       << ", tree+pad=" << metrics.t_tree_pad_ms << " ms"
                       << ", slice=" << metrics.t_slice_ms << " ms" << std::endl;
+            std::cout << "[Benchmark] end   " << (i + 1) << "/" << models.size() << " " << spec.id
+                      << " ok, " << metrics.t_total_ms << " ms" << std::endl;
         }
 
         results.push_back(std::move(metrics));
@@ -641,7 +943,7 @@ TEST_CASE("SLA benchmark harness", "[.][SLA][benchmark]")
         if (metrics.error.empty()) ++measured;
 
     Json document = Json::object();
-    document.set("schema", Json::integer(1));
+    document.set("schema", Json::integer(2));
     document.set("layer_height_mm", Json::number(BENCH_LAYER_HEIGHT_MM));
     document.set("island_min_area_mm2", Json::number(ISLAND_MIN_AREA_MM2));
 
