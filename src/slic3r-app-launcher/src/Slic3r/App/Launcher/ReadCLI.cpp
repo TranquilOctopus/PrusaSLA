@@ -1,5 +1,6 @@
 #include "Slic3r/App/Launcher/ReadCLI.hpp"
 
+#include "Slic3r/App/FixtureRender.hpp"
 #include "Slic3r/Domain/Config.hpp"
 #include "Slic3r/Domain/ConfigPack.hpp"
 #include "Slic3r/Domain/Types.hpp"
@@ -171,6 +172,28 @@ void add_input_options(CLI::App& app, App::InitParams& params)
            "Load the given 3MF file, slice it for SLA, and open the Preview tab. Debug flag for UI development."
     )
         ->type_name("FILE");
+
+    app.add_option(
+           "--render-to",
+           params.input.render_to,
+           "With --sla-fixture, render one view of the loaded fixture offscreen to this PNG, write a sidecar with "
+           "the lightness of the drawn theme tokens next to it and quit. Debug flag for visual regression (M6.2)."
+    )
+        ->type_name("FILE");
+
+    app.add_option(
+           "--render-view",
+           params.input.render_view,
+           "Which view --render-to renders: prepare (the bed) or preview (the sliced print). Defaults to prepare."
+    )
+        ->type_name("NAME");
+
+    app.add_option(
+           "--render-size",
+           params.input.render_size,
+           "Size of the --render-to image as WIDTHxHEIGHT. Defaults to 1280x960."
+    )
+        ->type_name("WIDTHxHEIGHT");
 }
 
 void add_transform_options(CLI::App& app, App::InitParams& params)
@@ -1009,6 +1032,30 @@ InitParams read_cli(::CLI::App& app, const std::string& app_version, const int a
         return init_params;
     }
 #endif
+
+    if (init_params.input.render_to.has_value()) {
+        // The render needs a fixture to render, and the words it takes are checked here, before
+        // anything else, so a typo stops the app instead of quietly producing no image.
+        if (!init_params.input.sla_fixture.has_value()) {
+            std::cerr << "Error: --render-to needs --sla-fixture." << std::endl;
+            init_params.exit_code = 1;
+            return init_params;
+        }
+        if (init_params.input.render_view.has_value()
+            && !App::fixture_view_from_string(*init_params.input.render_view).has_value()) {
+            std::cerr << "Error: --render-view takes prepare or preview, not "
+                      << *init_params.input.render_view << "." << std::endl;
+            init_params.exit_code = 1;
+            return init_params;
+        }
+        if (init_params.input.render_size.has_value()
+            && !App::parse_render_size(*init_params.input.render_size).has_value()) {
+            std::cerr << "Error: --render-size takes WIDTHxHEIGHT in 1..8192, not "
+                      << *init_params.input.render_size << "." << std::endl;
+            init_params.exit_code = 1;
+            return init_params;
+        }
+    }
 
     if (init_params.action.help_fff || init_params.action.help_sla) {
         custom_formatter->set_show_full_fdm_help(init_params.action.help_fff);

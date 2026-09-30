@@ -776,10 +776,143 @@ void DesktopApp::process_sla_fixture(Domain::SelectionId project_id)
     // Slice the bed
     m_project_interactor->slicing_interactor().slice_bed(slicing_id);
 
+    if (m_init_params.input.render_to.has_value()) {
+        // A render goes to the tab it renders, and the supports and the pad of the fixture only
+        // exist once the slice above has made them. No slice is started here beyond the one
+        // --sla-fixture has always started: the Slice button stays the only way to slice.
+        start_fixture_render(project_id, slicing_id);
+        return;
+    }
+
     // Switch to Preview mode
     m_navigator.navigate_to_module_type(Slic3r::App::Render::ModuleType::Preview);
 
     SPDLOG_INFO("SLA fixture processed, switched to Preview mode");
+}
+
+namespace {
+
+/// How long to wait for the slice of a fixture before rendering whatever there is.
+constexpr int fixture_render_timeout_ms = 300000;
+
+/// How long to wait after the slice reported it is done, so that the main thread work it queued
+/// (the SLA result, the scene nodes of the supports) is in the scene before it is rendered.
+constexpr int fixture_render_settle_ms = 250;
+
+} // namespace
+
+// Renders the fixture view of --render-to as soon as the slice of the fixture is done, then quits.
+struct DesktopApp::FixtureRenderListener final : public Biz::Slicing::IStatusListener
+{
+    explicit FixtureRenderListener(DesktopApp& app) : app(app) {}
+
+    void on_status_changed(const Biz::Slicing::StatusUpdate status_update, const Domain::SlicingId id) override
+    {
+        if (id != app.m_fixture_render_slicing_id || !status_update.code.has_value())
+            return;
+        const Biz::Slicing::StatusCode code = *status_update.code;
+        // A failed slice never reports Finished, so wait for the other end of it too, and render
+        // what the slice left behind: an empty render with an error in the log beats no render.
+        if (code != Biz::Slicing::StatusCode::Finished && code != Biz::Slicing::StatusCode::InvalidData)
+            return;
+        if (code == Biz::Slicing::StatusCode::InvalidData)
+            SPDLOG_ERROR("The fixture slice did not produce a result, rendering what is there.");
+        // The timer is already armed as a backstop; restart it short, so the render happens after
+        // the main thread work of the finished slice has run.
+        app.m_fixture_render_timer->StartOnce(fixture_render_settle_ms);
+    }
+
+    DesktopApp& app;
+};
+
+void DesktopApp::start_fixture_render(Domain::SelectionId project_id, Domain::SlicingId slicing_id)
+{
+    const std::string view_name = m_init_params.input.render_view.value_or("prepare");
+    const std::optional<App::FixtureView> view = App::fixture_view_from_string(view_name);
+    if (!view.has_value())
+        SPDLOG_ERROR("Unknown --render-view '{}', rendering the Prepare view.", view_name);
+    m_fixture_render_view       = view.value_or(App::FixtureView::Prepare);
+    m_fixture_render_size       = App::parse_render_size(m_init_params.input.render_size.value_or(""))
+                                     .value_or(Domain::Size{1280, 960});
+    m_fixture_render_project_id = project_id;
+    m_fixture_render_slicing_id = slicing_id;
+
+    m_fixture_render_timer = std::make_unique<wxTimer>(m_main_frame);
+    m_fixture_render_timer->Bind(
+        wxEVT_TIMER,
+        [this](wxTimerEvent& event) {
+            do_fixture_render();
+        }
+    );
+    m_fixture_render_timer->StartOnce(fixture_render_timeout_ms);
+
+    m_fixture_render_listener = std::make_unique<FixtureRenderListener>(*this);
+    m_project_interactor->slicing_interactor().add_listener<Biz::Slicing::IStatusListener>(
+        m_fixture_render_listener.get()
+    );
+
+    m_navigator.navigate_to_module_type(
+        m_fixture_render_view == App::FixtureView::Preview ? Slic3r::App::Render::ModuleType::Preview
+                                                           : Slic3r::App::Render::ModuleType::Plater
+    );
+    SPDLOG_INFO(
+        "Rendering the {} view of the fixture at {}x{} to {}, waiting for the slice to finish",
+        App::fixture_view_to_string(m_fixture_render_view),
+        m_fixture_render_size.width,
+        m_fixture_render_size.height,
+        *m_init_params.input.render_to
+    );
+}
+
+void DesktopApp::do_fixture_render()
+{
+    if (!m_init_params.input.render_to.has_value() || !m_fixture_render_timer)
+        return;
+    m_fixture_render_timer->Stop();
+    if (m_project_interactor->slicing_interactor().get_status(m_fixture_render_slicing_id)
+        != Biz::Slicing::StatusCode::Finished) {
+        SPDLOG_WARN("The fixture slice did not report success, rendering what is there.");
+    }
+
+    Platform::WX::WXRenderCanvas& canvas = m_main_frame->get_render_canvas();
+    // The render has a framebuffer of its own, but the device that draws into it belongs to the
+    // canvas, so its context has to be current. A canvas frame is the cheapest way to get there.
+    canvas.render();
+
+    const Domain::Images images = m_thumbnail_image_generator->render_view(
+        m_fixture_render_project_id,
+        m_fixture_render_slicing_id.bed_instance_id,
+        Domain::Sizes{m_fixture_render_size},
+        m_fixture_render_view
+    );
+    if (images.empty()) {
+        SPDLOG_ERROR("The {} view of the fixture rendered nothing.", App::fixture_view_to_string(m_fixture_render_view));
+        quit_after_fixture_render(false);
+        return;
+    }
+    quit_after_fixture_render(
+        App::write_fixture_render(
+            images.front(),
+            *m_init_params.input.render_to,
+            m_fixture_render_view,
+            AppServices::instance().theme()
+        )
+    );
+}
+
+void DesktopApp::quit_after_fixture_render(bool ok)
+{
+    if (m_fixture_render_timer)
+        m_fixture_render_timer->Stop();
+    if (m_fixture_render_listener) {
+        m_project_interactor->slicing_interactor().remove_listener<Biz::Slicing::IStatusListener>(
+            m_fixture_render_listener.get()
+        );
+        m_fixture_render_listener.reset();
+    }
+    SPDLOG_INFO("The fixture render is done, quitting.");
+    // A render that failed has to say so in the exit code, or a script cannot tell it from a crash.
+    wxApp::GetInstance()->Exit(ok ? 0 : 1);
 }
 
 } // namespace Slic3r::App::Desktop

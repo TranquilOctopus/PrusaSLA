@@ -90,3 +90,14 @@ Example:
 ```powershell
 .\build-default\src\slic3r-app-launcher\Release\prusa-slicer-launcher.exe --sla-fixture C:\path\to\model.3mf
 ```
+
+### `--render-to <file.png>`
+
+Renders one view of a `--sla-fixture` offscreen to a PNG, writes a sidecar with the lightness of
+the drawn theme tokens next to it and quits. Together with `--render-view prepare|preview` and
+`--render-size WIDTHxHEIGHT`, for the visual regression of [visual-regression.md](visual-regression.md).
+
+Example:
+```powershell
+.\build-default\src\slic3r-app-launcher\Release\prusa-slicer-launcher.exe --sla-fixture C:\path\to\model.3mf --render-to out\prepare.png --render-view prepare
+```
