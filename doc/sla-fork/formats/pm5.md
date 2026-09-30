@@ -73,7 +73,7 @@ sample shows how they are derived.
 | 56 | f32 | 0.009 | resin price (likely) |
 | 60 | u32 | 36 | currency symbol, `$` (likely) |
 | 64 | u32 | 0 | per-layer overrides flag (unknown) |
-| 68 | u32 | 3209 | estimated print time, s (likely) |
+| 68 | u32 | 3209 | estimated print time, s (likely). We write `sla_estimate_print_time()`, the sum of the exposure, the three waits and the lift and retract of every layer, see `profiling/print-time.md` |
 | 72 | u32 | 10 | transition layer count (likely) |
 | 76 | u32 | 0 | transition type (unknown) |
 | 80 | u32 | 0 | unknown |

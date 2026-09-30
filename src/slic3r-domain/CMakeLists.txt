@@ -76,6 +76,9 @@ add_library(slic3r-domain STATIC
     include/Slic3r/Domain/SlaLayerHeight.hpp
     src/Slic3r/Domain/SlaLayerHeight.cpp
 
+    include/Slic3r/Domain/SLA/PrintTime.hpp
+    src/Slic3r/Domain/SLA/PrintTime.cpp
+
     include/Slic3r/Domain/TextConfiguration.hpp
     src/Slic3r/Domain/TextConfiguration.cpp
     include/Slic3r/Domain/FontFile.hpp
@@ -226,6 +229,7 @@ if(SLIC3R_BUILD_TESTS)
         test/Slic3r/Domain/ConfigTests.cpp
         test/Slic3r/Domain/FDMConfigTests.cpp
         test/Slic3r/Domain/SlaLayerHeightTests.cpp
+        test/Slic3r/Domain/SlaPrintTimeTests.cpp
         test/Slic3r/Domain/Preset/PresetTreeTests.cpp
         test/Slic3r/Domain/Preset/HwConfigTests.cpp
         test/Slic3r/Domain/SizeTests.cpp

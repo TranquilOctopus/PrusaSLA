@@ -96,7 +96,7 @@ bottom layer count from `sla_bottom_layer_count()` and the transition layers fro
 | 20 | u32 | `bottom_light_pwm`, 0-255 | bottom light PWM | unverified |
 | 21 | u32 | `light_pwm`, 0-255 | light PWM | unverified |
 | 22 | u32 | 0 | advance mode | unverified |
-| 23 | u32 | the sum over the layers of the exposure and the three waits, rounded | print time, s. The lift and retract moves are not added, and the interface layers are spent on the interface exposure | unverified |
+| 23 | u32 | `sla_estimate_print_time()`, rounded to the nearest second | print time, s: the exposure, the three waits and the lift and retract of every layer, summed. See `profiling/print-time.md` | unverified |
 | 24 | f32 | total material volume, ml | the object and support material of the print statistics | unverified |
 | 25 | f32 | total weight, g | volume x the density `bottle_weight` / `bottle_volume` | unverified |
 | 26 | f32 | total price | volume x `bottle_cost` / `bottle_volume` | unverified |

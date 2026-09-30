@@ -11,6 +11,7 @@
 #include <memory>
 #include <mutex>
 #include <numeric>
+#include <optional>
 #include <set>
 #include <tuple>
 #include <vector>
@@ -20,6 +21,7 @@
 #include "Slic3r/Domain/ConfigCommon.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
 #include "Slic3r/Domain/SlaLayerHeight.hpp"
+#include "Slic3r/Domain/SLA/PrintTime.hpp"
 #include "Slic3r/Exception.hpp"
 #include "Slic3r/Biz/Algorithms/ExPolygon.hpp"
 #include "Slic3r/Biz/Algorithms/Execution/Execution.hpp"
@@ -1811,6 +1813,13 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
         });
     }
 
+    // The estimated print time of a printer that peels by lifting the plate and has no tilt
+    // (M1.11c): the exposure, the light-off waits and the lift/retract separation of every layer,
+    // summed. This is not the SL1 model above, which adds the tilt, the tower microsteps and the
+    // screen refresh; see doc/sla-fork/profiling/print-time.md.
+    const Domain::SlaPrintTimeEstimate print_time_estimate =
+        Domain::sla_estimate_print_time(config, int(printer_input.size()));
+
     m_print->m_on_sla_result(Biz::Slicing::SLAResult{
     .export_data = std::make_shared<SLAResultData>(SLAResultData{
         .serialized_config = m_print->build_serialized_config(print_statistics),
@@ -1819,6 +1828,16 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
         .layer_areas = std::move(layer_areas),
         .layer_peel_force = std::move(layer_peel_force),
         .issues = std::move(issues),
+        .print_time_s = print_time_estimate.valid
+            ? std::optional<double>(print_time_estimate.total_s)
+            : std::nullopt,
+        .layer_print_times_s = [&print_time_estimate] {
+            std::vector<double> ret;
+            ret.reserve(print_time_estimate.layers.size());
+            for (const auto& layer : print_time_estimate.layers)
+                ret.push_back(layer.total_s());
+            return ret;
+        }(),
     }),
     .slices  = std::move(slices),
     .heights = std::move(heights),

@@ -462,15 +462,16 @@ TEST_CASE("CTB header round trip", "[export][sla][ctb]")
     REQUIRE(ctb.bottom_light_pwm == 200u);
     REQUIRE(ctb.light_pwm == 128u);
     REQUIRE(ctb.advance_mode == 0u);
-    // The print time is the exposure and the three waits of every layer, the bottom layers with
-    // their own values, summed in whole milliseconds and rounded to seconds. The 20 mm cube is 400
-    // layers at 0.05 mm, so both parts of the sum are there.
+    // The print time is the shared MSLA estimate (M1.11c), rounded to the nearest second: every
+    // layer spends its exposure, its three light-off waits and the lift plus the retract, the
+    // burn-in layers on the bottom_* values. The 20 mm cube is 400 layers at 0.05 mm, so both
+    // parts of the sum are there. See doc/sla-fork/profiling/print-time.md.
     REQUIRE(layer_count > 11);
-    const std::uint32_t bottom_layer_ms = 35000u + 4000u + 700u + 800u;
-    const std::uint32_t normal_layer_ms = 6000u + 3000u + 400u + 600u;
-    const std::uint64_t expected_print_time_ms = 11u * std::uint64_t(bottom_layer_ms)
-        + (std::uint64_t(layer_count) - 11u) * std::uint64_t(normal_layer_ms);
-    REQUIRE(ctb.print_time_s == std::uint32_t((expected_print_time_ms + 500) / 1000));
+    const double bottom_layer_s = 35. + 4. + 0.7 + 0.8 + 9. / 1.75 + 9. / 2.75;
+    const double normal_layer_s = 6. + 3. + 0.4 + 0.6 + 7.5 / 1.25 + 7.5 / 2.5;
+    const double expected_print_time_s = 11. * bottom_layer_s
+        + (double(layer_count) - 11.) * normal_layer_s;
+    REQUIRE(ctb.print_time_s == std::uint32_t(expected_print_time_s + 0.5));
     // The material fields come from the bottle settings the test set: 1 g in 1000 ml and no cost.
     REQUIRE(ctb.total_volume_ml > 0.f);
     REQUIRE(ctb.total_weight_g == Catch::Approx(ctb.total_volume_ml));
@@ -620,14 +621,14 @@ TEST_CASE("CTB export exposes the raft interface layers with the interface expos
     }
 
     // The print time counts the interface layers at the interface exposure: 11 bottom layers, then
-    // 19 plain ones, the 10 of the band, and the rest of the print.
-    const std::uint32_t bottom_layer_ms    = 35000u + 4000u + 700u + 800u;
-    const std::uint32_t normal_layer_ms    = 6000u + 3000u + 400u + 600u;
-    const std::uint32_t interface_layer_ms = 12000u + 3000u + 400u + 600u;
-    const std::uint64_t expected_print_time_ms = 11u * std::uint64_t(bottom_layer_ms)
-        + 19u * std::uint64_t(normal_layer_ms) + 10u * std::uint64_t(interface_layer_ms)
-        + (std::uint64_t(layer_count) - 40u) * std::uint64_t(normal_layer_ms);
-    REQUIRE(ctb.print_time_s == std::uint32_t((expected_print_time_ms + 500) / 1000));
+    // 19 plain ones, the 10 of the band, and the rest of the print. Each layer also spends its
+    // three waits and its lift and retract, on the bottom_* values on the burn-in.
+    const double bottom_layer_s    = 35. + 4. + 0.7 + 0.8 + 9. / 1.75 + 9. / 2.75;
+    const double normal_layer_s    = 6. + 3. + 0.4 + 0.6 + 7.5 / 1.25 + 7.5 / 2.5;
+    const double interface_layer_s = 12. + 3. + 0.4 + 0.6 + 7.5 / 1.25 + 7.5 / 2.5;
+    const double expected_print_time_s = 11. * bottom_layer_s + 19. * normal_layer_s
+        + 10. * interface_layer_s + (double(layer_count) - 40.) * normal_layer_s;
+    REQUIRE(ctb.print_time_s == std::uint32_t(expected_print_time_s + 0.5));
 }
 
 TEST_CASE("CTB layer RLE decodes a known pattern", "[export][sla][ctb]")
