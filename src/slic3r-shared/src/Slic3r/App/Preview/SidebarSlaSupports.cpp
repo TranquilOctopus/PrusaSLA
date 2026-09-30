@@ -14,6 +14,7 @@
 #include "Slic3r/Domain/Model.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
 #include "Slic3r/Domain/BedInstance.hpp"
+#include "Slic3r/Domain/ElementRef.hpp"
 #include "Slic3r/App/IsSlaActive.hpp"
 
 using namespace Slic3r::App::Yoga;
@@ -28,6 +29,7 @@ SidebarSlaSupports::SidebarSlaSupports(ProjectInteractor& project_interactor, Ap
     m_config_container_listener_scope(project_interactor, *this),
     m_project_listener_scope(project_interactor, *this),
     m_bed_selection_listener_scope(project_interactor.scene_interactor(), *this),
+    m_slicing_input_listener_scope(project_interactor.scene_interactor(), *this),
     m_project_interactor(project_interactor),
     // The project may already be selected when this is constructed, so the initial state has to be read.
     m_current_project_id(project_interactor.selected_project_id())
@@ -45,6 +47,32 @@ SidebarSlaSupports::SidebarSlaSupports(ProjectInteractor& project_interactor, Ap
     m_rows_container = emplace_back<Item>();
     m_rows_container->set_orientation(Orientation::Vertical);
     m_rows_container->set_gap(3_fpx);
+
+    // The one line telling where the workflow stands, the Slice call to action is one of its texts.
+    m_status_text = emplace_back<Text>(_u8L(""));
+    m_status_text->set_font_type(Render::ImguiFontType::Regular);
+    m_status_text->set_margin({ 0.f, 0.f, 0.f, 5.f });
+
+    // The Auto support actions of the support tool (M2.17b), on the same row.
+    Item* auto_support_row = emplace_back<Item>();
+    auto_support_row->set_orientation(Orientation::Horizontal);
+    auto_support_row->set_gap(10_fpx);
+
+    m_auto_support_selected_button = auto_support_row->emplace_back<LayoutButton>(
+        _u8L("Auto support selected"),
+        Render::Icon::None,
+        _u8L("Generate support points for the selected models")
+    );
+    m_auto_support_selected_button->set_flex_grow(1.f);
+    m_auto_support_selected_button->callbacks().action = [this]() { auto_support(true); };
+
+    m_auto_support_all_button = auto_support_row->emplace_back<LayoutButton>(
+        _u8L("Auto support all"),
+        Render::Icon::None,
+        _u8L("Generate support points for every model on the build plate")
+    );
+    m_auto_support_all_button->set_flex_grow(1.f);
+    m_auto_support_all_button->callbacks().action = [this]() { auto_support(false); };
 
     // Edit supports button
     m_edit_supports_button = emplace_back<LayoutButton>(
@@ -77,6 +105,31 @@ void SidebarSlaSupports::on_selected_bed_instances_changed(Domain::SelectionId p
     if (m_project_interactor.selected_project_id() == project_id) {
         refresh();
     }
+}
+
+void SidebarSlaSupports::on_slicing_input_changed(const Domain::BedRef& /*bed_instance*/)
+{
+    // Support points reach the project as slicing input, so this is how a generation made from here
+    // shows what it generated in the list below.
+    refresh();
+}
+
+void SidebarSlaSupports::on_slicing_input_removed(const Domain::BedRef& /*bed_instance*/)
+{
+    refresh();
+}
+
+void SidebarSlaSupports::render_body(const Domain::Vec2f& pos, const Domain::Vec2f& size)
+{
+    // The generation runs in the support tool and can stop there at any time, so the section asks
+    // the tool whether one is going instead of trusting what it started.
+    const bool running = auto_support_running();
+    if (running != m_auto_support_running) {
+        m_auto_support_running = running;
+        update_controls();
+    }
+
+    Yoga::Window::render_body(pos, size);
 }
 
 void SidebarSlaSupports::refresh()
@@ -114,6 +167,48 @@ void SidebarSlaSupports::refresh()
         value_text->set_font_type(Render::ImguiFontType::Regular);
         value_text->set_text_color(m_theme->color_imgui(Platform::Color::Text));
     }
+
+    m_auto_support_running = auto_support_running();
+    update_controls();
+}
+
+void SidebarSlaSupports::update_controls()
+{
+    const std::vector<const ModelObject*> printable = listed_printable_objects();
+    const std::size_t models_with_supports = static_cast<std::size_t>(
+        std::ranges::count_if(printable, [](const ModelObject* object) { return !object->sla_support_points.empty(); })
+    );
+
+    const SlaSupportsPanelState state = sla_supports_panel_state(
+        printable.size(),
+        selected_printable_objects().size(),
+        models_with_supports,
+        m_auto_support_running
+    );
+
+    m_edit_supports_button->set_enabled(state.edit_supports_enabled);
+    m_auto_support_selected_button->set_enabled(state.auto_support_selected_enabled);
+    m_auto_support_all_button->set_enabled(state.auto_support_all_enabled);
+
+    switch (state.status) {
+    case SlaSupportsStatus::NoModels:
+        m_status_text->set_text(_u8L("No printable model on this build plate."));
+        break;
+    case SlaSupportsStatus::NeedsSupports:
+        m_status_text->set_text(_u8L("Some models have no support points yet."));
+        break;
+    case SlaSupportsStatus::Generating:
+        m_status_text->set_text(_u8L("Generating support points..."));
+        break;
+    case SlaSupportsStatus::ReadyToSlice:
+        // Nothing here slices, the section only says that the Slice button is what is left to do.
+        m_status_text->set_text(_u8L("Every model has support points. Press Slice."));
+        break;
+    }
+
+    m_status_text->set_text_color(
+        m_theme->color_imgui(state.slice_call_to_action ? Platform::Color::AccentSecondary : Platform::Color::Text)
+    );
 }
 
 std::vector<const ModelObject*> SidebarSlaSupports::listed_objects() const
@@ -148,6 +243,70 @@ std::vector<const ModelObject*> SidebarSlaSupports::listed_objects() const
     return objects;
 }
 
+const ModelInstance* SidebarSlaSupports::supportable_instance(const ModelObject* object) const
+{
+    if (!object) {
+        return nullptr;
+    }
+
+    // The same rule as the support tool: a model can be supported when a printable instance of it
+    // sits on a build plate.
+    const Domain::Project& project = m_project_interactor.selected_project();
+    for (const ModelInstance* instance : object->instances) {
+        if (!instance || !instance->is_printable()) {
+            continue;
+        }
+        const Domain::BedRef bed_ref = instance->get_last_bed();
+        if (project.find_bed_instance_by_id(bed_ref.instance_id) != nullptr) {
+            return instance;
+        }
+    }
+    return nullptr;
+}
+
+std::vector<const ModelObject*> SidebarSlaSupports::listed_printable_objects() const
+{
+    std::vector<const ModelObject*> printable;
+    for (const ModelObject* object : listed_objects()) {
+        if (supportable_instance(object)) {
+            printable.push_back(object);
+        }
+    }
+    return printable;
+}
+
+std::vector<const ModelObject*> SidebarSlaSupports::selected_printable_objects() const
+{
+    const std::vector<const ModelObject*> printable = listed_printable_objects();
+    if (printable.empty()) {
+        return {};
+    }
+
+    // The models selected in the scene, so that "Auto support selected" acts on what the user
+    // works on. Without such a selection the model the section would edit is the one to act on.
+    std::vector<const ModelObject*> selected;
+    const Biz::Scene::ObjectSelection& selection = m_project_interactor.scene_interactor().object_selection();
+    for (const Domain::ElementRef& element : selection.elements) {
+        const auto it = std::ranges::find_if(
+            printable,
+            [&element](const ModelObject* object) { return object->id().id == element.object_id; }
+        );
+        if (it != printable.end()) {
+            selected.push_back(*it);
+        }
+    }
+
+    if (selected.empty()) {
+        if (const ModelObject* object = edited_object();
+            object != nullptr && std::ranges::find(printable, object) != printable.end())
+        {
+            selected.push_back(object);
+        }
+    }
+
+    return selected;
+}
+
 const ModelObject* SidebarSlaSupports::edited_object() const
 {
     const std::vector<const ModelObject*> objects = listed_objects();
@@ -174,6 +333,43 @@ const ModelObject* SidebarSlaSupports::edited_object() const
 
 void SidebarSlaSupports::edit_supports()
 {
+    if (const ModelObject* object = edited_object(); object != nullptr) {
+        open_support_tool({ object });
+    }
+}
+
+void SidebarSlaSupports::auto_support(bool selected_only)
+{
+    if (m_auto_support_running || !m_navigator) {
+        return;
+    }
+
+    const std::vector<const ModelObject*> objects = selected_only ? selected_printable_objects()
+                                                                 : listed_printable_objects();
+    if (objects.empty()) {
+        return;
+    }
+
+    // The generation is the support tool's (M2.17b), which runs the engine on its worker thread, so
+    // the section opens the tool on the models and hands them over to it.
+    open_support_tool(objects);
+
+    std::vector<Domain::ObjectID> object_ids;
+    object_ids.reserve(objects.size());
+    for (const ModelObject* object : objects) {
+        object_ids.push_back(object->id());
+    }
+
+    if (!m_navigator->run_sla_auto_support(object_ids)) {
+        return;
+    }
+
+    m_auto_support_running = true;
+    update_controls();
+}
+
+void SidebarSlaSupports::open_support_tool(const std::vector<const ModelObject*>& objects)
+{
     if (m_project_interactor.selected_project_id() == Domain::INVALID_ID || !m_navigator) {
         return;
     }
@@ -181,25 +377,31 @@ void SidebarSlaSupports::edit_supports()
     // Switch to Prepare (Plater) module
     m_navigator->navigate_to_module_type(Render::ModuleType::Plater);
 
-    const ModelObject* object = edited_object();
-    if (!object) {
+    Biz::Scene::ObjectSelection::ElementRefs elements;
+    elements.reserve(objects.size());
+    for (const ModelObject* object : objects) {
+        const ModelInstance* instance = supportable_instance(object);
+        if (instance) {
+            elements.push_back(Domain::ElementRef{ object->id().id, instance->id().id });
+        }
+    }
+    if (elements.empty()) {
         return;
     }
 
-    const auto it = std::ranges::find_if(
-        object->instances,
-        [](const ModelInstance* instance) { return instance->is_printable(); }
-    );
-    if (it == object->instances.end()) {
-        return; // no printable instance to edit
-    }
-
-    // Select the instance before the tool is activated, the tool is enabled by the selection.
+    // Select the models before the tool is activated, the tool is enabled by the selection.
     m_project_interactor.scene_interactor().set_object_selection({
         Biz::Scene::SelectionMode::Instance,
-        { { object->id().id, (*it)->id().id } }
+        elements
     });
     m_navigator->activate_plater_tool(Scene::ToolType::SlaSupportPoints);
+}
+
+bool SidebarSlaSupports::auto_support_running() const
+{
+    // The generation belongs to the support tool of the Prepare view, which only the navigator
+    // reaches from here, and an unopened tool runs nothing.
+    return m_navigator != nullptr && m_navigator->sla_auto_support_running();
 }
 
 void SidebarSlaSupports::update_visibility()

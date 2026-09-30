@@ -222,6 +222,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Preview/SidebarPreviewActionButtons.cpp
         include/Slic3r/App/Preview/SidebarSlaSupports.hpp
         src/Slic3r/App/Preview/SidebarSlaSupports.cpp
+        include/Slic3r/App/Preview/SlaSupportsPanel.hpp
+        src/Slic3r/App/Preview/SlaSupportsPanel.cpp
 
         include/Slic3r/App/MultiSelections.hpp
         src/Slic3r/App/MultiSelections.cpp
@@ -1642,6 +1644,8 @@ if(SLIC3R_BUILD_TESTS)
         test/Slic3r/App/Scene/MouseBindingScheme.cpp
 
             test/Slic3r/App/Scene/HeightBandTests.cpp
+
+            test/Slic3r/App/Preview/SlaSupportsPanelTests.cpp
 
             test/Slic3r/App/Plater/SurfaceMesh.cpp
 

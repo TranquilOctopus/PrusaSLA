@@ -1,9 +1,11 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
 
 #include "Slic3r/Biz/ProjectScoped.hpp"
 #include "Slic3r/Biz/ISelectedProjectChangedListener.hpp"
+#include "Slic3r/Domain/ObjectID.hpp"
 
 #include "Slic3r/App/IAppConfigChangedListener.hpp"
 #include "Slic3r/App/ModalDialog.hpp"
@@ -85,6 +87,22 @@ public:
     /// Switch to Prepare and open one of its tools, e.g. Scene::ToolType::SlaSupportPoints.
     void activate_plater_tool(Scene::ToolType tool);
 
+    /**
+     * @brief Run the SLA support tool's Auto support on @p object_ids, or on every printable model
+     * of the project when the list is empty.
+     *
+     * The generation belongs to the support tool, so Prepare and that tool have to be open, which
+     * is what the Preview "Supports" section does before it calls this (M2.17d4).
+     *
+     * @return false when the run was not started, because the tool is not open, the printer is not
+     * an SLA one or nothing could be supported.
+     */
+    bool run_sla_auto_support(const std::vector<Domain::ObjectID>& object_ids = {});
+
+    /// Whether a support generation of the Prepare support tool is still going, false when it is
+    /// not open at all.
+    bool sla_auto_support_running() const;
+
     void on_selected_project_changed(size_t index) override;
 
     void set_opened_dialog(Yoga::Dialog* opened_dialog);
@@ -128,6 +146,7 @@ private:
     Plater::PlaterRenderModule* m_plater_module{nullptr};
     Preview::PreviewRenderModule* m_preview_module{nullptr};
     Platform::AbstractRenderCanvas* m_canvas{nullptr};
+    Biz::ProjectInteractor* m_project_interactor{nullptr};
     bool m_object_list_collapsed{false};
     ModalDialog m_current_modal_dialog{ModalDialog::None};
 };

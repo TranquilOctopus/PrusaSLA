@@ -105,12 +105,30 @@ public:
 
     void provide_clipper(Scene::Clipper& clipper);
 
+    /**
+     * @brief The Auto support action, on the given models or on every printable model of the
+     * project when @p object_ids is empty. Runs the generator for them one after another, asks
+     * once whether to keep existing points, and writes the result into the models.
+     *
+     * The tool has to be active, the generation belongs to it, and the Preview sidebar (M2.17d4)
+     * opens it here through Navigator::run_sla_auto_support.
+     *
+     * @return false when the run was not started, because the tool is not active, one is already
+     * going or none of the models can be supported.
+     */
+    bool auto_support(const std::vector<Domain::ObjectID>& object_ids = {});
+
+    /// Whether a generation started by auto_support() or by Generate is still going.
+    bool auto_support_running() const
+    {
+        return m_points_job_running || !m_auto_support_queue.empty();
+    }
+
     void render_scene(Render::CommandBuffer& cmd_buffer) override;
     void on_keyboard(Scene::GizmoKeyEventContext& ctx) override;
 
 private:
     void start_generation();
-    void start_auto_support_all();
     void process_auto_support_queue();
     void on_auto_support_completed(Domain::ObjectID obj_id, std::optional<Domain::SLA::SupportPoints> support_points);
     void on_generation_completed(std::optional<Domain::SLA::SupportPoints> support_points);

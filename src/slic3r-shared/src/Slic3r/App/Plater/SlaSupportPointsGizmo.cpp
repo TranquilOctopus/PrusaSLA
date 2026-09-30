@@ -39,6 +39,8 @@
 #include <magic_enum/magic_enum_flags.hpp>
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
+
 using namespace Slic3r;
 using namespace Slic3r::App::Yoga;
 using namespace Slic3r::Biz;
@@ -81,7 +83,7 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     m_dialog->callbacks().generate = [this]() { this->start_generation(); };
     m_dialog->callbacks().apply = [this]() { this->apply_generated_points(); };
     m_dialog->callbacks().discard = [this]() { this->discard_generated_points(); };
-    m_dialog->callbacks().auto_support_all = [this]() { this->start_auto_support_all(); };
+    m_dialog->callbacks().auto_support_all = [this]() { this->auto_support(); };
     m_dialog->callbacks().density_changed = [this](double value)
     {
         if (m_syncing_dialog) {
@@ -263,6 +265,9 @@ void SlaSupportPointsGizmo::on_activated()
     m_gizmo_active = true;
     m_project_interactor.scene_interactor().add_listener<Biz::Scene::ISceneSelectionChangedListener>(this);
     m_project_interactor.sla_object_cache().add_listener<Biz::ISLAObjectCacheChangedListener>(this);
+
+    // The tool is where the support settings are changed, so it opens with them open (M2.17d4).
+    m_dialog->set_settings_expanded(true);
 
     const Biz::Scene::ObjectSelection& selection =
         m_project_interactor.scene_interactor().object_selection();
@@ -626,57 +631,58 @@ void SlaSupportPointsGizmo::discard_generated_points()
     }
 }
 
-void SlaSupportPointsGizmo::start_auto_support_all()
+bool SlaSupportPointsGizmo::auto_support(const std::vector<ObjectID>& object_ids)
 {
-    if (m_points_job_running || !m_auto_support_queue.empty()) {
-        return;
+    if (!m_gizmo_active || m_points_job_running || !m_auto_support_queue.empty()) {
+        return false;
     }
 
     Domain::Project& project = m_project_interactor.selected_project();
-    Domain::SelectionId project_id = m_project_interactor.selected_project_id();
 
-    // Collect all model objects with at least one printable instance on a bed
-    for (Domain::ModelObject* model_object : project.model().objects) {
+    // A model can only be supported when a printable instance of it sits on a build plate.
+    const auto is_supportable = [&project](const Domain::ModelObject* model_object) {
         if (!model_object) {
-            continue;
+            return false;
         }
-
-        bool has_printable_on_bed = false;
-        for (const Domain::ModelInstance* instance : model_object->instances) {
+        return std::ranges::any_of(model_object->instances, [&project](const Domain::ModelInstance* instance) {
             if (!instance || !instance->is_printable()) {
-                continue;
+                return false;
             }
-            const Domain::BedRef bed_ref = instance->get_last_bed();
-            if (project.find_bed_instance_by_id(bed_ref.instance_id) != nullptr) {
-                has_printable_on_bed = true;
-                break;
+            return project.find_bed_instance_by_id(instance->get_last_bed().instance_id) != nullptr;
+        });
+    };
+
+    // Without a list the action covers every printable model of the project, the tool's own button.
+    if (object_ids.empty()) {
+        for (Domain::ModelObject* model_object : project.model().objects) {
+            if (is_supportable(model_object)) {
+                m_auto_support_queue.push_back(model_object->id());
             }
         }
-
-        if (has_printable_on_bed) {
-            m_auto_support_queue.push_back(model_object->id());
+    } else {
+        for (const ObjectID& obj_id : object_ids) {
+            const Domain::ModelObject* model_object = project.find_object_by_id(obj_id.id);
+            if (is_supportable(model_object)) {
+                m_auto_support_queue.push_back(model_object->id());
+            }
         }
     }
 
     if (m_auto_support_queue.empty()) {
-        return;
+        return false;
     }
 
     // Check if any queued object already has support points
-    bool any_has_points = false;
-    for (const Domain::ObjectID& obj_id : m_auto_support_queue) {
-        Domain::ModelObject* model_object = project.find_object_by_id(obj_id.id);
-        if (model_object && !model_object->sla_support_points.empty()) {
-            any_has_points = true;
-            break;
-        }
-    }
+    const bool any_has_points = std::ranges::any_of(m_auto_support_queue, [&project](const ObjectID& obj_id) {
+        const Domain::ModelObject* model_object = project.find_object_by_id(obj_id.id);
+        return model_object && !model_object->sla_support_points.empty();
+    });
 
     if (any_has_points) {
         // Ask user once: keep existing points or replace them
         // Using show_yesno_dialog since show_yesnocancel_dialog has a different API
         AppServices::instance().dialog_manager().show_yesno_dialog(
-            _u8L("Auto Support All"),
+            _u8L("Auto support"),
             _u8L("Some models already have supports. Keep them and add around them? (No = replace)"),
             [this](bool answer) {
                 m_auto_support_keep_existing = answer;
@@ -687,6 +693,8 @@ void SlaSupportPointsGizmo::start_auto_support_all()
         m_auto_support_keep_existing = true; // Keep (no existing points to worry about)
         process_auto_support_queue();
     }
+
+    return true;
 }
 
 void SlaSupportPointsGizmo::process_auto_support_queue()
