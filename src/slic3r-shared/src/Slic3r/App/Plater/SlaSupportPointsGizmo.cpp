@@ -196,6 +196,7 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
             }
         }
     };
+    m_dialog->callbacks().preset_mini = [this]() { this->apply_preset_mini(); };
     m_dialog->callbacks().preset_light = [this]() { this->apply_preset_light(); };
     m_dialog->callbacks().preset_medium = [this]() { this->apply_preset_medium(); };
     m_dialog->callbacks().preset_heavy = [this]() { this->apply_preset_heavy(); };
@@ -1558,25 +1559,32 @@ void SlaSupportPointsGizmo::apply_base_height_to_selected()
     commit_edited_points_live();
 }
 
+void SlaSupportPointsGizmo::apply_preset_mini()
+{
+    const auto [head_diameter, pillar_diameter, base_diameter, base_height] = get_support_preset_values("mini");
+    apply_support_preset(static_cast<float>(head_diameter), static_cast<float>(pillar_diameter),
+                         static_cast<float>(base_diameter), static_cast<float>(base_height), 0);
+}
+
 void SlaSupportPointsGizmo::apply_preset_light()
 {
     const auto [head_diameter, pillar_diameter, base_diameter, base_height] = get_support_preset_values("light");
     apply_support_preset(static_cast<float>(head_diameter), static_cast<float>(pillar_diameter),
-                         static_cast<float>(base_diameter), static_cast<float>(base_height), 0);
+                         static_cast<float>(base_diameter), static_cast<float>(base_height), 1);
 }
 
 void SlaSupportPointsGizmo::apply_preset_medium()
 {
     const auto [head_diameter, pillar_diameter, base_diameter, base_height] = get_support_preset_values("medium");
     apply_support_preset(static_cast<float>(head_diameter), static_cast<float>(pillar_diameter),
-                         static_cast<float>(base_diameter), static_cast<float>(base_height), 1);
+                         static_cast<float>(base_diameter), static_cast<float>(base_height), 2);
 }
 
 void SlaSupportPointsGizmo::apply_preset_heavy()
 {
     const auto [head_diameter, pillar_diameter, base_diameter, base_height] = get_support_preset_values("heavy");
     apply_support_preset(static_cast<float>(head_diameter), static_cast<float>(pillar_diameter),
-                         static_cast<float>(base_diameter), static_cast<float>(base_height), 2);
+                         static_cast<float>(base_diameter), static_cast<float>(base_height), 3);
 }
 
 std::tuple<double, double, double, double> SlaSupportPointsGizmo::get_support_preset_values(const std::string& preset_name) const
@@ -1589,14 +1597,15 @@ std::tuple<double, double, double, double> SlaSupportPointsGizmo::get_support_pr
         return item ? item->get<double>() : fallback;
     };
 
+    // The same defaults as the config definitions, for a preset the config box does not have.
     const double head_diameter = get_value("head_diameter",
-        preset_name == "light" ? 0.30 : (preset_name == "medium" ? 0.45 : 0.60));
+        preset_name == "mini" ? 0.2 : (preset_name == "light" ? 0.30 : (preset_name == "medium" ? 0.45 : 0.60)));
     const double pillar_diameter = get_value("pillar_diameter",
-        preset_name == "light" ? 0.8 : (preset_name == "medium" ? 1.2 : 1.8));
+        preset_name == "mini" ? 0.5 : (preset_name == "light" ? 0.8 : (preset_name == "medium" ? 1.2 : 1.8)));
     const double base_diameter = get_value("base_diameter",
-        preset_name == "light" ? 2.0 : (preset_name == "medium" ? 3.0 : 4.0));
+        preset_name == "mini" ? 1.4 : (preset_name == "light" ? 2.0 : (preset_name == "medium" ? 3.0 : 4.0)));
     const double base_height = get_value("base_height",
-        preset_name == "light" ? 0.5 : (preset_name == "medium" ? 0.7 : 1.0));
+        preset_name == "mini" ? 0.4 : (preset_name == "light" ? 0.5 : (preset_name == "medium" ? 0.7 : 1.0)));
 
     return {head_diameter, pillar_diameter, base_diameter, base_height};
 }

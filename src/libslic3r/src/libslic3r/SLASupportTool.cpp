@@ -176,12 +176,15 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const Domain::ModelO
 
         // Prepare generator data
         sla::PrepareSupportConfig prepare_cfg;
+        prepare_cfg.overhang_angle_threshold =
+            cfg.get<double>("support_points_overhang_angle");
         sla::SupportPointGeneratorData gen_data = sla::prepare_generator_data(
             std::move(slices), heights, prepare_cfg, throw_on_cancel, [](int){});
 
         // Configure support point generator
         sla::SupportPointGeneratorConfig config;
         config.density_relative = float(cfg.get<int>("support_points_density_relative") / 100.f);
+        config.minimal_point_distance = cfg.get<double>("support_points_minimal_distance");
 
         switch (cfg.get<Domain::sla::SupportTreeType>("support_tree_type")) {
             case Domain::sla::SupportTreeType::Default:

@@ -584,6 +584,35 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->min = 0;
     def->init_fn = init_with(100);
 
+    def = defs.add("support_points_minimal_distance", typeid(double));
+    def->location = Print;
+    def->overrides_in = Locations{ Material, Object};
+    def->label = L("Minimal distance between support points");
+    def->row_group = L("Support points");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Supports_Generation;
+    def->category = ConfigItemDef::Category::Print_Supports;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("The minimal distance of two support points made by the automatic "
+        "placement. Supports of islands are always kept. Zero means no limit.");
+    def->units = {L("mm")};
+    def->min = 0;
+    def->init_fn = init_with(0.);
+
+    def = defs.add("support_points_overhang_angle", typeid(double));
+    def->location = Print;
+    def->overrides_in = Locations{ Material, Object};
+    def->label = L("Overhang angle for support points");
+    def->row_group = L("Support points");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Supports_Generation;
+    def->category = ConfigItemDef::Category::Print_Supports;
+    def->gui_type = ConfigItemDef::GUIType::textfield;
+    def->tooltip = L("The automatic placement puts no support on an overhang that is "
+        "steeper than this angle from horizontal. Supports of islands are always kept. "
+        "The value is in degrees, 90 keeps every overhang.");
+    def->min = 0;
+    def->max = 90;
+    def->init_fn = init_with(90.);
+
     def = defs.add("pad_enable", typeid(bool));
     def->location = Print;
     def->overrides_in = Locations{ Object };
@@ -1635,77 +1664,68 @@ def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : 
         def->init_fn = init_with(5.);
     }
 
-    // Support presets for the SLA Support Points tool (Light, Medium, Heavy)
+    // Support presets for the SLA Support Points tool (Mini, Light, Medium, Heavy)
     // Each preset has 4 dimensions: head_diameter, pillar_diameter, base_diameter, base_height
-    for (const std::pair<std::string, std::string> preset :
-         { std::make_pair("light", L("Light")), std::make_pair("medium", L("Medium")), std::make_pair("heavy", L("Heavy")) }) {
-        def = defs.add("support_preset_" + preset.first + "_head_diameter", typeid(double));
-        def->label = preset.second;
+    struct SupportPreset {
+        std::string name;
+        std::string label;
+        double head_diameter;
+        double pillar_diameter;
+        double base_diameter;
+        double base_height;
+    };
+    for (const SupportPreset preset : {
+             SupportPreset{"mini", L("Mini"), 0.2, 0.5, 1.4, 0.4},
+             SupportPreset{"light", L("Light"), 0.30, 0.8, 2.0, 0.5},
+             SupportPreset{"medium", L("Medium"), 0.45, 1.2, 3.0, 0.7},
+             SupportPreset{"heavy", L("Heavy"), 0.60, 1.8, 4.0, 1.0}}) {
+        def = defs.add("support_preset_" + preset.name + "_head_diameter", typeid(double));
+        def->label = preset.label;
         def->location = Print;
         def->row_group = L("Head diameter");
         def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportHead;
         def->category = ConfigItemDef::Category::Print_Supports;
         def->gui_type = ConfigItemDef::GUIType::textfield;
-        def->tooltip = L("Head diameter for the " + preset.second + " support preset");
+        def->tooltip = L("Head diameter for the " + preset.label + " support preset");
         def->units = {L("mm")};
         def->min = 0;
-        if (preset.first == "light")
-            def->init_fn = init_with(0.30);
-        else if (preset.first == "medium")
-            def->init_fn = init_with(0.45);
-        else
-            def->init_fn = init_with(0.60);
+        def->init_fn = init_with(preset.head_diameter);
 
-        def = defs.add("support_preset_" + preset.first + "_pillar_diameter", typeid(double));
-        def->label = preset.second;
+        def = defs.add("support_preset_" + preset.name + "_pillar_diameter", typeid(double));
+        def->label = preset.label;
         def->location = Print;
         def->row_group = L("Pillar diameter");
         def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
         def->category = ConfigItemDef::Category::Print_Supports;
         def->gui_type = ConfigItemDef::GUIType::textfield;
-        def->tooltip = L("Pillar diameter for the " + preset.second + " support preset");
+        def->tooltip = L("Pillar diameter for the " + preset.label + " support preset");
         def->units = {L("mm")};
         def->min = 0;
-        if (preset.first == "light")
-            def->init_fn = init_with(0.8);
-        else if (preset.first == "medium")
-            def->init_fn = init_with(1.2);
-        else
-            def->init_fn = init_with(1.8);
+        def->init_fn = init_with(preset.pillar_diameter);
 
-        def = defs.add("support_preset_" + preset.first + "_base_diameter", typeid(double));
-        def->label = preset.second;
+        def = defs.add("support_preset_" + preset.name + "_base_diameter", typeid(double));
+        def->label = preset.label;
         def->location = Print;
         def->row_group = L("Base diameter");
         def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
         def->category = ConfigItemDef::Category::Print_Supports;
         def->gui_type = ConfigItemDef::GUIType::textfield;
-        def->tooltip = L("Base diameter for the " + preset.second + " support preset");
+        def->tooltip = L("Base diameter for the " + preset.label + " support preset");
         def->units = {L("mm")};
         def->min = 0;
-        if (preset.first == "light")
-            def->init_fn = init_with(2.0);
-        else if (preset.first == "medium")
-            def->init_fn = init_with(3.0);
-        else
-            def->init_fn = init_with(4.0);
+        def->init_fn = init_with(preset.base_diameter);
 
-        def = defs.add("support_preset_" + preset.first + "_base_height", typeid(double));
-        def->label = preset.second;
+        def = defs.add("support_preset_" + preset.name + "_base_height", typeid(double));
+        def->label = preset.label;
         def->location = Print;
         def->row_group = L("Base height");
         def->option_group = ConfigItemDef::OptionGroup::Print_Supports_SupportPillar;
         def->category = ConfigItemDef::Category::Print_Supports;
         def->gui_type = ConfigItemDef::GUIType::textfield;
-        def->tooltip = L("Base height for the " + preset.second + " support preset");
+        def->tooltip = L("Base height for the " + preset.label + " support preset");
         def->units = {L("mm")};
         def->min = 0;
-        if (preset.first == "light")
-            def->init_fn = init_with(0.5);
-        else if (preset.first == "medium")
-            def->init_fn = init_with(0.7);
-        else
-            def->init_fn = init_with(1.0);
+        def->init_fn = init_with(preset.base_height);
     }
 }
 

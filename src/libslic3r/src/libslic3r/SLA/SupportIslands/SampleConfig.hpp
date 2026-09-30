@@ -34,6 +34,11 @@ struct PrepareSupportConfig
     // Define minimal size of separable model part which will be filtered out
     // Half of support head diameter is impossible to print other than sphere from support head
     float minimal_bounding_sphere_radius = 0.2f; // [in mm]
+
+    // Overhangs steeper than this angle from horizontal get no support point while the
+    // samples are taken. A vertical wall (zero horizontal run) is 90 degrees, so the
+    // default keeps every overhang and the samples are the ones of the old algorithm.
+    double overhang_angle_threshold = 90.; // [in degrees]
 };
 
 /**
