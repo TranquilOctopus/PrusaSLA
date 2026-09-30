@@ -55,6 +55,32 @@ TEST_CASE("SLA export extensions are matched against the sliced format", "[expor
     CHECK_FALSE(sla_extension_matches_format(".gcode", "pm5"));
 }
 
+// The Photon Mono M5 family is one container with a machine name per printer, so each printer's
+// file extension is a file type of its own: a .pm5s file written with the M5's name would be a
+// wrong file, and the dialog must not offer the M5's extension for a plate sliced for the M5s.
+TEST_CASE("SLA export keeps the Photon Workshop variants apart", "[export][sla][file-types][pm5s][pm7]")
+{
+    CHECK(sla_default_export_extension("pm5s") == ".pm5s");
+    CHECK(sla_default_export_extension("pm7") == ".pm7");
+    CHECK(sla_extension_matches_format(".pm5s", "pm5s"));
+    CHECK(sla_extension_matches_format(".pm7", "pm7"));
+    CHECK_FALSE(sla_extension_matches_format(".pm5", "pm5s"));
+    CHECK_FALSE(sla_extension_matches_format(".pm5s", "pm7"));
+
+    for (const char* archive_format : {"pm5s", "pm7"}) {
+        const auto types = sla_export_file_types(archive_format);
+        REQUIRE_FALSE(types.empty());
+        // The printer's own extension is the default and the only one that can hold the layers.
+        CHECK(types.front().extension == archive_format);
+        CHECK(types.front().matches_sliced_format);
+        const auto matches = std::ranges::count_if(
+            types,
+            [](const auto& type) { return type.matches_sliced_format; }
+        );
+        CHECK(matches == 1);
+    }
+}
+
 TEST_CASE("SLA archive extensions map to an export format", "[export][sla][file-types]")
 {
     using Slic3r::Biz::PrintHost::PrintHostExportFormat;

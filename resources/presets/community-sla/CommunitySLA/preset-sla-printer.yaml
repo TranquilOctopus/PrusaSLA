@@ -21,7 +21,7 @@ values:
   min_initial_exposure_time: '1'
   max_initial_exposure_time: '300'
   printer_model: Photon Mono M5
-  printer_notes: Specs from vendor pages, unverified against official spec sheets. pm5 writer does not exist yet (only goo, sl1, sl1s, pwmo, pwmx, pwms).
+  printer_notes: Specs from vendor pages, unverified against official spec sheets. The pm5 writer is unverified, and no printer has read a file from this fork.
   printer_technology: SLA
   printer_variant: default
   sla_archive_format: pm5
@@ -52,7 +52,7 @@ values:
   min_initial_exposure_time: '1'
   max_initial_exposure_time: '300'
   printer_model: Photon Mono M5s
-  printer_notes: Specs from vendor pages, unverified against official spec sheets. pm5s writer does not exist yet (only goo, sl1, sl1s, pwmo, pwmx, pwms).
+  printer_notes: Specs from vendor pages, unverified against official spec sheets. The pm5s writer is experimental and unverified, with no sample file and no printer yet.
   printer_technology: SLA
   printer_variant: default
   sla_archive_format: pm5s
@@ -83,7 +83,7 @@ values:
   min_initial_exposure_time: '1'
   max_initial_exposure_time: '300'
   printer_model: Photon Mono M7 Pro
-  printer_notes: Specs from vendor pages, unverified against official spec sheets. pm7 writer does not exist yet (only goo, sl1, sl1s, pwmo, pwmx, pwms).
+  printer_notes: Specs from vendor pages, unverified against official spec sheets. The pm7 writer is experimental and unverified, with no sample file and no printer yet.
   printer_technology: SLA
   printer_variant: default
   sla_archive_format: pm7

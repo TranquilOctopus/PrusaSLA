@@ -208,6 +208,8 @@ static LayerPlacement written_layer_placement(
         return placement_of_svg(layer);
     case FileDataType::anycubic:
     case FileDataType::pm5:
+    case FileDataType::pm5s:
+    case FileDataType::pm7:
         return placement_of_pixels(
             decode_pw0_layer(layer, pixels_x * pixels_y),
             pixels_x,

@@ -20,7 +20,9 @@ namespace Sla {
 
 using FileData = std::vector<uint8_t>;
 using FilesData = std::vector<FileData>;
-enum class FileDataType{sl1_png, sl1_svg, anycubic, goo, pm5, ctb, other};
+// pm5, pm5s and pm7 are one Photon Workshop container with a machine name and a format version per
+// printer (doc/sla-fork/formats/pm5.md), so they are one writer with three file data types.
+enum class FileDataType{sl1_png, sl1_svg, anycubic, goo, pm5, pm5s, pm7, ctb, other};
 struct OutputFiles
 {
     FilesData data; // files binary data,  count files data == slices.size()

@@ -120,7 +120,10 @@ std::pair<int, int> quantization_grid(FileDataType type)
 {
     switch (type) {
     case FileDataType::anycubic:
-    case FileDataType::pm5: return {17, 255};
+    // The Photon Workshop container, all three of its variants, encodes layers as PW0 runs.
+    case FileDataType::pm5:
+    case FileDataType::pm5s:
+    case FileDataType::pm7: return {17, 255};
     case FileDataType::goo: return {16, 255};
     case FileDataType::ctb:
     case FileDataType::sl1_png:
@@ -178,7 +181,8 @@ ExportedCube export_cube(const std::string& format, double gamma_correction)
     const std::vector<uint8_t>& middle = sla_result->files.data[sla_result->files.data.size() / 2];
     if (out.type == FileDataType::goo) {
         out.layer = decode_goo_layer(middle, LAYER_PIXELS);
-    } else if (out.type == FileDataType::anycubic || out.type == FileDataType::pm5) {
+    } else if (out.type == FileDataType::anycubic || out.type == FileDataType::pm5
+               || out.type == FileDataType::pm5s || out.type == FileDataType::pm7) {
         out.layer = decode_pw0_layer(middle, LAYER_PIXELS);
     } else if (out.type == FileDataType::ctb) {
         out.layer = decode_ctb_layer(middle, LAYER_PIXELS);
@@ -218,7 +222,8 @@ size_t header_body(const ExportedCube& cube)
 TEST_CASE("A thresholded layer is binary and an anti-aliased one is not", "[export][sla][aa]")
 {
     const std::string format = GENERATE(std::string("sl1"), std::string("pwmx"), std::string("pm5"),
-                                        std::string("goo"), std::string("ctb"));
+                                        std::string("pm5s"), std::string("pm7"), std::string("goo"),
+                                        std::string("ctb"));
     const bool        aa_on = GENERATE(false, true);
     CAPTURE(format, aa_on);
 

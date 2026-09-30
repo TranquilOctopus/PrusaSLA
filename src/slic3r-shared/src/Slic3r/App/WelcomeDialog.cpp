@@ -331,7 +331,7 @@ static ItemPtr create_changelog_screen(const Theme& theme, std::function<void()>
             {
                 {Biz::_u8L("Exports SL1/SL1S, Elegoo .goo and older Anycubic Photon formats.")},
                 {
-                    Biz::_u8L("Newer Anycubic formats such as .pm5 are not supported yet."),
+                    Biz::_u8L("Anycubic .pm5, .pm5s and .pm7, and Chitubox .ctb, are experimental and unverified."),
                     secondary_color,
                 },
             },

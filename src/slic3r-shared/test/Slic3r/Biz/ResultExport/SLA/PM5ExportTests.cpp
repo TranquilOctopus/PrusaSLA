@@ -3,6 +3,7 @@
 
 #include "Slic3r/Biz/SlaFixture.hpp"
 #include "Slic3r/Biz/ResultExport/SLA/SlaArchiveFormat.hpp"
+#include "Slic3r/Biz/ResultExport/SLA/SlaExportFileTypes.hpp"
 #include "libslic3r/SLAResult.hpp"
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/TestUtils/TestTempDir.hpp"
@@ -12,6 +13,7 @@
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -59,6 +61,47 @@ TEST_CASE("PM5 format registry", "[export][sla][pm5]")
     // Extensions contain "pm5"
     auto exts = format->extensions();
     REQUIRE(std::find(exts.begin(), exts.end(), "pm5") != exts.end());
+}
+
+// The Photon Workshop family is one container with a machine name and a format version per printer,
+// so the registry holds one entry per printer and each has its own file data type: the export picks
+// its writer by that type, and a .pm5s file written with the M5's name would be a wrong file.
+TEST_CASE("The pm5s and pm7 formats are registered next to pm5", "[export][sla][pm5][pm5s][pm7]")
+{
+    register_sla_archive_formats();
+    auto& registry = SlaArchiveFormatRegistry::instance();
+
+    const struct {
+        const char* name;
+        const char* extension;
+        FileDataType type;
+    } expected[] = {
+        {"PM5", "pm5", FileDataType::pm5},
+        {"PM5S", "pm5s", FileDataType::pm5s},
+        {"PM7", "pm7", FileDataType::pm7},
+    };
+
+    for (const auto& entry : expected) {
+        INFO(entry.name);
+        const std::string extension(entry.extension);
+        // By name and by file data type, which are the two lookups the export does.
+        const std::unique_ptr<Slic3r::Biz::PrintHost::Sla::ISlaArchiveFormat> format =
+            registry.get(entry.name);
+        REQUIRE(format != nullptr);
+        REQUIRE(format->file_data_type() == entry.type);
+        REQUIRE(format->extensions().size() == 1u);
+        REQUIRE(format->extensions().front() == extension);
+        // The extension alone finds it too: that is what the format picker and the upload rules use.
+        const std::unique_ptr<Slic3r::Biz::PrintHost::Sla::ISlaArchiveFormat> by_extension =
+            registry.find_by_extension(extension);
+        REQUIRE(by_extension != nullptr);
+        REQUIRE(by_extension->name() == std::string(entry.name));
+        REQUIRE(registry.find_by_file_data_type(entry.type) != nullptr);
+        // The default extension a save dialog offers for this printer is its own.
+        const std::string default_extension =
+            Slic3r::Biz::PrintHost::Sla::sla_default_export_extension(extension);
+        REQUIRE(default_extension == "." + extension);
+    }
 }
 
 // The container layout itself is checked in detail in AnycubicExportTests.cpp; this checks the
