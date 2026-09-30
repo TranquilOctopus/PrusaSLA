@@ -317,7 +317,7 @@ CavityAnalysis detect_cavities(const std::vector<ExPolygons>& layers,
 
             ExPolygons region = {holes[group.holes.front()]};
             for (size_t i = 1; i < group.holes.size(); ++i)
-                region = union_ex(region, holes[group.holes[i]]);
+                region = union_ex(region, ExPolygons{holes[group.holes[i]]});
 
             RegionTrack track = group.tracks.empty() ?
                 start_track(region, layer_idx, layers) :
