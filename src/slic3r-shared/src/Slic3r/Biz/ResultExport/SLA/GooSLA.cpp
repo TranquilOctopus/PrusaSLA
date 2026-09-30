@@ -325,6 +325,11 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
         header.bottom_layers = layer_count;
     }
 
+    // The raft interface is the band of layers at the top of the raft with an exposure of their
+    // own. The format has an exposure per layer, so it can carry one, and no interface leaves
+    // every layer the exposure it had before.
+    const Domain::RaftInterface raft_interface = Domain::sla_raft_interface(cfg, layer_count);
+
     // Distances are mm and speeds mm/s, the units the settings are defined in.
     header.bottom_lift_distance = get_cfg_value_f_pos(cfg, "bottom_lift_height", 6.0f);
     header.bottom_lift_speed = get_cfg_value_f_pos(cfg, "bottom_lift_speed", 2.0f);
@@ -360,7 +365,7 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
             print_time += header.bottom_exposure_time;
             print_time += header.bottom_before_lift_time + header.bottom_after_lift_time + header.bottom_after_retract_time;
         } else {
-            print_time += header.common_exposure_time;
+            print_time += float(raft_interface.layer_exposure_s(i, header.common_exposure_time));
             print_time += header.before_lift_time + header.after_lift_time + header.after_retract_time;
         }
     }
@@ -482,7 +487,10 @@ void store_goo(const std::string& file_path, const Biz::Slicing::SLAResultData& 
                 layer_def.second_retract_speed = header.bottom_second_retract_speed;
                 layer_def.light_pwm = header.bottom_light_pwm;
             } else {
-                layer_def.layer_exposure_time = header.common_exposure_time;
+                // The interface layers are exposed like the rest of the print unless the interface
+                // brings an exposure of its own, and are separated like them.
+                layer_def.layer_exposure_time =
+                    float(raft_interface.layer_exposure_s(i, header.common_exposure_time));
                 layer_def.layer_off_time = header.turn_off_time;
                 layer_def.before_lift_time = header.before_lift_time;
                 layer_def.after_lift_time = header.after_lift_time;

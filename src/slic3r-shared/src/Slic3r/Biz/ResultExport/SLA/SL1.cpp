@@ -148,6 +148,8 @@ void fill_iniconf(ConfMap &m, const Domain::ConfigView &cfg, const Domain::SLA::
 
     CNumericLocalesSetter locales_setter; // for to_string
     m["layerHeight"]    = serialize(Domain::sla_effective_layer_height(cfg));
+    // The .sl1 format has one exposure for the whole print and one for its first layer, so the
+    // raft interface exposure (raft_interface_exposure) has nowhere to go here and is left unused.
     m["expTime"]        = serialize(cfg.get<double>("exposure_time"));
     m["expTimeFirst"]   = serialize(cfg.get<double>("initial_exposure_time"));
     const Domain::SLAMaterialSpeed mps = cfg.get<Domain::SLAMaterialSpeed>("material_print_speed");
