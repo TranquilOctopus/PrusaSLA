@@ -1279,4 +1279,19 @@ bool is_supported_file(const std::string& input_file)
     return false;
 }
 
+const std::vector<std::string>& get_resin_profile_extensions()
+{
+    static const std::vector<std::string> extensions = {".cfg", ".cfgx", ".lyr"};
+    return extensions;
+}
+
+bool is_resin_profile_file(const std::string& input_file)
+{
+    for (const std::string& ext : get_resin_profile_extensions()) {
+        if (boost::algorithm::iends_with(input_file, ext))
+            return true;
+    }
+    return false;
+}
+
 } // namespace Slic3r::Biz::FileLoadingLogic

@@ -17,7 +17,8 @@ namespace Slic3r::App::Desktop {
 /**
  * wxWidgets adapter that receives OS file drop events and routes them to the
  * appropriate ProjectInteractor method:
- *   - single project file (.3mf) → load_project()
+ *   - resin profile (.cfg, .cfgx, .lyr) → the resin import review dialog
+ *   - single project file (.3mf)       → load_project()
  *   - everything else (model files)   → load_models_to_project()
  * Unsupported file types are silently filtered out.
  *

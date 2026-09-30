@@ -8,6 +8,8 @@
 #include "Slic3r/App/IAppConfigChangedListener.hpp"
 #include "Slic3r/App/ModalDialog.hpp"
 
+#include <boost/filesystem/path.hpp>
+
 namespace Slic3r::Biz {
 class ProjectInteractor;
 } // namespace Slic3r::Biz
@@ -70,6 +72,15 @@ public:
     );
 
     void navigate_to_module_type(Render::ModuleType type);
+
+    /**
+     * @brief Open the resin import review dialog for @p path.
+     *
+     * The dialog lives in the bed sidebar of a render module, so this goes to the module that owns
+     * one: the Prepare module, which is where a profile is imported into. Called by the entry
+     * points of M3.10b, the "Import resin profile" button and a profile dropped onto the window.
+     */
+    void open_resin_import(const boost::filesystem::path& path);
 
     /// Switch to Prepare and open one of its tools, e.g. Scene::ToolType::SlaSupportPoints.
     void activate_plater_tool(Scene::ToolType tool);

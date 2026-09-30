@@ -981,6 +981,12 @@ Scene::IGizmoController& PlaterRenderModule::gizmo_controller() {
     return *m_gizmo_manager;
 }
 
+SidebarBed& PlaterRenderModule::sidebar_bed()
+{
+    ASSERT(m_sidebar_bed.get());
+    return *m_sidebar_bed;
+}
+
 void PlaterRenderModule::init_scene()
 {
 #if ENABLED_NODE_LOGGING

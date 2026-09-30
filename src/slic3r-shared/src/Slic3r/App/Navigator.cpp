@@ -3,6 +3,8 @@
 #include "Slic3r/App/Plater/PlaterRenderModule.hpp"
 #include "Slic3r/App/Preview/PreviewRenderModule.hpp"
 #include "Slic3r/App/Platform/AbstractRenderCanvas.hpp"
+#include "Slic3r/App/SidebarBed.hpp"
+#include "Slic3r/App/MaterialSelectionDialog.hpp"
 #include "Slic3r/App/AppServices.hpp"
 #include "Slic3r/App/AppConfigInteractor.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
@@ -71,6 +73,17 @@ void Navigator::set_render_module_type(Render::ModuleType type)
     if (force_render_modele_switch && m_callbacks.render_module_switched) {
         m_callbacks.render_module_switched();
     }
+}
+
+void Navigator::open_resin_import(const boost::filesystem::path& path)
+{
+    if (!has_modules()) {
+        return;
+    }
+    // The review dialog belongs to the bed sidebar of a module, and only the module being looked
+    // at can show the dialog it holds, so the import opens in Prepare.
+    set_render_module_type(Render::ModuleType::Plater);
+    m_plater_module->sidebar_bed().material_selection_dialog().open_resin_import(path);
 }
 
 void Navigator::activate_plater_tool(Scene::ToolType tool)

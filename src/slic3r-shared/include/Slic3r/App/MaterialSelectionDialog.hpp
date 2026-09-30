@@ -60,8 +60,8 @@ public:
     /**
      * @brief Open the resin import review dialog for @p path.
      *
-     * The dialog itself is M3.10a; the entry points that call this (an "Import resin profile" button
-     * in the toolbar of this dialog, and a profile dropped onto the window) are M3.10b.
+     * The dialog itself is M3.10a; the entry points that call this (this dialog's "Import resin
+     * profile" button, and a profile dropped onto the window) are M3.10b.
      */
     void open_resin_import(const boost::filesystem::path& path);
 
@@ -81,6 +81,9 @@ private:
     void update_current_context();
     void update_type_filter_visibility();
     void on_about_to_show() override;
+
+    /// Ask the platform for a resin profile file and hand it to the review dialog.
+    void pick_resin_profile();
 
 private:
     using SelectionRowListViewFactory = Yoga::ViewFactory<
@@ -114,6 +117,7 @@ private:
     std::vector<Yoga::LayoutButton*> m_sla_type_filter_buttons;
     Yoga::InputText* m_input_text_search                 = nullptr;
     Yoga::LayoutButton* m_only_favorites_button          = nullptr;
+    Yoga::LayoutButton* m_import_resin_profile_button    = nullptr;
     SelectionRowListView* m_selection_row_list_view      = nullptr;
     Biz::Preset::PresetItemObservableList* m_preset_list = nullptr;
     MaterialSettingsDialog* m_material_settings_dialog   = nullptr;
