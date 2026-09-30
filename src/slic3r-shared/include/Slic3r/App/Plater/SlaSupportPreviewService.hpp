@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Slic3r/App/Plater/SlaSupportPreviewSchedule.hpp"
 #include "Slic3r/App/Render/GeometryManager.hpp"
 #include "Slic3r/App/Scene/AuxiliaryElementId.hpp"
 #include "Slic3r/App/Scene/TriangleMeshManager.hpp"
@@ -110,6 +111,11 @@ SlaSupportPreviewDiff diff_sla_support_previews(
  * and draws them standing on the plate, while PlaterScenePresenter lifts the model itself by the
  * same elevation. Objects without points, with supports turned off, or that left the plate lose
  * their preview. Nothing is sliced, the meshes come from the support tool engine call only.
+ *
+ * A burst of edits (dragging a support point, a slider changing a per point value) is collected by
+ * SlaSupportPreviewSchedule and costs one build of the final state, and a key that changes while
+ * a build runs stops it instead of letting it finish into the bin. The main thread never waits for
+ * a build and never holds more than the newest tree and raft of an object.
  */
 class SlaSupportPreviewService :
     public Biz::ISlicingInputChangedListener,
@@ -160,17 +166,27 @@ public:
     ) override;
 
 private:
+    /// @brief Everything a build needs but the mesh, taken when the key changed and used when the
+    /// debounce window is over. Cheap to copy, so it is taken on every edit of the burst; the mesh
+    /// is not, it is cloned once the burst is.
+    struct Pending
+    {
+        Domain::ObjectID                  object_id;
+        Domain::Transform3d               instance_matrix{Domain::Transform3d::Identity()};
+        Domain::SLA::SupportPoints        points;
+        Domain::FullConfigSLAPtr          full_config;
+        Domain::PartialObjectConfigSLAPtr object_config;
+        Domain::Transform3d               bed_trafo{Domain::Transform3d::Identity()};
+        double                            elevation{0.};
+    };
+
     struct Job
     {
+        SlaSupportPreviewSchedule::Request     request;
+        Pending                               pending;
+        // The worker's copy of the model: the worker thread must not read the object the main
+        // thread keeps editing.
         std::unique_ptr<Domain::ModelObject> cloned_object;
-        Domain::Transform3d                   instance_matrix;
-        Domain::SLA::SupportPoints            points;
-        Domain::FullConfigSLAPtr              full_config;
-        Domain::PartialObjectConfigSLAPtr     object_config;
-        Domain::Transform3d                   bed_trafo{Domain::Transform3d::Identity()};
-        double                                elevation{0.};
-        Domain::ObjectID                      object_id;
-        std::size_t                           generation{0};
     };
 
     struct ObjectPreview
@@ -185,6 +201,7 @@ private:
     void cancel_worker();
     void drop_object(Domain::ObjectID object_id);
     void drop_main_node();
+    void start_due_build(const SlaSupportPreviewSchedule::Request& request);
     void start_next_job();
     void build_nodes(
         Domain::ObjectID                  object_id,
@@ -223,11 +240,18 @@ private:
     // One entry per object that has, or is about to get, a preview. The key is the one the tree is
     // (or will be) built from, so an object with an unchanged key is not rebuilt.
     std::unordered_map<std::size_t, ObjectPreview> m_previews;
-    // Per object counter, bumped whenever a new job is queued. Results of older generations are
-    // dropped when they arrive.
-    std::unordered_map<std::size_t, std::size_t> m_generations;
-    std::deque<Job>                             m_queue;
-    Biz::JThread::JThread                       m_worker;
+
+    // What is waiting for its debounce window, at most one entry per object: the newest key
+    // replaces the older one, so a burst of edits keeps a single build.
+    std::unordered_map<std::size_t, Pending> m_pending;
+    // The signature handed to the schedule per object. Bumped on every key change, so the result
+    // of a build that an edit made stale is recognised and dropped.
+    std::unordered_map<std::size_t, std::uint64_t> m_signatures;
+    // The debounce and the cancellation of the running builds.
+    std::unique_ptr<ISlaSupportPreviewTimer> m_debounce_timer;
+    SlaSupportPreviewSchedule                m_schedule;
+    std::deque<Job>                          m_queue;
+    Biz::JThread::JThread                    m_worker;
     // True from the moment the worker is spawned until its result came back to the main thread,
     // so that only one tree is built at a time.
     std::atomic<bool> m_worker_running{false};
