@@ -106,6 +106,12 @@ ObjectSettingsObservableList::set_value(const std::string& key, const Domain::Co
 
     ASSERT(item, "key has to correspond to existing item");
 
+    // The snapshot has to be taken before the value is written: it holds the state the undo brings
+    // back, so taking it afterwards would save the new value and undo would leave the setting where
+    // it was. The per-object raft and support settings are edited here, from the object override
+    // panel (M2.6b).
+    m_scene_interactor.undo_provider().take_snapshot(UndoSnapshotType::SetPartSettingsValue);
+
     if (item->is_override()) {
         for (Domain::ConfigBox* box : m_item_sources.at(item)) {
             box->overrides.set(key, value);
@@ -118,8 +124,6 @@ ObjectSettingsObservableList::set_value(const std::string& key, const Domain::Co
     }
 
     update_overriden(item);
-
-    m_scene_interactor.undo_provider().take_snapshot(UndoSnapshotType::SetPartSettingsValue);
 
     invoke_listeners<IListObserver<OverrideItem>>([&](IListObserver<OverrideItem>* l)
                                                   { l->on_updated({m_item_index.at(key)}); });

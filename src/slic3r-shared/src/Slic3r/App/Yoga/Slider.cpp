@@ -121,6 +121,7 @@ void Slider::render(const Vec2f& pos, const Vec2f& size)
 
     if (m_hovered && ImGui::IsMouseClicked(0)) {
         m_dragging = true;
+        notify_value_editing_started();
     }
 
     ImGuiIO& io = ImGui::GetIO();
@@ -128,6 +129,7 @@ void Slider::render(const Vec2f& pos, const Vec2f& size)
     if (m_dragging) {
         if (!io.MouseDown[0] || io.MouseReleased[0]) {
             m_dragging = false;
+            notify_value_editing_ended();
         } else {
             const double proc_pos = pos.x() + 0.5 * m_thumb->width();
             const double proc_width =
@@ -150,13 +152,34 @@ void Slider::render(const Vec2f& pos, const Vec2f& size)
         double accer = io.KeyCtrl || io.KeyShift ? 5. : 1.;
         double value = clamp(m_value + mw * accer * step);
 
-        if (!Domain::fuzzy_compare(m_value, value)) {
+        // A wheel turn has no end the user perceives, so one notch is one action: it opens and
+        // closes around the value it reports.
+        const bool changed = !Domain::fuzzy_compare(m_value, value);
+        if (changed) {
             set_style_dirty(); // to ask for redraw
+            notify_value_editing_started();
         }
         set_value(value);
+        if (changed) {
+            notify_value_editing_ended();
+        }
     }
 
     Oval::render(pos, size);
+}
+
+void Slider::notify_value_editing_started()
+{
+    if (m_callbacks.value_editing_started) {
+        m_callbacks.value_editing_started();
+    }
+}
+
+void Slider::notify_value_editing_ended()
+{
+    if (m_callbacks.value_editing_ended) {
+        m_callbacks.value_editing_ended();
+    }
 }
 
 void Slider::set_value(double value)

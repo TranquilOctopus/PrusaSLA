@@ -11,6 +11,12 @@ public:
     struct Callbacks
     {
         std::function<void(double value)> value_changed{nullptr};
+
+        // The user started and stopped changing the value. A drag reports a value on every frame it
+        // lasts, so a control that records history opens one step at value_editing_started and
+        // closes it at value_editing_ended, and the value changes in between are that one action.
+        std::function<void()> value_editing_started{nullptr};
+        std::function<void()> value_editing_ended{nullptr};
     };
 
     explicit Slider(double begin, double end, double step = 1.);
@@ -40,6 +46,8 @@ protected:
 
 private:
     void set_hovered(bool hovered);
+    void notify_value_editing_started();
+    void notify_value_editing_ended();
     double clamp(double value);
     double snap_to_nearest(double value);
     void update_area_width();

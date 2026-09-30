@@ -3,6 +3,7 @@
 #include "Slic3r/App/Scene/IGizmo.hpp"
 #include "Slic3r/App/Plater/GizmoWindow.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsEditing.hpp"
+#include "Slic3r/App/Plater/SlaUndoAction.hpp"
 #include "Slic3r/Biz/SLAObjectCache.hpp"
 #include "Slic3r/Biz/Scene/SceneInteractor.hpp"
 #include "Slic3r/Domain/ObjectID.hpp"
@@ -146,6 +147,9 @@ private:
     void remove_point_at_index(size_t idx);
     void move_point_to_mesh_pos(size_t idx, const Domain::Vec3d& mesh_pos);
     void take_undo_snapshot();
+    void take_undo_snapshot_for_value_edit();
+    void on_value_editing_started();
+    void on_value_editing_ended();
 
     // Visuals
     void update_point_visuals();
@@ -294,6 +298,10 @@ private:
 
     // Guard to prevent dialog setters from triggering value-change callbacks
     bool m_syncing_dialog{false};
+
+    // The value edit of a slider that is running, so the ticks of a drag become one undo step
+    // (M2.6b).
+    SlaUndoAction m_value_edit_action;
 
     class DialogSyncGuard
     {

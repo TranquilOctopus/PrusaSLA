@@ -84,6 +84,8 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     m_dialog->callbacks().apply = [this]() { this->apply_generated_points(); };
     m_dialog->callbacks().discard = [this]() { this->discard_generated_points(); };
     m_dialog->callbacks().auto_support_all = [this]() { this->auto_support(); };
+    m_dialog->callbacks().value_editing_started = [this]() { this->on_value_editing_started(); };
+    m_dialog->callbacks().value_editing_ended = [this]() { this->on_value_editing_ended(); };
     m_dialog->callbacks().density_changed = [this](double value)
     {
         if (m_syncing_dialog) {
@@ -94,7 +96,7 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
             Domain::Project& project = m_project_interactor.selected_project();
             Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
             if (model_object) {
-                m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SlaSupportPointsEdit);
+                take_undo_snapshot_for_value_edit();
                 auto result = model_object->object_settings_sla.find("support_points_density_relative");
                 if (result.item) {
                     result.item->set<int>(density);
@@ -762,6 +764,13 @@ bool SlaSupportPointsGizmo::auto_support(const std::vector<ObjectID>& object_ids
         return false;
     }
 
+    // One snapshot for the whole run: the button (or the "Auto support selected" of the Preview
+    // panel) is one user action, and the points of every model of the queue are written from here
+    // on. Taking it here, before the first of them is touched, is also what keeps the "replace the
+    // existing supports" branch undoable: the clearing it does happens after this snapshot and so is
+    // part of what undo brings back (M2.6b).
+    m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SlaSupportPointsApply);
+
     // Check if any queued object already has support points
     const bool any_has_points = std::ranges::any_of(m_auto_support_queue, [&project](const ObjectID& obj_id) {
         const Domain::ModelObject* model_object = project.find_object_by_id(obj_id.id);
@@ -879,7 +888,8 @@ void SlaSupportPointsGizmo::on_auto_support_completed(Domain::ObjectID obj_id, s
         Domain::Project& project = m_project_interactor.selected_project();
         Domain::ModelObject* model_object = project.find_object_by_id(obj_id.id);
         if (model_object) {
-            m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SlaSupportPointsApply);
+            // The snapshot of the run was already taken in auto_support(), before the first model of
+            // the queue was touched, so a run over several models is one undo step.
 
             // A generated point takes the tip shape, tip length, knot, stem cross-section and stem
             // taper of the settings of its own model, like a point placed by hand (M2.16c, M2.24).
@@ -1066,6 +1076,27 @@ void SlaSupportPointsGizmo::discard_edited_points()
 void SlaSupportPointsGizmo::take_undo_snapshot()
 {
     m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SlaSupportPointsEdit);
+}
+
+// A slider reports a new value on every frame its thumb is dragged, so a drag of N ticks arrives
+// here as N value changes. They are one user action, so only the first of them takes a snapshot,
+// and it takes it before it changes the model: undo then brings back the values the drag started
+// from, in one step (M2.6b).
+void SlaSupportPointsGizmo::take_undo_snapshot_for_value_edit()
+{
+    if (m_value_edit_action.take()) {
+        take_undo_snapshot();
+    }
+}
+
+void SlaSupportPointsGizmo::on_value_editing_started()
+{
+    m_value_edit_action.begin();
+}
+
+void SlaSupportPointsGizmo::on_value_editing_ended()
+{
+    m_value_edit_action.end();
 }
 
 // Hits are in the hit volume's local frame; sla_support_points live in the object's mesh frame.
@@ -1618,7 +1649,7 @@ void SlaSupportPointsGizmo::apply_pillar_diameter_to_selected()
     if (!m_edit_state.has_value()) {
         return;
     }
-    take_undo_snapshot();
+    take_undo_snapshot_for_value_edit();
     m_edit_state->editing.apply_pillar_diameter_to_selected();
     update_point_visuals();
     commit_edited_points_live();
@@ -1629,7 +1660,7 @@ void SlaSupportPointsGizmo::apply_base_diameter_to_selected()
     if (!m_edit_state.has_value()) {
         return;
     }
-    take_undo_snapshot();
+    take_undo_snapshot_for_value_edit();
     m_edit_state->editing.apply_base_diameter_to_selected();
     update_point_visuals();
     commit_edited_points_live();
@@ -1640,7 +1671,7 @@ void SlaSupportPointsGizmo::apply_base_height_to_selected()
     if (!m_edit_state.has_value()) {
         return;
     }
-    take_undo_snapshot();
+    take_undo_snapshot_for_value_edit();
     m_edit_state->editing.apply_base_height_to_selected();
     update_point_visuals();
     commit_edited_points_live();
@@ -1658,7 +1689,7 @@ void SlaSupportPointsGizmo::apply_support_geometry_to_selected(SupportGeometryFi
     if (!m_edit_state.has_value()) {
         return;
     }
-    take_undo_snapshot();
+    take_undo_snapshot_for_value_edit();
     m_edit_state->editing.apply_support_geometry_to_selected(field);
     // The points now carry the new value, so the fields keep showing it.
     update_selected_support_geometry();
@@ -1671,7 +1702,7 @@ void SlaSupportPointsGizmo::apply_support_on_model_to_selected(SupportOnModel on
     if (!m_edit_state.has_value()) {
         return;
     }
-    take_undo_snapshot();
+    take_undo_snapshot_for_value_edit();
     m_edit_state->editing.apply_support_on_model_to_selected(on_model);
     // The points now carry the new state, so the control keeps showing it.
     update_selected_support_geometry();

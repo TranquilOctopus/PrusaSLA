@@ -23,6 +23,11 @@ public:
     struct Callbacks
     {
         std::function<void(double value)> value_changed{nullptr};
+        // The user started and stopped changing the value, on the slider or in the input field. A
+        // drag and a keystroke both report a value per step, so a control that records history opens
+        // one step at value_editing_started and closes it at value_editing_ended.
+        std::function<void()> value_editing_started{nullptr};
+        std::function<void()> value_editing_ended{nullptr};
     };
 
     explicit SliderWithInput();

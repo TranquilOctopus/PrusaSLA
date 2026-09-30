@@ -48,7 +48,14 @@ void SliderWithInput::Create()
                 return;
             }
         }
+        // A keystroke is one action, so it opens and closes around the value it reports.
+        if (callbacks().value_editing_started) {
+            callbacks().value_editing_started();
+        }
         m_slider->set_value(std::stod(input_value));
+        if (callbacks().value_editing_ended) {
+            callbacks().value_editing_ended();
+        }
     };
 
     // By default we use DefaultValidator for the slider
@@ -65,6 +72,14 @@ void SliderWithInput::Create()
         update_input_text(value);
         if (callbacks().value_changed)
             callbacks().value_changed(value);
+    };
+    m_slider->callbacks().value_editing_started = [this]() {
+        if (callbacks().value_editing_started)
+            callbacks().value_editing_started();
+    };
+    m_slider->callbacks().value_editing_ended = [this]() {
+        if (callbacks().value_editing_ended)
+            callbacks().value_editing_ended();
     };
 }
 

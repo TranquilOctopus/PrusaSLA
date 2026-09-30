@@ -4,6 +4,7 @@
 #include "Slic3r/App/Plater/SlaSupportGeometry.hpp"
 #include "Slic3r/App/Plater/SlaSupportOnModel.hpp"
 
+#include <initializer_list>
 #include <optional>
 
 namespace Slic3r::App::Yoga {
@@ -53,6 +54,13 @@ public:
         std::function<void()> preset_medium = []() {};
         std::function<void()> preset_heavy = []() {};
         std::function<void()> auto_support_all = []() {};
+
+        // The user started and stopped changing one of the value sliders (M2.6b). Every value the
+        // tool writes on the points comes from one of them, and a drag of a slider reports a value
+        // per frame, so the tool takes its undo snapshot at the start of the edit and not on each of
+        // the ticks of it.
+        std::function<void()> value_editing_started = []() {};
+        std::function<void()> value_editing_ended = []() {};
     };
 
     Callbacks& callbacks();
@@ -91,6 +99,11 @@ public:
     /// Whether the section with the point settings is open. The tool opens it, so the settings are
     /// there when one goes into supporting an object (M2.17d4).
     void set_settings_expanded(bool expanded);
+
+private:
+    /// Lets every value slider of the window report when the user started and stopped editing its
+    /// value, so that a drag of one of them is a single undo step (M2.6b).
+    void report_value_editing(std::initializer_list<Yoga::SliderWithInput*> sliders);
 
 private:
     Yoga::CollapsibleWindow* m_settings_window = nullptr;

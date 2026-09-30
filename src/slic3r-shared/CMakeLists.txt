@@ -1680,6 +1680,10 @@ if(SLIC3R_BUILD_TESTS)
 
             test/Slic3r/App/Plater/SlaSupportOnModelTests.cpp
 
+            test/Slic3r/App/Plater/SlaUndoActionTests.cpp
+
+            test/Slic3r/App/Plater/SlaSupportPointsUndoTests.cpp
+
             test/Slic3r/App/Plater/SlaSupportPreviewServiceTests.cpp
 
             test/Slic3r/App/Plater/SlaDrainHolesEditingTests.cpp
