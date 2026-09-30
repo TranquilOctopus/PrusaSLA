@@ -63,6 +63,7 @@
 #include "Slic3r/App/Plater/HeightRangeGizmo.hpp"
 #include "Slic3r/App/Plater/HeightRangeDialog.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsGizmo.hpp"
+#include "Slic3r/App/Plater/SlaSupportPreviewService.hpp"
 #include "Slic3r/App/Plater/SlaHollowGizmo.hpp"
 #include "Slic3r/App/Plater/ToolGizmosUiInfo.hpp"
 #include "Slic3r/App/Navigator.hpp"
@@ -100,6 +101,7 @@
 #include "Slic3r/App/MaterialSelectionDialog.hpp"
 #include "Slic3r/App/MaterialSettingsDialog.hpp"
 #include "Slic3r/App/PrintSettingsDialog.hpp"
+#include "Slic3r/App/SlaPrintSettingsDialog.hpp"
 #include "Slic3r/App/PrinterAddDialog.hpp"
 #include "Slic3r/App/PresetUpdater/PresetUpdaterDialog.hpp"
 #include "Slic3r/App/UIItemCommand.hpp"
@@ -979,6 +981,12 @@ Scene::IGizmoController& PlaterRenderModule::gizmo_controller() {
     return *m_gizmo_manager;
 }
 
+SidebarBed& PlaterRenderModule::sidebar_bed()
+{
+    ASSERT(m_sidebar_bed.get());
+    return *m_sidebar_bed.get();
+}
+
 void PlaterRenderModule::init_scene()
 {
 #if ENABLED_NODE_LOGGING
@@ -1079,6 +1087,13 @@ void PlaterRenderModule::init_gizmos()
         m_project_interactor,
         AppServices::instance().pop_notification_center()
     );
+    // Keeps the support tree and the raft of every model on the plate drawn, so the tool gizmo
+    // below only has to edit points.
+    m_sla_support_preview = std::make_unique<SlaSupportPreviewService>(
+        m_project_interactor,
+        *m_scene_presenter,
+        *m_device
+    );
     m_paint_on_supports_gizmo = &m_gizmo_manager->add_tool_gizmo<PaintOnSupportsGizmo>(
         *m_device,
         m_gizmo_manager->data_factory(),
@@ -1146,7 +1161,8 @@ void PlaterRenderModule::init_gizmos()
     m_sla_support_points_gizmo = &m_gizmo_manager->add_tool_gizmo<SlaSupportPointsGizmo>(
         *m_scene_presenter,
         m_project_interactor,
-        *m_device
+        *m_device,
+        *m_sla_support_preview
     );
     m_sla_hollow_gizmo = &m_gizmo_manager->add_tool_gizmo<SlaHollowGizmo>(
         *m_scene_presenter,

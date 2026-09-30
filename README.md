@@ -15,17 +15,17 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 ## Progress
 
-**95 of 173 todos done (55%)** · updated 2026-09-29 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**145 of 203 todos done (71%)** · updated 2026-09-30 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
 | M0: Foundation | 12/15 | `██████████░░` 80% |
-| M1: Look, feel and SLA-first shell | 21/31 | `████████░░░░` 68% |
-| M2: SLA editing tools (porting the legacy gizmos) | 31/40 | `█████████░░░` 78% |
-| M3: Resin profile import (Chitubox, Lychee and others) | 2/15 | `██░░░░░░░░░░` 13% |
-| M4: Engine quality (measure first; every PR includes before/after metrics) | 7/18 | `█████░░░░░░░` 39% |
-| M5: Formats and inspection | 13/26 | `██████░░░░░░` 50% |
-| M6: Quality gates and release | 4/11 | `████░░░░░░░░` 36% |
+| M1: Look, feel and SLA-first shell | 34/40 | `██████████░░` 85% |
+| M2: SLA editing tools (porting the legacy gizmos) | 44/50 | `███████████░` 88% |
+| M3: Resin profile import (Chitubox, Lychee and others) | 10/17 | `███████░░░░░` 59% |
+| M4: Engine quality (measure first; every PR includes before/after metrics) | 9/20 | `█████░░░░░░░` 45% |
+| M5: Formats and inspection | 26/32 | `██████████░░` 81% |
+| M6: Quality gates and release | 5/12 | `█████░░░░░░░` 42% |
 | M7: Excellent auto-supports *(parked)* | 5/17 | `████░░░░░░░░` 29% |
 
 ### Waiting on you
@@ -33,10 +33,6 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 - **M0.12** Choose 10–20 benchmark models. Use only models whose licenses allow redistribution, or store them outside t…
 - **M3.1** Put a few real `.cfg`, `.cfgx`, `.lyr` and `.lyp` files in `local-samples/`, exported from your own Chitubo…
 - **M5.3.samples** Provide one sliced sample archive per target printer (from Chitubox/Lychee/Photon Workshop) and list the pr…
-
-### Blocked
-
-- **M5.1a** Restore the SL1/SL1S archive reader into libslic3r from `d9e89cf564^` (`SLAArchiveReader`, `ZipperArchiveIm… — (2026-09-23) the restored reader is on `sla/M5.1a-sl1-reader` but does not build. It depends on both layers: the legacy `DynamicPrintConfig` (Biz) and ten engine headers that are all private to libslic3r (`MarchingSquares`, `SlicesToTriangleMesh`, `SLA/RasterBase`, `ExPolygon`, `ClipperUtils`, …), plus `miniz_extension.hpp`, which no longer exists (3.0 has `Slic3r/Biz/Algorithms/MiniZWrapper.hpp`). Moving it all into libslic3r breaks layering; moving it all into Biz (tried, at the reviewer's instruction) cannot reach the private headers. Needed split: a small **public** engine function in `src/libslic3r/include/libslic3r/` that turns decoded layer images plus pixel size and layer heights into a mesh, with no config types; and the rest in Biz: opening the zip through MiniZWrapper, parsing `config.ini`/`prusaslicer.ini`, calling the engine function. Keep the existing round-trip test.
 
 ### Open todos
 
@@ -48,45 +44,32 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 </details>
 
-<details><summary>M1: Look, feel and SLA-first shell — 10 open</summary>
+<details><summary>M1: Look, feel and SLA-first shell — 6 open</summary>
 
 - [ ] **M1.1b** Runtime screen audit with an SLA printer selected, following the R1–R10 checklist in `ux/journeys.md`. Reco…
 - [ ] **M1.8** SLA path in the welcome dialog, plus SLA hints and notifications. Also fix the “Export gcode to a file” too…
-  - [ ] **M1.8b** SLA hints and notifications along the first-run and plater flow.
 - [ ] **M1.11** SLA sidebar summary (PLAN F5).
   - [ ] **M1.11b** The W4 issues list (islands, cups) with jump-to-layer links into the layer view.
 - [ ] **M1.12** Branding artwork: replace `resources/icons/splashscreen.jpg` and the `PrusaSlicer.*` app icons (ico, icns,…
 - [ ] **M1.13** User test feedback, 2026-09-23 (first hands-on session with the app).
-  - [ ] **M1.13c** Move the exposure and layer settings into the resin preset, so a resin preset is one resin on one printer:…
-  - [ ] **M1.13d** Audit the SLA settings panels and hide every option that does nothing for SLA (hide, don't delete). List wh…
-  - [ ] **M1.13f** Finish "build plate" for the strings M1.13a could not reach (arrange dialog, menu items, undo names, two er…
 
 </details>
 
-<details><summary>M2: SLA editing tools (porting the legacy gizmos) — 9 open</summary>
+<details><summary>M2: SLA editing tools (porting the legacy gizmos) — 6 open</summary>
 
 - [ ] **M2.9** Plater SLA visuals: resin tint, support and pad materials, and overlay styling (PLAN F3).
 - [ ] **M2.14b** Raft shapes the pad generator cannot make today: grid or honeycomb infill, a tapered skate profile, and a s…
-- [ ] **M2.14c** Raft UI: the raft type dropdown and its knobs in the SLA print settings, with the preset bundles from M2.14a.
-- [ ] **M2.14d** Make `raft_type` the single source of truth. Engine: `generate_pad`, `slice_supports`, `SLAPrintObject::get…
 - [ ] **M2.15** Bracing and cross-bracing controls beyond `support_pillar_connection_mode`, if M2.11 marks them missing.
 - [ ] **M2.17** Supports are an explicit step before slicing, never done by the slicer. The workflow (decided 2026-09-22):…
   - [ ] **M2.17d** Supports are done in Preview (user feedback 2026-09-23). Entering Preview must not slice and must not auto-…
 - [ ] **M2.18** Manual supports from presets (user, 2026-09-23): pick Light, Medium or Heavy in the support tool and every…
-- [ ] **M2.19** Live support geometry (user, 2026-09-28: "the support geometry should auto-generate when support points are…
 
 </details>
 
-<details><summary>M3: Resin profile import (Chitubox, Lychee and others) — 13 open</summary>
+<details><summary>M3: Resin profile import (Chitubox, Lychee and others) — 7 open</summary>
 
 - [ ] **M3.1** Put a few real `.cfg`, `.cfgx`, `.lyr` and `.lyp` files in `local-samples/`, exported from your own Chitubo… *(needs you)*
 - [ ] **M3.2** Add `local-samples/` to `.gitignore`. Document the observed structure of each sample format in `doc/sla-for…
-- [ ] **M3.5** `ResinProfileMapper` for tilt printers (SL1/SL1S). Implement the mapping table with statuses and unit conve…
-- [ ] **M3.6** `ResinProfileMapper` for generic MSLA printers, using the M0.4 motion keys.
-- [ ] **M3.7** `ResinProfileImportInteractor`: read, map, pick a base material, save as a user preset, handle name collisi…
-- [ ] **M3.8** `SlicedArchiveResinReader`: read material settings from `.sl1`/`.sl1s` `config.ini`. Register readers for o…
-- [ ] **M3.9** CLI `--import-resin-profile` with `--dry-run` and a JSON `--report` option.
-- [ ] **M3.10** Import review dialog. Contents: source summary, suggested target printer (from printer hints) with a printe…
 - [ ] **M3.11** Quick-entry form "New resin from datasheet": the ~6 datasheet fields, run through the same mapper and revie…
 - [ ] **M3.12** `ChituboxCfgxReader`, if M3.2 marked it feasible; otherwise close this todo with a link to the M3.2 finding.
 - [ ] **M3.13** `LycheeLyrReader` (and `.lyp` printer hints), if M3.2 marked it feasible; otherwise close it with a link to…
@@ -111,21 +94,14 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 </details>
 
-<details><summary>M5: Formats and inspection — 13 open</summary>
+<details><summary>M5: Formats and inspection — 6 open</summary>
 
 - [ ] **M5.1** Import `.sl1`/`.sl1s`/`.slx` archives in the new app, porting the legacy `SLAImportJob` (PLAN C1).
-  - [ ] **M5.1a** Restore the SL1/SL1S archive reader into libslic3r from `d9e89cf564^` (`SLAArchiveReader`, `ZipperArchiveIm… *(blocked)*
-  - [ ] **M5.1b** Wire the reader into `FileLoadingLogic` and `get_import_extensions()`, as a job with progress and cancel.
 - [ ] **M5.3.ctb** Chitubox `.ctb` writer for older Elegoo machines, and possibly the Anycubic Photon Mono M5 (see the M5.3.pw…
 - [ ] **M5.3.pw-b** Anycubic newer formats (`.pm5`, `.pm5s`, `.pm7`) — **`.pm5` first: it is the format the maintainer's Photon…
 - [ ] **M5.3.samples** Provide one sliced sample archive per target printer (from Chitubox/Lychee/Photon Workshop) and list the pr… *(needs you)*
 - [ ] **M5.4** Display mirroring and orientation test pattern for every format (PLAN C3).
 - [ ] **M5.5** Upload SLA archives to print hosts and removable drives (PLAN C4).
-- [ ] **M5.6** Preview layer inspector: 2D layer view with a pixel grid (PLAN F4). Use mock data until M4.9 lands.
-- [ ] **M5.7** Per-layer area and peel-force chart beside the layer slider.
-- [ ] **M5.8** Clickable issue markers (islands, cups) that jump to the layer.
-- [ ] **M5.9** Pre-export checklist and format picker (PLAN F8).
-- [ ] **M5.10** Height-band clipping in the 3D view, like Chitubox's preview: two sliders set a lower and an upper Z limit…
 
 </details>
 

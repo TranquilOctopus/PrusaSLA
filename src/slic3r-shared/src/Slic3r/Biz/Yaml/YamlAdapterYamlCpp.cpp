@@ -98,9 +98,9 @@ YamlAdapterYamlCpp::NodeRef YamlAdapterYamlCpp::value(const KeyValuePair& pair, 
 Yaml::Details::Mark YamlAdapterYamlCpp::mark(const NodeRef& node)
 {
     if (!node.node.has_value())
-        return {.file = node.file};
+        return {.file = std::string{node.file}};
     auto mark = node.node->Mark();
-    return {.file = node.file, .line = size_t(mark.line + 1), .column = size_t(mark.column + 1)};
+    return {.file = std::string{node.file}, .line = size_t(mark.line + 1), .column = size_t(mark.column + 1)};
 }
 
 

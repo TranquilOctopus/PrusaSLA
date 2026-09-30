@@ -1,5 +1,7 @@
 #pragma once
 
+#include <map>
+#include <optional>
 #include <unordered_map>
 
 #include "Slic3r/App/Scene/GeometryDataFactory.hpp"
@@ -10,6 +12,7 @@
 #include "Slic3r/Biz/ISelectedProjectChangedListener.hpp"
 #include "Slic3r/Biz/ISelectedBedInstanceChangedListener.hpp"
 #include "Slic3r/Biz/Scene/SceneInteractor.hpp"
+#include "Slic3r/Biz/Scene/SelectionExtents.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/App/Plater/PlaterScenePresenterProjectContext.hpp"
 #include "Slic3r/App/Render/GeometryManager.hpp"
@@ -76,6 +79,21 @@ public:
     );
 
     bool project_ready() const { return !m_projects.empty(); }
+
+    bool has_project(Domain::SelectionId project_id) const
+    {
+        return m_projects.find(project_id) != m_projects.end();
+    }
+
+    /// @brief Visual-only Z offset added to every node of one model object, in mm. The SLA support
+    /// preview uses it to stand the model on top of its support tree without touching the model.
+    void set_sla_lift(Domain::ObjectID object_id, double lift);
+    void clear_sla_lifts();
+    [[nodiscard]] double sla_lift(Domain::ObjectID object_id) const;
+    /// @brief The lift of the current selection, 0 when it spans several objects or none.
+    [[nodiscard]] double selection_sla_lift() const;
+    /// @brief The selection extents with the visual lift of the selection applied to the box.
+    [[nodiscard]] std::optional<Biz::Scene::SelectionExtents> selection_bounding_box() const;
 
     Scene::Scene& scene() override { return project_context().scene(); }
     const Scene::Scene& scene() const override { return project_context().scene(); }
@@ -218,6 +236,10 @@ private:
 
     void set_scene_aabb_as_dirty() { m_camera_frustum_updater.set_scene_aabb_as_dirty(); }
 
+    /// @brief The instance matrix with the visual SLA lift of the object pre-translated in Z.
+    [[nodiscard]] Domain::Transform3d instance_transform(const Domain::ModelInstance* inst) const;
+    void apply_sla_lift_to_nodes(Domain::ObjectID object_id);
+
     PlaterScenePresenterProjectContext& project_context()
     {
         ASSERT(m_selected_project_id != Domain::INVALID_ID);
@@ -333,6 +355,7 @@ private:
 
     bool m_freeze_selection_center{ false };
     bool m_volume_materials_dirty{ true };
+    std::map<Domain::ObjectID, double> m_sla_lifts;
 };
 
 } // namespace Slic3r::App::Plater

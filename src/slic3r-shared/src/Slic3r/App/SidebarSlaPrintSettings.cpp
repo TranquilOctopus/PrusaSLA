@@ -12,6 +12,8 @@
 #include "Slic3r/Domain/Config.hpp"
 #include "Slic3r/Domain/ConfigContainer.hpp"
 #include "Slic3r/Domain/ConfigPack.hpp"
+#include "Slic3r/Domain/FullConfigSLA.hpp"
+#include "Slic3r/Domain/SlaLayerHeight.hpp"
 
 #include <iomanip>
 #include <sstream>
@@ -44,6 +46,21 @@ std::string selected_resin_name(const Biz::ProjectInteractor& project_interactor
         return {};
     }
     return resins.items().at(selected_index).ui_preset_name();
+}
+
+/// The layer height the print will actually be sliced with: the one of the resin when the resin
+/// defines one, the one of the supports & raft preset otherwise. Nullopt when neither has one.
+std::optional<double> effective_layer_height(
+    const Domain::ConfigPackSLA& config_pack,
+    const Domain::Preset::HwPrinterConfig& hw_config
+)
+{
+    const auto full_config = std::make_shared<const Domain::FullConfigSLA>(config_pack, hw_config);
+    Domain::ConfigView config_view{full_config, {}};
+    config_view.finalize();
+
+    const double layer_height = Domain::sla_effective_layer_height(config_view);
+    return layer_height > 0. ? std::optional<double>{layer_height} : std::nullopt;
 }
 
 } // namespace
@@ -96,8 +113,9 @@ std::string SidebarSlaPrintSettings::summary_text() const
         return {};
     }
 
-    const Domain::ConfigPack config_pack =
-        m_project_interactor.selected_config_container().build_print_config();
+    const Domain::ConfigContainer& config_container
+        = m_project_interactor.selected_config_container();
+    const Domain::ConfigPack config_pack = config_container.build_print_config();
     const auto* sla_config = std::get_if<Domain::ConfigPackSLA>(&config_pack);
     if (sla_config == nullptr) {
         return {};
@@ -105,7 +123,7 @@ std::string SidebarSlaPrintSettings::summary_text() const
 
     return SidebarSlaPrintSettingsFormat::format_summary(
         selected_resin_name(m_project_interactor),
-        get_number(sla_config->sla_print_settings, "layer_height"),
+        effective_layer_height(*sla_config, config_container.selected_preset().hw_config),
         get_number(sla_config->sla_material_settings, "exposure_time"),
         get_number(sla_config->sla_material_settings, "initial_exposure_time"),
         Biz::_u8L("mm"),

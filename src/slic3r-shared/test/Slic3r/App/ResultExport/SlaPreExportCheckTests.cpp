@@ -62,7 +62,9 @@ TEST_CASE("SlaPreExportCheck - long model lists are truncated", "[SlaPreExportCh
     const Problems problems = format_problems({ "A", "B", "C", "D", "E", "F", "G" }, {});
 
     REQUIRE(problems.lines.size() == 1);
-    CHECK(problems.lines.front() == "7 models have no supports: A, B, C, D, E, … and 2 more");
+    // The raw UTF-8 bytes of the ellipsis, because a "\u2026" in a narrow literal is encoded in the
+    // execution code page (this project is not compiled with /utf-8) and would not compare equal.
+    CHECK(problems.lines.front() == "7 models have no supports: A, B, C, D, E, " "\xE2\x80\xA6" " and 2 more");
 }
 
 TEST_CASE("SlaPreExportCheck - islands are counted with the first layer", "[SlaPreExportCheck]")

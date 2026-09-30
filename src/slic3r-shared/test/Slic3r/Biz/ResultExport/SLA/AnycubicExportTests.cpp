@@ -62,6 +62,14 @@ TEST_CASE("Anycubic pwmx export", "[export][sla][anycubic]")
     config.sla_material_settings.items.opt("exposure_time").set(6.0);
     config.sla_material_settings.items.opt("initial_exposure_time").set(35.0);
     config.sla_print_settings.items.opt("faded_layers").set(10);
+    // Layer separation. The header takes the lift distance in mm, the lift and retract speeds in
+    // mm/s and the wait in s, which is the unit of every one of these settings.
+    config.sla_material_settings.items.opt("lift_height").set(7.5);
+    config.sla_material_settings.items.opt("lift_speed").set(1.25);
+    config.sla_material_settings.items.opt("retract_speed").set(2.5);
+    config.sla_material_settings.items.opt("wait_before_lift").set(3.0);
+    config.sla_material_settings.items.opt("bottom_lift_height").set(9.0);
+    config.sla_material_settings.items.opt("bottom_lift_speed").set(1.75);
     config.sla_material_settings.items.opt("bottle_weight").set(1.0);
     config.sla_material_settings.items.opt("bottle_volume").set(1000.0);
     config.sla_material_settings.items.opt("bottle_cost").set(0.0);
@@ -133,6 +141,17 @@ TEST_CASE("Anycubic pwmx export", "[export][sla][anycubic]")
     uint32_t transition_layer_count = read_le<uint32_t>(data.data() + header_payload_offset + 72);
     REQUIRE(transition_layer_count == 10);
 
+    // The separation settings of the resin reach the file: +12 is the wait before the lift in s,
+    // +24 the lift distance in mm, +28 the lift speed and +32 the retract speed, both in mm/s.
+    REQUIRE(data.size() >= header_payload_offset + 36);
+    const auto f = [&data, header_payload_offset](size_t offset) {
+        return *reinterpret_cast<const float*>(data.data() + header_payload_offset + offset);
+    };
+    REQUIRE(f(12) == Catch::Approx(3.0f));  // wait_before_lift
+    REQUIRE(f(24) == Catch::Approx(7.5f));  // lift_height
+    REQUIRE(f(28) == Catch::Approx(1.25f)); // lift_speed
+    REQUIRE(f(32) == Catch::Approx(2.5f));  // retract_speed
+
     REQUIRE(data.size() >= header_payload_offset + 48);
     uint32_t res_x = read_le<uint32_t>(data.data() + header_payload_offset + 44);
     uint32_t res_y = read_le<uint32_t>(data.data() + header_payload_offset + 48);
@@ -149,6 +168,22 @@ TEST_CASE("Anycubic pwmx export", "[export][sla][anycubic]")
     REQUIRE(data.size() >= layers_header_offset + 12 + 4 + 4);
     uint32_t layer_count = read_le<uint32_t>(data.data() + layers_header_offset + 12 + 4);
     REQUIRE(layer_count == sla_result->files.data.size());
+
+    // Every layer carries its own lift distance and lift speed, the bottom_* settings on the
+    // bottom layers and the plain ones after them. 11 layers are at the bottom exposure time, the
+    // engine fading the exposure over faded_layers starting with the first one.
+    const size_t layer_entry_base = layers_header_offset + 12 + 4 + 4;
+    const size_t layer_entry_size = 32;
+    REQUIRE(data.size() >= layer_entry_base + layer_entry_size * layer_count);
+    for (uint32_t i = 0; i < layer_count; ++i) {
+        const size_t entry = layer_entry_base + i * layer_entry_size;
+        const bool bottom = i < 11;
+        INFO("layer " << i);
+        REQUIRE(*reinterpret_cast<const float*>(data.data() + entry + 8)
+                == Catch::Approx(bottom ? 9.0f : 7.5f));
+        REQUIRE(*reinterpret_cast<const float*>(data.data() + entry + 12)
+                == Catch::Approx(bottom ? 1.75f : 1.25f));
+    }
 }
 
 // PW0 decoder for test verification
@@ -196,6 +231,13 @@ TEST_CASE("Anycubic PM5 export", "[export][sla][anycubic][pm5]")
     config.sla_print_settings.items.opt("faded_layers").set(10);
     // The resin owns the transition layer count, the print preset keeps a value of its own.
     config.sla_material_settings.items.opt("resin_faded_layers").set(4);
+    // Layer separation: mm, mm/s and s, the units the .pm5 header fields are in.
+    config.sla_material_settings.items.opt("lift_height").set(7.5);
+    config.sla_material_settings.items.opt("lift_speed").set(1.25);
+    config.sla_material_settings.items.opt("retract_speed").set(2.5);
+    config.sla_material_settings.items.opt("wait_before_lift").set(3.0);
+    config.sla_material_settings.items.opt("bottom_lift_height").set(9.0);
+    config.sla_material_settings.items.opt("bottom_lift_speed").set(1.75);
     config.sla_material_settings.items.opt("bottle_weight").set(1.0);
     config.sla_material_settings.items.opt("bottle_volume").set(1000.0);
     config.sla_material_settings.items.opt("bottle_cost").set(0.0);
@@ -289,8 +331,19 @@ TEST_CASE("Anycubic PM5 export", "[export][sla][anycubic][pm5]")
     // exposes 5 layers at the initial exposure time.
     float bottom_layer_count_f = *reinterpret_cast<const float*>(data.data() + header_body + 20);
     REQUIRE(bottom_layer_count_f == Catch::Approx(5.0f));
+
+    // The separation settings of the resin reach the file: +12 is the light-off delay in s, +24
+    // the lift height in mm, +28 the lift speed and +32 the retract speed, both in mm/s, so none of
+    // them is converted.
+    REQUIRE(data.size() >= header_body + 36);
+    float wait_before_lift_s = *reinterpret_cast<const float*>(data.data() + header_body + 12);
+    REQUIRE(wait_before_lift_s == Catch::Approx(3.0f));
     float lift_height_mm = *reinterpret_cast<const float*>(data.data() + header_body + 24);
-    REQUIRE(lift_height_mm == Catch::Approx(8.0f));
+    REQUIRE(lift_height_mm == Catch::Approx(7.5f));
+    float lift_speed_mms = *reinterpret_cast<const float*>(data.data() + header_body + 28);
+    REQUIRE(lift_speed_mms == Catch::Approx(1.25f));
+    float retract_speed_mms = *reinterpret_cast<const float*>(data.data() + header_body + 32);
+    REQUIRE(retract_speed_mms == Catch::Approx(2.5f));
 
     // HEADER +72 is the transition layer count, the fade taken from the resin.
     REQUIRE(data.size() >= header_body + 76);
@@ -347,6 +400,15 @@ TEST_CASE("Anycubic PM5 export", "[export][sla][anycubic][pm5]")
         uint32_t reserved = read_le<uint32_t>(data.data() + entry_off + 28);
         REQUIRE(reserved == 0);
 
+        // Entry +8 is the lift height in mm and +12 the lift speed in mm/s of that layer: the
+        // bottom_* settings on the 5 bottom layers, the plain ones after them.
+        const bool bottom = i < 5;
+        INFO("layer " << i);
+        REQUIRE(*reinterpret_cast<const float*>(data.data() + entry_off + 8)
+                == Catch::Approx(bottom ? 9.0f : 7.5f));
+        REQUIRE(*reinterpret_cast<const float*>(data.data() + entry_off + 12)
+                == Catch::Approx(bottom ? 1.75f : 1.25f));
+
         // offset + length must be inside file
         REQUIRE(img_offset + img_size <= data.size());
         // Bytes at offset must equal result's layer data
@@ -387,6 +449,9 @@ TEST_CASE("Anycubic PM5 export", "[export][sla][anycubic][pm5]")
     // MACHINE's body is 140 bytes and the software block follows it directly;
     REQUIRE(read_le<uint32_t>(data.data() + machine_body + 112) == 16u);
     REQUIRE(addr_software == machine_body + 140);
+    // MACHINE's maximum Z, in mm, is the printer preset's max_print_height.
+    const float machine_max_z = *reinterpret_cast<const float*>(data.data() + machine_body + 128);
+    REQUIRE(machine_max_z == Catch::Approx(200.0f));
     // the software block is a 32-byte name, then its own total length (164);
     REQUIRE(read_le<uint32_t>(data.data() + addr_software + 32) == 164u);
     // MODEL comes right after the software block and spans 48 bytes, and the layer images follow.

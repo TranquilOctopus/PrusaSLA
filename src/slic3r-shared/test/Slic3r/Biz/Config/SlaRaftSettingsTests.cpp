@@ -344,3 +344,85 @@ TEST_CASE("SLA overridable settings have known option groups", "[Config][SLA][Ov
         }
     }
 }
+
+TEST_CASE("SLA settings that nothing reads are hidden, not deleted", "[Config][SLA][Hidden]")
+{
+    const auto& defs = Slic3r::Domain::get_defs_sla();
+    auto find_def    = [&defs](const std::string& name) -> const ConfigItemDef*
+    {
+        for (const auto& def : defs.defs()) {
+            if (def.name == name)
+                return &def;
+        }
+        return nullptr;
+    };
+
+    // The evidence is in doc/sla-fork/sla-settings-evidence.md: the engine derives the peel time
+    // from ExposureProfile and from the tilt times, and nothing clamps the exposure with the
+    // min/max bounds, so none of these is read on an SLA path. Hidden, not deleted: old presets
+    // and .3mf projects still carry the values.
+    for (const std::string& key :
+         {"min_exposure_time",
+          "max_exposure_time",
+          "min_initial_exposure_time",
+          "max_initial_exposure_time",
+          "material_source_note"})
+    {
+        INFO("setting " << key);
+        const ConfigItemDef* def = find_def(key);
+        REQUIRE(def != nullptr);
+        CHECK(def->category == ConfigItemDef::Category::Hidden);
+    }
+}
+
+TEST_CASE("SLA settings next to the hidden ones stay visible", "[Config][SLA][Hidden]")
+{
+    const auto& defs = Slic3r::Domain::get_defs_sla();
+    auto find_def    = [&defs](const std::string& name) -> const ConfigItemDef*
+    {
+        for (const auto& def : defs.defs()) {
+            if (def.name == name)
+                return &def;
+        }
+        return nullptr;
+    };
+
+    // The layer-separation knobs were hidden by M1.13d3 because no exporter looked them up. They
+    // are not: the .pwmx/.pm5 and .goo writers take the lift distance, the lift and retract speeds,
+    // the waits around the moves and the light PWM from them, the bottom_* ones for the bottom
+    // layers, so a user on a non-Prusa printer sets them. Hiding them again would take away a real
+    // setting, so they are listed with the other settings the exporters read.
+    for (const std::string& key :
+         {"lift_height",
+          "lift_height_2",
+          "lift_speed",
+          "lift_speed_2",
+          "retract_speed",
+          "retract_speed_2",
+          "wait_before_lift",
+          "wait_after_lift",
+          "wait_after_retract",
+          "light_pwm",
+          "bottom_lift_height",
+          "bottom_lift_height_2",
+          "bottom_lift_speed",
+          "bottom_lift_speed_2",
+          "bottom_retract_speed",
+          "bottom_retract_speed_2",
+          "bottom_wait_before_lift",
+          "bottom_wait_after_lift",
+          "bottom_wait_after_retract",
+          "bottom_light_pwm",
+          "bottom_layer_count",
+          "exposure_time",
+          "initial_exposure_time",
+          "faded_layers",
+          "delay_before_exposure",
+          "delay_after_exposure"})
+    {
+        INFO("setting " << key);
+        const ConfigItemDef* def = find_def(key);
+        REQUIRE(def != nullptr);
+        CHECK(def->category != ConfigItemDef::Category::Hidden);
+    }
+}

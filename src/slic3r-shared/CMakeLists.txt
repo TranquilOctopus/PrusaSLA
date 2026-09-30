@@ -64,6 +64,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Plater/SlaIssueAnalysis.cpp
         include/Slic3r/App/Plater/SlaHeightBand.hpp
         src/Slic3r/App/Plater/SlaHeightBand.cpp
+        include/Slic3r/App/Plater/SlaHeightBandMeshes.hpp
+        src/Slic3r/App/Plater/SlaHeightBandMeshes.cpp
         include/Slic3r/App/Plater/SimplifyDialog.hpp
         src/Slic3r/App/Plater/SimplifyDialog.cpp
         include/Slic3r/App/Plater/ArrangeDialog.hpp
@@ -110,6 +112,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Plater/HeightRangeDialog.cpp
         include/Slic3r/App/Plater/SlaSupportPointsGizmo.hpp
         src/Slic3r/App/Plater/SlaSupportPointsGizmo.cpp
+        include/Slic3r/App/Plater/SlaSupportPreviewService.hpp
+        src/Slic3r/App/Plater/SlaSupportPreviewService.cpp
         include/Slic3r/App/Plater/SlaSupportPointsEditing.hpp
         src/Slic3r/App/Plater/SlaSupportPointsEditing.cpp
         include/Slic3r/App/Plater/SlaSupportPointsDialog.hpp
@@ -300,6 +304,10 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/PrinterNozzleRow.cpp
         src/Slic3r/App/MaterialSelectionDialog.cpp
         include/Slic3r/App/MaterialSelectionDialog.hpp
+        include/Slic3r/App/ResinImportReport.hpp
+        src/Slic3r/App/ResinImportReport.cpp
+        include/Slic3r/App/ResinImportDialog.hpp
+        src/Slic3r/App/ResinImportDialog.cpp
         include/Slic3r/App/MaterialSelectionRow.hpp
         src/Slic3r/App/MaterialSelectionRow.cpp
         include/Slic3r/App/Search.hpp
@@ -854,6 +862,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/Biz/OverridableConfigBoxInteractor.cpp
         include/Slic3r/Biz/MiniZErrorTranslation.hpp
         src/Slic3r/Biz/MiniZErrorTranslation.cpp
+        include/Slic3r/Biz/ArchiveIni.hpp
+        src/Slic3r/Biz/ArchiveIni.cpp
 
         include/Slic3r/Biz/OverrideItem.hpp
         include/Slic3r/Biz/ConfigItemContext.hpp
@@ -1087,6 +1097,14 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/Biz/ResinProfile/ResinProfileReaderRegistry.cpp
         include/Slic3r/Biz/ResinProfile/ChituboxCfgReader.hpp
         src/Slic3r/Biz/ResinProfile/ChituboxCfgReader.cpp
+        include/Slic3r/Biz/ResinProfile/SlicedArchiveResinReader.hpp
+        src/Slic3r/Biz/ResinProfile/SlicedArchiveResinReader.cpp
+        include/Slic3r/Biz/ResinProfile/ResinProfileMapper.hpp
+        src/Slic3r/Biz/ResinProfile/ResinProfileMapper.cpp
+        include/Slic3r/Biz/ResinProfile/ResinProfileImportInteractor.hpp
+        src/Slic3r/Biz/ResinProfile/ResinProfileImportInteractor.cpp
+        include/Slic3r/Biz/ResinProfile/ResinImportReport.hpp
+        src/Slic3r/Biz/ResinProfile/ResinImportReport.cpp
         include/Slic3r/Biz/ResinEconomics.hpp
         src/Slic3r/Biz/ResinEconomics.cpp
         include/Slic3r/Biz/ResinEconomicsInteractor.hpp
@@ -1608,6 +1626,10 @@ if(SLIC3R_BUILD_TESTS)
 
             test/Slic3r/App/SlaHintsTests.cpp
 
+            test/Slic3r/App/ResinImportReportTests.cpp
+
+            test/Slic3r/App/ResinProfileFileRoutingTests.cpp
+
             test/Slic3r/App/Scene/Node.cpp
             test/Slic3r/App/Scene/Ray.cpp
         test/Slic3r/App/Scene/MouseBindingScheme.cpp
@@ -1620,6 +1642,8 @@ if(SLIC3R_BUILD_TESTS)
 
             test/Slic3r/App/Plater/SlaSupportPointsGizmoTests.cpp
 
+            test/Slic3r/App/Plater/SlaSupportPreviewServiceTests.cpp
+
             test/Slic3r/App/Plater/SlaDrainHolesEditingTests.cpp
 
             test/Slic3r/App/Plater/SlaHollowGizmoTests.cpp
@@ -1627,6 +1651,8 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/App/Plater/SlaIssueAnalysisTests.cpp
 
             test/Slic3r/App/Plater/SlaUnsupportedObjectsTests.cpp
+
+        test/Slic3r/App/Plater/SlaHeightBandMeshesTests.cpp
 
             test/Slic3r/App/ResultExport/SlaPreExportCheckTests.cpp
 
@@ -1663,6 +1689,11 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/Biz/SlaFixture.hpp
             test/Slic3r/Biz/SlaFixture.cpp
             test/Slic3r/Biz/ResinProfile/ChituboxCfgReaderTests.cpp
+            test/Slic3r/Biz/ResinProfile/SlicedArchiveResinReaderTests.cpp
+            test/Slic3r/Biz/ResinProfile/ResinProfileMapperTests.cpp
+            test/Slic3r/Biz/ResinProfile/ResinProfileImportTestFixture.hpp
+            test/Slic3r/Biz/ResinProfile/ResinProfileImportInteractorTests.cpp
+            test/Slic3r/Biz/ResinProfile/ResinImportReportTests.cpp
             test/Slic3r/Biz/ResinEconomicsTests.cpp
             test/Slic3r/Biz/ResinEconomicsInteractorTests.cpp
             test/Slic3r/Biz/Scene/SceneInteractorTests.cpp
@@ -1756,6 +1787,12 @@ if(SLIC3R_BUILD_TESTS)
     set(TEST_DATA_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test/data)
     file(TO_NATIVE_PATH "${TEST_DATA_DIR}" TEST_DATA_DIR)
     target_compile_definitions(slic3r-shared-tests PRIVATE TEST_DATA_DIR=R"\(${TEST_DATA_DIR}\)")
+
+    # The app bundle, which is the only fixture that has a generic MSLA printer (the test data
+    # bundle only carries the SL1), for the resin profile import tests.
+    set(TEST_APP_PRESETS_DIR ${SLIC3R_RESOURCES_DIR}/presets)
+    file(TO_NATIVE_PATH "${TEST_APP_PRESETS_DIR}" TEST_APP_PRESETS_DIR)
+    target_compile_definitions(slic3r-shared-tests PRIVATE TEST_APP_PRESETS_DIR=R"\(${TEST_APP_PRESETS_DIR}\)")
 
     add_test(NAME slic3r-shared-tests
             COMMAND slic3r-shared-tests ${CATCH_ALL_ARGS}

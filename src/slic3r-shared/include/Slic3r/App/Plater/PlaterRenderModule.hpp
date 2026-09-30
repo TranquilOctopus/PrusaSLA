@@ -79,6 +79,7 @@ class SlaHollowGizmo;
 class SlaIssueNotification;
 class SlaUnsupportedNotification;
 class SlaFirstModelNotification;
+class SlaSupportPreviewService;
 class PlaterScenePresenter;
 class PlaterRenderLayout;
 class SidebarPlaterActionButtons;
@@ -184,6 +185,10 @@ public:
 
     Scene::IGizmoController& gizmo_controller();
 
+    /// The bed sidebar, which owns the material selection dialog and with it the resin import
+    /// review dialog. The navigator reaches them through here.
+    SidebarBed& sidebar_bed();
+
     /**
      * @name Implementation of Scene::ISharedModelGeometryProvider public interface
      * @{
@@ -240,6 +245,7 @@ private:
     Biz::ProjectInteractor& m_project_interactor;
     App::Undo::Store& m_undo_store;
     std::unique_ptr<PlaterScenePresenter> m_scene_presenter;
+    std::unique_ptr<SlaSupportPreviewService> m_sla_support_preview;
     std::unique_ptr<Scene::GizmoManager> m_gizmo_manager;
 
     Yoga::Menu* m_bed_menu = nullptr;

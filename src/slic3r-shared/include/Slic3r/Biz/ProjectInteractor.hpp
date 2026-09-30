@@ -361,6 +361,11 @@ public:
         return m_sla_object_cache;
     }
 
+    const SLAObjectCache& sla_object_cache() const
+    {
+        return m_sla_object_cache;
+    }
+
     GeneratedSupportPointsCache& generated_support_points_cache()
     {
         return m_generated_support_points_cache;

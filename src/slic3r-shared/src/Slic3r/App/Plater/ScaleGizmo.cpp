@@ -2,6 +2,7 @@
 #include <fmt/ostream.h>
 #include "Slic3r/App/Plater/GizmoNodeTag.hpp"
 #include "Slic3r/App/Plater/PlaterSceneLayer.hpp"
+#include "Slic3r/App/Plater/PlaterScenePresenter.hpp"
 #include "Slic3r/App/Scene/GeometryDataFactory.hpp"
 #include "Slic3r/App/Plater/PlaterGizmosHelper.hpp"
 
@@ -102,7 +103,7 @@ Scene::GizmoActivationState ScaleGizmo::on_mouse(Scene::GizmoEventContext& ctx, 
     }
 
     const std::optional<Biz::Scene::SelectionExtents> selection_bounding_box{
-        m_scene_interactor.selection_bounding_box()
+        m_scene_provider.selection_bounding_box()
     };
     if (!selection_bounding_box) {
         return Scene::GizmoActivationState::Inactive;
@@ -464,7 +465,7 @@ std::unique_ptr<Scene::Node> ScaleGizmo::generate_handle_nodes() const
     builder.set_debug_name("scale_handles");
     builder.set_tag(ScaleGizmoNodeTag{});
 
-    const auto selection_bounding_box{m_scene_interactor.selection_bounding_box()};
+    const auto selection_bounding_box{m_scene_provider.selection_bounding_box()};
     if (!selection_bounding_box) {
         return nullptr;
     }

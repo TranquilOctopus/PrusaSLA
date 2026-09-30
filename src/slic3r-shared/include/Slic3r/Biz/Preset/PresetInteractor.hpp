@@ -114,6 +114,19 @@ public:
         Domain::Preset::PresetKind kind,
         size_t slot_index
     );
+    /**
+     * @brief Save the currently selected preset as a new user preset under a name the caller picked,
+     * without asking for one.
+     * This is save_user_preset() minus the name dialog, for callers that already know the name (the
+     * resin profile importer, the CLI). The new preset inherits from the system preset the selected
+     * one came from and carries only the values that differ from it, like a preset saved from the
+     * material settings dialog.
+     */
+    void save_selected_preset_as(
+        Domain::Preset::PresetKind kind,
+        size_t slot_index,
+        std::string new_name
+    );
     void save_user_tool_print_presets();
 
     const PresetInteractorConfigContainerContext& config_container_context(
@@ -965,6 +978,19 @@ private:
         Domain::Preset::SelectedPreset& selected_preset,
         Domain::SelectionId config_container_id
     );
+
+    /**
+     * @brief Re-points the config boxes the printer and print/tool interactors cache at the presets
+     * of the bundle as it is right now.
+     *
+     * The interactors keep raw pointers into Bundle::evaluated_presets, and reloading a vendor
+     * replaces that map wholesale, which frees those boxes. Anything reading them afterwards - a
+     * main thread task posted before the reload, a settings dialog, a dirty check - would read
+     * freed memory, so the save path re-resolves them from the reloaded bundle once the selection
+     * is final. Whatever cannot be resolved is left untouched: the interactors are refilled by the
+     * next selection change anyway, and a preset that cannot be found must not become an assert.
+     */
+    void refresh_cached_original_config_boxes();
 
     void duplicate_hw_config_if_needed_and_update(Domain::Preset::HwPrinterConfig& hw_config, ListenerInvokeLaterBag& bag);
 

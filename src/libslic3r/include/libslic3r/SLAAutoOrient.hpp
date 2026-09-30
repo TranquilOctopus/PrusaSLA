@@ -22,7 +22,22 @@ namespace Slic3r::sla {
 // to cancel. The default never cancels.
 using AutoOrientStatus = std::function<bool(int)>;
 
+// What the auto orientation optimizes for.
+enum class AutoOrientGoal
+{
+    // Lay the object down so it is as low as possible on the build plate (fewest layers).
+    MinHeight,
+    // Lay the object down on the face that needs the least support material.
+    LeastSupports
+};
+
+// The rotation for the given goal. Same angle convention as auto_orient_min_height() below.
+// An object with no instances or no geometry has nothing to rotate, "no rotation" is returned
+// for it instead of searching.
+Domain::Vec2d auto_orient(const Domain::ModelObject& object, AutoOrientGoal goal, AutoOrientStatus status = {});
+
 // The rotation that makes the object as low as possible on the build plate (fewest layers).
+// Shorthand for auto_orient(object, AutoOrientGoal::MinHeight).
 Domain::Vec2d auto_orient_min_height(const Domain::ModelObject& object, AutoOrientStatus status = {});
 
 } // namespace Slic3r::sla

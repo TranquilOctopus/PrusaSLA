@@ -30,8 +30,15 @@ void Clipper::update(
     m_selected_instance = selected_instance;
     m_sla_shift         = sla_shift;
 
-    if (!m_selected_object || !m_selected_instance)
+    if (!m_selected_object || !m_selected_instance) {
+        // The height band can work on the whole plate without a selection - drop the volumes of
+        // whatever was selected before, only the extra meshes are cut then.
+        object_clippers.clear();
+        m_old_meshes.clear();
+        m_active_inst_bb_radius = 0.;
+        recalculate_object_clippers();
         return;
+    }
 
     // which mesh should be cut?
     std::vector<const Domain::TriangleMesh*> meshes;
@@ -70,16 +77,16 @@ void Clipper::update(
         if (mc) {
             object_clippers.emplace_back(std::move(mc), mc_tr);
         }
-
-        Domain::Vec3d bb_size = Biz::Algorithms::BoundingBox::sizes(
-            Biz::Algorithms::ModelObject::instance_bounding_box(
-                *m_selected_object,
-                *m_selected_instance
-            )
-        );
-
-        m_active_inst_bb_radius = 0.5 * bb_size.norm();
     }
+
+    Domain::Vec3d bb_size = Biz::Algorithms::BoundingBox::sizes(
+        Biz::Algorithms::ModelObject::instance_bounding_box(
+            *m_selected_object,
+            *m_selected_instance
+        )
+    );
+
+    m_active_inst_bb_radius = 0.5 * bb_size.norm();
 
     recalculate_object_clippers();
 }
@@ -88,30 +95,67 @@ void Clipper::release()
 {
     object_clippers.clear();
     m_old_meshes.clear();
+    m_extra_meshes.clear();
+    m_extra_clippers.clear();
     m_clp.reset();
     m_clp_ratio = 0.;
 }
 
-void Clipper::recalculate_object_clippers()
+void Clipper::set_extra_meshes(std::vector<ExtraMesh> meshes)
 {
-    if (m_clp_ratio == 0. || !m_clp || !m_selected_instance)
-        return;
-    const Transformation inst_trafo = m_selected_instance->get_transformation();
+    m_extra_meshes = std::move(meshes);
+    set_extra_clippers();
+    recalculate_object_clippers();
+}
 
-    for (const auto& [mesh_clipper, tr] : object_clippers) {
-        Transformation trafo = inst_trafo * tr;
-        trafo.set_offset(trafo.get_offset() + Vec3d(0., 0., m_sla_shift));
-        mesh_clipper->set_plane(*m_clp);
-        mesh_clipper->set_transformation(trafo);
-        mesh_clipper->set_limiting_plane(Biz::ClippingPlane(Vec3d::UnitZ(), -SINKING_Z_THRESHOLD));
-        mesh_clipper->set_limiting_plane(m_limiting_plane);
-        mesh_clipper->update_result();
+void Clipper::set_extra_clippers()
+{
+    m_extra_clippers.clear();
+    m_extra_clippers.reserve(m_extra_meshes.size());
+
+    for (const ExtraMesh& extra : m_extra_meshes) {
+        if (!extra.mesh)
+            continue;
+        m_extra_clippers.emplace_back(new Biz::MeshClipper, Transformation{extra.trafo});
+        m_extra_clippers.back().first->set_mesh(extra.mesh->its);
+        m_extra_clippers.back().first->set_behaviour(m_fill_cut, m_contour_width);
     }
 }
 
-const std::vector<Domain::ModelVolume*>& Clipper::volumes()
+void Clipper::recalculate_object_clippers()
 {
-    assert(m_selected_object);
+    if (m_clp_ratio == 0. || !m_clp)
+        return;
+
+    if (m_selected_instance) {
+        const Transformation inst_trafo = m_selected_instance->get_transformation();
+        for (const auto& [mesh_clipper, tr] : object_clippers) {
+            Transformation trafo = inst_trafo * tr;
+            trafo.set_offset(trafo.get_offset() + Vec3d(0., 0., m_sla_shift));
+            set_mesh_clipper_plane(*mesh_clipper, trafo);
+        }
+    }
+
+    // The extra meshes already carry their world transform, so neither the instance transform nor
+    // the support lift of the selected object applies to them.
+    for (const auto& [mesh_clipper, trafo] : m_extra_clippers)
+        set_mesh_clipper_plane(*mesh_clipper, trafo);
+}
+
+void Clipper::set_mesh_clipper_plane(Biz::MeshClipper& mesh_clipper, const Domain::Transformation& trafo)
+{
+    mesh_clipper.set_plane(*m_clp);
+    mesh_clipper.set_transformation(trafo);
+    mesh_clipper.set_limiting_plane(m_limiting_plane);
+    mesh_clipper.update_result();
+}
+
+const std::vector<ModelVolume*>& Clipper::volumes()
+{
+    // The height band works without a selection, in which case only the extra meshes are cut.
+    static const std::vector<ModelVolume*> no_volumes;
+    if (!m_selected_object)
+        return no_volumes;
     return m_selected_object->volumes;
 }
 
@@ -219,8 +263,9 @@ void Clipper::set_height_band(const HeightBand& band)
     m_height_band = band;
 
     if (m_height_band.active) {
-        // The clipper holds a single plane, so the lower limit goes there - and it caps its own cut face.
-        m_clp.reset(new Biz::ClippingPlane(Vec3d::UnitZ(), m_height_band.z_min));
+        // The clipper holds a single plane, so the lower limit goes there - it caps its own cut face.
+        // The shaders keep dot(n, p) <= offset, so a -Z normal drops everything below z_min.
+        m_clp.reset(new Biz::ClippingPlane(-Vec3d::UnitZ(), -m_height_band.z_min));
         // get_clipping_plane_data() only forwards the plane to the shaders for a non zero ratio.
         m_clp_ratio = 1.;
     }
@@ -231,7 +276,14 @@ void Clipper::set_height_band(const HeightBand& band)
 void Clipper::set_behavior(bool hide_clipped, bool fill_cut, double contour_width)
 {
     m_hide_clipped = hide_clipped;
+    // Remembered so that meshes added later (the height band's extra meshes) are cut the same way.
+    m_fill_cut      = fill_cut;
+    m_contour_width = contour_width;
+
     for (auto& [mesh_clipper, tr] : object_clippers)
+        mesh_clipper->set_behaviour(fill_cut, contour_width);
+
+    for (auto& [mesh_clipper, tr] : m_extra_clippers)
         mesh_clipper->set_behaviour(fill_cut, contour_width);
 
     recalculate_object_clippers();

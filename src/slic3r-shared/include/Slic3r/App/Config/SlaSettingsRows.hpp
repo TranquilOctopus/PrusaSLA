@@ -44,6 +44,8 @@ public:
 
 private:
     const Biz::ConfigItemContext* find_item(const std::string& key) const;
+    /// The item of that key, or nullptr when it is missing or hidden.
+    const Biz::ConfigItemContext* shown_item(const std::string& key) const;
     bool is_dirty(size_t row_index) const;
     void rebuild();
 

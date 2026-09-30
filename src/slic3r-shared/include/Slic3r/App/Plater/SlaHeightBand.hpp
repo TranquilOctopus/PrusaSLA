@@ -4,10 +4,13 @@
 #include "Slic3r/App/Scene/Clipper.hpp"
 #include "Slic3r/App/Scene/HeightBand.hpp"
 #include "Slic3r/Biz/Platform/ListenerScope.hpp"
+#include "Slic3r/Biz/ISelectedBedInstanceChangedListener.hpp"
 #include "Slic3r/Biz/ISelectedConfigContainerChangedListener.hpp"
 #include "Slic3r/Biz/ISelectedProjectChangedListener.hpp"
+#include "Slic3r/Biz/SLAObjectCache.hpp"
 #include "Slic3r/Biz/Scene/SceneInteractor.hpp"
 #include "Slic3r/Domain/SelectionId.hpp"
+#include "Slic3r/Domain/SlicingId.hpp"
 
 namespace Slic3r::Biz {
 class ProjectInteractor;
@@ -36,13 +39,17 @@ namespace Slic3r::App::Plater {
  * Two sliders set a lower and an upper Z limit taken from the selected printer's max_print_height. The band
  * is applied through the plater's own Scene::ClipperPresenter: the lower limit is the clipper plane (and so
  * the mesh clipper caps its cut face), the upper limit is a second clipping plane of the same shader.
- * The band is off by default (full range) and suspended while a tool gizmo owns the shared clipper.
+ * Every printable instance on the build plate, plus the SLA support tree and the raft, are fed to the
+ * clipper as extra meshes, so the band shows the whole print and not only the selected model. The band is
+ * off by default (full range) and suspended while a tool gizmo owns the shared clipper.
  */
 class SlaHeightBand :
     public Yoga::Window,
     public Biz::ISelectedConfigContainerChangedListener,
     public Biz::ISelectedProjectChangedListener,
-    public Biz::Scene::ISceneSelectionChangedListener
+    public Biz::Scene::ISceneSelectionChangedListener,
+    public Biz::ISelectedBedInstancesChangedListener,
+    public Biz::ISLAObjectCacheChangedListener
 {
 public:
     SlaHeightBand(
@@ -63,6 +70,12 @@ public:
         Domain::SelectionId project_id,
         const Biz::Scene::ObjectSelection& selection
     ) override;
+    void on_selected_bed_instances_changed(
+        Domain::SelectionId project_id,
+        const Biz::Scene::BedSelection& bed_selection
+    ) override;
+    // A finished slice replaced the support tree or the raft of an object on the bed.
+    void on_sla_object_cache_changed(const Domain::SlicingId& id, Domain::ObjectID object_id) override;
 
     /// A tool gizmo is using the shared clipper - hide the band and remember that it has to come back.
     void set_suspended(bool suspended);
@@ -82,6 +95,8 @@ private:
     [[nodiscard]] double max_print_height() const;
     [[nodiscard]] const Domain::ModelObject* selected_object() const;
     [[nodiscard]] const Domain::ModelInstance* selected_instance() const;
+    // Every printable model on the selected build plate, the support trees and the rafts.
+    [[nodiscard]] std::vector<Scene::ExtraMesh> collect_extra_meshes() const;
 
 private:
     Biz::ProjectInteractor& m_project_interactor;
@@ -102,6 +117,16 @@ private:
         Biz::Scene::SceneInteractor,
         SlaHeightBand>
         m_selection_listener_scope;
+    Biz::ListenerScope<
+        Biz::ISelectedBedInstancesChangedListener,
+        Biz::Scene::SceneInteractor,
+        SlaHeightBand>
+        m_bed_selection_listener_scope;
+    Biz::ListenerScope<
+        Biz::ISLAObjectCacheChangedListener,
+        Biz::SLAObjectCache,
+        SlaHeightBand>
+        m_sla_object_cache_listener_scope;
 
     Domain::SelectionId m_current_project_id{Domain::INVALID_ID};
     Domain::SelectionId m_current_config_container_id{Domain::INVALID_ID};

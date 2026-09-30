@@ -1,6 +1,7 @@
 #include "Slic3r/App/Config/SlaSettingsRows.hpp"
 
 #include "Slic3r/App/Config/ConfigRowItem.hpp"
+#include "Slic3r/App/Yoga/Namespace.hpp"
 
 #include "Slic3r/Biz/IConfigBoxSetter.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
@@ -9,12 +10,14 @@ using namespace Slic3r::App::Yoga;
 
 namespace Slic3r::App {
 
+using Yoga::operator""_fpx;
+
 SlaSettingsRows::SlaSettingsRows(std::vector<Key> keys, Biz::IConfigBoxSetter& cb_setter) :
     Yoga::Item(), m_keys(std::move(keys)), m_cb_setter(cb_setter)
 {
     set_object_name("SlaSettingsRows");
     set_orientation(Orientation::Vertical);
-    set_gap(5.fpx);
+    set_gap(5_fpx);
     set_flex_shrink(0);
 }
 
@@ -29,8 +32,7 @@ void SlaSettingsRows::refresh()
     size_t wanted = 0;
     if (m_items != nullptr) {
         for (const Key& key : m_keys) {
-            const Biz::ConfigItemContext* context = find_item(key.key);
-            if (context != nullptr && context->config_item != nullptr) {
+            if (shown_item(key.key) != nullptr) {
                 ++wanted;
             }
         }
@@ -44,8 +46,8 @@ void SlaSettingsRows::refresh()
 
     size_t index = 0;
     for (const Key& key : m_keys) {
-        const Biz::ConfigItemContext* context = find_item(key.key);
-        if (context == nullptr || context->config_item == nullptr) {
+        const Biz::ConfigItemContext* context = shown_item(key.key);
+        if (context == nullptr) {
             continue;
         }
         m_rows.at(index)->set_state(*context->config_item);
@@ -66,16 +68,26 @@ const Biz::ConfigItemContext* SlaSettingsRows::find_item(const std::string& key)
     return nullptr;
 }
 
+const Biz::ConfigItemContext* SlaSettingsRows::shown_item(const std::string& key) const
+{
+    const Biz::ConfigItemContext* context = find_item(key);
+    if (context == nullptr || context->config_item == nullptr) {
+        return nullptr;
+    }
+    // A hidden setting is not shown by any other settings panel either, so it is not shown here.
+    if (context->config_item->def().category == Domain::ConfigItemDef::Category::Hidden) {
+        return nullptr;
+    }
+    return context;
+}
+
 bool SlaSettingsRows::is_dirty(size_t row_index) const
 {
     if (row_index >= m_row_keys.size()) {
         return false;
     }
-    const Biz::ConfigItemContext* context = find_item(m_keys.at(m_row_keys.at(row_index)).key);
-    if (context == nullptr || context->config_item == nullptr) {
-        return false;
-    }
-    if (context->config_item->def().category == Domain::ConfigItemDef::Category::Hidden) {
+    const Biz::ConfigItemContext* context = shown_item(m_keys.at(m_row_keys.at(row_index)).key);
+    if (context == nullptr) {
         return false;
     }
     return context->original_config_item != nullptr
@@ -96,8 +108,8 @@ void SlaSettingsRows::rebuild()
 
     for (size_t key_index = 0; key_index < m_keys.size(); ++key_index) {
         const Key& key                        = m_keys.at(key_index);
-        const Biz::ConfigItemContext* context = find_item(key.key);
-        if (context == nullptr || context->config_item == nullptr) {
+        const Biz::ConfigItemContext* context = shown_item(key.key);
+        if (context == nullptr) {
             continue;
         }
 

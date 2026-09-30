@@ -7,6 +7,7 @@
 #include "Slic3r/Domain/Types.hpp"
 #include "Slic3r/Domain/FullConfigSLA.hpp"
 #include "Slic3r/Domain/ConfigBoxesSLA.hpp"
+#include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/Domain/ConfigPack.hpp"
 #include "Slic3r/Domain/Config.hpp"
 #include "Slic3r/Domain/Preset/HwConfig.hpp"
@@ -75,8 +76,10 @@ SlaConfig make_sla_config_zero_elevation()
 {
     Slic3r::Domain::ConfigPackSLA pack;
     pack.sla_print_settings.items.opt("supports_enable").set(true);
-    pack.sla_print_settings.items.opt("pad_enable").set(true);
-    pack.sla_print_settings.items.opt("pad_around_object").set(true);
+    // Since M2.14d the raft type decides whether a raft hugs the object; pad_enable /
+    // pad_around_object are only the fallback for presets without raft_type.
+    pack.sla_print_settings.items.opt("raft_type")
+        .set(Slic3r::Domain::sla::RaftType::AroundObject);
     pack.sla_print_settings.items.opt("pad_around_object_everywhere").set(true);
     pack.sla_print_settings.items.opt("support_object_elevation").set(10.0);
     return make_sla_config(std::move(pack));

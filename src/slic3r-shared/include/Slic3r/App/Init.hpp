@@ -61,6 +61,14 @@ struct ActionParams
     bool preset_updater_cleanup             = false;
     bool dump_json_model                    = false;
     bool generate_preset_cache              = false;
+    /// Foreign resin profile file, or folder of them, to import as user resin presets
+    /// (--import-resin-profile). The target printer is the selected one, so --printer-profile
+    /// decides where the presets land.
+    std::optional<std::string> import_resin_profile;
+    /// Only report what --import-resin-profile would do, saving nothing (--dry-run).
+    bool import_resin_profile_dry_run = false;
+    /// File the import report is written to as JSON (--report).
+    std::optional<std::string> import_resin_profile_report;
     std::variant<
         PluginInitActionParams,
         PluginKeygenActionParams,
@@ -92,6 +100,7 @@ struct ActionParams
             || preset_updater_cleanup
             || dump_json_model
             || generate_preset_cache
+            || import_resin_profile.has_value()
             || !std::holds_alternative<std::monostate>(subcommand_action);
     }
 

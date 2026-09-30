@@ -1,6 +1,7 @@
 #include "Slic3r/App/Plater/RotationDialog.hpp"
 #include "Slic3r/App/Plater/PlaceOnBedButton.hpp"
 #include "Slic3r/App/Yoga/Text.hpp"
+#include "Slic3r/App/Yoga/RadioButton.hpp"
 #include "Slic3r/App/Plater/TripleInput.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
 #include "Slic3r/App/Plater/PlaterGizmosHelper.hpp"
@@ -25,6 +26,18 @@ using Domain::SquareMatrix4d;
 using Domain::SquareMatrix3d;
 using Domain::Vec3d;
 using Domain::Transform3d;
+
+namespace {
+
+// The auto orientation goal is remembered for the whole session. This window is rebuilt every time
+// the Rotate panel is opened, so the choice cannot be kept in a member of RotationDialog.
+Slic3r::sla::AutoOrientGoal& auto_orient_goal()
+{
+    static Slic3r::sla::AutoOrientGoal goal{Slic3r::sla::AutoOrientGoal::LeastSupports};
+    return goal;
+}
+
+} // namespace
 
 RotationDialog::RotationDialog(
     App::Plater::PlaterScenePresenter& scene_provider,
@@ -84,6 +97,25 @@ RotationDialog::RotationDialog(
 
     m_auto_orient_button = rotation_section->emplace_back<Yoga::LayoutButton>(_u8L("Auto orient"));
     m_auto_orient_button->callbacks().action = [this]() { on_auto_orient(); };
+
+    m_auto_orient_goal_row = rotation_section->emplace_back<Yoga::Item>();
+    m_auto_orient_goal_row->set_orientation(Orientation::Horizontal);
+    m_auto_orient_goal_row->set_gap(10_fpx);
+    m_lowest_height_button =
+        m_auto_orient_goal_row->emplace_back<Yoga::RadioButton>(_u8L("Lowest height"));
+    m_auto_orient_goal_buttons.insert_button(m_lowest_height_button);
+    m_fewest_supports_button =
+        m_auto_orient_goal_row->emplace_back<Yoga::RadioButton>(_u8L("Fewest supports"));
+    m_auto_orient_goal_buttons.insert_button(m_fewest_supports_button);
+    reload_auto_orient_goal();
+    m_auto_orient_goal_buttons.callbacks().checked_changed = [this](Yoga::AbstractButton*, Yoga::AbstractButton*)
+    {
+        if (m_lowest_height_button->checked()) {
+            auto_orient_goal() = Slic3r::sla::AutoOrientGoal::MinHeight;
+        } else if (m_fewest_supports_button->checked()) {
+            auto_orient_goal() = Slic3r::sla::AutoOrientGoal::LeastSupports;
+        }
+    };
 
     add_separator(content());
 
@@ -165,6 +197,16 @@ void RotationDialog::update_auto_orient_button_visibility()
 {
     const bool is_sla = App::is_sla_active(m_project_interactor);
     m_auto_orient_button->set_visible(is_sla);
+    m_auto_orient_goal_row->set_visible(is_sla);
+}
+
+void RotationDialog::reload_auto_orient_goal()
+{
+    if (auto_orient_goal() == Slic3r::sla::AutoOrientGoal::MinHeight) {
+        m_lowest_height_button->set_checked(true);
+    } else {
+        m_fewest_supports_button->set_checked(true);
+    }
 }
 
 void RotationDialog::on_auto_orient()
@@ -213,7 +255,7 @@ void RotationDialog::on_auto_orient()
     }
 
     // Get the target rotation from the engine
-    const Domain::Vec2d target_rot_sla{Slic3r::sla::auto_orient_min_height(*object)};
+    const Domain::Vec2d target_rot_sla{Slic3r::sla::auto_orient(*object, auto_orient_goal())};
     const double rot_x{target_rot_sla.x()};
     const double rot_y{target_rot_sla.y()};
 

@@ -3,6 +3,7 @@
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
 
+#include "Slic3r/App/IsSlaActive.hpp"
 #include "Slic3r/App/Navigator.hpp"
 #include "Slic3r/App/Yoga/Text.hpp"
 #include "Slic3r/App/Yoga/LayoutButton.hpp"
@@ -65,6 +66,20 @@ PrinterAdvancedSettingsDialog::PrinterAdvancedSettingsDialog(
     );
     m_dirty_categorizer->set_source_model(
         project_interactor.preset_interactor().printer_cbi().config_box_list()
+    );
+
+    // `thumbnails` is defined once for both technologies (ConfigCommon.cpp), so it cannot be
+    // hidden in the definition without taking it away from FFF. Nothing on the SLA path reads
+    // it - the FFF G-code path is its only consumer - so the panel filters it out for SLA.
+    m_config_tabs.front()->observable_categorizer->set_filter_fn(
+        [this](const Biz::ConfigItemContext& data)
+        {
+            if (data.config_item->def().category == Domain::ConfigItemDef::Category::Hidden) {
+                return false;
+            }
+            return data.config_item->def().name != "thumbnails"
+                || !is_sla_active(*m_project_interactor);
+        }
     );
 
     m_config_tabs.front()->category_page_transformer->set_transform_fn(

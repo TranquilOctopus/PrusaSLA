@@ -36,6 +36,12 @@ const std::map<TypeFlag, std::string>& get_wildcard_map()
         {TypeFlag::Svg,            "SVG files (*.svg)|*.svg"},
         {TypeFlag::Zip,            "Zip files (*.zip)|*.zip"},
         {TypeFlag::AllTextures,    "Texture files|*.png;*.svg"},
+        // The picker of the resin import review dialog. A sliced archive is offered here because
+        // the reader registry reads the resin out of it, but dropping one on the window still
+        // loads it as a project, so .sl1/.sl1s are not part of
+        // Biz::FileLoadingLogic::get_resin_profile_extensions().
+        {TypeFlag::ResinProfile,   "Resin profile files (*.cfg, *.cfgx, *.lyr, *.sl1, *.sl1s)"
+                                    "|*.cfg;*.cfgx;*.lyr;*.sl1;*.sl1s"},
     };
     return map;
 }

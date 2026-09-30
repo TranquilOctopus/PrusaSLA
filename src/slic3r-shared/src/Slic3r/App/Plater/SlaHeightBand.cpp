@@ -1,4 +1,5 @@
 #include "Slic3r/App/Plater/SlaHeightBand.hpp"
+#include "Slic3r/App/Plater/SlaHeightBandMeshes.hpp"
 
 #include "Slic3r/App/IsSlaActive.hpp"
 #include "Slic3r/App/Render/Device.hpp"
@@ -26,6 +27,8 @@ using namespace Slic3r::App::Yoga;
 
 namespace Slic3r::App::Plater {
 
+using Biz::_u8L;
+
 static constexpr double band_step   = 0.1;
 static constexpr int band_precision = 1;
 
@@ -41,7 +44,9 @@ SlaHeightBand::SlaHeightBand(
     m_scene_provider(scene_provider),
     m_config_container_listener_scope(project_interactor, *this),
     m_project_listener_scope(project_interactor, *this),
-    m_selection_listener_scope(project_interactor.scene_interactor(), *this)
+    m_selection_listener_scope(project_interactor.scene_interactor(), *this),
+    m_bed_selection_listener_scope(project_interactor.scene_interactor(), *this),
+    m_sla_object_cache_listener_scope(project_interactor.sla_object_cache(), *this)
 {
     set_orientation(Orientation::Vertical);
     set_gap(5_fpx);
@@ -148,6 +153,26 @@ void SlaHeightBand::on_scene_selection_changed(
     }
 }
 
+void SlaHeightBand::on_selected_bed_instances_changed(
+    Domain::SelectionId project_id,
+    const Biz::Scene::BedSelection& /*bed_selection*/
+)
+{
+    if (m_project_interactor.selected_project_id() == project_id) {
+        // Another build plate - the band has to be rebuilt around its models.
+        stop();
+        refresh();
+    }
+}
+
+void SlaHeightBand::on_sla_object_cache_changed(const Domain::SlicingId& id, Domain::ObjectID /*object_id*/)
+{
+    if (id == m_project_interactor.selected_bed_slicing_id()) {
+        // Slicing replaced the support tree or the raft of an object on this bed.
+        refresh();
+    }
+}
+
 void SlaHeightBand::set_suspended(bool suspended)
 {
     if (m_suspended == suspended)
@@ -204,6 +229,26 @@ const Domain::ModelInstance* SlaHeightBand::selected_instance() const
     const Domain::ElementRef& element = selection.elements.front();
     return m_project_interactor.project(m_current_project_id)
         .find_instance_by_id(element.object_id, element.instance_id);
+}
+
+std::vector<Scene::ExtraMesh> SlaHeightBand::collect_extra_meshes() const
+{
+    if (m_current_project_id == Domain::INVALID_ID
+        || !m_project_interactor.project_exists(m_current_project_id))
+        return {};
+
+    const Domain::SlicingId slicing_id = m_project_interactor.selected_bed_slicing_id();
+    if (slicing_id.project_id != m_current_project_id)
+        return {};
+
+    const Domain::Project& project = m_project_interactor.project(m_current_project_id);
+    const Domain::BedInstance* bed = project.find_bed_instance_by_id(slicing_id.bed_instance_id);
+    if (bed == nullptr)
+        return {};
+
+    return collect_height_band_meshes(
+        *bed, slicing_id, m_project_interactor.sla_object_cache(), selected_instance()
+    );
 }
 
 void SlaHeightBand::update_visibility()
@@ -265,10 +310,9 @@ void SlaHeightBand::apply()
 
     const Domain::ModelObject* object     = selected_object();
     const Domain::ModelInstance* instance = selected_instance();
-    const bool can_clip                   = m_presenter != nullptr
-        && m_main_node != nullptr
-        && object != nullptr
-        && instance != nullptr;
+    // The band no longer needs a selection - it shows the whole plate. What it does need is a
+    // printer to take max_print_height from, which the visibility check above guarantees.
+    const bool can_clip = m_presenter != nullptr && m_main_node != nullptr;
 
     if (m_min_slider != nullptr)
         m_min_slider->set_enabled(can_clip);
@@ -297,6 +341,8 @@ void SlaHeightBand::apply()
         m_clip_instance = instance;
     }
 
+    // The rest of the plate, the support trees and the rafts, capped with the same planes.
+    m_presenter->set_extra_meshes(collect_extra_meshes());
     m_presenter->set_height_band(m_band);
 }
 

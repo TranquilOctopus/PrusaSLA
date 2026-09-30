@@ -66,6 +66,22 @@ TEST_CASE("Goo export", "[export][sla][goo]")
     config.sla_material_settings.items.opt("exposure_time").set(6.0);
     config.sla_material_settings.items.opt("initial_exposure_time").set(35.0);
     config.sla_print_settings.items.opt("faded_layers").set(10);
+    // Layer separation. The .goo header holds these in mm, mm/s and s and the light PWM in 0-255,
+    // the units of the settings themselves, so all of them go in unchanged.
+    config.sla_material_settings.items.opt("lift_height").set(7.5);
+    config.sla_material_settings.items.opt("lift_speed").set(1.25);
+    config.sla_material_settings.items.opt("retract_speed").set(2.5);
+    config.sla_material_settings.items.opt("wait_before_lift").set(3.0);
+    config.sla_material_settings.items.opt("wait_after_lift").set(0.4);
+    config.sla_material_settings.items.opt("wait_after_retract").set(0.6);
+    config.sla_material_settings.items.opt("light_pwm").set(128);
+    config.sla_material_settings.items.opt("bottom_lift_height").set(9.0);
+    config.sla_material_settings.items.opt("bottom_lift_speed").set(1.75);
+    config.sla_material_settings.items.opt("bottom_retract_speed").set(2.75);
+    config.sla_material_settings.items.opt("bottom_wait_before_lift").set(4.0);
+    config.sla_material_settings.items.opt("bottom_wait_after_lift").set(0.7);
+    config.sla_material_settings.items.opt("bottom_wait_after_retract").set(0.8);
+    config.sla_material_settings.items.opt("bottom_light_pwm").set(200);
     config.sla_material_settings.items.opt("bottle_weight").set(1.0);
     config.sla_material_settings.items.opt("bottle_volume").set(1000.0);
     config.sla_material_settings.items.opt("bottle_cost").set(0.0);
@@ -135,6 +151,47 @@ TEST_CASE("Goo export", "[export][sla][goo]")
     // The engine has no burn-in of its own, it fades the exposure over the 10 transition layers
     // starting with the first one, so that is 11 layers at the bottom exposure time.
     REQUIRE(read_be<uint32_t>(data.data() + bottom_layers_offset) == 11);
+
+    // The layer separation of the resin, all in the units of the settings: the six waits in s, the
+    // lift and retract distances in mm (there is no retract distance setting, so the plate returns
+    // over the lift distance), the speeds in mm/s and the two light PWMs in 0-255.
+    const auto f = [&data](size_t offset) {
+        uint32_t bits = read_be<uint32_t>(data.data() + offset);
+        float value = 0.f;
+        std::memcpy(&value, &bits, sizeof(value));
+        return value;
+    };
+    // After bottom_layers: bottom_lift_distance, bottom_lift_speed, lift_distance, lift_speed,
+    // bottom_retract_distance, bottom_retract_speed, retract_distance, retract_speed, then the two
+    // second-stage distances and speeds, then the two PWMs. The bottom exposure time comes before
+    // bottom_layers and is already part of bottom_layers_offset.
+    size_t motion = bottom_layers_offset + 4;
+    REQUIRE(f(motion + 0) == Catch::Approx(9.0f));    // bottom_lift_distance, bottom_lift_height
+    REQUIRE(f(motion + 4) == Catch::Approx(1.75f));   // bottom_lift_speed
+    REQUIRE(f(motion + 8) == Catch::Approx(7.5f));    // lift_distance, lift_height
+    REQUIRE(f(motion + 12) == Catch::Approx(1.25f));  // lift_speed
+    REQUIRE(f(motion + 16) == Catch::Approx(9.0f));   // bottom_retract_distance == bottom lift
+    REQUIRE(f(motion + 20) == Catch::Approx(2.75f));  // bottom_retract_speed
+    REQUIRE(f(motion + 24) == Catch::Approx(7.5f));   // retract_distance == lift distance
+    REQUIRE(f(motion + 28) == Catch::Approx(2.5f));   // retract_speed
+    // The second stage is off unless the *_2 settings say otherwise, so all eight of its fields
+    // (bottom and normal, lift and retract, distance and speed) are 0 here.
+    for (size_t i = 0; i < 8; ++i) {
+        INFO("second stage field " << i);
+        REQUIRE(f(motion + 32 + i * 4) == Catch::Approx(0.0f));
+    }
+    REQUIRE(read_be<int16_t>(data.data() + motion + 64) == 200); // bottom_light_pwm
+    REQUIRE(read_be<int16_t>(data.data() + motion + 66) == 128); // light_pwm
+
+    // The six waits around the separation come before the bottom exposure time: the bottom ones
+    // first, then the normal ones.
+    size_t waits = layer_thickness_offset + 4 + 4 + 1 + 4;
+    REQUIRE(f(waits + 0) == Catch::Approx(4.0f));  // bottom_before_lift_time
+    REQUIRE(f(waits + 4) == Catch::Approx(0.7f));  // bottom_after_lift_time
+    REQUIRE(f(waits + 8) == Catch::Approx(0.8f));  // bottom_after_retract_time
+    REQUIRE(f(waits + 12) == Catch::Approx(3.0f)); // before_lift_time
+    REQUIRE(f(waits + 16) == Catch::Approx(0.4f)); // after_lift_time
+    REQUIRE(f(waits + 20) == Catch::Approx(0.6f)); // after_retract_time
 
     // transition_layers is the last field of the header, after layer_content_offset and
     // gray_scale_level, and the fade itself comes from faded_layers.

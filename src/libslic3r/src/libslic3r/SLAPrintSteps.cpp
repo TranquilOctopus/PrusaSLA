@@ -359,7 +359,10 @@ SLAPrint::Steps::Steps(SLAPrint *print)
 
 void SLAPrint::Steps::apply_printer_corrections(SLAPrintObject &po, SliceOrigin o)
 {
-    if (o == soSupport && !po.m_supportable_mesh->emesh.vertices().empty()) return;
+    // The supportable mesh is built by the support point step, which may bail out before it gets
+    // there (no mesh to support). Dereferencing the empty optional would be undefined behaviour.
+    if (o == soSupport && po.m_supportable_mesh && !po.m_supportable_mesh->emesh.vertices().empty())
+        return;
 
     auto faded_lyrs = size_t(std::max(0, Domain::sla_effective_faded_layers(po.m_config)));
     double min_w = m_print->print_config().get<double>("elefant_foot_min_width") / 2.;
@@ -896,9 +899,23 @@ void SLAPrint::Steps::support_points(SLAPrintObject &po)
 
     // Maximal move of support point to mesh surface,
     // no more than height of layer
-    assert(po.m_model_height_levels.size() > 1);
-    double allowed_move = (po.m_model_height_levels[1] - po.m_model_height_levels[0]) +
-        std::numeric_limits<float>::epsilon();
+    //
+    // The layer height is read as the distance between the first two model height levels. An object
+    // that is not taller than a single layer (a flat or a nearly flat mesh) has fewer than two
+    // levels, and a degenerate level pair measures nothing either. Both fall back to the configured
+    // layer height, the height the model height levels themselves are built from. Reading [1] on a
+    // shorter vector would run past its end.
+    constexpr double min_layer_height = 1e-4; // mm, thinner than this cannot be printed
+    double allowed_move = 0.;
+    if (po.m_model_height_levels.size() > 1)
+        allowed_move = double(po.m_model_height_levels[1] - po.m_model_height_levels[0]);
+    if (allowed_move <= min_layer_height) {
+        allowed_move = std::max(Domain::sla_effective_layer_height(po.m_config), min_layer_height);
+        SPDLOG_WARN("Object {} has no usable model height level, the layer height {} mm is used to "
+                    "move its support points onto the surface.", po.model_object()->id().id,
+                    allowed_move);
+    }
+    allowed_move += std::numeric_limits<float>::epsilon();
     SupportPoints support_points = 
         move_on_mesh_surface(layer_support_points, emesh, allowed_move, cancel);
 
@@ -1124,16 +1141,20 @@ void SLAPrint::Steps::initialize_printer_input()
     printer_input.clear();
 
     size_t mx = 0;
-    for(SLAPrintObject * o : m_print->m_objects) {
-        if (auto m = o->m_slice_index.size() > mx)
-            mx = m;
-    }
+    for(SLAPrintObject * o : m_print->m_objects)
+        mx = std::max(mx, o->m_slice_index.size());
 
     printer_input.reserve(mx);
 
     auto eps = coord_t(SCALED_EPSILON);
 
     for(SLAPrintObject * o : m_print->m_objects) {
+        if (o->m_slice_index.empty())
+            // The object has no layer at all (a mesh that could not be sliced). There is no ground
+            // level to take from an empty index and no slice record to report as unprintable, so
+            // the object simply contributes nothing to the print grid here.
+            continue;
+
         coord_t gndlvl = o->m_slice_index.front().print_level() - ilhs;
         for (const SliceRecord& slicerecord : o->m_slice_index) {
             if (!slicerecord.is_valid()) {

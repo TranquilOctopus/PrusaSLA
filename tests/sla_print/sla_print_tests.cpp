@@ -1,22 +1,30 @@
 #include <unordered_map>
 #include <random>
 #include <numeric>
+#include <cstddef>
 #include <cstdint>
 #include <algorithm>
+#include <optional>
+#include <string>
+#include <string_view>
 
 #include "sla_test_utils.hpp"
 
+#include <libslic3r/IPrint.hpp>
 #include <libslic3r/TriangleMeshSlicer.hpp>
 #include <libslic3r/SLA/SupportTreeMesher.hpp>
 #include <libslic3r/BranchingTree/PointCloud.hpp>
 #include "Slic3r/Biz/Algorithms/BoundingBox.hpp"
 #include "Slic3r/Biz/Algorithms/ModelObject.hpp"
+#include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
 #include "Slic3r/Biz/Slicing/BackgroundProcess.hpp"
 #include "Slic3r/Domain/BedInstance.hpp"
 #include "Slic3r/Domain/ConfigPack.hpp"
 #include "Slic3r/Domain/Preset/HwConfig.hpp"
 #include "Slic3r/Domain/Preset/SelectedPreset.hpp"
 #include "Slic3r/Domain/PrinterTechnology.hpp"
+#include "Slic3r/Domain/TriangleMesh.hpp"
+#include "Slic3r/Exception.hpp"
 #include "Slic3r/TestUtils/HwConfigUtils.hpp"
 #include "libslic3r/IThumbnailImageGenerator.hpp"
 #include "libslic3r/SLAPrint.hpp"
@@ -322,7 +330,7 @@ int applied_faded_layers(int print_faded_layers, int resin_faded_layers)
     Domain::Model model;
     Domain::ModelObject* object = model.add_object();
     object->name = "cube.stl";
-    Biz::Algorithms::add_volume(object, mesh);
+    Biz::Algorithms::ModelObject::add_volume(object, mesh);
     object->add_instance();
 
     Domain::Bed model_bed;
@@ -358,6 +366,68 @@ int applied_faded_layers(int print_faded_layers, int resin_faded_layers)
     return statistics->count_faded_layers;
 }
 
+// What the support point step did for the single object of a thin plate.
+struct SupportPointStepResult
+{
+    bool step_done{false};       // the step ran, so it reached the height level reads under test
+    std::size_t point_count{0};  // support points it left on the object
+};
+
+// Runs the support point step with automatic support generation on the single object of `mesh`.
+//
+// The object is sliced with a 0.05 mm layer, so a plate thinner than that covers exactly one model
+// height level and the support point step has no pair of levels to measure a layer with. Stopping
+// at slaposSupportPoints with the model object selected is what makes the engine generate the
+// points instead of taking them from the model; the object callback, which the engine calls after
+// every completed object step, is where the generated points come out.
+SupportPointStepResult run_support_point_step(const Domain::TriangleMesh& mesh, double elevation)
+{
+    using namespace Slic3r;
+
+    Domain::Model model;
+    Domain::ModelObject* object = model.add_object();
+    object->name = "thin.stl";
+    Biz::Algorithms::ModelObject::add_volume(object, mesh);
+    object->add_instance();
+    const Domain::ObjectID object_id = object->id();
+
+    Domain::Bed model_bed;
+    Domain::BedInstance bed_instance{model_bed};
+    for (const Domain::ModelObject* obj : model.objects) {
+        for (Domain::ModelInstance* inst : obj->instances) {
+            bed_instance.model_instances.push_back(inst);
+        }
+    }
+
+    Domain::ConfigPackSLA config;
+    config.sla_print_settings.items.opt("layer_height").set<double>(0.05);
+    config.sla_material_settings.items.opt("initial_layer_height").set<double>(0.05);
+    config.sla_print_settings.items.opt("supports_enable").set(true);
+    config.sla_print_settings.items.opt("support_object_elevation").set<double>(elevation);
+
+    auto hw_config = Test::create_dummy_hw_config(1, 0, Domain::PrinterTechnology::SLA);
+    auto preset_metadata = create_dummy_selected_preset_metadata(hw_config);
+    auto metadata = Biz::Slicing::build_gcode_metadata({}, preset_metadata, config);
+
+    SupportPointStepResult result;
+    SLAPrint print{[](Biz::Slicing::SLAResult&&) {},
+                   [&result](const Biz::Slicing::Sla::Object& reported) {
+                       if (reported.support_points)
+                           result.point_count = reported.support_points->size();
+                   }};
+    print.update(model, config, bed_instance, preset_metadata,
+                 Biz::Slicing::build_metadata_serializer(metadata, preset_metadata, config));
+
+    ThumbnailGenerator thumbnail_generator{};
+    print.slice(Domain::SlicingId{0, 0}, thumbnail_generator,
+                Biz::Slicing::SliceUntilStep{slaposSupportPoints, object_id});
+
+    if (print.objects().size() == 1)
+        result.step_done = print.objects().front()->is_step_done(slaposSupportPoints);
+
+    return result;
+}
+
 } // namespace
 
 TEST_CASE("Initial layer height zero uses layer height", "[SLAInitialLayerHeight]") {
@@ -376,4 +446,44 @@ TEST_CASE("Resin transition layers override the print faded layers", "[SLAResinF
     REQUIRE(applied_faded_layers(10, 3) == 3);
     // -1 (the unset value) falls back to the print preset.
     REQUIRE(applied_faded_layers(10, -1) == 10);
+}
+
+TEST_CASE("Support points for an object thinner than one layer", "[SLASupportPoints]") {
+    // 0.02 mm is thinner than the 0.05 mm layer the helper slices with, so the model height level
+    // grid of the object covers no level inside the plate. The support point step used to read the
+    // second of those levels to learn how far a point may be moved onto the surface, running past
+    // the end of the vector, which a release build neither catches nor survives. Either finishing
+    // the step or refusing the model is a pass; only a crash or some other error is not.
+    SupportPointStepResult result;
+    std::optional<std::string> refusal;
+    try {
+        result = run_support_point_step(
+            Biz::Algorithms::TriangleMesh::make_cube(10., 10., 0.02), 10.);
+    } catch (const Slic3r::RuntimeError& e) {
+        // The engine's own refusal (SLAPrintSteps.cpp:706), which BackgroundProcess turns into an
+        // error on the bed. Only that one is a handled outcome here - any other exception escapes.
+        // The message is copied out of the exception, which dies with the catch block.
+        refusal = e.what();
+    }
+
+    if (!refusal) {
+        // The step ran, so the reads under test were reached. The plate itself covers no grid
+        // level at this elevation, so the number of points it ends up with is not what this test
+        // is about.
+        CHECK(result.step_done);
+    } else {
+        CAPTURE(*refusal);
+        CHECK(refusal->find("can not be sliced") != std::string::npos);
+    }
+}
+
+TEST_CASE("Support points for a plate one layer tall", "[SLASupportPoints]") {
+    // 0.07 mm with a 0.05 mm layer: the grid holds exactly one level inside the plate, so this is
+    // the one-layer object with a model slice to cover. The same single level vector as the thin
+    // plate above, only now the step has an island to put points on.
+    SupportPointStepResult result;
+    REQUIRE_NOTHROW(result = run_support_point_step(
+        Biz::Algorithms::TriangleMesh::make_cube(10., 10., 0.07), 10.));
+    CHECK(result.step_done);
+    CHECK(result.point_count > 0);
 }

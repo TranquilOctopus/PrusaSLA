@@ -80,7 +80,8 @@ private:
     void create_supports_tab();
     void update_resin_combo_source();
 
-    /// Gathers the config items of the selected resin and supports presets.
+    /// Gathers the config items of the selected resin and supports presets. Every tab is bound
+    /// to the box of its own preset, so a key is never edited in the wrong preset.
     void collect_config_items();
     void refresh_rows();
 
@@ -102,8 +103,10 @@ private:
     SlaSettingsRows* m_resin_rows{nullptr};
     SlaSettingsRows* m_supports_rows{nullptr};
 
-    /// The config items of the selected presets, the source of the rows above.
-    std::vector<Biz::ConfigItemContext> m_config_items;
+    /// The config items of the selected resin, the source of the rows of the "Resin" tab.
+    std::vector<Biz::ConfigItemContext> m_resin_config_items;
+    /// The config items of the selected supports & raft preset, the source of its tab rows.
+    std::vector<Biz::ConfigItemContext> m_supports_config_items;
 
     Biz::Preset::PresetItemObservableList* m_resin_presets{nullptr};
     Yoga::ComboBoxListViewSelection<Biz::Preset::PresetItem>* m_resin_combo{nullptr};

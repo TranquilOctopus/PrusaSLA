@@ -114,7 +114,11 @@ void PrintToolConfigObservableList::set_print_value(
 {
     PrintToolItems::iterator index_it = find_item(key);
 
-    if (index_it != m_items.end() && index_it->print_item->value() != value) {
+    if (m_print_config_box != nullptr
+        && index_it != m_items.end()
+        && index_it->print_item != nullptr
+        && index_it->print_item->value() != value)
+    {
         const size_t index = std::distance(m_items.begin(), index_it);
 
         m_print_config_box->items.opt(key).set(value);
@@ -142,9 +146,9 @@ void PrintToolConfigObservableList::set_tool_value(
 {
     PrintToolItems::iterator index_it = find_item(key);
 
-    if (index_it != m_items.cend()) {
+    if (index_it != m_items.cend() && index_it->print_item != nullptr) {
         for (size_t index : indexes) {
-            if (index > m_tool_config_boxes.size()) {
+            if (index >= m_tool_config_boxes.size()) {
                 continue;
             }
             m_tool_config_boxes.at(index)->overrides.set(key, value);
@@ -163,6 +167,9 @@ const Domain::ConfigValue* PrintToolConfigObservableList::find_print_value(
     const std::string& name
 ) const
 {
+    if (m_print_config_box == nullptr) {
+        return nullptr;
+    }
     Domain::ConfigItem* found_item = m_print_config_box->items.find(name);
     return found_item ? &found_item->value() : nullptr;
 }
@@ -170,6 +177,9 @@ const Domain::ConfigValue* PrintToolConfigObservableList::find_print_value(
 const Domain::ConfigValue*
 PrintToolConfigObservableList::find_tool_value(const std::string& name, size_t index) const
 {
+    if (index >= m_tool_config_boxes.size()) {
+        return nullptr;
+    }
     Domain::ConfigItem* found_item = m_tool_config_boxes.at(index)->items.find(name);
     return found_item ? &found_item->value() : nullptr;
 }
@@ -278,13 +288,17 @@ bool PrintToolConfigObservableList::is_dirty_tool(size_t index) const
 void PrintToolConfigObservableList::set_from_original_value(const std::string& key)
 {
     auto item = find_item(key);
+    if (item == m_items.end()) {
+        return;
+    }
     if (item->original_print_item) {
         set_print_value(key, item->original_print_item->value());
     }
 
-    if (!item->original_tool_overrides.empty()) {
-        for (size_t tool_id{}; tool_id < item->original_tool_overrides.size(); tool_id++) {
-            set_tool_value(key, {tool_id}, item->original_tool_overrides.at(tool_id)->value());
+    for (size_t tool_id{}; tool_id < item->original_tool_overrides.size(); tool_id++) {
+        // A tool with no override of this key has no original value to restore.
+        if (const Domain::ConfigItem* original_override = item->original_tool_overrides.at(tool_id)) {
+            set_tool_value(key, {tool_id}, original_override->value());
         }
     }
 }
@@ -292,7 +306,7 @@ void PrintToolConfigObservableList::set_from_original_value(const std::string& k
 void PrintToolConfigObservableList::set_from_original_print_value(const std::string& key)
 {
     auto item = find_item(key);
-    if (item->original_print_item) {
+    if (item != m_items.end() && item->original_print_item) {
         set_print_value(key, item->original_print_item->value());
     }
 }
@@ -302,8 +316,11 @@ PrintToolConfigObservableList::set_from_original_tool_value(const std::string& k
 {
     auto item = find_item(key);
 
-    if (!item->original_tool_overrides.empty()) {
-        set_tool_value(key, {index}, item->original_tool_overrides.at(index)->value());
+    if (item == m_items.end() || index >= item->original_tool_overrides.size()) {
+        return;
+    }
+    if (const Domain::ConfigItem* original_override = item->original_tool_overrides.at(index)) {
+        set_tool_value(key, {index}, original_override->value());
     }
 }
 
@@ -320,12 +337,18 @@ PrintToolConfigObservableList::PrintToolItems::iterator PrintToolConfigObservabl
 
 void PrintToolConfigObservableList::update_extruders()
 {
-    const std::vector<unsigned> extruder_candidates =
-        m_workbench.project(m_selected_project_id)
-            .find_bed_instance_by_id(
-                m_scene_interactor.bed_selection().last_selected_bed().instance_id
-            )
-            ->extruder_candidates;
+    // This runs from a scene event, which may be a main thread task posted long before it is
+    // delivered: the bed it selected then may be gone by now, and re-reading it must not turn a
+    // stale notification into a crash. Nothing to update means nothing to do.
+    const Domain::BedRef last_selected_bed = m_scene_interactor.bed_selection().last_selected_bed();
+    const Domain::Project* project = m_workbench.find_project_by_id(m_selected_project_id);
+    const Domain::BedInstance* bed_instance
+        = project != nullptr ? project->find_bed_instance_by_id(last_selected_bed.instance_id) : nullptr;
+    if (bed_instance == nullptr) {
+        return;
+    }
+
+    const std::vector<unsigned> extruder_candidates = bed_instance->extruder_candidates;
 
     const std::set<unsigned> extruder_candidates_set{
         extruder_candidates.cbegin(),
@@ -339,11 +362,23 @@ void PrintToolConfigObservableList::update_extruders()
 
 void PrintToolConfigObservableList::update_items()
 {
+    // An extruder candidates event can be delivered before set_sources() ever ran, so there are
+    // no sources to re-read from and no items to update. Skipping also keeps the notification
+    // below from announcing an update of an empty range.
+    if (m_items.empty() || m_print_config_box == nullptr || m_original_print_config_box == nullptr) {
+        return;
+    }
+
     for (PrintToolItem& tool_print_item : m_items) {
         tool_print_item.is_favorite = m_favorites.find(tool_print_item.name) != m_favorites.end();
 
         tool_print_item.print_item = m_print_config_box->items.find(tool_print_item.name);
         tool_print_item.original_print_item = m_original_print_config_box->items.find(tool_print_item.name);
+        if (tool_print_item.print_item == nullptr || tool_print_item.original_print_item == nullptr) {
+            // The key is not in one of the sources anymore. update_value() and the dirty checks
+            // all read through these two, so such an item cannot be updated and is left as it is.
+            continue;
+        }
 
         std::vector<const Domain::ConfigItem*> tool_overrides;
         if (tool_print_item.print_item->def().overrides_in.contains(
