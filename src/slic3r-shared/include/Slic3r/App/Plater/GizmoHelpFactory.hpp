@@ -34,7 +34,15 @@ public:
      */
     void init(Yoga::Item* container);
 
-    void add_item(const std::vector<HelpItem>& icons, const std::string& title);
+    /**
+     * @brief Adds a help row: its icons and the label of the action they do.
+     *
+     * @param icons  The mouse buttons or key icons of the row, in the order they are shown.
+     * @param title  The label of the action.
+     * @return The label of the row, so that a tool whose wording depends on the printer technology
+     * can give it another text later (see PaintOnSupportsDialog::set_technology).
+     */
+    Yoga::Text* add_item(const std::vector<HelpItem>& icons, const std::string& title);
 
 private:
     Yoga::Item* m_container{nullptr};

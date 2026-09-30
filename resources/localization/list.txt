@@ -95,6 +95,7 @@ src/slic3r-shared/src/Slic3r/App/Plater/PaintOnFuzzySkinDialog.cpp
 src/slic3r-shared/src/Slic3r/App/Plater/PaintOnSeamsDialog.cpp
 src/slic3r-shared/src/Slic3r/App/Plater/PaintOnSupportsDialog.cpp
 src/slic3r-shared/src/Slic3r/App/Plater/PaintOnSupportsGizmo.cpp
+src/slic3r-shared/src/Slic3r/App/Plater/PaintSupportsRules.cpp
 src/slic3r-shared/src/Slic3r/App/Plater/PlaceOnBedButton.cpp
 src/slic3r-shared/src/Slic3r/App/Plater/PlaterRenderModule.cpp
 src/slic3r-shared/src/Slic3r/App/Plater/ReferenceFramePicker.cpp

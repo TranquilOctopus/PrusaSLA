@@ -5,6 +5,7 @@
 // points of the generator without painting.
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cstddef>
 #include <vector>
 
@@ -291,5 +292,75 @@ TEST_CASE("A model with nothing painted gets the points of the generator without
             const bool same = blocked[i] == unpainted[i];
             CHECK(same);
         }
+    }
+}
+
+TEST_CASE("An island keeps its support point inside a blocked region", "[SupportFacetPaint]")
+{
+    // The rule of the block brush: blocking takes the automatic points of an overhang away, never the
+    // points of an island. An island is a region of a layer with nothing solid below it, the region
+    // the island detection of M4.8d reports and names because it can fall off the build, and a
+    // support point is what holds it up. It is the one rule the user cannot paint away, so the hint
+    // of the block brush says so.
+    //
+    // A box has no overhang at all, so its only automatic points are the island points of its bottom
+    // layer. Painting every facet of it as a blocker therefore paints the island itself.
+    PaintedModel painted{triangle_mesh::make_cube(20., 20., 10.)};
+    const SlaConfig config = make_sla_config();
+
+    SECTION("painting the whole box as a blocker leaves its island points alone")
+    {
+        const Slic3r::Domain::SLA::SupportPoints unpainted = generate(painted, config);
+        const size_t islands = points_of_type(unpainted, SupportPointType::island).size();
+        REQUIRE(islands > 0);
+
+        // Every facet, the bottom one included: the island lies inside the painted surface now.
+        painted.paint_faces_above(-1.1, TriangleStateType::BLOCKER);
+
+        const Slic3r::Domain::SLA::SupportPoints blocked = generate(painted, config);
+        INFO("Automatic points of the unpainted box: " << unpainted.size());
+        INFO("Automatic points of the blocked box: " << blocked.size());
+        CHECK(points_of_type(blocked, SupportPointType::island).size() == islands);
+    }
+
+    SECTION("the island lies inside the blocked region and keeps its points")
+    {
+        painted.paint_faces_above(-1.1, TriangleStateType::BLOCKER);
+
+        const Slic3r::Domain::TriangleMesh mesh    = painted.volume->mesh();
+        const std::vector<float>          heights = layer_heights(mesh);
+        const Slic3r::sla::SupportFacetPaint paint = Slic3r::sla::support_facet_paint(
+            Slic3r::sla::support_tool_model_mesh(*painted.object),
+            Slic3r::Domain::Transform3d::Identity(), heights, [] { return false; });
+        REQUIRE(paint.has_blocker_regions);
+
+        const LayerSupportPoints plain   = generate_points(mesh, {});
+        const LayerSupportPoints blocked = generate_points(mesh, paint);
+        const auto islands = points_of_type(plain, SupportPointType::island);
+        REQUIRE(islands.size() > 0);
+
+        // Every island point of the plain run that lies inside a blocked region of its own layer is a
+        // point the block brush could not take away. That the blocked region really covers the island
+        // is the point of the test: the points kept below are points inside a blocked region.
+        size_t inside_blocked_region = 0;
+        for (const auto &island : islands) {
+            // A support point sits at the middle of the layer it was made on, which is the height of
+            // that layer, so a point names its own layer.
+            const auto height = std::find(heights.begin(), heights.end(), island.pos.z());
+            INFO("Island point at z " << island.pos.z());
+            REQUIRE(height != heights.end());
+            const size_t layer_id = static_cast<size_t>(std::distance(heights.begin(), height));
+
+            const Slic3r::Point where{
+                Slic3r::coord_t(scale_(island.pos.x())), Slic3r::coord_t(scale_(island.pos.y()))};
+            if (paint.is_blocked(layer_id, where))
+                ++inside_blocked_region;
+        }
+        INFO("Island points inside a blocked region: " << inside_blocked_region);
+        REQUIRE(inside_blocked_region > 0);
+
+        // And the run with the blockers has all of them: the island sampling is the same in both runs,
+        // because an island point is made of the shape of a part and not of a sample of an overhang.
+        CHECK(points_of_type(blocked, SupportPointType::island).size() == islands.size());
     }
 }

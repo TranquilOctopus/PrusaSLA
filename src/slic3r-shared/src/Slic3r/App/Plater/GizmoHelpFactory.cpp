@@ -14,7 +14,7 @@ void GizmoHelpFactory::init(Item* container)
     m_container = container;
 }
 
-void GizmoHelpFactory::add_item(const std::vector<HelpItem>& icons, const std::string& title)
+Text* GizmoHelpFactory::add_item(const std::vector<HelpItem>& icons, const std::string& title)
 {
     ASSERT(m_container);
     Item* help_group = m_container->emplace_back<Item>();
@@ -46,6 +46,8 @@ void GizmoHelpFactory::add_item(const std::vector<HelpItem>& icons, const std::s
     }
     Text* text = help_group->emplace_back<Text>(title);
     text->set_text_color(color);
+
+    return text;
 }
 
 } // namespace Slic3r::App::Plater
