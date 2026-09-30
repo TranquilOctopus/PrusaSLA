@@ -85,6 +85,11 @@ not yet explained.
 u32 0 (likely "use full greyscale" = off), u32 16 (grey level count), 16 bytes `0F 1F 2F … EF FF`,
 u32 0. The 16 levels match HEADER +40.
 
+Both level counts stay 16 whatever `gamma_correction` is (M4.13b): they count the levels of the
+encoding, which the pw0 encoder always writes as a 4-bit grey, and the table is 16 bytes wide. A
+thresholded print uses two of the sixteen. Only the sample has been compared, and it was sliced
+with anti-aliasing on, so no value is known for a binary layer.
+
 ### LAYERDEF (body at 0x126EC)
 
 u32 layer count (289 in the sample), then one 32-byte entry per layer:
