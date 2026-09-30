@@ -10,11 +10,16 @@
 #include <cstddef>
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace Slic3r::Biz {
 
 class ProjectInteractor;
+
+namespace Preset {
+class PresetInteractor;
+} // namespace Preset
 
 namespace ResinProfile {
 
@@ -42,9 +47,29 @@ struct ResinImportResult
     std::string preset_name;
     /// Name of the system resin preset the new one inherits from. Empty on failure.
     std::string base_preset;
+    /// Id of that system resin preset, the one the import dialog keeps selected in its base picker.
+    std::string base_preset_id;
+    /// Id of the format the reader recognized, e.g. "chitubox-cfg". Empty when nothing was read.
+    std::string source_format;
+    /// The resin the file names, empty when it names none. It is also the resin the importer looks
+    /// for among the system resins to use as the base, and its name suggests the preset name.
+    std::string resin_name;
+    /// Vendor of that resin, empty when the file names none.
+    std::string resin_vendor;
     /// What became of every key in the file, whether it was written or only reported.
     MappingResult mapping;
 };
+
+/**
+ * @brief The system resin presets the selected printer offers, as (id, name) pairs, in the order
+ * the printer offers them. These are the bases an imported preset can inherit from: a user or
+ * runtime preset would give it no system preset to inherit from, and the unnamed shared profiles
+ * (*common*, *sl1s_fast*, ...) are not a resin of this printer at all, only the values a resin
+ * starts from. Empty when the printer is not an SLA printer or has no resin in that slot.
+ * The import dialog offers these so the user can pick the base (M3.10a).
+ */
+std::vector<std::pair<std::string, std::string>>
+system_resin_presets(const Preset::PresetInteractor& presets, Domain::SelectionId project_id, size_t slot);
 
 /**
  * @brief Reads foreign resin profiles and saves them as PrusaSLA user resin presets.
@@ -81,10 +106,18 @@ public:
      * @brief Import one resin profile file into @p target.
      * @param dry_run Report what the import would do without touching a preset. The name is the one
      *                the import would use, so it accounts for the names already taken.
+     * @param base_preset_id Id of the system resin preset the new one inherits from, e.g. the one the
+     *                       import dialog picked. Empty picks it from the profile as described above;
+     *                       an id that is not a system resin of this printer is ignored the same way.
+     * @param preset_name Name to save under, e.g. the one the user typed in the import dialog. Empty
+     *                    derives it from the profile. It is sanitized and made unique either way, so
+     *                    it can never replace a preset that is already there.
      */
     ResinImportResult import_file(const boost::filesystem::path& path,
                                   const ResinImportTarget& target = {},
-                                  bool dry_run = false);
+                                  bool dry_run = false,
+                                  const std::string& base_preset_id = {},
+                                  const std::string& preset_name = {});
 
     /// @brief Import every regular file in @p folder, sorted by name. One result per file, errors
     /// collected: a file the registry does not recognise, or that fails, never stops the batch.

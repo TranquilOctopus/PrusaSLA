@@ -11,6 +11,7 @@
 #include "Slic3r/App/MaterialSettingsDialog.hpp"
 #include "Slic3r/App/AppConfigInteractor.hpp"
 #include "Slic3r/App/PrinterSearchFunction.hpp"
+#include "Slic3r/App/ResinImportDialog.hpp"
 #include "Slic3r/App/IsSlaActive.hpp"
 
 #include "Slic3r/Biz/ProjectInteractor.hpp"
@@ -116,6 +117,9 @@ MaterialSelectionDialog::MaterialSelectionDialog(
 
     m_material_settings_dialog =
         content_item()->emplace_back<MaterialSettingsDialog>(project_interactor, m_navigator, this);
+    // The resin import review dialog lives here because this is where a profile comes in from: the
+    // "Import resin profile" button of M3.10b opens it through open_resin_import().
+    m_resin_import_dialog = content_item()->emplace_back<ResinImportDialog>(project_interactor, m_navigator);
     m_material_presets.add_listener<Biz::IListObserver<Biz::Preset::PresetItemObservableList>>(
         this
     );
@@ -291,6 +295,7 @@ m_material_filter->set_filter_fn(
 
     // Material Settings Dialog setup
     m_material_settings_dialog->attach_to_item(content_item(), Position::Left);
+    m_resin_import_dialog->attach_to_item(content_item(), Position::Left);
 
     m_material_settings_dialog->dialog_callbacks().tab_selected = [this](size_t current_index)
     {
@@ -388,6 +393,16 @@ void MaterialSelectionDialog::update_preset_list()
 MaterialSettingsDialog& MaterialSelectionDialog::material_settings_dialog()
 {
     return *m_material_settings_dialog;
+}
+
+void MaterialSelectionDialog::open_resin_import(const boost::filesystem::path& path)
+{
+    m_resin_import_dialog->open(path);
+}
+
+ResinImportDialog& MaterialSelectionDialog::resin_import_dialog()
+{
+    return *m_resin_import_dialog;
 }
 
 void MaterialSelectionDialog::on_app_config_changed(const std::string& key)

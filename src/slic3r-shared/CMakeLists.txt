@@ -304,6 +304,10 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/PrinterNozzleRow.cpp
         src/Slic3r/App/MaterialSelectionDialog.cpp
         include/Slic3r/App/MaterialSelectionDialog.hpp
+        include/Slic3r/App/ResinImportReport.hpp
+        src/Slic3r/App/ResinImportReport.cpp
+        include/Slic3r/App/ResinImportDialog.hpp
+        src/Slic3r/App/ResinImportDialog.cpp
         include/Slic3r/App/MaterialSelectionRow.hpp
         src/Slic3r/App/MaterialSelectionRow.cpp
         include/Slic3r/App/Search.hpp
@@ -1621,6 +1625,8 @@ if(SLIC3R_BUILD_TESTS)
             test/Slic3r/App/SlaFirstPreferenceTests.cpp
 
             test/Slic3r/App/SlaHintsTests.cpp
+
+            test/Slic3r/App/ResinImportReportTests.cpp
 
             test/Slic3r/App/Scene/Node.cpp
             test/Slic3r/App/Scene/Ray.cpp

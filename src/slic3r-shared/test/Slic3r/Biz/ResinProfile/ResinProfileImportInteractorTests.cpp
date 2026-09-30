@@ -5,8 +5,10 @@
 #include "Slic3r/Biz/ResinProfile/ResinProfileImportTestFixture.hpp"
 
 #include <optional>
+#include <ranges>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 using namespace Slic3r::Biz;
@@ -28,6 +30,13 @@ TEST_CASE(
     CHECK(result.error.empty());
     CHECK(result.preset_name == "Grey resin");
     CHECK(result.base_preset == fallback_resin);
+    // What the file says about itself, for the source summary of the import dialog and for the
+    // report the CLI writes.
+    CHECK(result.source_format == "chitubox-cfg");
+    CHECK(result.resin_name == "Grey resin");
+    // A Chitubox profile names no vendor, so the field is empty rather than made up.
+    CHECK(result.resin_vendor.empty());
+    CHECK_FALSE(result.base_preset_id.empty());
     // A Z-lift printer keeps the bottom layer count instead of fading the exposure over it.
     CHECK(result.mapping.material_values.at("exposure_time") == "3.5");
     CHECK(result.mapping.material_values.at("bottom_layer_count") == "8");
@@ -127,6 +136,121 @@ TEST_CASE("ResinProfileImportInteractor writes nothing on a dry run", "[resin_pr
     // Nothing was saved and the printer still shows its own resin.
     CHECK(fx.material("Grey resin") == nullptr);
     CHECK(fx.material(fallback_resin) != nullptr);
+}
+
+TEST_CASE(
+    "ResinProfileImportInteractor imports onto the base the caller asks for",
+    "[resin_profile][import]"
+)
+{
+    ResinImportFixture fx;
+    // The profile names no resin of this printer, so on its own the base would be the fallback one.
+    const fs::path profile = fx.write_profile("grey.cfg", chitubox_cfg("Grey resin", "8"));
+    const Domain::Preset::EvaluatedMaterialPreset::Preset* base = fx.material(named_resin);
+    REQUIRE(base != nullptr);
+    const std::string base_id = base->id;
+
+    ResinProfile::ResinProfileImportInteractor interactor(fx.project_interactor);
+    const ResinProfile::ResinImportResult result =
+        interactor.import_file(profile, fx.target(), /*dry_run=*/true, base_id);
+
+    REQUIRE(result.ok);
+    CHECK(result.base_preset == named_resin);
+    CHECK(result.base_preset_id == base_id);
+}
+
+TEST_CASE(
+    "ResinProfileImportInteractor falls back to its own base choice for an unknown base id",
+    "[resin_profile][import]"
+)
+{
+    ResinImportFixture fx;
+    const fs::path profile = fx.write_profile("grey.cfg", chitubox_cfg("Grey resin", "8"));
+
+    ResinProfile::ResinProfileImportInteractor interactor(fx.project_interactor);
+    const ResinProfile::ResinImportResult result =
+        interactor.import_file(profile, fx.target(), /*dry_run=*/true, "no_preset_with_this_id");
+
+    // A base that is not a system resin of this printer is ignored, not refused: the dialog can pass
+    // an id a bundle reload has dropped without breaking the import.
+    REQUIRE(result.ok);
+    CHECK(result.base_preset == fallback_resin);
+}
+
+TEST_CASE("ResinProfileImportInteractor saves under the name the caller passes", "[resin_profile][import]")
+{
+    ResinImportFixture fx;
+    const fs::path profile = fx.write_profile("grey.cfg", chitubox_cfg("Grey resin", "8"));
+
+    ResinProfile::ResinProfileImportInteractor interactor(fx.project_interactor);
+    const ResinProfile::ResinImportResult result =
+        interactor.import_file(profile, fx.target(), /*dry_run=*/false, {}, "My grey resin");
+
+    REQUIRE(result.ok);
+    CHECK(result.preset_name == "My grey resin");
+    CHECK(fx.material("My grey resin") != nullptr);
+    // The name the profile carries no longer names the preset.
+    CHECK(fx.material("Grey resin") == nullptr);
+}
+
+TEST_CASE(
+    "ResinProfileImportInteractor keeps a caller name unique and cuts off what a file name cannot carry",
+    "[resin_profile][import]"
+)
+{
+    ResinImportFixture fx;
+    const fs::path profile = fx.write_profile("grey.cfg", chitubox_cfg("Grey resin", "8"));
+
+    ResinProfile::ResinProfileImportInteractor interactor(fx.project_interactor);
+    const ResinProfile::ResinImportResult first =
+        interactor.import_file(profile, fx.target(), /*dry_run=*/false, {}, "Grey/resin");
+    const ResinProfile::ResinImportResult second =
+        interactor.import_file(profile, fx.target(), /*dry_run=*/false, {}, "Grey/resin");
+
+    // The name is a file name, so the slash is replaced, and a name that is taken still adds a
+    // preset instead of replacing the first one.
+    REQUIRE(first.ok);
+    REQUIRE(second.ok);
+    CHECK(first.preset_name == "Grey_resin");
+    CHECK(second.preset_name == "Grey_resin (2)");
+}
+
+TEST_CASE(
+    "ResinProfileImportInteractor offers the system resins of the printer as bases",
+    "[resin_profile][import]"
+)
+{
+    ResinImportFixture fx;
+
+    const std::vector<std::pair<std::string, std::string>> resins =
+        ResinProfile::system_resin_presets(
+            fx.project_interactor.preset_interactor(), fx.project_interactor.selected_project_id(), 0
+        );
+
+    // The printer's own resins are offered, every one of them with an id the import takes back.
+    CHECK(resins.size() >= 2);
+    const auto offers = [&resins](const std::string& name) {
+        return std::ranges::any_of(resins, [&name](const std::pair<std::string, std::string>& resin) {
+            return resin.second == name;
+        });
+    };
+    CHECK(offers(fallback_resin));
+    CHECK(offers(named_resin));
+    for (const std::pair<std::string, std::string>& resin : resins) {
+        CHECK_FALSE(resin.first.empty());
+    }
+
+    // The ids are the ones the import takes back: a dry run with the id of a listed resin picks it.
+    const auto named = std::ranges::find_if(resins, [](const std::pair<std::string, std::string>& resin) {
+        return resin.second == named_resin;
+    });
+    REQUIRE(named != resins.end());
+    const fs::path profile = fx.write_profile("grey.cfg", chitubox_cfg("Grey resin", "8"));
+    ResinProfile::ResinProfileImportInteractor interactor(fx.project_interactor);
+    const ResinProfile::ResinImportResult result =
+        interactor.import_file(profile, fx.target(), /*dry_run=*/true, named->first);
+    REQUIRE(result.ok);
+    CHECK(result.base_preset_id == named->first);
 }
 
 TEST_CASE("ResinProfileImportInteractor imports a folder, one result per file", "[resin_profile][import]")
