@@ -172,6 +172,63 @@ raft are then built from those points and drawn. The layer images and the export
 from **Slice** in step 4. Before you slice, set **Raft type** and **Object elevation** in the
 **Print settings** dialog (section 1).
 
+### Paint where the automatic supports go
+
+**Paint-on supports** (`L`) in the tool bar. For a resin printer it paints the two regions that
+decide where **Auto support** puts its points: *Paint supports*, which asks for points, and *Block
+supports*, which refuses them. Select the models before you open the tool: it paints the parts of
+the selection, and it closes itself again if nothing is selected. Its panel is called **Paint
+supports**, and the three help rows at the bottom of it name the three brushes - left mouse *Paint
+supports*, right mouse *Block supports*, `Shift`+left mouse *Remove paint*.
+
+The panel rows, top to bottom:
+
+- **Tool**: a brush, or the smart fill, which spreads over the connected area whose facets lie
+  within **Smart fill angle** of the facet you clicked.
+- **Shape**: sphere or circle, with **Brush size** (mm) beside them, or a pointer, which has no
+  size and fills the whole flat area under the cursor instead.
+- **Clipping of view** (%) limits how far into the model the brush reaches, and the button beside
+  it resets the direction.
+- **Show overhangs** (°) marks the facets steeper than that from horizontal, and **Enforce** paints
+  all of them in one go. **Paint on overhangs only** keeps the brush off the rest of the surface.
+- **Split triangles** subdivides the facets under the brush, so a painted edge can follow the
+  triangle boundaries more closely.
+- **Automatic painting** is not offered for a resin printer. It paints the spots of the FFF support
+  spot search, which is a slice of the bed, and only the **Slice** button slices a resin print.
+
+![TODO screenshot: the Paint supports panel on a resin printer, the two brushes named and the block hint under them]()
+
+![TODO screenshot: a model painted with Paint supports under a canopy and blocked on a flat face]()
+
+**Painting never slices.** A stroke writes the painted facets onto the model, marks the plate
+modified and stops there. The points come afterwards: run **Auto support** in the support tool
+(section 3), or **Auto support selected** / **Auto support all** in the Preview sidebar (section
+5), and the generator places them, the preview service redraws the tree from the new points, and
+the layer images and the export file still come from **Slice** in step 4.
+
+What the paint then decides:
+
+- A region painted with *Paint supports* gets points at the configured **Support points density**,
+  also where the overhang rule of section 3 would have skipped it, and it does not replace the
+  points the parts of that layer would get anyway.
+- A region painted with *Block supports* gets no automatic support point and wins over an enforced
+  region. A blocked area is grown by 0.2 mm, so a point on its border is caught as well.
+- A facet with no area in a layer - a vertical wall, or the top face of the model - paints nothing
+  in that layer, the way it does for FFF. Paint the horizontal surface a point would stand on.
+- A model with nothing painted gets exactly the points of an unpainted one, so painting only ever
+  adds and removes points you can see afterwards.
+
+**An island keeps its point, even inside a blocked region.** A blocker only drops the overhang
+samples of a layer, and the point that catches a small floating island is placed from the shape of
+a part, not from an overhang sample. A blocked area that would leave an island without support
+still gets the island point, because an island without one falls off the build in the middle of
+the print. This is what the block hint in the panel says, and it is the one rule painting does not
+override: block the places where an overhang point is wasted, and leave the islands their support.
+
+The paint is one undo step per stroke (`Ctrl+Z` and `Ctrl+Y`), it travels with the model into the
+project file and the 3MF export and comes back with it, and the revert button at the top of the
+panel - the one whose tooltip reads *Remove all selection* - clears all of it.
+
 ## 4. Slice
 
 Slicing happens when you press **Slice**, at the bottom of the right-hand sidebar in the **Prepare**
