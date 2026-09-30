@@ -17,6 +17,7 @@
 
 #include <libslic3r/SLAResult.hpp>
 #include <libslic3r/SLALayerImage.hpp>
+#include <libslic3r/SLA/LayerStats.hpp>
 
 #include <imgui/imgui.h>
 
@@ -100,6 +101,19 @@ ImVec2 bed_mm_to_image_px(
     const double v = 1. - y_mm / mapping.height_mm;
 
     return ImVec2(rect_min.x + float(u) * rect_size.x, rect_min.y + float(v) * rect_size.y);
+}
+
+// The vat film the peel force coefficients came from, spelled as the vat film combo box spells
+// it. These are the chemical names of the films, not words to translate.
+std::string vat_film_name(const Domain::ConfigView& config)
+{
+    switch (config.get<Domain::sla::VatFilmType>("vat_film_type")) {
+    case Domain::sla::VatFilmType::nFEP: return "nFEP";
+    case Domain::sla::VatFilmType::PFA:  return "PFA";
+    case Domain::sla::VatFilmType::ACF:  return "ACF";
+    case Domain::sla::VatFilmType::FEP:  break;
+    }
+    return "FEP";
 }
 
 } // namespace
@@ -536,7 +550,12 @@ void SlaLayerImageWindow::render_body(const Domain::Vec2f& pos, const Domain::Ve
         if (has_peel) {
             render_plot(
                 *m_layer_peel_force,
-                _u8L("Peel force (N)"),
+                // The film in the title: the force is in the same newtons for every film, but the
+                // coefficients behind it are not, so a chart without it says nothing about which
+                // film the numbers came from.
+                fmt::format(
+                    fmt::runtime(_u8L("Peel force (N, {0})")),
+                    m_result_data ? vat_film_name(m_result_data->config) : std::string()),
                 m_current_layer,
                 Platform::Color::AccentSecondary,
                 region.x,
@@ -630,9 +649,31 @@ std::string SlaLayerImageWindow::layer_stats_text() const
             text += "  ·  ";
         }
         text += fmt::format(fmt::runtime(_u8L("Peel {:.1f} N")), peel);
+        // The layer is over the peel_force_warning: the chart has no room for a threshold line,
+        // so the line of text below it says so instead.
+        const double warning = peel_warning_n();
+        if (warning > 0. && double(peel) > warning) {
+            text += fmt::format(fmt::runtime(_u8L(" (over {:.1f} N)")), warning);
+        }
     }
 
     return text;
+}
+
+double SlaLayerImageWindow::peel_warning_n() const
+{
+    if (!m_result_data)
+        return 0.;
+
+    // The same resolution of the setting the slicer used, see peel_force_warning_n() in
+    // SLA/LayerStats.hpp: a negative setting takes the default of the vat film.
+    const Domain::ConfigView& config = m_result_data->config;
+    ::Slic3r::sla::PeelForceSettings settings;
+    settings.film                 = config.get<Domain::sla::VatFilmType>("vat_film_type");
+    settings.area_coefficient     = config.get<double>("peel_area_coefficient");
+    settings.perimeter_coefficient = config.get<double>("peel_perimeter_coefficient");
+    return ::Slic3r::sla::peel_force_warning_n(
+        config.get<double>("peel_force_warning"), settings.coefficients());
 }
 
 void SlaLayerImageWindow::rebuild_island_list()

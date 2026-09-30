@@ -733,6 +733,12 @@ const std::map<std::string, std::vector<Step>> invalidated_by{
     {"min_exposure_time", steps({propagate(slapsMergeSlicesAndEval)})},
     {"min_initial_exposure_time", steps({propagate(slapsMergeSlicesAndEval)})},
     {"output_filename_format", steps({})},
+    // The peel force model is computed together with the layer statistics, so the vat film and
+    // the two coefficients and the warning only need the merge step again, like area_fill above.
+    {"peel_area_coefficient", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"peel_force_warning", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"peel_perimeter_coefficient", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"vat_film_type", steps({propagate(slapsMergeSlicesAndEval)})},
     {"pad_around_object", steps({propagate(slaposObjectSlice)})},
     {"pad_around_object_everywhere", steps({propagate(slaposObjectSlice)})},
     {"pad_brim_size", steps({propagate(slaposPad)})},

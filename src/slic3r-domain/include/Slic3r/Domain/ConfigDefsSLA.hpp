@@ -26,6 +26,10 @@ namespace sla {
     // flat disc under a pillar that runs straight into it. The same three values live on the point
     // itself (SLA::SupportPoint::BaseShape), whose Default means the value configured here.
     enum class SupportBaseShape { Cone, Cylinder, Flat };
+    // The material of the film at the bottom of the vat. It is the hardest pull a layer puts on
+    // the film, so it picks the coefficients of the peel force estimate, see the vat_film_type
+    // key and doc/sla-fork/profiling/peel-force.md.
+    enum class VatFilmType { FEP, nFEP, PFA, ACF };
 }
 
 enum TowerSpeeds : int {
