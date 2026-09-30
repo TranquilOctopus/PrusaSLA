@@ -1,6 +1,7 @@
 #include "GooSLA.hpp"
 
 #include "libslic3r/SLA/RasterBase.hpp"
+#include "libslic3r/SLA/RasterMemory.hpp"
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
 
 #include <cstdint>
@@ -154,6 +155,11 @@ public:
         sla::RasterEncoder encoder = GooSLARasterEncoder{};
         sla::EncodedRaster encoded_raster = raster->encode(encoder);
         return std::move(encoded_raster.m_buffer);
+    }
+
+    size_t raw_raster_bytes() const override
+    {
+        return res.pixels() * sla::raw_raster_bytes_per_pixel();
     }
 };
 

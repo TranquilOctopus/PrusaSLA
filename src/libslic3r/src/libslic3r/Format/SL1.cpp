@@ -12,6 +12,7 @@
 #include "Slic3r/Biz/Algorithms/MiniZWrapper.hpp" // IWYU pragma: keep
 #include <LocalesUtils.hpp>
 #include "libslic3r/SLA/RasterBase.hpp"
+#include "libslic3r/SLA/RasterMemory.hpp"
 
 #include <boost/filesystem/path.hpp>
 #include <boost/algorithm/string.hpp>
@@ -64,6 +65,11 @@ public:
         sla::RasterEncoder encoder = sla::PNGRasterEncoder{};
         EncodedRaster encoded_raster = raster->encode(encoder);
         return std::move(encoded_raster.m_buffer);
+    }
+
+    size_t raw_raster_bytes() const override
+    {
+        return res.pixels() * sla::raw_raster_bytes_per_pixel();
     }
 };
 

@@ -30,6 +30,13 @@ public:
     /// </summary>
     /// <param name="shape">Separable part from slice</param>
     virtual Biz::Slicing::Sla::FileData create_file(const ExPolygons& slice) = 0;
+
+    /// <summary>
+    /// Bytes of full-resolution raw raster that create_file() holds while it runs, or 0 when the
+    /// format never builds a raster (SVG). The rasterize step uses this to keep only a bounded
+    /// number of layers in memory at once, see sla::raw_raster_batch_size.
+    /// </summary>
+    virtual size_t raw_raster_bytes() const = 0;
 };
 } // namespace Slic3r
 
