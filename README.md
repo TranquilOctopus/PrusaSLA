@@ -15,13 +15,13 @@ upstream. The plan and rules are in [`doc/sla-fork/PLAN.md`](doc/sla-fork/PLAN.m
 
 ## Progress
 
-**143 of 201 todos done (71%)** · updated 2026-09-30 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**145 of 203 todos done (71%)** · updated 2026-09-30 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
 | M0: Foundation | 12/15 | `██████████░░` 80% |
 | M1: Look, feel and SLA-first shell | 34/40 | `██████████░░` 85% |
-| M2: SLA editing tools (porting the legacy gizmos) | 42/48 | `██████████░░` 88% |
+| M2: SLA editing tools (porting the legacy gizmos) | 44/50 | `███████████░` 88% |
 | M3: Resin profile import (Chitubox, Lychee and others) | 10/17 | `███████░░░░░` 59% |
 | M4: Engine quality (measure first; every PR includes before/after metrics) | 9/20 | `█████░░░░░░░` 45% |
 | M5: Formats and inspection | 26/32 | `██████████░░` 81% |
