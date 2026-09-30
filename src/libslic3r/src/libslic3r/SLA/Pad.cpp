@@ -156,6 +156,7 @@ static inline double get_merge_distance(const PadConfig &c)
 // Part of the pad configuration that is used for 3D geometry generation
 struct PadConfig3D {
     double thickness, height, wing_height, slope, edge_taper;
+    PadConfig::Infill infill;
 
     explicit PadConfig3D(const PadConfig &cfg2d)
         : thickness{cfg2d.wall_thickness_mm}
@@ -163,11 +164,23 @@ struct PadConfig3D {
         , wing_height{cfg2d.wall_height_mm}
         , slope{cfg2d.wall_slope}
         , edge_taper{cfg2d.edge_taper_mm}
+        , infill{cfg2d.infill}
     {}
 
     inline double bottom_offset() const
     {
         return (thickness + wing_height) / std::tan(slope);
+    }
+
+    /// The z where the open cells of the infill begin, that is, the top of the cells. The object
+    /// rests on the solid skin under the top face and, in a raft with a cavity, on the floor of
+    /// the cavity, so the cells may not reach into either of them. The skin is what is left of the
+    /// raft height after the cells.
+    inline double infill_cells_top_z() const
+    {
+        double z = -infill.skin_mm;
+        double floor_z = -wing_height;
+        return z > floor_z ? z : floor_z;
     }
 };
 
@@ -363,6 +376,212 @@ ExPolygon offset_contour_only(const ExPolygon &poly, coord_t delta, Args...args)
     return std::move(tmp2.front());
 }
 
+// A pattern finer than this would be a hole too small to print and would take the boolean ops
+// down with it, so a raft that needs more cells than this is printed solid.
+constexpr size_t MAX_INFILL_CELLS = 4096;
+
+// The open cells of the raft infill, cut out of the given region of the raft. Both patterns are
+// lattices of cells with the infill wall left between two neighbours, so what is left of the
+// region between the cells is the ribs of the pattern. Grid is a lattice of squares, honeycomb the
+// hexagons of a hexagonal lattice.
+ExPolygons infill_cells(const ExPolygon &region, const PadConfig3D &cfg)
+{
+    ExPolygons cells;
+
+    const coord_t cell = scaled(cfg.infill.spacing_mm);
+    const coord_t wall = scaled(cfg.infill.wall_mm);
+
+    // A pattern without open cells would fill the raft back up to solid and one without material
+    // between the cells would be a raft full of holes, so neither is built.
+    if (cell <= 0 || wall <= 0)
+        return cells;
+
+    const Points &pts = region.contour.points;
+    if (pts.empty())
+        return cells;
+
+    // The lattice is generated over the bounding box of the region and clipped to it afterwards,
+    // so a cell that reaches over the edge of the region is trimmed instead of guessed at.
+    coord_t min_x = pts.front().x(), max_x = min_x;
+    coord_t min_y = pts.front().y(), max_y = min_y;
+    for (const Point &p : pts) {
+        min_x = std::min(min_x, p.x());
+        max_x = std::max(max_x, p.x());
+        min_y = std::min(min_y, p.y());
+        max_y = std::max(max_y, p.y());
+    }
+
+    Polygons lattice;
+
+    switch (cfg.infill.type) {
+    case Domain::sla::RaftInfillType::None:
+        break;
+
+    case Domain::sla::RaftInfillType::Grid: {
+        const coord_t period = cell + wall;
+        const long    cols   = (max_x - min_x) / period + 1;
+        const long    rows   = (max_y - min_y) / period + 1;
+
+        if (cols <= 0 || rows <= 0)
+            break;
+
+        if (size_t(cols) * size_t(rows) > MAX_INFILL_CELLS) {
+            SPDLOG_ERROR("Raft infill spacing is too small for this raft, printing it solid.");
+            break;
+        }
+
+        for (coord_t x = min_x; x < max_x; x += period)
+            for (coord_t y = min_y; y < max_y; y += period)
+                lattice.emplace_back(Points{{x, y},
+                                             {x + cell, y},
+                                             {x + cell, y + cell},
+                                             {x, y + cell}});
+        break;
+    }
+
+    case Domain::sla::RaftInfillType::Honeycomb: {
+        // The cells are hexagons on a lattice that keeps the wall between two neighbours, so the
+        // clear width of a cell is the spacing.
+        const double r_cell = cfg.infill.spacing_mm / 2.;
+        const double r_lat  = (cfg.infill.spacing_mm + cfg.infill.wall_mm) / 2.;
+        const coord_t col_dx = scaled(std::sqrt(3.) * r_lat);
+        const coord_t row_dy = scaled(2. * r_lat);
+        const coord_t reach  = scaled(2. * r_cell / std::sqrt(3.));
+
+        if (col_dx > 0 && row_dy > 0 && reach > 0) {
+            const int first_col = int(std::floor(double(min_x - reach) / col_dx));
+            const int last_col  = int(std::ceil(double(max_x + reach) / col_dx));
+            const int first_row = int(std::floor(double(min_y - reach) / row_dy));
+            const int last_row  = int(std::ceil(double(max_y + reach) / row_dy));
+
+            const long cols = long(last_col) - long(first_col) + 1;
+            const long rows = long(last_row) - long(first_row) + 1;
+
+            if (cols > 0 && rows > 0 &&
+                size_t(cols) * size_t(rows) <= MAX_INFILL_CELLS) {
+                for (int col = first_col; col <= last_col; ++col) {
+                    const coord_t cx = coord_t(col) * col_dx;
+                    for (int row = first_row; row <= last_row; ++row) {
+                        // Every other column of a hexagonal lattice sits half a row higher.
+                        const coord_t cy = coord_t(row) * row_dy + ((col & 1) ? row_dy / 2 : 0);
+
+                        Points hexagon;
+                        hexagon.reserve(6);
+                        for (int i = 0; i < 6; ++i) {
+                            const double angle = i * PI / 3.;
+                            hexagon.emplace_back(coord_t(cx + double(reach) * std::cos(angle)),
+                                                 coord_t(cy + double(reach) * std::sin(angle)));
+                        }
+
+                        lattice.emplace_back(std::move(hexagon));
+                    }
+                }
+            } else {
+                SPDLOG_ERROR("Raft infill spacing is too small for this raft, printing it solid.");
+            }
+        }
+        break;
+    }
+    }
+
+    if (lattice.empty())
+        return cells;
+
+    return intersection_ex(ExPolygons{region}, lattice);
+}
+
+// What the raft infill leaves of one raft part: its interior without the solid rim, the open
+// cells inside that and the ribs around the cells. All three are empty for a raft that is printed
+// solid.
+struct PadInfill {
+    ExPolygons interior;
+    ExPolygons cells;
+    ExPolygons ribs;
+};
+
+// Cut the pattern of the infill out of the raft part. The part is given as the outline it has
+// where it is narrowest, so the cells are inside the raft at every height.
+PadInfill cut_infill_cells(const ExPolygon &outline, const PadConfig3D &cfg)
+{
+    PadInfill infill;
+
+    // No pattern, or a skin that is the whole raft and leaves nothing to open up.
+    if (!cfg.infill || cfg.infill_cells_top_z() <= -cfg.height)
+        return infill;
+
+    // The pattern stops at a solid rim, which is as thick as the material between two cells.
+    for (const ExPolygon &region : offset_ex(outline, -scaled<float>(cfg.infill.wall_mm))) {
+        ExPolygons cells = infill_cells(region, cfg);
+
+        // An interior without a cell in it is left solid. Cutting the pattern out of it anyway
+        // would leave a closed pocket in the raft, which no printer can fill and no post
+        // processing can empty.
+        if (cells.empty())
+            continue;
+
+        infill.interior.emplace_back(region);
+        infill.cells.insert(infill.cells.end(), cells.begin(), cells.end());
+
+        ExPolygons ribs = diff_ex(ExPolygons{region}, cells);
+        infill.ribs.insert(infill.ribs.end(), ribs.begin(), ribs.end());
+    }
+
+    return infill;
+}
+
+// The open cells of the infill: the walls around them and the flat ceiling that closes them at the
+// top. What stands above the ceiling is the solid skin under the top face of the raft, which is
+// what the object rests on.
+indexed_triangle_set create_infill_geometry(const PadInfill & infill,
+                                            const PadConfig3D & cfg,
+                                            ThrowOnCancel       thr)
+{
+    indexed_triangle_set ret;
+
+    if (infill.cells.empty())
+        return ret;
+
+    const double z_floor = -cfg.height, z_ceiling = cfg.infill_cells_top_z();
+
+    for (const ExPolygon &ribs : infill.ribs) {
+        thr();
+
+        // The boundary of what is left of the interior around the cells is what the walls are
+        // built on: the rim along the wall of the raft and the ribs between the cells.
+        its_merge(ret, straight_walls(ribs.contour, z_ceiling, z_floor));
+        for (const Polygon &h : ribs.holes)
+            its_merge(ret, straight_walls(h, z_ceiling, z_floor));
+
+        // The cells are closed at the top by the ribs, so the ceiling of a cell is the floor of the
+        // skin above it and no cell ever reaches under the object.
+        its_merge(ret, triangulate_expolygon_3d(ribs, z_ceiling, NORMALS_DOWN));
+    }
+
+    return ret;
+}
+
+// The bottom face of a raft part, which the cells of the infill go through: the solid rim around
+// the infill and the ribs around the cells, so the walls of the cells stand on its edges.
+indexed_triangle_set create_infill_floor(const ExPolygon & outline,
+                                         const PadInfill & infill,
+                                         double             z)
+{
+    indexed_triangle_set ret;
+
+    if (infill.cells.empty()) {
+        its_merge(ret, triangulate_expolygon_3d(outline, z, NORMALS_DOWN));
+        return ret;
+    }
+
+    for (const ExPolygon &rim : diff_ex(ExPolygons{outline}, infill.interior))
+        its_merge(ret, triangulate_expolygon_3d(rim, z, NORMALS_DOWN));
+
+    for (const ExPolygon &ribs : infill.ribs)
+        its_merge(ret, triangulate_expolygon_3d(ribs, z, NORMALS_DOWN));
+
+    return ret;
+}
+
 bool add_cavity(indexed_triangle_set &pad,
                 ExPolygon &           top_poly,
                 const PadConfig3D &   cfg,
@@ -431,7 +650,12 @@ indexed_triangle_set create_outer_pad_geometry(const ExPolygons & skeleton,
 
         if (bottom_poly.empty()) continue;
         thr();
-        
+
+        // The cells are cut out of the part between the bottom face and the solid skin under the
+        // top face, so the wall and the top face of the raft stay where they were.
+        const PadInfill infill = cut_infill_cells(bottom_poly, cfg);
+        its_merge(ret, create_infill_geometry(infill, cfg, thr));
+
         double z_min = -cfg.height, z_max = 0;
         if (taper_z < 0) {
             its_merge(ret, walls(bevel_poly.contour, top_poly.contour, taper_z, z_max));
@@ -446,8 +670,8 @@ indexed_triangle_set create_outer_pad_geometry(const ExPolygons & skeleton,
         const double hole_z_max = taper_z < 0 ? 0. : z_max;
         for (auto &h : bottom_poly.holes)
             its_merge(ret, straight_walls(h, hole_z_max, z_min));
-        
-        its_merge(ret, triangulate_expolygon_3d(bottom_poly, z_min, NORMALS_DOWN));
+
+        its_merge(ret, create_infill_floor(bottom_poly, infill, z_min));
         its_merge(ret, triangulate_expolygon_3d(top_poly, NORMALS_UP));
     }
 
@@ -463,12 +687,15 @@ indexed_triangle_set create_inner_pad_geometry(const ExPolygons & skeleton,
     double z_max = 0., z_min = -cfg.height;
     for (const ExPolygon &pad_part : skeleton) {
         thr();
+        // An inner part is a straight prism, so its narrowest cross section is its own outline.
+        const PadInfill infill = cut_infill_cells(pad_part, cfg);
+        its_merge(ret, create_infill_geometry(infill, cfg, thr));
         its_merge(ret, straight_walls(pad_part.contour, z_max, z_min));
 
         for (auto &h : pad_part.holes)
             its_merge(ret, straight_walls(h, z_max, z_min));
-    
-        its_merge(ret, triangulate_expolygon_3d(pad_part, z_min, NORMALS_DOWN));
+
+        its_merge(ret, create_infill_floor(pad_part, infill, z_min));
         its_merge(ret, triangulate_expolygon_3d(pad_part, z_max, NORMALS_UP));
     }
 

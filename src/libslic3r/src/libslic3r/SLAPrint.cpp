@@ -67,6 +67,32 @@ using Slic3r::Biz::Slicing::SliceUntilStep;
 using Slic3r::Domain::SlicingId;
 
 namespace {
+// The pattern the inside of the raft is filled with. A config saved before the raft infill keys
+// existed has none, which is the solid slab it always was.
+Domain::SLA::RaftInfill raft_infill(const SLAPrintObjectConfigView &c)
+{
+    Domain::SLA::RaftInfill infill;
+
+    if (c.values().count("raft_infill") == 0)
+        return infill;
+
+    switch (c.get<Domain::sla::RaftInfillType>("raft_infill")) {
+    case Domain::sla::RaftInfillType::None:
+    case Domain::sla::RaftInfillType::Grid:
+    case Domain::sla::RaftInfillType::Honeycomb:
+        break;
+    default:
+        return infill;
+    }
+
+    infill.type       = c.get<Domain::sla::RaftInfillType>("raft_infill");
+    infill.spacing_mm = c.get<double>("raft_infill_spacing");
+    infill.wall_mm    = c.get<double>("raft_infill_wall");
+    infill.skin_mm    = c.get<double>("raft_infill_skin");
+
+    return infill;
+}
+
 // The pad values raft_type stands for, or nullopt for a config that has no raft_type
 // (or one this build does not know), where the pad_enable / pad_around_object
 // checkboxes are the only source of truth.
@@ -95,9 +121,11 @@ std::optional<Domain::SLA::RaftPadValues> raft_values(const SLAPrintObjectConfig
         c.get<double>("pad_object_gap"),
         // A config saved before the edge taper existed has none, which is the sharp edge it
         // always had.
-        c.values().count("raft_edge_taper") == 0 ? 0. : c.get<double>("raft_edge_taper")
+        c.values().count("raft_edge_taper") == 0 ? 0. : c.get<double>("raft_edge_taper"),
+        raft_infill(c)
     );
 }
+
 } // namespace
 
 // Is a raft (pad) printed? raft_type decides, pad_enable is the legacy fallback.
@@ -215,8 +243,9 @@ sla::PadConfig::EmbedObject builtin_pad_cfg(const SLAPrintObjectConfigView& c)
 sla::PadConfig make_pad_cfg(const SLAPrintObjectConfigView& c)
 {
     sla::PadConfig pcfg;
+    const std::optional<Domain::SLA::RaftPadValues> vals = raft_values(c);
 
-    if (const auto vals = raft_values(c); vals) {
+    if (vals) {
         pcfg.wall_thickness_mm = vals->pad_wall_thickness_mm;
         pcfg.wall_slope = vals->pad_wall_slope_deg * PI / 180.0;
         pcfg.max_merge_dist_mm = c.get<double>("pad_max_merge_distance");
@@ -234,6 +263,14 @@ sla::PadConfig make_pad_cfg(const SLAPrintObjectConfigView& c)
         pcfg.edge_taper_mm =
             c.values().count("raft_edge_taper") == 0 ? 0. : c.get<double>("raft_edge_taper");
     }
+
+    // The pattern the raft is filled with is the user's choice, no raft type replaces it, so it is
+    // read the same way whether the raft type mapping applies or not.
+    const Domain::SLA::RaftInfill infill = vals ? vals->raft_infill : raft_infill(c);
+    pcfg.infill.type       = infill.type;
+    pcfg.infill.spacing_mm = infill.spacing_mm;
+    pcfg.infill.wall_mm    = infill.wall_mm;
+    pcfg.infill.skin_mm    = infill.skin_mm;
 
     // set builtin pad implicitly ON
     pcfg.embed_object = builtin_pad_cfg(c);
@@ -703,6 +740,10 @@ const std::map<std::string, std::vector<Step>> invalidated_by{
     {"pad_wall_slope", steps({propagate(slaposPad)})},
     {"pad_wall_thickness", steps({propagate(slaposObjectSlice)})},
     {"raft_edge_taper", steps({propagate(slaposPad)})},
+    {"raft_infill", steps({propagate(slaposPad)})},
+    {"raft_infill_spacing", steps({propagate(slaposPad)})},
+    {"raft_infill_wall", steps({propagate(slaposPad)})},
+    {"raft_infill_skin", steps({propagate(slaposPad)})},
     {"raft_type", steps({propagate(slaposObjectSlice), propagate(slaposPad)})},
     {"printer_model", steps({})},
     {"printer_notes", steps({})},
