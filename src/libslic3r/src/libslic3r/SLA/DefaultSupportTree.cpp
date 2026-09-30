@@ -370,8 +370,9 @@ bool DefaultSupportTree::create_ground_pillar(const Junction &hjp,
     [[maybe_unused]] double stem_taper = 0.;   // see note below: not yet honoured
     if (head_id >= 0 && size_t(head_id) < m_sm.pts->size()) {
         const Domain::SLA::SupportPoint &sp = m_sm.pts->at(head_id);
-        if (sp.base_height > 0.f) base_height_override = double(sp.base_height);
-        if (sp.base_diameter > 0.f) base_radius_override = double(sp.base_diameter) * 0.5;
+        const BaseSize base = base_size(m_sm, &sp);
+        base_height_override = base.height;
+        base_radius_override = base.radius;
         if (sp.stem_sides != 0) stem_sides = sp.stem_sides;
         if (sp.stem_taper > 0.f) stem_taper = double(sp.stem_taper);
         full_pillar_radius = head_back_radius(m_sm, sp);
@@ -428,13 +429,11 @@ void DefaultSupportTree::add_pinheads()
     auto heads = reserve_vector<Head>(m_sm.pts->size());
     for (const Domain::SLA::SupportPoint &sp : *m_sm.pts) {
         m_thr();
-        double tip_len = sp.tip_length > 0.f ? double(sp.tip_length) : m_sm.cfg.head_width_mm;
-        double contact_d = sp.contact_depth > 0.f ? double(sp.contact_depth) : m_sm.cfg.head_penetration_mm;
         heads.emplace_back(
             NaNd,
             sp.head_front_radius,
             0.,
-            contact_d,
+            head_penetration(m_sm, sp),
             Vec3d::Zero(),         // dir
             sp.pos.cast<double>()  // displacement
             );
@@ -467,7 +466,7 @@ void DefaultSupportTree::add_pinheads()
         const Domain::SLA::SupportPoint &sp = m_sm.pts->at(fidx);
         double lmin = sp.tip_length > 0.f ? double(sp.tip_length) : m_sm.cfg.head_width_mm;
         double lmax = lmin;
-        double pen = sp.contact_depth > 0.f ? double(sp.contact_depth) : m_sm.cfg.head_penetration_mm;
+        double pen = head_penetration(m_sm, sp);
 
         if (back_r < m_sm.cfg.head_back_radius_mm) {
             lmin = 0., lmax = pen;
