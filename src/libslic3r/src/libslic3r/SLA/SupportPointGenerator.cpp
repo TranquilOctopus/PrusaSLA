@@ -10,6 +10,7 @@
 // SupportIslands
 #include "libslic3r/SLA/SupportIslands/UniformSupportIsland.hpp"
 #include "libslic3r/SLA/SupportIslands/SampleConfigFactory.hpp"
+#include "libslic3r/SLA/SupportFacetPaint.hpp"
 #include "Slic3r/Biz/Algorithms/BoundingBox.hpp"
 #include "Slic3r/Biz/Algorithms/ExPolygon.hpp"
 #include "Slic3r/Biz/Algorithms/Point.hpp"
@@ -392,6 +393,98 @@ void support_island(const LayerPart &part, NearPoints& near_points, float part_z
             /* radius_curve_index */ 0,
             /* current_radius */ static_cast<coord_t>(scale_(cfg.support_curve.front().x()))
         });
+}
+
+/// <summary>
+/// Drop the overhang samples that lie in a region the user painted as a blocker.
+/// <para></para>
+/// The samples are the only thing a blocker takes away. An island point is made from the shape of the
+/// part and not from a sample, so an island inside a blocked region keeps the points it needs.
+/// </summary>
+/// <param name="samples">Sampled overhangs of one surface</param>
+/// <param name="facet_paint">The painted facets of the mesh, sliced into the layers</param>
+/// <param name="layer_id">The layer the samples were made on</param>
+/// <returns>Samples that are not in a blocked region of their own layer</returns>
+Points filter_blocked_samples(Points samples, const SupportFacetPaint &facet_paint, size_t layer_id)
+{
+    if (facet_paint.blockers(layer_id).empty())
+        return samples;
+
+    std::erase_if(samples, [&facet_paint, layer_id](const Point &p) {
+        return facet_paint.is_blocked(layer_id, p);
+    });
+    return samples;
+}
+
+/// <summary>
+/// Make the support points of the regions the user painted as enforcers.
+/// <para></para>
+/// The region is sampled the way an island is sampled, with the density of the islands, and the
+/// points are made even where the overhang rule would skip the surface: the painting is what the
+/// user asked for, not a hint. A region that is painted as a blocker as well is not sampled.
+/// </summary>
+/// <param name="regions">Enforced regions of the layer</param>
+/// <param name="blockers">Blocked regions of the same layer</param>
+/// <param name="enforced">OUT grid the created points are stored in</param>
+/// <param name="layer_grids">Grids of the layer, the points it already has</param>
+/// <param name="part_z">current z coordinate of the layer</param>
+/// <param name="config">Configuration of the sampling</param>
+void support_enforced_regions(
+    const ExPolygons &regions,
+    const ExPolygons &blockers,
+    NearPoints &enforced,
+    const NearPointss &layer_grids,
+    float part_z,
+    const SupportPointGeneratorConfig &config
+) {
+    if (regions.empty())
+        return;
+
+    // A blocker wins: no point is placed where the user forbade one.
+    const ExPolygons open_regions = blockers.empty() ? regions : diff_ex(regions, blockers);
+    if (open_regions.empty())
+        return;
+
+    // The head of a support point has a size, so two points may not lie on the same spot. The
+    // sampler keeps the distance of a head radius inside its own region, this is about the points
+    // the layer already has.
+    const coord_t head_diameter = static_cast<coord_t>(scale_(config.head_diameter));
+    const double  head_radius_sq = sqr(0.5 * static_cast<double>(head_diameter));
+    auto is_nearer_than_head = [head_radius_sq](const LayerSupportPoint &point, const Point &pos) {
+        return (point.position_on_layer - pos).cast<double>().squaredNorm() < head_radius_sq;
+    };
+    auto exist_near_point = [&layer_grids, head_diameter, &is_nearer_than_head](const Point &pos) {
+        return std::any_of(layer_grids.begin(), layer_grids.end(),
+            [&pos, head_diameter, &is_nearer_than_head](const NearPoints &grid) {
+                return grid.exist_true_in_radius(pos, head_diameter / 2, is_nearer_than_head);
+            });
+    };
+
+    const Points no_permanent;
+    for (const ExPolygon &region : open_regions) {
+        for (const SupportIslandPointPtr &sample :
+             uniform_support_island(region, no_permanent, config.island_configuration)) {
+            if (exist_near_point(sample->point))
+                continue; // the layer has a support point at this spot already
+
+            // The point is an island point: it is made of the shape of a region, not of a sample of
+            // an overhang, and the tree builds it like the point of an island.
+            enforced.add(LayerSupportPoint{
+                SupportPoint{
+                    Vec3f{
+                        unscale<float>(sample->point.x()),
+                        unscale<float>(sample->point.y()),
+                        part_z
+                    },
+                    /* head_front_radius */ config.head_diameter / 2,
+                    SupportPointType::island
+                },
+                /* position_on_layer */ sample->point,
+                /* radius_curve_index */ 0,
+                /* current_radius */ static_cast<coord_t>(scale_(config.support_curve.front().x()))
+            });
+        }
+    }
 }
 
 void support_peninsulas(const Peninsulas& peninsulas, NearPoints& near_points, float part_z,
@@ -1102,7 +1195,8 @@ SupportPointGeneratorData Slic3r::sla::prepare_generator_data(
     const std::vector<float> &heights,
     const PrepareSupportConfig &config,
     ThrowOnCancel throw_on_cancel,
-    StatusFunction statusfn
+    StatusFunction statusfn,
+    SupportFacetPaint facet_paint
 ) {
     // check input
     assert(!slices.empty());
@@ -1113,6 +1207,7 @@ SupportPointGeneratorData Slic3r::sla::prepare_generator_data(
     // Move input into result
     SupportPointGeneratorData result;
     result.slices = std::move(slices);
+    result.facet_paint = std::move(facet_paint);
 
     // Allocate empty layers.
     result.layers = Layers(result.slices.size());
@@ -1180,8 +1275,11 @@ SupportPointGeneratorData Slic3r::sla::prepare_generator_data(
     // Surfaces steeper than the configured angle from horizontal get no sample. The default
     // (90 degrees, a wall) is not steeper than anything, so it keeps every overhang.
     const bool drop_steep_overhangs = config.overhang_angle_threshold < 90.;
+    // A surface the user painted as a blocker gets no sample either. Island points are not made of
+    // samples, so an island in a blocked region keeps its points.
+    const bool drop_blocked_overhangs = result.facet_paint.has_blocker_regions;
     execution::for_each(execution::ex_tbb, size_t(1), result.layers.size(),
-    [&result, &heights, &config, sample_distance_in_um2, drop_steep_overhangs, throw_on_cancel](size_t layer_id) {
+    [&result, &heights, &config, sample_distance_in_um2, drop_steep_overhangs, drop_blocked_overhangs, throw_on_cancel](size_t layer_id) {
         if ((layer_id % 32) == 0)
             throw_on_cancel();
 
@@ -1199,6 +1297,9 @@ SupportPointGeneratorData Slic3r::sla::prepare_generator_data(
             if (drop_steep_overhangs)
                 it_part->samples = filter_steep_overhangs(
                     *it_part, layer_height, config.overhang_angle_threshold);
+            if (drop_blocked_overhangs)
+                it_part->samples = filter_blocked_samples(
+                    std::move(it_part->samples), result.facet_paint, layer_id);
         }
     }, 8 /* gransize */);
 
@@ -1690,6 +1791,21 @@ LayerSupportPoints generate_support_points(
             support_part_overhangs(part, config, near_points, layer.print_z, maximal_radius, spacing);
             grids.push_back(std::move(near_points));
         }
+
+        // The regions the user painted as enforcers are sampled after all the parts of the layer, so
+        // that the sample of one part of the layer does not suppress the point of another one. Their
+        // points are kept in a grid of their own for the same reason: they carry the support of the
+        // region they were made for and do not take the suppression of a part of the layer above away
+        // from it.
+        if (data.facet_paint.has_enforcer_regions) {
+            NearPoints enforced(&result);
+            support_enforced_regions(
+                data.facet_paint.enforcers(layer_id), data.facet_paint.blockers(layer_id), enforced,
+                grids, layer.print_z, config);
+            if (!enforced.get_indices().empty())
+                grids.push_back(std::move(enforced));
+        }
+
         prev_grids = std::move(grids);
 
         throw_on_cancel();

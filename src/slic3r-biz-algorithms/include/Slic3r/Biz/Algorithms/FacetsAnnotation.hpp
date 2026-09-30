@@ -11,6 +11,12 @@ bool has_facets(const Domain::FacetsAnnotation &facets_annotation, Domain::Trian
 indexed_triangle_set get_facets(const Domain::FacetsAnnotation &facets_annotation, const Domain::ModelVolume &model_volume, Domain::TriangleSelector::TriangleStateType type);
 indexed_triangle_set get_facets_strict(const Domain::FacetsAnnotation &facets_annotation, const Domain::ModelVolume &model_volume, Domain::TriangleSelector::TriangleStateType type);
 
+// The same over the painting and the mesh it was made on, for a caller that has the mesh but not
+// the volume it belongs to: the support tool snapshots the volumes as meshes (SupportToolModelMesh).
+// The painting is indexed by the triangles of that very mesh.
+indexed_triangle_set get_facets(const Domain::TriangleSelector::TriangleSplittingData &painting, const Domain::TriangleMesh &mesh, Domain::TriangleSelector::TriangleStateType type);
+indexed_triangle_set get_facets_strict(const Domain::TriangleSelector::TriangleSplittingData &painting, const Domain::TriangleMesh &mesh, Domain::TriangleSelector::TriangleStateType type);
+
 Domain::indexed_triangle_set_with_color get_all_facets_with_colors(const Domain::FacetsAnnotation &facets_annotation, const Domain::ModelVolume &model_volume);
 Domain::indexed_triangle_set_with_color get_all_facets_strict_with_colors(const Domain::FacetsAnnotation &facets_annotation, const Domain::ModelVolume &model_volume);
 

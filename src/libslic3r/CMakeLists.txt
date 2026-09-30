@@ -326,6 +326,7 @@ set(SLIC3R_SOURCES
     src/libslic3r/SLA/JobController.hpp
     src/libslic3r/SLA/Pad.hpp
     src/libslic3r/SLA/SupportIslands/SampleConfig.hpp
+    src/libslic3r/SLA/SupportFacetPaint.hpp
     src/libslic3r/SLA/SupportPointGenerator.hpp
     src/libslic3r/SLA/SupportTree.hpp
     src/libslic3r/SLA/SupportTreeStrategies.hpp
@@ -355,6 +356,7 @@ set(SLIC3R_SOURCES
     src/libslic3r/SLA/SupportIslands/SupportIslandPoint.hpp
     src/libslic3r/SLA/SupportIslands/UniformSupportIsland.cpp
     src/libslic3r/SLA/SupportIslands/UniformSupportIsland.hpp
+    src/libslic3r/SLA/SupportFacetPaint.cpp
     src/libslic3r/SLA/SupportPointGenerator.cpp
     src/libslic3r/SLA/Rotfinder.cpp
     src/libslic3r/SLA/Rotfinder.hpp

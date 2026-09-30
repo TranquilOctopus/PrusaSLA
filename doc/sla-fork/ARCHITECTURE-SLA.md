@@ -364,6 +364,21 @@ clipper); `App/Plater/SlaHeightBandMeshes.{hpp,cpp}` collects the meshes it cuts
 `App/Plater/SlaUnsupportedObjects.{hpp,cpp}` is the "sliced with no support structure" rule, shared
 with the pre-export check; `SlaUnsupportedNotification.{hpp,cpp}` shows it.
 
+### Support painting
+
+The facets the user painted on the model (`ModelVolume::supported_facets`, the same field the FFF
+`PaintOnSupportsGizmo` writes) are honoured by the auto support generator. The new
+`SLA/SupportFacetPaint.hpp` and `.cpp` (namespace `Slic3r::sla`) hold `SupportFacetPaint` (the enforcer
+and blocker regions of every layer) and `support_facet_paint(parts, object_to_world, heights,
+cancel)`, which reads the painted facets of a `SupportToolModelMesh` (each part carries the
+`TriangleSplittingData` of its volume) and projects them into the slabs of the layers with
+`slice_mesh_slabs`, the way `PrintObject::project_and_append_custom_facets` does it for FFF.
+`SupportPointGeneratorData` carries the paint: `prepare_generator_data` drops the overhang samples of
+a blocked layer, and `generate_support_points` samples an enforced region with the island sampler and
+the configured density. The paint is built by `generate_support_points_for_tool` and by the
+`prepare_for_generate_supports` step, so the tool and the slice time agree. A facet that has no area
+in a layer (a vertical wall) paints nothing in that layer, as in the FFF path.
+
 Parity checklists against the legacy gizmos: `doc/sla-fork/parity/support-points.md` and
 `doc/sla-fork/parity/hollow.md`.
 

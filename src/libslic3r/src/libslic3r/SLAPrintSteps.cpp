@@ -32,7 +32,9 @@
 #include <libslic3r/SLAPrintSteps.hpp>
 #include "Slic3r/Biz/CGAL/Algorithms/MeshBoolean.hpp"
 #include <libslic3r/TriangleMeshSlicer.hpp>
+#include <libslic3r/SLASupportTool.hpp>
 #include <libslic3r/SLA/Pad.hpp>
+#include <libslic3r/SLA/SupportFacetPaint.hpp>
 #include <libslic3r/SLA/SupportPointGenerator.hpp>
 #include <libslic3r/SLA/ZCorrection.hpp>
 #include <libslic3r/SLA/CavityDetection.hpp>
@@ -288,6 +290,17 @@ static std::vector<ExPolygons> slice_volumes(
     }
 
     return out;
+}
+
+// The facets the user painted on the model of the object, as the regions of the model height
+// levels, so that the support point generator can honour the painting of the facets exactly like
+// it honours the enforcer and blocker modifier volumes. The painting lives on the volumes of the
+// model and the points are generated on the assembled mesh, so the regions are the projection of the
+// painted facets, the same way PrintObject::project_and_append_custom_facets does it for FFF.
+static sla::SupportFacetPaint facet_paint_of(SLAPrintObject &po, const sla::ThrowOnCancel &cancel)
+{
+    return sla::support_facet_paint(sla::support_tool_model_mesh(*po.model_object()), po.trafo(),
+                                    po.m_model_height_levels, cancel);
 }
 
 template<class T> T level(const SliceRecord &sr)
@@ -660,7 +673,8 @@ void SLAPrint::Steps::prepare_for_generate_supports(SLAPrintObject &po) {
             report_status(current, OBJ_STEP_LABELS(slaposSupportPoints));
     };
     po.m_support_point_generator_data =
-        prepare_generator_data(std::move(slices), heights, prepare_cfg, cancel, status);
+        prepare_generator_data(std::move(slices), heights, prepare_cfg, cancel, status,
+                               facet_paint_of(po, cancel));
 }
 
 // The slicing will be performed on an imaginary 1D grid which starts from
