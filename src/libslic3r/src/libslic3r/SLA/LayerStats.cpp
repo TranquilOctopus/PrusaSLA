@@ -95,7 +95,7 @@ PeelForceCoefficients PeelForceSettings::coefficients() const
     if (area_coefficient > 0.)
         out.area_coefficient_n_per_mm2 = area_coefficient;
     if (perimeter_coefficient > 0.)
-        out.perimeter_coefficient_n_per_mm2 = perimeter_coefficient;
+        out.perimeter_coefficient_n_per_mm = perimeter_coefficient;
     return out;
 }
 
@@ -154,7 +154,7 @@ std::vector<float> peel_force_estimate(const std::vector<LayerPeelInput>& layers
 
     for (const LayerPeelInput& layer : layers) {
         double force = coefficients.area_coefficient_n_per_mm2 * layer.area_mm2
-                     + coefficients.perimeter_coefficient_n_per_mm2 * layer.perimeter_mm
+                     + coefficients.perimeter_coefficient_n_per_mm * layer.perimeter_mm
                      + coefficients.suction_coefficient_n_per_mm2 * layer.suction_area_mm2;
         forces.push_back(static_cast<float>(force));
     }
