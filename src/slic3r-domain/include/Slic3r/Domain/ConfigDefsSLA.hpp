@@ -21,6 +21,15 @@ namespace sla {
     // same three values live on the point itself (SLA::SupportPoint::TipShape), which is where the
     // value is used once it is placed.
     enum class SupportTipShape { Default, Cone, Ball };
+    // The shape of the foot where a pillar meets the raft or the build plate, as support_base_shape
+    // stores it: a cone that flares gradually, a straight cylinder of the base diameter, or a thin
+    // flat disc under a pillar that runs straight into it. The same three values live on the point
+    // itself (SLA::SupportPoint::BaseShape), whose Default means the value configured here.
+    enum class SupportBaseShape { Cone, Cylinder, Flat };
+    // The material of the film at the bottom of the vat. It is the hardest pull a layer puts on
+    // the film, so it picks the coefficients of the peel force estimate, see the vat_film_type
+    // key and doc/sla-fork/profiling/peel-force.md.
+    enum class VatFilmType { FEP, nFEP, PFA, ACF };
 }
 
 enum TowerSpeeds : int {

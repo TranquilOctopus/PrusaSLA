@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <string>
 #include <vector>
 #include <optional>
 
@@ -29,10 +30,11 @@ struct OutputFiles
 /// Reserved for M4.8/M5.8: per-print issue list (islands, cups, trapped resin, etc.)
 struct SlaIssue
 {
-    enum class Kind { Island, Cup, TrappedResin, Other };
+    enum class Kind { Island, Cup, TrappedResin, HighPeelForce, Other };
     Kind kind = Kind::Other;
     size_t layer = 0;
     Domain::ObjectID object_id{};
+    std::string object_name; //< the model the issue was found on, empty when unknown
     Domain::Vec3d position = Domain::Vec3d::Zero();
     std::string note;
 };

@@ -33,6 +33,7 @@ public:
         std::function<void(double)> base_height_changed = [](double) {};
         std::function<void(Domain::SLA::SupportPoint::TipShape)> tip_shape_changed = [](
             Domain::SLA::SupportPoint::TipShape) {};
+        std::function<void(double)> tip_length_changed = [](double) {};
         std::function<void(double)> knot_diameter_changed = [](double) {};
         std::function<void(double)> stem_sides_changed = [](double) {};
         std::function<void(double)> stem_taper_changed = [](double) {};
@@ -66,10 +67,13 @@ public:
     void set_base_diameter_use_global(bool use_global);
     void set_base_height_use_global(bool use_global);
 
-    /// Shows the tip shape, knot, stem cross-section and stem taper of the selected points (M2.16c).
-    /// An empty @p geometry means nothing is selected or the points disagree on one of the values:
-    /// the fields are then left empty instead of showing a value only some of the points have.
-    void set_support_geometry(const std::optional<SlaSupportGeometry>& geometry);
+/// Shows the tip shape, tip length, knot, stem cross-section and stem taper of the selected points
+/// (M2.16c, M2.24). An empty @p geometry means nothing is selected or the points disagree on one of
+/// the values: the fields are then left empty instead of showing a value only some of the points
+/// have. @p has_selection tells the two apart for the tip diameter, which is the head diameter
+/// control as well: with nothing selected it keeps showing the diameter a new point takes.
+void set_support_geometry(const std::optional<SlaSupportGeometry>& geometry, bool has_selection);
+
     void set_clipping_plane_position(double pos);
     void set_lock_island_supports(bool locked);
     void set_active_preset(int index);
@@ -89,9 +93,11 @@ private:
     Yoga::ToggleButton* m_pillar_diameter_use_global_checkbox = nullptr;
     Yoga::ToggleButton* m_base_diameter_use_global_checkbox = nullptr;
     Yoga::ToggleButton* m_base_height_use_global_checkbox = nullptr;
-    // The per-point support geometry (M2.16c), the section the tip shape and the knot belong to and
-    // the stem the side count and the taper.
+    // The per-point support geometry (M2.16c, M2.24): the tip diameter (which is the head diameter
+    // slider above), the section the tip shape, the tip length and the knot belong to, and the stem
+    // the side count and the taper.
     Yoga::ComboBox* m_tip_shape_combo = nullptr;
+    Yoga::SliderWithInput* m_tip_length_slider = nullptr;
     Yoga::SliderWithInput* m_knot_diameter_slider = nullptr;
     Yoga::SliderWithInput* m_stem_sides_slider = nullptr;
     Yoga::SliderWithInput* m_stem_taper_slider = nullptr;

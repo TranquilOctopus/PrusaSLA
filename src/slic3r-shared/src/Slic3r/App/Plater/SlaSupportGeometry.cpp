@@ -11,7 +11,10 @@ using Domain::SLA::SupportPoints;
 SlaSupportGeometry support_geometry_of(const SupportPoint& point)
 {
     SlaSupportGeometry geometry;
+    // The tool works in diameters, the point stores the radii of the tip and of the knot.
+    geometry.tip_diameter_mm  = 2. * static_cast<double>(point.head_front_radius);
     geometry.tip_shape        = point.tip_shape;
+    geometry.tip_length_mm    = point.tip_length;
     geometry.knot_diameter_mm = 2. * static_cast<double>(point.knot_radius);
     geometry.stem_sides       = point.stem_sides;
     geometry.stem_taper       = point.stem_taper;
@@ -25,8 +28,14 @@ void apply_support_geometry(
 )
 {
     switch (field) {
+    case SupportGeometryField::TipDiameter:
+        point.head_front_radius = static_cast<float>(geometry.tip_diameter_mm / 2.);
+        break;
     case SupportGeometryField::TipShape:
         point.tip_shape = geometry.tip_shape;
+        break;
+    case SupportGeometryField::TipLength:
+        point.tip_length = static_cast<float>(geometry.tip_length_mm);
         break;
     case SupportGeometryField::KnotDiameter:
         // The tool works in diameters, the point stores the radius of the knot.
@@ -43,8 +52,12 @@ void apply_support_geometry(
 
 void apply_support_geometry(SupportPoint& point, const SlaSupportGeometry& geometry)
 {
+    // The tip diameter is not among them: the generator fills the head radius from the tree type
+    // it was asked for, and a point placed by hand takes the tip diameter of the tool, which is the
+    // one this geometry carries (see SlaSupportPointsEditing::add_point).
     for (const SupportGeometryField field :
          {SupportGeometryField::TipShape,
+          SupportGeometryField::TipLength,
           SupportGeometryField::KnotDiameter,
           SupportGeometryField::StemSides,
           SupportGeometryField::StemTaper}) {

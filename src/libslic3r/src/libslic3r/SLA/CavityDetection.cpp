@@ -339,4 +339,16 @@ CavityAnalysis detect_cavities(const std::vector<ExPolygons>& layers,
     return out;
 }
 
+std::vector<float> cup_suction_area_mm2(const std::vector<CupHit>& cups, size_t layer_count)
+{
+    std::vector<float> areas(layer_count, 0.f);
+    for (const CupHit& cup : cups) {
+        // The opening is counted on every layer the cup is a hole of, which is from the layer
+        // that holds the opening up to the one below the roof.
+        for (size_t layer = cup.first_layer; layer <= cup.last_layer && layer < layer_count; ++layer)
+            areas[layer] += static_cast<float>(cup.opening_area_mm2);
+    }
+    return areas;
+}
+
 } // namespace Slic3r::SLA

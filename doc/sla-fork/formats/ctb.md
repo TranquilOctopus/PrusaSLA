@@ -101,7 +101,7 @@ bottom layer count from `sla_bottom_layer_count()` and the transition layers fro
 | 25 | f32 | total weight, g | volume x the density `bottle_weight` / `bottle_volume` | unverified |
 | 26 | f32 | total price | volume x `bottle_cost` / `bottle_volume` | unverified |
 | 27-28 | char[8] | `"USD"` | price unit. The table counts 32-bit words, so this field is two of them | unverified |
-| 29 | u32 | 1 | anti-aliasing | unverified |
+| 29 | u32 | 1, or 0 when `gamma_correction` is 0 | anti-aliasing: the AA level of the raster, which is 1 unless the rasterizer thresholded it to a binary image (M4.13b) | unverified |
 | 30 | u32 | 0 | reserved | unverified |
 
 Word 24 is the only one that needs the print statistics; the rest of the block is the resin and the

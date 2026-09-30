@@ -31,6 +31,10 @@ void pad_blueprint(
 
 struct PadConfig {
     double wall_thickness_mm = 1.;
+    // How thick the slab on the build plate the raft stands on is, which need not be the
+    // thickness of the walls above it. Zero keeps the floor as thick as the walls, which is the
+    // raft the generator has always built.
+    double floor_thickness_mm = 0.;
     double wall_height_mm = 1.;
     double max_merge_dist_mm = 50;
     double wall_slope = std::atan(1.0);          // Universal constant for Pi/4
@@ -87,9 +91,16 @@ struct PadConfig {
         return wall_height_mm / std::tan(wall_slope);
     }
 
+    /// The thickness of the slab the raft stands on. Zero is the wall thickness, so a raft with
+    /// no floor thickness of its own is the one the generator has always built.
+    inline double floor_thickness() const
+    {
+        return floor_thickness_mm > 0. ? floor_thickness_mm : wall_thickness_mm;
+    }
+
     inline double full_height() const
     {
-        return wall_height_mm + wall_thickness_mm;
+        return wall_height_mm + floor_thickness();
     }
 
     /// Returns the elevation needed for compensating the pad.

@@ -378,12 +378,15 @@ bool DefaultSupportTree::create_ground_pillar(const Junction &hjp,
     double base_height_override = 0.;
     double base_radius_override = 0.;
     double full_pillar_radius = m_sm.cfg.head_back_radius_mm;
+    // A point may ask for a foot of a shape of its own, the others get the configured one.
+    Domain::sla::SupportBaseShape base_shape = m_sm.cfg.base_shape;
     StemGeometry stem;     // round and untapered unless the point asks for more
     if (head_id >= 0 && size_t(head_id) < m_sm.pts->size()) {
         const Domain::SLA::SupportPoint &sp = m_sm.pts->at(head_id);
         const BaseSize base = base_size(m_sm, &sp);
         base_height_override = base.height;
         base_radius_override = base.radius;
+        base_shape = base.shape;
         stem = stem_geometry(m_sm, &sp);
         full_pillar_radius = head_back_radius(m_sm, sp);
     }
@@ -399,7 +402,8 @@ bool DefaultSupportTree::create_ground_pillar(const Junction &hjp,
                                                       base_height_override,
                                                       base_radius_override,
                                                       full_pillar_radius,
-                                                      stem);
+                                                      stem,
+                                                      base_shape);
 
     if (pillar_id >= 0) // Save the pillar endpoint in the spatial index
         m_pillar_index.guarded_insert(m_builder.pillar(pillar_id).endpt,
@@ -473,7 +477,11 @@ void DefaultSupportTree::add_pinheads()
         Vec3d hp = m_points.row(fidx);
 
         const Domain::SLA::SupportPoint &sp = m_sm.pts->at(fidx);
-        double lmin = sp.tip_length > 0.f ? double(sp.tip_length) : m_sm.cfg.head_width_mm;
+        // The length of the tapered tip: the one the point carries, else the configured default
+        // (support_tip_length), else the pinhead width, which is what the tree has always built.
+        double lmin = sp.tip_length > 0.f ? double(sp.tip_length) : m_sm.cfg.tip_length_mm;
+        if (lmin <= 0.)
+            lmin = m_sm.cfg.head_width_mm;
         double lmax = lmin;
         double pen = head_penetration(m_sm, sp);
 

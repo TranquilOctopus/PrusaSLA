@@ -96,6 +96,13 @@ Domain::SLA::RaftInfill raft_infill(const SLAPrintObjectConfigView &c)
     return infill;
 }
 
+// The value of a raft knob a config may not have at all: a print preset saved before the knob
+// existed carries none of it, which is the raft of that day.
+double raft_knob_mm(const SLAPrintObjectConfigView &c, const char *key)
+{
+    return c.values().count(key) == 0 ? 0. : c.get<double>(key);
+}
+
 // The pad values raft_type stands for, or nullopt for a config that has no raft_type
 // (or one this build does not know), where the pad_enable / pad_around_object
 // checkboxes are the only source of truth.
@@ -122,10 +129,12 @@ std::optional<Domain::SLA::RaftPadValues> raft_values(const SLAPrintObjectConfig
         c.get<double>("pad_brim_size"),
         c.get<double>("pad_wall_slope"),
         c.get<double>("pad_object_gap"),
-        // A config saved before the edge taper existed has none, which is the sharp edge it
-        // always had.
-        c.values().count("raft_edge_taper") == 0 ? 0. : c.get<double>("raft_edge_taper"),
-        raft_infill(c)
+        // The edge taper and the floor thickness came later than the knobs above them, so a
+        // config without them is the raft it has always been: a sharp edge and a floor as thick as
+        // the wall.
+        raft_knob_mm(c, "raft_edge_taper"),
+        raft_infill(c),
+        raft_knob_mm(c, "raft_floor_thickness")
     );
 }
 
@@ -172,6 +181,9 @@ sla::SupportTreeConfig make_support_cfg(const SLAPrintObjectConfigView& c)
             c.get<Percentage>("support_small_pillar_diameter_percent").get_abs_value(1.0) * pillar_r;
         scfg.head_penetration_mm = c.get<double>("support_head_penetration");
         scfg.head_width_mm = c.get<double>("support_head_width");
+        // The tip length a support point that carries no tip length of its own is built with
+        // (M2.24). Zero keeps the pinhead width, which is what the tree has always built.
+        scfg.tip_length_mm = c.get<double>("support_tip_length");
         scfg.object_elevation_mm = is_zero_elevation(c) ?
                                        0. : c.get<double>("support_object_elevation");
         scfg.bridge_slope = c.get<double>("support_critical_angle") * PI / 180.0 ;
@@ -185,6 +197,7 @@ sla::SupportTreeConfig make_support_cfg(const SLAPrintObjectConfigView& c)
         scfg.pillar_widening_factor = c.get<double>("support_pillar_widening_factor");
         scfg.base_radius_mm = 0.5*c.get<double>("support_base_diameter");
         scfg.base_height_mm = c.get<double>("support_base_height");
+        scfg.base_shape = c.get<Domain::sla::SupportBaseShape>("support_base_shape");
         scfg.pillar_base_safety_distance_mm =
             c.get<double>("support_base_safety_distance") < EPSILON ?
                 scfg.safety_distance_mm : c.get<double>("support_base_safety_distance");
@@ -213,6 +226,7 @@ sla::SupportTreeConfig make_support_cfg(const SLAPrintObjectConfigView& c)
         scfg.pillar_widening_factor = c.get<double>("branchingsupport_pillar_widening_factor");
         scfg.base_radius_mm = 0.5*c.get<double>("branchingsupport_base_diameter");
         scfg.base_height_mm = c.get<double>("branchingsupport_base_height");
+        scfg.base_shape = c.get<Domain::sla::SupportBaseShape>("branchingsupport_base_shape");
         scfg.pillar_base_safety_distance_mm =
             c.get<double>("branchingsupport_base_safety_distance") < EPSILON ?
                 scfg.safety_distance_mm : c.get<double>("branchingsupport_base_safety_distance");
@@ -255,6 +269,7 @@ sla::PadConfig make_pad_cfg(const SLAPrintObjectConfigView& c)
         pcfg.wall_height_mm = vals->pad_wall_height_mm;
         pcfg.brim_size_mm = vals->pad_brim_size_mm;
         pcfg.edge_taper_mm = vals->raft_edge_taper_mm;
+        pcfg.floor_thickness_mm = vals->raft_floor_thickness_mm;
     } else {
         // Legacy behavior
         pcfg.wall_thickness_mm = c.get<double>("pad_wall_thickness");
@@ -263,8 +278,8 @@ sla::PadConfig make_pad_cfg(const SLAPrintObjectConfigView& c)
         pcfg.max_merge_dist_mm = c.get<double>("pad_max_merge_distance");
         pcfg.wall_height_mm = c.get<double>("pad_wall_height");
         pcfg.brim_size_mm = c.get<double>("pad_brim_size");
-        pcfg.edge_taper_mm =
-            c.values().count("raft_edge_taper") == 0 ? 0. : c.get<double>("raft_edge_taper");
+        pcfg.edge_taper_mm = raft_knob_mm(c, "raft_edge_taper");
+        pcfg.floor_thickness_mm = raft_knob_mm(c, "raft_floor_thickness");
     }
 
     // The pattern the raft is filled with is the user's choice, no raft type replaces it, so it is
@@ -650,6 +665,7 @@ const std::map<std::string, std::vector<Step>> invalidated_by{
     {"branchingsupport_base_diameter", steps({propagate(slaposSupportTree)})},
     {"branchingsupport_base_height", steps({propagate(slaposSupportTree)})},
     {"branchingsupport_base_safety_distance", steps({propagate(slaposSupportTree)})},
+    {"branchingsupport_base_shape", steps({propagate(slaposSupportTree)})},
     {"branchingsupport_buildplate_only", steps({propagate(slaposSupportTree)})},
     {"branchingsupport_critical_angle", steps({propagate(slaposSupportTree)})},
     {"branchingsupport_head_front_diameter", steps({propagate(slaposSupportTree)})},
@@ -730,6 +746,12 @@ const std::map<std::string, std::vector<Step>> invalidated_by{
     {"min_exposure_time", steps({propagate(slapsMergeSlicesAndEval)})},
     {"min_initial_exposure_time", steps({propagate(slapsMergeSlicesAndEval)})},
     {"output_filename_format", steps({})},
+    // The peel force model is computed together with the layer statistics, so the vat film and
+    // the two coefficients and the warning only need the merge step again, like area_fill above.
+    {"peel_area_coefficient", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"peel_force_warning", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"peel_perimeter_coefficient", steps({propagate(slapsMergeSlicesAndEval)})},
+    {"vat_film_type", steps({propagate(slapsMergeSlicesAndEval)})},
     {"pad_around_object", steps({propagate(slaposObjectSlice)})},
     {"pad_around_object_everywhere", steps({propagate(slaposObjectSlice)})},
     {"pad_brim_size", steps({propagate(slaposPad)})},
@@ -743,6 +765,9 @@ const std::map<std::string, std::vector<Step>> invalidated_by{
     {"pad_wall_slope", steps({propagate(slaposPad)})},
     {"pad_wall_thickness", steps({propagate(slaposObjectSlice)})},
     {"raft_edge_taper", steps({propagate(slaposPad)})},
+    // A thicker floor is a taller raft, so the pad mesh, the slices and the raft interface band
+    // that sits on top of it are all built again.
+    {"raft_floor_thickness", steps({propagate(slaposPad)})},
     {"raft_infill", steps({propagate(slaposPad)})},
     {"raft_infill_spacing", steps({propagate(slaposPad)})},
     {"raft_infill_wall", steps({propagate(slaposPad)})},
@@ -772,6 +797,7 @@ const std::map<std::string, std::vector<Step>> invalidated_by{
     {"support_base_diameter", steps({propagate(slaposSupportTree)})},
     {"support_base_height", steps({propagate(slaposSupportTree)})},
     {"support_base_safety_distance", steps({propagate(slaposSupportTree)})},
+    {"support_base_shape", steps({propagate(slaposSupportTree)})},
     {"support_brace_diameter", steps({propagate(slaposSupportTree)})},
     {"support_brace_enable", steps({propagate(slaposSupportTree)})},
     {"support_brace_start_height", steps({propagate(slaposSupportTree)})},
@@ -814,6 +840,9 @@ const std::map<std::string, std::vector<Step>> invalidated_by{
     {"support_small_pillar_diameter_percent", steps({propagate(slaposSupportTree)})},
     {"support_stem_sides", steps({})},
     {"support_stem_taper", steps({})},
+    // M2.24: the default tip length of a support point. The default tree reads it for every point
+    // that carries no tip length of its own, so it rebuilds the trees.
+    {"support_tip_length", steps({propagate(slaposSupportTree)})},
     {"support_tip_shape", steps({})},
     {"support_tree_type", steps({propagate(slaposObjectSlice)})},
     {"supports_enable", steps({propagate(slaposObjectSlice)})},

@@ -1,5 +1,6 @@
 #include "Slic3r/App/OverrideSettingsDialog.hpp"
 
+#include "Slic3r/App/SlaRaftSettings.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
 
@@ -80,7 +81,13 @@ OverrideSettingsDialog::OverrideSettingsDialog(Biz::ProjectInteractor& project_i
     m_category_filter = std::make_shared<OverrideConfigFilter>();
     m_category_filter->set_filter_fn(
         [this](const Biz::OverrideItem& item) -> bool
-        { return item.is_override() && item.config_item->def().category == m_current_category; }
+        {
+            // The raft type and the raft infill the objects read decide which raft knobs an object
+            // may override, the same way they decide which ones the print preset shows.
+            return item.is_override()
+                && item.config_item->def().category == m_current_category
+                && raft_setting_visible_for_object(m_project_interactor, item.name);
+        }
     );
     m_category_filter->set_sort_fn(
         [](const Biz::OverrideItem& lhs, const Biz::OverrideItem& rhs)

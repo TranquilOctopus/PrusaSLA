@@ -65,8 +65,10 @@ std::uint64_t hash_support_points(const Domain::SLA::SupportPoints& points)
         mix_float(point.base_diameter);
         mix_float(point.base_height);
         // The same for the per-point tip and stem geometry (M2.16c): a change of the tip shape, the
-        // knot, the stem cross-section or the stem taper is a new tree as well.
+        // knot, the stem cross-section or the stem taper is a new tree as well. The foot the
+        // pillar gets (M2.23) is part of it: another shape is another base.
         mix(static_cast<std::uint64_t>(point.tip_shape));
+        mix(static_cast<std::uint64_t>(point.base_shape));
         mix_float(point.knot_radius);
         mix(static_cast<std::uint64_t>(point.stem_sides));
         mix_float(point.stem_taper);

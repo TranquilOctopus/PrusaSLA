@@ -28,6 +28,7 @@ std::vector<std::string> get_all_sla_config_keys() {
     keys.push_back("branchingsupport_base_diameter");
     keys.push_back("branchingsupport_base_height");
     keys.push_back("branchingsupport_base_safety_distance");
+    keys.push_back("branchingsupport_base_shape");
     keys.push_back("branchingsupport_buildplate_only");
     keys.push_back("branchingsupport_critical_angle");
     keys.push_back("branchingsupport_head_front_diameter");
@@ -93,7 +94,11 @@ std::vector<std::string> get_all_sla_config_keys() {
     keys.push_back("pad_wall_height");
     keys.push_back("pad_wall_slope");
     keys.push_back("pad_wall_thickness");
+    keys.push_back("peel_area_coefficient");
+    keys.push_back("peel_force_warning");
+    keys.push_back("peel_perimeter_coefficient");
     keys.push_back("raft_edge_taper");
+    keys.push_back("raft_floor_thickness");
     keys.push_back("raft_infill");
     keys.push_back("raft_infill_spacing");
     keys.push_back("raft_infill_wall");
@@ -119,6 +124,7 @@ std::vector<std::string> get_all_sla_config_keys() {
     keys.push_back("support_base_diameter");
     keys.push_back("support_base_height");
     keys.push_back("support_base_safety_distance");
+    keys.push_back("support_base_shape");
     keys.push_back("support_brace_diameter");
     keys.push_back("support_brace_enable");
     keys.push_back("support_brace_start_height");
@@ -159,6 +165,7 @@ std::vector<std::string> get_all_sla_config_keys() {
     keys.push_back("support_small_pillar_diameter_percent");
     keys.push_back("support_stem_sides");
     keys.push_back("support_stem_taper");
+    keys.push_back("support_tip_length");
     keys.push_back("support_tip_shape");
     keys.push_back("support_tree_type");
     keys.push_back("supports_enable");
@@ -179,6 +186,7 @@ std::vector<std::string> get_all_sla_config_keys() {
     keys.push_back("tower_hop_height");
     keys.push_back("tower_speed");
     keys.push_back("use_tilt");
+    keys.push_back("vat_film_type");
     keys.push_back("zcorrection_layers");
 
     keys.push_back("bottom_layer_count");
@@ -278,6 +286,7 @@ TEST_CASE("SLAInvalidation: branching support keys the engine reads are defined"
         "branchingsupport_base_diameter",
         "branchingsupport_base_height",
         "branchingsupport_base_safety_distance",
+        "branchingsupport_base_shape",
         "branchingsupport_buildplate_only",
         "branchingsupport_critical_angle",
         "branchingsupport_head_front_diameter",
@@ -320,6 +329,7 @@ TEST_CASE("SLAInvalidation: table-driven expected steps for representative keys"
         {"bed_shape", steps({})},
         {"bottle_cost", steps({})},
         {"branchingsupport_base_diameter", steps({propagate(slaposSupportTree)})},
+        {"branchingsupport_base_shape", steps({propagate(slaposSupportTree)})},
         {"branchingsupport_object_elevation", steps({propagate(slaposObjectSlice)})},
         {"display_width", steps({propagate(slapsMergeSlicesAndEval)})},
         {"elefant_foot_compensation", all_steps()},
@@ -333,12 +343,14 @@ TEST_CASE("SLAInvalidation: table-driven expected steps for representative keys"
         {"material_correction", all_steps()},
         {"pad_brim_size", steps({propagate(slaposPad)})},
         {"pad_enable", steps({propagate(slaposObjectSlice)})},
+        {"raft_floor_thickness", steps({propagate(slaposPad)})},
         {"raft_interface_thickness", steps({propagate(slapsMergeSlicesAndEval)})},
         {"raft_type", steps({propagate(slaposObjectSlice), propagate(slaposPad)})},
         {"relative_correction", all_steps()},
         {"resin_faded_layers", steps({propagate(slaposObjectSlice)})},
         {"resin_layer_height", steps({propagate(slaposObjectSlice)})},
         {"support_base_diameter", steps({propagate(slaposSupportTree)})},
+        {"support_base_shape", steps({propagate(slaposSupportTree)})},
         {"support_brace_enable", steps({propagate(slaposSupportTree)})},
         {"support_object_elevation", steps({propagate(slaposObjectSlice)})},
         {"support_points_density_relative", steps({propagate(slaposSupportPoints)})},

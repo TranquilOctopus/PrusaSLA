@@ -13,7 +13,6 @@ namespace Slic3r::App::Plater {
 struct SlaSupportPointsEditing
 {
     Domain::SLA::SupportPoints points;
-    double head_diameter_mm = 0.4;
     double pillar_diameter_mm = 0.0;
     double base_diameter_mm = 0.0;
     double base_height_mm = 0.0;
@@ -24,9 +23,11 @@ struct SlaSupportPointsEditing
     std::unordered_set<size_t> selected_point_indices;
     bool lock_island_supports = false;
 
-    // The tip shape, knot, stem cross-section and stem taper a point takes (M2.16c). Filled from
-    // the Supports & raft settings, so a new point gets the geometry the user configured, and
-    // apply_support_geometry_to_selected(field) writes one of them on the points that are selected.
+    // The tip diameter, tip shape, tip length, knot, stem cross-section and stem taper a point takes
+    // (M2.16c, M2.24). Filled from the Supports & raft settings, so a new point gets the geometry
+    // the user configured, and apply_support_geometry_to_selected(field) writes one of them on the
+    // points that are selected. The tip diameter is the tool's "head diameter" control: it is the
+    // only home of that number, which a preset button also writes.
     SlaSupportGeometry support_geometry;
 
     // Core editing operations
@@ -42,7 +43,6 @@ struct SlaSupportPointsEditing
     void select_all_points();
     void clear_selection();
     void delete_selected_points();
-    void apply_head_diameter_to_selected();
     void apply_pillar_diameter_to_selected();
     void apply_base_diameter_to_selected();
     void apply_base_height_to_selected();

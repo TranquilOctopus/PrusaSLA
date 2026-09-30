@@ -43,6 +43,11 @@ struct SupportTreeConfig
     // Width in mm from the back sphere center to the front sphere center.
     double head_width_mm = 1.0;
 
+    // The length in mm of the tapered tip of a support point that carries no tip length of its
+    // own (support_tip_length). Zero means the pinhead width is used, which is what the tree has
+    // always built.
+    double tip_length_mm = 0.;
+
     // How to connect pillars
     Domain::sla::PillarConnectionMode pillar_connection_mode = Domain::sla::PillarConnectionMode::dynamic;
 
@@ -72,6 +77,10 @@ struct SupportTreeConfig
 
     // The height of the pillar base cone in mm.
     double base_height_mm = 1.0;
+
+    // The shape of the pillar base: a cone that flares gradually, a straight cylinder of the
+    // base diameter or a thin flat disc under a straight pillar.
+    Domain::sla::SupportBaseShape base_shape = Domain::sla::SupportBaseShape::Cone;
 
     // The default angle for connecting support sticks and junctions.
     double bridge_slope = M_PI/4;

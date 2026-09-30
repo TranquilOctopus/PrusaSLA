@@ -97,7 +97,24 @@ TEST_CASE("SlaIssueAnalysis - analyze_sla_issues_for_notification", "[SlaIssueAn
 
         REQUIRE(result.trapped_resin_count == 2);
         REQUIRE(result.trapped_resin_lowest_layer == 4);
+        REQUIRE(result.affected_objects == 0);
         REQUIRE(result.message == "2 trapped resin pockets found, first on layer 4. The resin in it cannot drain.");
+    }
+
+    SECTION("Layers with a high peel force are not in the notification")
+    {
+        // The peel force model (M4.9b) makes an issue of its own kind, but the notification names
+        // only the kinds the user can do something about here.
+        SlaIssue high_peel;
+        high_peel.kind = SlaIssue::Kind::HighPeelForce;
+        high_peel.layer = 30;
+        high_peel.position = Slic3r::Domain::Vec3d::Zero();
+        std::vector<SlaIssue> issues = { high_peel };
+
+        SlaIssueAnalysis result = analyze_sla_issues_for_notification(issues);
+
+        REQUIRE(result.message.empty());
+        REQUIRE(result.empty());
     }
 
     SECTION("Every kind found is named, the most harmful first")
@@ -113,6 +130,30 @@ TEST_CASE("SlaIssueAnalysis - analyze_sla_issues_for_notification", "[SlaIssueAn
         REQUIRE(
             result.message
             == "2 islands found, first on layer 8. They can fall off during printing. "
+               "1 cup found, first on layer 3. They can hold a vacuum against the film on every peel. "
+               "1 trapped resin pocket found, first on layer 12. The resin in it cannot drain."
+        );
+    }
+
+    SECTION("The island sentence names the models and the cavity sentences follow it")
+    {
+        // M4.8g put the models into the island sentence, M4.8f added the two cavity sentences
+        // behind it: both are kept, in that order.
+        std::vector<SlaIssue> issues = {
+            make_island(10, Slic3r::Domain::ObjectID(1)),
+            make_island(12, Slic3r::Domain::ObjectID(2)),
+            make_cup(3),
+            make_trapped_resin(12),
+        };
+        SlaIssueAnalysis result = analyze_sla_issues_for_notification(issues);
+
+        REQUIRE(result.island_count == 2);
+        REQUIRE(result.affected_objects == 2);
+        REQUIRE(result.cup_count == 1);
+        REQUIRE(result.trapped_resin_count == 1);
+        REQUIRE(
+            result.message
+            == "2 islands found on 2 models, first on layer 10. They can fall off during printing. "
                "1 cup found, first on layer 3. They can hold a vacuum against the film on every peel. "
                "1 trapped resin pocket found, first on layer 12. The resin in it cannot drain."
         );
@@ -160,5 +201,61 @@ TEST_CASE("SlaIssueAnalysis - analyze_sla_issues_for_notification", "[SlaIssueAn
 
         REQUIRE(result.message.find("2 islands found") != std::string::npos);
         REQUIRE(result.message.find("1 island found") == std::string::npos);
+    }
+
+    SECTION("Islands on one model are counted once")
+    {
+        const Slic3r::Domain::ObjectID vase(1);
+        std::vector<SlaIssue> issues = {make_island(10, vase), make_island(20, vase)};
+        SlaIssueAnalysis result      = analyze_sla_issues_for_notification(issues);
+
+        REQUIRE(result.island_count == 2);
+        REQUIRE(result.affected_objects == 1);
+        REQUIRE(
+            result.message
+            == "2 islands found on 1 model, first on layer 10. They can fall off during printing."
+        );
+    }
+
+    SECTION("Islands on several models are counted apart")
+    {
+        std::vector<SlaIssue> issues = {
+            make_island(10, Slic3r::Domain::ObjectID(1)),
+            make_island(12, Slic3r::Domain::ObjectID(2)),
+            make_island(20, Slic3r::Domain::ObjectID(1)),
+        };
+        SlaIssueAnalysis result = analyze_sla_issues_for_notification(issues);
+
+        REQUIRE(result.island_count == 3);
+        REQUIRE(result.affected_objects == 2);
+        REQUIRE(
+            result.message
+            == "3 islands found on 2 models, first on layer 10. They can fall off during printing."
+        );
+    }
+
+    SECTION("A single island on a single model uses singular 'island' and 'model'")
+    {
+        std::vector<SlaIssue> issues = {make_island(100, Slic3r::Domain::ObjectID(1))};
+        SlaIssueAnalysis result      = analyze_sla_issues_for_notification(issues);
+
+        REQUIRE(
+            result.message
+            == "1 island found on 1 model, first on layer 100. They can fall off during printing."
+        );
+    }
+
+    SECTION("An island that could not be put on a model does not count as one")
+    {
+        std::vector<SlaIssue> issues =
+            {make_island(10, Slic3r::Domain::ObjectID(1)), make_island(20)};
+        SlaIssueAnalysis result = analyze_sla_issues_for_notification(issues);
+
+        REQUIRE(result.island_count == 2);
+        REQUIRE(result.affected_objects == 1);
+        REQUIRE(
+            result.message
+            == "2 islands found on 1 model, first on layer 10. They can fall off during printing."
+        );
     }
 }

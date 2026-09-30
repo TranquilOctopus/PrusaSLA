@@ -42,6 +42,18 @@ using namespace Slic3r::Domain;
 
 namespace Slic3r::App {
 
+namespace {
+
+/// The models of the bed a drain hole can be suggested on. The candidates borrow the meshes, so
+/// the meshes are kept here and reserved once, before the candidates take pointers into them.
+struct DrainHoleCandidates
+{
+    std::vector<Domain::TriangleMesh>                 meshes;
+    std::vector<Slic3r::Biz::Sla::DrainHoleCandidate> candidates;
+};
+
+} // namespace
+
 SidebarSlaSummary::SidebarSlaSummary(Biz::ProjectInteractor& project_interactor) :
     Window("SidebarSlaSummary"),
     m_config_container_listener_scope(project_interactor, *this),
@@ -227,11 +239,27 @@ void SidebarSlaSummary::add_issue_rows(const SlaIssueRows& issue_rows)
     title->set_font_type(Render::ImguiFontType::Bold);
     title->set_flex_shrink(0_fpx);
 
-    for (const SlaIssueRow& issue_row : issue_rows.rows) {
+    for (SlaIssueRow issue_row : issue_rows.rows) {
         // A cavity is the one kind of issue a hole in the model can answer, so its row carries a
         // button that adds the suggested one next to the link into the layer image window.
         const bool is_cavity = Slic3r::Biz::Sla::accepts_drain_hole_suggestion(issue_row.kind);
-        Item*      line      = m_rows_container->emplace_back<Item>();
+
+        // The issues of a slice are found on the merged layers of the bed, so a cavity names no
+        // model. The search that places the hole finds the one it lands on anyway, so the row runs
+        // it too and names that model the way an island row names its own (M4.8g).
+        if (is_cavity && issue_row.object_name.empty()) {
+            const std::optional<Slic3r::Biz::Sla::DrainHoleSuggestion> suggestion =
+                suggest_drain_hole(issue_row);
+            if (suggestion.has_value()) {
+                const Domain::ModelObject* owner =
+                    m_project_interactor.selected_project().find_object_by_id(suggestion->object_id.id);
+                if (owner != nullptr) {
+                    issue_row.object_name = owner->name;
+                }
+            }
+        }
+
+        Item* line = m_rows_container->emplace_back<Item>();
         line->set_orientation(Orientation::Horizontal);
         line->set_align_items(YGAlignCenter);
         line->set_gap(4_fpx);
@@ -279,16 +307,13 @@ void SidebarSlaSummary::add_issue_rows(const SlaIssueRows& issue_rows)
     }
 }
 
-void SidebarSlaSummary::add_suggested_drain_hole(const SlaIssueRow& issue_row)
+std::optional<Slic3r::Biz::Sla::DrainHoleSuggestion> SidebarSlaSummary::suggest_drain_hole(
+    const SlaIssueRow& issue_row) const
 {
     const Domain::Project& project = m_project_interactor.selected_project();
     const Domain::BedInstance* bed_instance = project.find_bed_instance_by_id(m_current_bed_instance_id);
     if (bed_instance == nullptr) {
-        AppServices::instance().dialog_manager().show_warning_dialog(
-            _u8L("The build plate of this issue is not on screen anymore."),
-            _u8L("Warning")
-        );
-        return;
+        return std::nullopt;
     }
 
     // The issues of a slice are found on the merged layers of the whole bed, so none of them names
@@ -297,10 +322,9 @@ void SidebarSlaSummary::add_suggested_drain_hole(const SlaIssueRow& issue_row)
     //
     // The candidates borrow their mesh, so the meshes are kept alive here for the whole search and
     // are reserved once, so that the addresses the candidates hold stay valid.
-    std::vector<Domain::TriangleMesh>                  meshes;
-    std::vector<Slic3r::Biz::Sla::DrainHoleCandidate>  candidates;
-    meshes.reserve(bed_instance->model_instances.size());
-    candidates.reserve(bed_instance->model_instances.size());
+    DrainHoleCandidates collected;
+    collected.meshes.reserve(bed_instance->model_instances.size());
+    collected.candidates.reserve(bed_instance->model_instances.size());
     const Biz::SLAObjectCache& sla_object_cache = m_project_interactor.sla_object_cache();
     for (const Domain::ModelInstance* instance : bed_instance->model_instances) {
         if (instance == nullptr || !instance->is_printable()) {
@@ -327,13 +351,17 @@ void SidebarSlaSummary::add_suggested_drain_hole(const SlaIssueRow& issue_row)
         if (instance_trafo == sliced_object.instance_trafos.end()) {
             continue;
         }
-        meshes.emplace_back(model_object->raw_mesh());
-        candidates.push_back(Slic3r::Biz::Sla::DrainHoleCandidate{
-            model_object->id(), &meshes.back(), sliced_object.object_trafo * (instance_trafo->second)});
+        collected.meshes.emplace_back(model_object->raw_mesh());
+        collected.candidates.push_back(Slic3r::Biz::Sla::DrainHoleCandidate{
+            model_object->id(), &collected.meshes.back(), sliced_object.object_trafo * (instance_trafo->second)});
     }
 
-    const std::optional<Slic3r::Biz::Sla::DrainHoleSuggestion> suggestion =
-        Slic3r::Biz::Sla::suggest_nearest_drain_hole(candidates, issue_row.kind, issue_row.position);
+    return Slic3r::Biz::Sla::suggest_nearest_drain_hole(collected.candidates, issue_row.kind, issue_row.position);
+}
+
+void SidebarSlaSummary::add_suggested_drain_hole(const SlaIssueRow& issue_row)
+{
+    const std::optional<Slic3r::Biz::Sla::DrainHoleSuggestion> suggestion = suggest_drain_hole(issue_row);
     if (!suggestion.has_value()) {
         AppServices::instance().dialog_manager().show_warning_dialog(
             _u8L("No surface of a model on the plate lies inside this issue, so no drain hole "

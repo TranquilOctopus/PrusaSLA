@@ -1419,6 +1419,52 @@ static bool is_contained_in_bed(const SLAPrintObject& object, const BuildVolume&
     return ret;
 }
 
+// What each model object occupies on one merged layer, so that an issue of the layer can be
+// named after the model it belongs to (M4.8g). The polygons are the same ones the merged layer
+// is built from, per object: the body of the model and its supports, which is where an island
+// may sit as well. Several slice records of the same object on a layer (its instances) are
+// merged into one entry, so the areas compared below stay comparable.
+static std::vector<SLA::ObjectLayer> object_layers_of(const SLAPrint::PrintLayer& layer)
+{
+    std::vector<SLA::ObjectLayer> out;
+
+    for (const std::reference_wrapper<const SliceRecord>& reference : layer.slices()) {
+        const SliceRecord& record = reference.get();
+        const SLAPrintObject* po  = record.print_obj();
+        if (po == nullptr || po->model_object() == nullptr)
+            continue;
+
+        const Domain::ObjectID object_id = po->model_object()->id();
+
+        ExPolygons polygons = get_all_polygons(record, po->instances(), soModel);
+        ExPolygons supports = get_all_polygons(record, po->instances(), soSupport);
+        for (ExPolygon& poly : supports)
+            polygons.emplace_back(std::move(poly));
+
+        if (polygons.empty())
+            continue;
+
+        // A second record of the same object on this layer (another instance) is merged into the
+        // first one, so the areas compared when an island is attributed stay comparable.
+        auto it = std::find_if(
+            out.begin(),
+            out.end(),
+            [&object_id](const SLA::ObjectLayer& o) { return o.object_id == object_id; }
+        );
+        if (it == out.end()) {
+            out.push_back(
+                SLA::ObjectLayer{object_id, po->model_object()->name(), union_ex(polygons)}
+            );
+        } else {
+            for (ExPolygon& poly : polygons)
+                it->slices.emplace_back(std::move(poly));
+            it->slices = union_ex(it->slices);
+        }
+    }
+
+    return out;
+}
+
 // Merging the slices from all the print objects into one slice grid and
 // calculating print statistics from the merge result.
 void SLAPrint::Steps::merge_slices_and_eval_stats() {
@@ -1612,6 +1658,29 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
     const SLA::CavityAnalysis cavities =
         SLA::detect_cavities(all_layer_polygons, layer_thicknesses_mm);
 
+    // Name the model every island belongs to (M4.8g). The layers above are merged over all the
+    // objects, so the model of an island is the one that holds most of its area on that layer.
+    // Only the layers that do have an island are looked at, which are a few per print, and the
+    // hits come layer by layer, so each such layer is only assembled once.
+    for (size_t first = 0; first < island_hits.size();) {
+        const size_t layer_idx = island_hits[first].layer_index;
+        size_t last            = first;
+        while (last < island_hits.size() && island_hits[last].layer_index == layer_idx)
+            ++last;
+
+        if (layer_idx < printer_input.size()) {
+            const std::vector<SLA::ObjectLayer> layer_objects =
+                object_layers_of(printer_input[layer_idx]);
+            for (size_t i = first; i < last; ++i) {
+                const SLA::IslandOwner owner = SLA::attribute_island(island_hits[i], layer_objects);
+                island_hits[i].object_id     = owner.object_id;
+                island_hits[i].object_name   = owner.name;
+            }
+        }
+
+        first = last;
+    }
+
     auto& print_statistics = m_print->m_print_statistics;
     print_statistics = create_stats(layers_info, is_prusa_print);
     if (printer_input.empty()) // set as invalid
@@ -1645,9 +1714,20 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
         heights.push_back(level_f);
     }
 
-    // Compute per-layer exposed area and peel force estimates (M4.9).
+    // Compute per-layer exposed area and peel force estimates (M4.9). The peel force is a model,
+    // not a measurement: area, boundary and the suction of the cups of M4.8e, each with the
+    // coefficient of the vat film, see doc/sla-fork/profiling/peel-force.md.
     std::vector<float> layer_areas = SLA::layer_areas_mm2(slices);
-    std::vector<float> layer_peel_force = SLA::peel_force_estimate(layer_areas);
+    SLA::PeelForceSettings peel_settings;
+    peel_settings.film = config.get<Domain::sla::VatFilmType>("vat_film_type");
+    peel_settings.area_coefficient = config.get<double>("peel_area_coefficient");
+    peel_settings.perimeter_coefficient = config.get<double>("peel_perimeter_coefficient");
+    const SLA::PeelForceCoefficients peel_coefficients = peel_settings.coefficients();
+    std::vector<float> layer_peel_force = SLA::peel_force_estimate(
+        slices, SLA::cup_suction_area_mm2(cavities.cups, slices.size()), peel_coefficients);
+    const double peel_warning_n = SLA::peel_force_warning_n(config.get<double>("peel_force_warning"), peel_coefficients);
+    const std::vector<size_t> high_peel_layers =
+        SLA::layers_over_peel_force(layer_peel_force, peel_warning_n);
 
     // Convert island hits to SlaIssue entries.
     std::vector<Sla::SlaIssue> issues;
@@ -1660,13 +1740,16 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
         }
         std::ostringstream note_ss;
         note_ss << "island, " << std::fixed << std::setprecision(2) << hit.area_mm2 << " mm2";
-        issues.emplace_back(Sla::SlaIssue{
-            .kind = Sla::SlaIssue::Kind::Island,
-            .layer = hit.layer_index,
-            .object_id = Domain::ObjectID{}, // Merged layers cannot attribute to a single object.
-            .position = Domain::Vec3d(hit.centroid.x(), hit.centroid.y(), layer_z),
-            .note = note_ss.str()
-        });
+        issues.emplace_back(
+            Sla::SlaIssue{
+                .kind        = Sla::SlaIssue::Kind::Island,
+                .layer       = hit.layer_index,
+                .object_id   = hit.object_id,
+                .object_name = hit.object_name,
+                .position    = Domain::Vec3d(hit.centroid.x(), hit.centroid.y(), layer_z),
+                .note        = note_ss.str()
+            }
+        );
     }
 
     // The Z of the bottom of a layer, where the opening of a cup and the floor of a cavity are.
@@ -1707,6 +1790,23 @@ void SLAPrint::Steps::merge_slices_and_eval_stats() {
             .object_id = Domain::ObjectID{},
             .position = Domain::Vec3d(trapped.centroid.x(), trapped.centroid.y(),
                                       layer_bottom_z(trapped.first_layer)),
+            .note = note_ss.str()
+        });
+    }
+
+    // The layers the peel force model calls high. One entry per layer, so the count in the
+    // sidebar is the number of layers and not the number of problems inside them. The position is
+    // the layer, not a spot in it: there is no spot, so x and y stay at the middle of the plate.
+    for (size_t layer : high_peel_layers) {
+        std::ostringstream note_ss;
+        note_ss << std::fixed << std::setprecision(1) << "peel force "
+                << (layer < layer_peel_force.size() ? layer_peel_force[layer] : 0.f) << " N over "
+                << peel_warning_n << " N";
+        issues.emplace_back(Sla::SlaIssue{
+            .kind = Sla::SlaIssue::Kind::HighPeelForce,
+            .layer = layer,
+            .object_id = Domain::ObjectID{},
+            .position = Domain::Vec3d(0., 0., layer_bottom_z(layer)),
             .note = note_ss.str()
         });
     }
@@ -1816,9 +1916,9 @@ void SLAPrint::Steps::rasterize()
     // (granularity 1, no concurrency cap) made that multiplier the core count. The batch makes
     // the peak a function of the budget in RasterMemory.hpp instead. See
     // doc/sla-fork/profiling/raster-memory.md.
-    const size_t batch = raw_raster_batch_size(rasterizer_ptr->raw_raster_bytes(),
-                                               layers.size(),
-                                               execution::max_concurrency(execution::ex_tbb));
+    const size_t batch = sla::raw_raster_batch_size(rasterizer_ptr->raw_raster_bytes(),
+                                                    layers.size(),
+                                                    execution::max_concurrency(execution::ex_tbb));
     for (size_t first = 0; first < layers.size(); first += batch) {
         if (cancel_fn())
             break;

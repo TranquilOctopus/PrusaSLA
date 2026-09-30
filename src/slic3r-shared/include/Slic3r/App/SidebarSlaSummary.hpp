@@ -11,10 +11,16 @@
 #include "Slic3r/Domain/SelectionId.hpp"
 #include "Slic3r/Domain/SlicingId.hpp"
 
+#include <optional>
+
 namespace Slic3r::Biz {
 class ProjectInteractor;
 class SLAResultCache;
 } // namespace Slic3r::Biz
+
+namespace Slic3r::Biz::Sla {
+struct DrainHoleSuggestion;
+} // namespace Slic3r::Biz::Sla
 
 namespace Slic3r::App {
 
@@ -45,6 +51,10 @@ private:
     // Add the drain hole the issue of this row suggests to the model it lands on. Nothing is
     // sliced here: the plate is marked as modified and the user re-slices with the Slice button.
     void add_suggested_drain_hole(const SlaIssueRow& issue_row);
+    // The hole suggested for the cavity of this row, or nothing when the row names no cavity or
+    // no model of the plate has a surface along its axis. Both the row name and the button above
+    // read it, so they cannot disagree about the model the cavity is in.
+    std::optional<Slic3r::Biz::Sla::DrainHoleSuggestion> suggest_drain_hole(const SlaIssueRow& issue_row) const;
 
     Biz::ProjectInteractor& m_project_interactor;
     Biz::ListenerScope<Biz::ISelectedConfigContainerChangedListener, Biz::ProjectInteractor, SidebarSlaSummary> m_config_container_listener_scope;

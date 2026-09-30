@@ -17,6 +17,7 @@ add_executable(${_TEST_NAME}_tests ${_TEST_NAME}_tests_main.cpp
     sla_raft_type_tests.cpp
     sla_raft_edge_taper_tests.cpp
     sla_raft_infill_tests.cpp
+    sla_raft_floor_thickness_tests.cpp
     sla_invalidation_tests.cpp
     sla_rotfinder_tests.cpp
     sla_layer_image_tests.cpp
@@ -26,6 +27,7 @@ add_executable(${_TEST_NAME}_tests ${_TEST_NAME}_tests_main.cpp
     sla_local_island_coverage_tests.cpp
     sla_support_tool_tests.cpp
     sla_support_preset_tests.cpp
+    sla_support_base_shape_tests.cpp
     sla_support_placement_tests.cpp
     sla_support_point_geometry_tests.cpp
     sla_benchmark_tests.cpp

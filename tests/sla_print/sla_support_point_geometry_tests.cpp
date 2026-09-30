@@ -495,6 +495,40 @@ TEST_CASE("DefaultSupportTree::A point without the fields keeps the old mesh",
     CHECK(base->r_top == Approx(pillar.r_start));
 }
 
+// M2.24: the length of the tapered tip. A point carries its own (M2.13), the
+// configured support_tip_length is the default of the points that carry none,
+// and zero there keeps the pinhead width, which is what the tree built before.
+TEST_CASE("DefaultSupportTree::The tip length is the one of the point, else the configured one",
+          "[suptreetree]")
+{
+    auto tip_length_of = [](const Slic3r::sla::SupportableMesh &sm) {
+        sla::SupportTreeBuilder builder;
+        sla::create_default_tree(builder, sm);
+
+        const sla::Head *head = head_at(builder, point_pos);
+        REQUIRE(head != nullptr);
+
+        return head->width_mm;
+    };
+
+    Slic3r::sla::SupportableMesh sm = make_supportable_mesh(SupportPoints{geometry_point()});
+
+    // The pinhead width, the length the tree has always built with.
+    CHECK(tip_length_of(sm) == Approx(sm.cfg.head_width_mm));
+
+    // A configured tip length is the one every point without a tip length of its
+    // own is built with.
+    sm.cfg.tip_length_mm = 0.4;
+    CHECK(tip_length_of(sm) == Approx(0.4));
+
+    // A point of its own keeps it, whatever the default says.
+    SupportPoints pts{geometry_point()};
+    pts[0].tip_length = 0.6f;
+    Slic3r::sla::SupportableMesh own = make_supportable_mesh(pts);
+    own.cfg.tip_length_mm = 0.4;
+    CHECK(tip_length_of(own) == Approx(0.6));
+}
+
 TEST_CASE("BranchingSupportTree::Point geometry reaches the ground pillar",
           "[suptreetree]")
 {

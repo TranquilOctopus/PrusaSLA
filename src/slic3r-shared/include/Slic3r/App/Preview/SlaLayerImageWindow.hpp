@@ -49,6 +49,8 @@ private:
         float height
     );
     std::string layer_stats_text() const;
+    // The peel force in N above which a layer is called high, 0 when the slicer found no warning.
+    double peel_warning_n() const;
     void on_prev_layer();
     void on_next_layer();
     // Turns a click on the fitted layer image into slice mm and opens the native resolution zoom on it.
@@ -64,6 +66,7 @@ private:
         double x_mm{0.};
         double y_mm{0.};
         std::optional<double> area_mm2;
+        std::string object_name; //< the model it was found on, empty when unknown
     };
     // Fills the island list and its rows from the issues of the last result.
     void rebuild_island_list();

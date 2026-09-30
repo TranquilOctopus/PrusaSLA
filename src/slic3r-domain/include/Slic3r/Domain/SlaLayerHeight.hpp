@@ -83,7 +83,8 @@ RaftInterface raft_interface_band(double raft_height_mm,
                                   double layer_height_mm);
 
 /// The raft interface of a print, read from the config: the band of raft_interface_band() for the
-/// raft the config describes (its wall thickness plus the height of its cavity), with
+/// raft the config describes (its floor thickness, or its wall thickness when the floor has none of
+/// its own, plus the height of its cavity), with
 /// raft_interface_exposure as the exposure of the band. A band that reaches into the bottom layers
 /// is cut back to them, because the bottom exposure wins there: the burn-in is what holds the raft
 /// to the build plate, so it is not the interface's to decide.
