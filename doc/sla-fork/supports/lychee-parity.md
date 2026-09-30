@@ -34,8 +34,8 @@ Refreshed 2026-09-30 against what is merged: M2.12 (per-point sizes), M2.13 (tip
 
 | Status | Count |
 |---|---|
-| **covered** | 18 (rows 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 18, 19, 20, 21) |
-| **partial** | 3 (rows 11, 13, 17) |
+| **covered** | 17 (rows 1, 2, 3, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 18, 19, 20, 21) |
+| **partial** | 4 (rows 4, 11, 13, 17) |
 | **missing** | 0 |
 
 Row 11 is partial because the related configs exist. Row 3 was partial because the tip diameter was reachable only through the head diameter control of a selection; M2.24 makes it one of the per-point geometry fields, so it is covered. Row 4 is still partial: M2.24 gave the tip length a global default and a per-point control, but the tip itself is our double-sphere pinhead, not a cone. Rows 6, 7, 9 and 10 were partial because M2.13 and M2.16 stored and persisted the value on the support point without any mesh builder reading it; M2.16b builds all four, so what is still missing there is the UI.
