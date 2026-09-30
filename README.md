@@ -139,13 +139,13 @@ branch, one commit, the box ticked in the same commit.
 
 ## Progress
 
-**236 of 278 todos done (85%)** · updated 2026-09-30 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**239 of 278 todos done (86%)** · updated 2026-09-30 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
 | M0: Foundation | 14/15 | `███████████░` 93% |
 | M1: Look, feel and SLA-first shell | 43/44 | `████████████` 98% |
-| M2: SLA editing tools (porting the legacy gizmos) | 75/79 | `███████████░` 95% |
+| M2: SLA editing tools (porting the legacy gizmos) | 78/79 | `████████████` 99% |
 | M3: Resin profile import (Chitubox, Lychee and others) | 24/28 | `██████████░░` 86% |
 | M4: Engine quality (measure first; every PR includes before/after metrics) | 22/32 | `████████░░░░` 69% |
 | M5: Formats and inspection | 37/42 | `███████████░` 88% |
@@ -174,12 +174,9 @@ branch, one commit, the box ticked in the same commit.
 
 </details>
 
-<details><summary>M2: SLA editing tools (porting the legacy gizmos) — 4 open</summary>
+<details><summary>M2: SLA editing tools (porting the legacy gizmos) — 1 open</summary>
 
-- [ ] **M2.9** Plater SLA visuals: resin tint, support and pad materials, and overlay styling (PLAN F3).
   - [ ] **M2.9b** Resin tint and translucency: the model follows the material's `material_colour` (PLAN 2.1 rule 4) and a tra…
-  - [ ] **M2.9c** Overlay styling: support point glyphs, island markers and the clipping-cap (hollow and drain hole) previews…
-- [ ] **M2.14b** Raft shapes the pad generator cannot make today: grid or honeycomb infill, a tapered skate profile, and a s…
 
 </details>
 
