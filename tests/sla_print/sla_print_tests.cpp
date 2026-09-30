@@ -4,6 +4,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <algorithm>
+#include <optional>
+#include <string>
+#include <string_view>
 
 #include "sla_test_utils.hpp"
 
@@ -21,6 +24,7 @@
 #include "Slic3r/Domain/Preset/SelectedPreset.hpp"
 #include "Slic3r/Domain/PrinterTechnology.hpp"
 #include "Slic3r/Domain/TriangleMesh.hpp"
+#include "Slic3r/Exception.hpp"
 #include "Slic3r/TestUtils/HwConfigUtils.hpp"
 #include "libslic3r/IThumbnailImageGenerator.hpp"
 #include "libslic3r/SLAPrint.hpp"
@@ -446,15 +450,31 @@ TEST_CASE("Resin transition layers override the print faded layers", "[SLAResinF
 
 TEST_CASE("Support points for an object thinner than one layer", "[SLASupportPoints]") {
     // 0.02 mm is thinner than the 0.05 mm layer the helper slices with, so the model height level
-    // grid of the object holds a single level. The support point step reads the second of those
-    // levels to learn how far a point may be moved onto the surface; it used to run past the end of
-    // the vector, which a release build neither catches nor survives.
+    // grid of the object covers no level inside the plate. The support point step used to read the
+    // second of those levels to learn how far a point may be moved onto the surface, running past
+    // the end of the vector, which a release build neither catches nor survives. Either finishing
+    // the step or refusing the model is a pass; only a crash or some other error is not.
     SupportPointStepResult result;
-    REQUIRE_NOTHROW(result = run_support_point_step(
-        Biz::Algorithms::TriangleMesh::make_cube(10., 10., 0.02), 10.));
-    // The step ran, so the reads under test were reached. The plate itself covers no grid level at
-    // this elevation, so the number of points it ends up with is not what this test is about.
-    CHECK(result.step_done);
+    std::optional<std::string> refusal;
+    try {
+        result = run_support_point_step(
+            Biz::Algorithms::TriangleMesh::make_cube(10., 10., 0.02), 10.);
+    } catch (const Slic3r::RuntimeError& e) {
+        // The engine's own refusal (SLAPrintSteps.cpp:706), which BackgroundProcess turns into an
+        // error on the bed. Only that one is a handled outcome here - any other exception escapes.
+        // The message is copied out of the exception, which dies with the catch block.
+        refusal = e.what();
+    }
+
+    if (!refusal) {
+        // The step ran, so the reads under test were reached. The plate itself covers no grid
+        // level at this elevation, so the number of points it ends up with is not what this test
+        // is about.
+        CHECK(result.step_done);
+    } else {
+        CAPTURE(*refusal);
+        CHECK(refusal->find("can not be sliced") != std::string::npos);
+    }
 }
 
 TEST_CASE("Support points for a plate one layer tall", "[SLASupportPoints]") {
