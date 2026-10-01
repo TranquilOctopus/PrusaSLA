@@ -43,6 +43,7 @@ These broke MSVC builds more than once; check your diff for them before committi
 - Eigen: don't mix float/double or a 4x4 `.matrix()` with a 3x3 (`.linear()`).
 - A new pure virtual must be implemented by every subclass, including ones added on other branches; a new source/test file is listed in CMake exactly once.
 - Never use a lambda as a default member initializer or default argument in a header (`std::function<bool()> f = [] { return false; };`). MSVC numbers those lambdas per namespace, so different TUs can give two lambdas the same name and the linker keeps one body; a default stop condition then returned garbage and aborted every support tree. Use a named inline function (`= &detail::never_stop;`).
+- `fmt::format` checks its format string at compile time: a translated string (`_u8L(...)`) must be wrapped, `fmt::format(fmt::runtime(_u8L("... {} ...")), x)`, or use `Slic3r::format` with `%1%`.
 - Docs (`ROADMAP.md`, `README.md`) use CRLF: keep it. Never edit inside the README `PROGRESS` markers; run `doc/sla-fork/tools/readme_progress.py`.
 - Coding agents: stay inside your worktree, never `cd` and never write `..` in a path (the agent sandbox rejects it and the job ends); scratch files go in `.agent-scratch/`.
 - Read the SLA code map, `doc/sla-fork/ARCHITECTURE-SLA.md`, before exploring the tree.
