@@ -27,6 +27,20 @@ using Domain::TriangleSelector::TriangleStateType;
 /// layer of the model it belongs to are two views of the same surface, not one.
 constexpr double blocker_region_margin_mm = 0.2;
 
+/// True when the painting can belong to @p mesh, that is when every triangle it names is a triangle
+/// of that mesh. A painting that was made for another mesh can reach this point with a project file
+/// whose volume kept its painting after its mesh was replaced, so the caller refuses such data
+/// instead of reading it against the wrong mesh.
+bool painting_matches(const Domain::TriangleSelector::TriangleSplittingData &painting,
+                      const indexed_triangle_set                          &mesh)
+{
+    return std::all_of(painting.triangles_to_split.begin(), painting.triangles_to_split.end(),
+                       [&mesh](const Domain::TriangleSelector::TriangleBitStreamMapping &entry) {
+                           return entry.triangle_idx >= 0 &&
+                                  static_cast<size_t>(entry.triangle_idx) < mesh.indices.size();
+                       });
+}
+
 /// The facets of every part that are painted as @p state, placed in the frame of the merged mesh the
 /// support points are generated in. A part with nothing painted is skipped, so an unpainted model
 /// costs one empty triangle set per state.
@@ -37,6 +51,11 @@ indexed_triangle_set painted_facets(const SupportToolModelMesh &parts,
     indexed_triangle_set result;
     for (const SupportToolModelMesh::Part &part : parts.parts) {
         if (part.mesh == nullptr || part.painting.triangles_to_split.empty())
+            continue;
+
+        // A painting that was not made for the mesh of this part has no facets here: it is
+        // refused instead of read, because the facets it names are the facets of another mesh.
+        if (!painting_matches(part.painting, part.mesh->its))
             continue;
 
         // The strict read is the one of the FFF support painting (PrintObject::

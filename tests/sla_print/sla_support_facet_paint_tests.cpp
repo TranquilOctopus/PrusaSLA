@@ -84,12 +84,16 @@ struct PaintedModel
 
     /// Paint every facet whose normal points up into the given half space, so that a whole face of
     /// the model is painted and not a piece of it. The bit stream of the painting is written the way
-    /// the paint tool writes it: one state code per triangle, 1 for an enforcer and 2 for a blocker
-    /// (see TriangleSelector::decode_leaf_state).
+    /// the paint tool writes it, one hexadecimal digit per nibble: the low two bits of a nibble are
+    /// the number of sides the triangle is split along and the high two bits are the state of a leaf
+    /// (see TriangleSelector::serialize and FacetsAnnotation::get_triangle_as_string), so an
+    /// enforcer is 0b0100 ('4') and a blocker is 0b1000 ('8'). Writing the state itself ('1' and '2')
+    /// asks for a triangle split along one or two sides, and the read of that walks off the bit stream
+    /// into memory that is not ours.
     void paint_faces_above(double min_normal_z, TriangleStateType state)
     {
         const indexed_triangle_set &its = volume->mesh().its;
-        const char *state_code = state == TriangleStateType::ENFORCER ? "1" : "2";
+        const char *state_code = state == TriangleStateType::ENFORCER ? "4" : "8";
         for (size_t facet = 0; facet < its.indices.size(); ++facet) {
             if (triangle_mesh::its_face_normal(its, int(facet)).z() < min_normal_z)
                 continue;
@@ -208,11 +212,11 @@ TEST_CASE("A painted blocker takes the automatic points of its overhang away", "
     {
         REQUIRE(overhangs > 0);
 
-        // Every facet of the cone: it stands on its tip, so it has no downward facing facet to leave
-        // alone - its island is a region of the first layer and not a surface that can be painted.
-        // The sides of a cone that widens upwards face outwards and downwards, so the threshold is
-        // below their normal.
-        painted.paint_faces_above(-0.7, TriangleStateType::BLOCKER);
+        // Every facet of the cone, the wide disc on top included: the section is about the whole
+        // overhang, so nothing is left out. The sides of a cone that widens upwards face outwards
+        // and downwards - their normal z is about -0.78 for this cone - so a threshold above that
+        // paints the top disc alone and leaves the overhang standing.
+        painted.paint_faces_above(-1.1, TriangleStateType::BLOCKER);
 
         const Slic3r::Domain::SLA::SupportPoints blocked = generate(painted, config);
         INFO("Automatic points left: " << blocked.size());

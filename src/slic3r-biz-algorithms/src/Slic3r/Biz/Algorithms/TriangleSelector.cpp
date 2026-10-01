@@ -1985,9 +1985,25 @@ void TriangleSelector::deserialize(const TriangleSplittingData &data, bool needs
     std::vector<ProcessingInfo> parents;
 
     for (auto [triangle_id, ibit] : data.triangles_to_split) {
-        assert(triangle_id < int(m_triangles.size()));
+        // Painting data that was not made for this mesh - a project file whose mesh was edited
+        // after the facets were painted on it, or a bit stream written by another tool - names
+        // triangles this mesh does not have and can run out in the middle of the tree it
+        // describes. Read blindly, both cases walk off the end of m_triangles and of the bit
+        // stream into memory that is not ours, so such data is refused here: a mesh with no
+        // readable painting has nothing painted on it.
+        if (triangle_id < 0 || triangle_id >= m_orig_size_indices)
+            break;
+
         assert(ibit < int(data.bitstream.size()));
-        const auto next_nibble = [&data, &ibit = ibit]() {
+
+        // Set when a read had to stop at the end of the bit stream, so that the rest of the data is
+        // not read either.
+        bool end_of_data = false;
+        const auto next_nibble = [&data, &ibit = ibit, &end_of_data]() {
+            if (ibit < 0 || ibit + 3 >= int(data.bitstream.size())) {
+                end_of_data = true;
+                return 0;
+            }
             int n = 0;
             for (int i = 0; i < 4; ++ i)
                 n |= data.bitstream[ibit ++] << i;
@@ -2006,6 +2022,16 @@ void TriangleSelector::deserialize(const TriangleSplittingData &data, bool needs
             const TriangleStateType state = is_split ? TriangleStateType::NONE : decode_leaf_state(code, next_nibble);
             // Only valid if is_split.
             const int special_side = code >> 2;
+
+            if (end_of_data)
+                // The tree of this triangle ends past the end of the bit stream.
+                break;
+
+            // A split side that a triangle cannot have: the same data as above. The neighbor
+            // bookkeeping of the children reads the neighbors along that side, so such a code would
+            // read a neighbor of a triangle that does not exist.
+            if (is_split && (special_side > 2 || (num_of_split_sides == 3 && special_side != 0)))
+                break;
 
             // Take care of the first iteration separately, so handling of the others is simpler.
             if (parents.empty()) {
