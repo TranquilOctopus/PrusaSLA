@@ -41,6 +41,7 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Plater/RotationGizmo.cpp
         include/Slic3r/App/Plater/RotationDialog.hpp
         src/Slic3r/App/Plater/RotationDialog.cpp
+        include/Slic3r/App/Plater/AutoOrientProgress.hpp
         include/Slic3r/App/Plater/PlaceOnFaceGizmo.hpp
         src/Slic3r/App/Plater/PlaceOnFaceGizmo.cpp
         src/Slic3r/App/Plater/PlaceOnFaceGizmoPlanes.hpp
@@ -1694,6 +1695,8 @@ test/Slic3r/App/SlaObjectUseRowsTests.cpp
             test/Slic3r/App/Scene/HeightBandTests.cpp
 
             test/Slic3r/App/Preview/SlaSupportsPanelTests.cpp
+
+            test/Slic3r/App/Plater/AutoOrientProgressTests.cpp
 
             test/Slic3r/App/Plater/SurfaceMesh.cpp
 

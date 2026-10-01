@@ -1,4 +1,5 @@
 #include "Slic3r/App/Plater/RotationDialog.hpp"
+#include "Slic3r/App/Plater/AutoOrientProgress.hpp"
 #include "Slic3r/App/Plater/PlaceOnBedButton.hpp"
 #include "Slic3r/App/Yoga/Text.hpp"
 #include "Slic3r/App/Yoga/RadioButton.hpp"
@@ -70,6 +71,9 @@ struct AutoOrientResult
 // the percentages can arrive out of order. The progress tracker only ever moves forward, so the
 // high water mark is kept here: a percentage that is behind the last one is dropped rather than
 // sent back, which the tracker would not accept.
+//
+// The engine counts in per cent and the tracker in a fraction, so every percentage goes through
+// AutoOrientProgress.hpp on its way in.
 AutoOrientResult run_auto_orient(
     Biz::JThread::StopToken stop_token,
     Biz::Platform::JobManager::ProgressTracker progress,
@@ -86,7 +90,7 @@ AutoOrientResult run_auto_orient(
             while (percent > last && !reported.compare_exchange_weak(last, percent)) {
             }
             if (percent > last)
-                progress.set(Domain::Percentage{double(percent)});
+                progress.set(auto_orient_progress_fraction(percent));
         }
         return !stop_token.stop_requested();
     }};
@@ -325,7 +329,8 @@ void RotationDialog::on_job_manager_status_changed(
         return;
     }
 
-    m_auto_orient_progress_percent = it->second.percent ? int(it->second.percent->value) : 0;
+    m_auto_orient_progress_percent =
+        it->second.percent ? auto_orient_progress_percent(it->second.percent.value()) : 0;
     reload_auto_orient_status();
 }
 
