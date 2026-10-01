@@ -301,6 +301,34 @@ TEST_CASE("An enforced region gets support points where the overhang rule has no
         CHECK(dense_on_top > sparse_on_top);
     }
 
+    SECTION("an enforced region gets points where a point of a layer below already stands")
+    {
+        // A box is a prism, so the island points of its bottom layer are carried up through every
+        // layer above it and the topmost layer of the grid holds points before the painting is even
+        // read - at the very spots the enforced top face is sampled at, because both are sampled
+        // from the same square. A point of a layer below holds the surface from underneath instead
+        // of standing on it, and an enforced region is painted over exactly that, so the points
+        // below may not take the samples of the region away.
+        const Slic3r::Domain::TriangleMesh mesh = painted.volume->mesh();
+        painted.paint_faces_above(0.5, TriangleStateType::ENFORCER);
+
+        const Slic3r::sla::SupportFacetPaint paint = Slic3r::sla::support_facet_paint(
+            Slic3r::sla::support_tool_model_mesh(*painted.object),
+            Slic3r::Domain::Transform3d::Identity(), layer_heights(mesh), [] { return false; });
+        REQUIRE(paint.has_enforcer_regions);
+
+        // The generator leaves its points at the height of the layer it made them on, so the points
+        // on the top face of the box are the ones above its middle and the island points of the
+        // bottom face are not counted with them.
+        const LayerSupportPoints plain      = generate_points(mesh, {});
+        const LayerSupportPoints enforced   = generate_points(mesh, paint);
+        const size_t             plain_top  = points_above(plain, 5.f).size();
+        const size_t             forced_top = points_above(enforced, 5.f).size();
+        INFO("Points on the top of the box: " << plain_top << " plain, " << forced_top << " enforced");
+        CHECK(plain_top == 0);
+        CHECK(forced_top > 0);
+    }
+
     SECTION("a painted facet lands in the layer whose slab it is in")
     {
         // The layers the generator works on are the middles of the layers of the mesh, so the slab of
