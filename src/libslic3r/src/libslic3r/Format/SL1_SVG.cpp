@@ -7,6 +7,7 @@
 #include <LocalesUtils.hpp>
 
 #include "Slic3r/Biz/Algorithms/ExPolygon.hpp"
+#include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "libslic3r/SLA/RasterBase.hpp"
 #include "libslic3r/SLA/RasterMemory.hpp"
 #include "libslic3r/ClipperUtils.hpp"
@@ -230,10 +231,10 @@ public:
         mirror[X] = cfg.get<bool>("display_mirror_x");
         mirror[Y] = cfg.get<bool>("display_mirror_y");
 
-        auto ro = cfg.get<int>("display_orientation");
-        sla::RasterBase::Orientation orientation = ro == sla::RasterBase::roPortrait
-            ? sla::RasterBase::roPortrait
-            : sla::RasterBase::roLandscape;
+        const auto ro = cfg.get<Domain::SLADisplayOrientation>("display_orientation");
+        const sla::RasterBase::Orientation orientation =
+            ro == Domain::SLADisplayOrientation::sladoPortrait ? sla::RasterBase::roPortrait
+                                                               : sla::RasterBase::roLandscape;
 
         if (orientation == sla::RasterBase::roPortrait) {
             std::swap(w, h);
