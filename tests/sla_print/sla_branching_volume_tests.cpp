@@ -441,9 +441,14 @@ TEST_CASE("A branch is as thick as today until a cap is asked for", "[suptreetre
             CHECK(Slic3r::sla::branch_radius(cfg, r_min, weight) == widened(r_min, weight));
 
             // A cap that no radius of this tree reaches is the tree of today, so
-            // that is what the default of the key has to mean.
+            // that is what the default of the key has to mean. The cap is a
+            // multiple of the radius of the head, so a roomy one is a little more
+            // than the fattest branch of this tree over that radius, and it is not
+            // a plain 20 mm: on a head of 0.25 mm a cap of 20 is 5 mm, while the
+            // branch of a node of weight 500 comes to 12.75 mm there, so a cap of
+            // 20 does reach a radius of this tree and takes the widening off.
             Slic3r::sla::SupportTreeConfig roomy = cfg;
-            roomy.pillar_radius_cap = 20.;
+            roomy.pillar_radius_cap = widened(r_min, 500.) / r_min + 1.;
             CHECK(Slic3r::sla::branch_radius(roomy, r_min, weight) == widened(r_min, weight));
 
             // A cap that does reach it takes the widening off and nothing else. A

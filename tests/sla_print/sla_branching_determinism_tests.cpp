@@ -46,6 +46,7 @@
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
 #include "Slic3r/Domain/TriangleMesh.hpp"
 #include "Slic3r/Domain/Types.hpp"
+#include "libslic3r/KDTreeIndirect.hpp"
 #include "libslic3r/SLA/BranchingTreeSLA.hpp"
 #include "libslic3r/SLA/SupportTree.hpp"
 #include "libslic3r/SLA/SupportTreeBuilder.hpp"
@@ -295,6 +296,25 @@ std::string first_difference(const indexed_triangle_set &a, const indexed_triang
     return {};
 }
 
+// The support points the branching tree keeps. It drops a point that stands
+// closer than 0.1 mm to another one before it builds anything at all, so the
+// point it drops as the duplicate of the one next to it gets no head at all,
+// although a head would fit under it. The filter of the tree is the oracle here,
+// the same way the placement of a point is: a point that leaves the model out of
+// the head bookkeeping is a point with no head of its own, and asking the
+// builder for one must not hand out the head of the point that was kept.
+std::vector<bool> points_the_tree_keeps(const Fixture &fx)
+{
+    auto coordfn = [&fx](size_t id, size_t dim) { return fx.pts[id].pos(dim); };
+    Slic3r::KDTreeIndirect<3, float, decltype(coordfn)> tree{coordfn, fx.pts.size()};
+
+    std::vector<bool> keeps(fx.pts.size(), false);
+    for (size_t i : Slic3r::sla::non_duplicate_suppt_indices(tree, fx.pts, 0.1))
+        keeps[i] = true;
+
+    return keeps;
+}
+
 Tree build_tree(const Fixture &fx)
 {
     Tree t;
@@ -399,6 +419,8 @@ TEST_CASE(
     SupportTreeBuilder builder;
     Slic3r::sla::create_branching_tree(builder, sm);
 
+    const std::vector<bool> keeps = points_the_tree_keeps(fx);
+
     // The tree builds no head of its own: it uses the one the placement of the point
     // gives it, so the placement is the oracle of which head belongs where.
     size_t with_head = 0;
@@ -417,6 +439,17 @@ TEST_CASE(
             // A point the surface under it does not face down for gets no head at
             // all, and asking the builder for one must not hand out the head of a
             // point that did get one.
+            CHECK(head == nullptr);
+            continue;
+        }
+
+        if (!keeps[i]) {
+            // A point dropped as the duplicate of a point next to it has a head
+            // that would fit under it all the same, but the tree never asked for
+            // one, so the builder must not answer with the head of the point it
+            // kept instead. This is the case the id mapping is about: the head of
+            // the point that was kept is under the id of that point, and not under
+            // the id of the number it has among the leaves.
             CHECK(head == nullptr);
             continue;
         }
@@ -455,10 +488,16 @@ TEST_CASE(
                                                    at_point;
                                         });
         CHECK(point != fx.pts.end());
-        CHECK(unsigned(point - fx.pts.begin()) == unsigned(h.id));
 
-        if (!h.is_valid())
+        if (!h.is_valid()) {
+            // A head the tree gave up on (a leaf it could not route to the plate)
+            // keeps its place in the builder but loses its id with it, so it is
+            // counted here and its id is not read.
             ++dropped;
+            continue;
+        }
+
+        CHECK(unsigned(point - fx.pts.begin()) == unsigned(h.id));
     }
 
     CHECK(dropped <= with_head);
