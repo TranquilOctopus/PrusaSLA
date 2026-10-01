@@ -168,13 +168,14 @@ TEST_CASE("object_resin_use - the models add up to the print", "[object_resin_us
 
     SECTION("a body standing on another model is counted once")
     {
-        // The big cube is 20 x 20 and the small one of 10 x 10 stands on top of it, so the layer
-        // holds 400 mm2 of resin and not 500.
+        // The big cube is 20 x 20 and the small one of 10 x 10 stands inside it, both on the same
+        // layer, so the layer holds 400 mm2 of resin and not 500: the small one is charged nothing
+        // for the resin it shares with the big one.
         const ObjectID big   = object_id(1);
         const ObjectID small = object_id(2);
 
-        std::vector<ObjectLayerUse> layers{layer_of(0, big, "big", 20., 0.)};
-        layers.emplace_back(layer_of(1, small, "small", 10., 0.));
+        std::vector<ObjectLayerUse>
+            layers{layer_of(0, big, "big", 20., 0.), layer_of(0, small, "small", 10., 0.)};
 
         const std::vector<ObjectResinUse> use = object_resin_use(layers, scaling_sq);
         REQUIRE(use.size() == 2);
@@ -202,7 +203,7 @@ TEST_CASE("object_resin_use - the raft is shared by footprint", "[object_resin_u
 {
     SECTION("one raft under two models is counted once and split by footprint")
     {
-        // Two models standing in one raft of 40 x 20 mm, which both of them hands over whole: that
+        // Two models standing in one raft of 40 x 40 mm, which both of them hands over whole: that
         // is what a shared pad looks like in the slices.
         const ObjectID small = object_id(1);
         const ObjectID big   = object_id(2);
@@ -215,18 +216,18 @@ TEST_CASE("object_resin_use - the raft is shared by footprint", "[object_resin_u
         const std::vector<ObjectResinUse> use = object_resin_use(layers, scaling_sq);
         REQUIRE(use.size() == 2);
 
-        // The bodies stand in the raft, so what is left of it is the 800 mm2 of it less their own
+        // The bodies stand in the raft, so what is left of it is the 1600 mm2 of it less their own
         // 100 and 400.
-        const double raft_mm3 = 300. * layer_height_mm;
+        const double raft_mm3 = 1100. * layer_height_mm;
         CHECK(
             find(use, small).raft_volume_mm3 + find(use, big).raft_volume_mm3 == Approx(raft_mm3)
         );
 
-        // 100 mm2 of footprint against 400, so a quarter of the raft and three quarters of it.
+        // 100 mm2 of footprint against 400, so a fifth of the raft and four fifths of it.
         CHECK(find(use, small).footprint_mm2 == Approx(100.));
         CHECK(find(use, big).footprint_mm2 == Approx(400.));
-        CHECK(find(use, small).raft_volume_mm3 == Approx(raft_mm3 / 4.));
-        CHECK(find(use, big).raft_volume_mm3 == Approx(raft_mm3 * 3. / 4.));
+        CHECK(find(use, small).raft_volume_mm3 == Approx(raft_mm3 / 5.));
+        CHECK(find(use, big).raft_volume_mm3 == Approx(raft_mm3 * 4. / 5.));
         CHECK(total_volume(use) == Approx(raft_mm3 + 500. * layer_height_mm));
     }
 
