@@ -671,7 +671,7 @@ Unit and meaning questions marked "verify" get settled in M3.1 by comparing a sa
   printer does not have, the file that is written read back by `ChituboxCfgReader`, and a path that
   cannot be opened. The user guide's three-ways-in section, its export section and its known limits
   were corrected; the screenshot placeholders are still pending. NOT BUILT when it was written; a
-  human builds and runs the suites.
+  human builds and runs the suites. Fix 2026-10-01 (found by a test build): export_preset_to_file() opened the .cfg in text mode, so on Windows every line of the file ended in CRLF and the file on disk was not the text the report describes: the case that reads the file back and compares it with result.exported.text failed on the line endings alone. The file is written in binary now, as the .ctb, .goo and .pwmx writers and the yaml files already are, and the reader of a .cfg normalises line endings before it parses.
 
 ## M4: Engine quality (measure first; every PR includes before/after metrics)
 

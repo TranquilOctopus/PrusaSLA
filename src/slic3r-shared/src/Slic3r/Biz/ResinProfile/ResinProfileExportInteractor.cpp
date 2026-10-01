@@ -125,8 +125,11 @@ ResinProfileExportResult ResinProfileExportInteractor::export_preset_to_file(
         return result;
     }
 
-    // Truncate: a shorter profile must not leave the tail of a longer one behind it.
-    boost::nowide::ofstream out{path, std::ios::out | std::ios::trunc};
+    // Truncate: a shorter profile must not leave the tail of a longer one behind it. Binary, like
+    // every other export of this fork (.ctb, .goo, .pwmx, the yaml files): the file is the text of
+    // the report and not a line ending translation of it, so what lands on disk is the text the
+    // caller showed and the text the reader of a .cfg reads back.
+    boost::nowide::ofstream out{path, std::ios::out | std::ios::binary | std::ios::trunc};
     if (!out.is_open()) {
         result.ok    = false;
         result.error = fmt::format("Cannot open {} for writing.", path.string());
