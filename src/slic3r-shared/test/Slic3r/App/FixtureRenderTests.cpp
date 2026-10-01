@@ -58,6 +58,28 @@ Domain::Image rgba_image(int width, int height, const std::vector<uint8_t>& pixe
     return Domain::Image(Domain::PixelFormat::RGBA8, width, height, std::vector<uint8_t>(pixels));
 }
 
+// Domain::ColorRGBA takes either four floats or four bytes, so four int literals name neither and
+// do not compile. These name the byte form, so a channel value reads as the byte it is.
+Domain::ColorRGBA rgb8(int r, int g, int b)
+{
+    return Domain::ColorRGBA(
+        static_cast<unsigned char>(r),
+        static_cast<unsigned char>(g),
+        static_cast<unsigned char>(b),
+        static_cast<unsigned char>(255)
+    );
+}
+
+Domain::ColorRGBA rgba8(int r, int g, int b, int a)
+{
+    return Domain::ColorRGBA(
+        static_cast<unsigned char>(r),
+        static_cast<unsigned char>(g),
+        static_cast<unsigned char>(b),
+        static_cast<unsigned char>(a)
+    );
+}
+
 /// The camera data a view hands over when a tab is switched, moved away from every default.
 Platform::CameraSynchData view_camera_data(double distance, double zoom)
 {
@@ -225,11 +247,11 @@ TEST_CASE("[FixtureRender] L* of a colour is the CIE one")
         double l;
     };
     const Palette palette[]{
-        {"Sage100", Domain::ColorRGBA(202, 210, 197, 255), 83.27},
-        {"Sage300", Domain::ColorRGBA(132, 169, 140, 255), 65.88},
-        {"Teal500", Domain::ColorRGBA(82, 121, 111, 255), 47.77},
-        {"Slate700", Domain::ColorRGBA(53, 79, 82, 255), 31.71},
-        {"Slate900", Domain::ColorRGBA(47, 62, 70, 255), 25.23},
+        {"Sage100", rgb8(202, 210, 197), 83.27},
+        {"Sage300", rgb8(132, 169, 140), 65.88},
+        {"Teal500", rgb8(82, 121, 111), 47.77},
+        {"Slate700", rgb8(53, 79, 82), 31.71},
+        {"Slate900", rgb8(47, 62, 70), 25.23},
     };
     for (const Palette& entry : palette) {
         INFO("Palette token: " << entry.token);
@@ -238,12 +260,12 @@ TEST_CASE("[FixtureRender] L* of a colour is the CIE one")
 
     // The Rec. 709 weights, not a plain average of the channels: green reads lighter than red
     // and red lighter than blue.
-    CHECK(cie_lightness(Domain::ColorRGBA(0, 255, 0, 255)) == Approx(87.74).margin(0.05));
-    CHECK(cie_lightness(Domain::ColorRGBA(255, 0, 0, 255)) == Approx(53.24).margin(0.05));
-    CHECK(cie_lightness(Domain::ColorRGBA(0, 0, 255, 255)) == Approx(32.30).margin(0.05));
+    CHECK(cie_lightness(rgb8(0, 255, 0)) == Approx(87.74).margin(0.05));
+    CHECK(cie_lightness(rgb8(255, 0, 0)) == Approx(53.24).margin(0.05));
+    CHECK(cie_lightness(rgb8(0, 0, 255)) == Approx(32.30).margin(0.05));
 
     // The alpha of a colour says nothing about its lightness.
-    CHECK(cie_lightness(Domain::ColorRGBA(0, 0, 0, 0)) == Approx(0.0).margin(0.01));
+    CHECK(cie_lightness(rgba8(0, 0, 0, 0)) == Approx(0.0).margin(0.01));
 }
 
 TEST_CASE("[FixtureRender] The lightness of the roles comes from the tokens, in both themes")
