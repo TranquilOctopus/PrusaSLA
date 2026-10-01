@@ -304,8 +304,10 @@ TEST_CASE(
 {
     // Two blocks floating above two cubes, touching each other, so the merged layer holds one
     // region that both models have a piece of. The left block covers x -5..5, the right one
-    // x -3..13, so the right one holds more of the island while the centroid (x = 4) sits in the
-    // left one: the answer can come from neither of those two rules.
+    // x -3..13, so the right one holds more of the island while the centroid of the merged region
+    // (x 4.35) sits in the left one: the answer can come from neither of those two rules. The
+    // blocks clear the cubes below by 2 mm, because a block that overlaps them is not floating at
+    // all and the layer below says so.
     const size_t left_id  = 3;
     const size_t right_id = 4;
 
@@ -324,20 +326,23 @@ TEST_CASE(
         } else {
             // The blocks, touching each other, so the layer holds a single region of both.
             object_layers[layer].push_back(
-                make_object(left_id, "left cube", ExPolygons{make_square(10.0, 0.0, 10.0)})
+                make_object(left_id, "left cube", ExPolygons{make_square(10.0, 0.0, 12.0)})
             );
             object_layers[layer].push_back(
-                make_object(right_id, "right cube", ExPolygons{make_square(16.0, 5.0, 10.0)})
+                make_object(right_id, "right cube", ExPolygons{make_square(16.0, 5.0, 15.0)})
             );
         }
         layers[layer] = merged_layer(object_layers[layer]);
     }
 
+    // One region of both models, so there is one island to name and not one per model.
+    REQUIRE(layers[1].size() == 1);
+
     const std::vector<SLA::IslandHit> hits = SLA::detect_islands(layers, 0.05);
 
     REQUIRE(hits.size() == 1);
     CHECK(hits[0].layer_index == 1);
-    CHECK(hits[0].centroid.x() == Approx(4.0).margin(0.01));
+    CHECK(hits[0].centroid.x() == Approx(4.35).margin(0.05));
 
     const SLA::IslandOwner owner = SLA::attribute_island(hits[0], object_layers[1]);
     CHECK(owner.object_id == ObjectID{right_id});
