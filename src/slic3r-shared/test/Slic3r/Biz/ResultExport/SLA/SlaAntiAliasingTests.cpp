@@ -56,6 +56,16 @@ constexpr int    DISPLAY_PIXELS_X = 320;
 constexpr int    DISPLAY_PIXELS_Y = 180;
 constexpr size_t LAYER_PIXELS     = size_t(DISPLAY_PIXELS_X) * DISPLAY_PIXELS_Y;
 
+// The display in mm, 68.04 x 38.04 as the other export tests use. The size is not free: a pixel has
+// to be a size the 20 mm cube of generate_cubes() does not divide into a whole number of pixels,
+// because agg antialiasing is per pixel coverage and a polygon edge that falls exactly on a pixel
+// boundary covers every pixel it touches either wholly or not at all. On a 64 x 36 mm display of
+// 320 x 180 pixels, where a pixel is exactly 0.2 mm, the cube is exactly 100 pixels wide and its
+// raster is 0 or 255 whatever gamma_correction says, which is what an anti-aliased file must not
+// look like. These pixels are 0.213 x 0.211 mm, so the edges of the cube cross them.
+constexpr double DISPLAY_WIDTH  = 68.04;
+constexpr double DISPLAY_HEIGHT = 38.04;
+
 // Body offsets of the fields under test, counted from the first byte after a section's 12-byte tag
 // and 4-byte declared length (pm5.md, and the writers themselves).
 constexpr size_t PM5_LEVELS_OFFSET      = 40; // u32 grey level count
@@ -146,8 +156,8 @@ ExportedCube export_cube(const std::string& format, double gamma_correction)
     config.sla_printer_settings.items.opt("display_pixels_y").set(DISPLAY_PIXELS_Y);
     config.sla_printer_settings.items.opt("display_orientation").set(
         Slic3r::Domain::SLADisplayOrientation::sladoLandscape);
-    config.sla_printer_settings.items.opt("display_width").set(64.0);
-    config.sla_printer_settings.items.opt("display_height").set(36.0);
+    config.sla_printer_settings.items.opt("display_width").set(DISPLAY_WIDTH);
+    config.sla_printer_settings.items.opt("display_height").set(DISPLAY_HEIGHT);
     config.sla_printer_settings.items.opt("display_mirror_x").set(false);
     config.sla_printer_settings.items.opt("display_mirror_y").set(false);
     // 0 thresholds the raster, 1 anti-aliases it. Nothing in between: the test is about the two
