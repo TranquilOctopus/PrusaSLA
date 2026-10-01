@@ -97,14 +97,18 @@ struct SlaHollowingSuggestion
  * volume of the body less that shell, which is the estimate the brief asks for and the one the
  * notification reads.
  *
- * It is an UPPER bound, and deliberately not sharpened into an exact figure: where two offset
- * surfaces meet in a corner they cut away the same resin twice, so the real saving of a 40 mm cube
- * with 3 mm walls is nearer 25 ml than the 45 ml this says. An upper bound is the safe direction
- * for a suggestion - it never tells the user a hollow print saves less than it does - and the
- * notification says "about" for the same reason. A layer whose shell would be thicker than the
- * layer itself (a sliver, where a wall cannot be stood at all) counts as no saving rather than as a
- * negative one; the eligibility rule of hollowing_suggestion_eligible() is what keeps those out of
- * the notification in the first place.
+ * It is an UPPER bound, and deliberately not sharpened into an exact figure: the estimate charges
+ * the side walls of the shell on every layer, including the floor and the roof, where a shell of
+ * wall_mm has no interior left to take out, so the real saving of a 40 mm cube with 3 mm walls is
+ * the 39.3 ml of its 34^3 mm3 interior rather than the 45 ml this says. Where two offset surfaces
+ * meet in a corner they count the same resin twice, which makes the estimate smaller rather than
+ * bigger (four 3 x 3 mm squares on each of the 34 layers the interior reaches, 1.2 ml of it), so
+ * the floor and the roof it never charges (6.7 ml of it) are what the difference is made of. An
+ * upper bound is the safe direction for a suggestion - it never tells the user a hollow print
+ * saves less than it does - and the notification says "about" for the same reason. A layer whose
+ * shell would be thicker than the layer itself (a sliver, where a wall cannot be stood at all)
+ * counts as no saving rather than as a negative one; the eligibility rule of
+ * hollowing_suggestion_eligible() is what keeps those out of the notification in the first place.
  *
  * @param stats What the slice measured for one model object.
  * @param wall_mm The wall of the shell, in mm. Zero or less saves nothing.
