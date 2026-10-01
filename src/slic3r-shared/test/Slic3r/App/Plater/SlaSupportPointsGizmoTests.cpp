@@ -12,9 +12,11 @@
 #include "Slic3r/Domain/Model.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
+#include "Slic3r/Domain/TriangleMesh.hpp"
 #include "Slic3r/Domain/Types.hpp"
 
 #include <Eigen/Geometry>
+#include <optional>
 #include <unordered_set>
 
 using Slic3r::Domain::Model;
@@ -698,13 +700,20 @@ TEST_CASE("SlaSupportPointsEditing - rectangle selection", "[SlaSupportPointsGiz
 // these are the rules of that and of the raycast that follows it.
 namespace {
 
-// A 20 mm cube standing on the plate, where the object of the tool sits.
+// A 20 mm cube standing on the plate, where the object of the tool sits. An AABBMesh is a view on a
+// triangle mesh and not a copy of it (the raycast reads the mesh through the pointer it keeps), so
+// the cube is a member of its own here and the acceleration structure is built from it in the
+// constructor. Built into the argument of the constructor instead, it would be freed before the
+// first raycast of the case below.
 struct CubeOnThePlate
 {
-    Slic3r::AABBMesh aabb{Slic3r::Biz::Algorithms::TriangleMesh::its_make_cube(20., 20., 20.)};
-    Transform3d      instance{Transform3d::Identity()};
+    Slic3r::Domain::TriangleMesh mesh{
+        Slic3r::Biz::Algorithms::TriangleMesh::its_make_cube(20., 20., 20.)
+    };
+    Slic3r::AABBMesh aabb;
+    Transform3d instance{Transform3d::Identity()};
 
-    CubeOnThePlate()
+    CubeOnThePlate() : aabb(mesh)
     {
         instance.translate(Vec3d{100., 110., 0.});
     }
@@ -712,8 +721,10 @@ struct CubeOnThePlate
 
 } // namespace
 
-TEST_CASE("SlaSupportPointsGizmo - a click on the drawn model adds a point where the surface is",
-          "[SlaSupportPointsGizmo][lift]")
+TEST_CASE(
+    "SlaSupportPointsGizmo - a click on the drawn model adds a point where the surface is",
+    "[SlaSupportPointsGizmo][lift]"
+)
 {
     CubeOnThePlate cube;
 

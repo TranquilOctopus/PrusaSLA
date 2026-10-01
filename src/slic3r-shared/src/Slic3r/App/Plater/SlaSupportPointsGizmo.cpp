@@ -1774,6 +1774,63 @@ void SlaSupportPointsGizmo::apply_preset_mini()
     this->apply_new_support_preset(0);
 }
 
+void SlaSupportPointsGizmo::apply_preset_light()
+{
+    this->apply_new_support_preset(1);
+}
+
+void SlaSupportPointsGizmo::apply_preset_medium()
+{
+    this->apply_new_support_preset(2);
+}
+
+void SlaSupportPointsGizmo::apply_preset_heavy()
+{
+    this->apply_new_support_preset(3);
+}
+
+// The tip diameter, tip shape, tip length, knot, stem cross-section and stem taper a point takes, read
+// off the object settings of the model the tool works on (M2.16c, M2.24, M2.23b). This is what a
+// clicked point takes and what a generated point is filled with, so both start from the values the
+// user configured for this model.
+SlaSupportGeometry SlaSupportPointsGizmo::support_geometry_defaults(const Domain::ModelObject* model_object) const
+{
+    SlaSupportGeometry geometry;
+    if (!model_object) {
+        return geometry;
+    }
+
+    const auto& settings = model_object->object_settings_sla;
+
+    // The tip diameter is the "head diameter" control of the tool (M2.24), so a point placed by hand
+    // takes the configured one and a preset button replaces it.
+    if (auto result = settings.find("support_head_front_diameter"); result.item != nullptr) {
+        geometry.tip_diameter_mm = result.item->get<double>();
+    }
+    if (auto result = settings.find("support_tip_shape"); result.item != nullptr) {
+        geometry.tip_shape = support_tip_shape_of(result.item->get<Domain::sla::SupportTipShape>());
+    }
+    if (auto result = settings.find("support_tip_length"); result.item != nullptr) {
+        geometry.tip_length_mm = result.item->get<double>();
+    }
+    if (auto result = settings.find("support_knot_diameter"); result.item != nullptr) {
+        geometry.knot_diameter_mm = result.item->get<double>();
+    }
+    if (auto result = settings.find("support_stem_sides"); result.item != nullptr) {
+        geometry.stem_sides = result.item->get<int>();
+    }
+    if (auto result = settings.find("support_stem_taper"); result.item != nullptr) {
+        geometry.stem_taper = result.item->get<double>();
+    }
+    // The foot of a new point is the shape support_base_shape asks for (M2.23b), so a point placed
+    // by hand gets the foot the user configured rather than the cone of before.
+    if (auto result = settings.find("support_base_shape"); result.item != nullptr) {
+        geometry.base_shape = support_base_shape_of(result.item->get<Domain::sla::SupportBaseShape>());
+    }
+
+    return geometry;
+}
+
 // The four values of a preset, from the print preset of the printer where it belongs
 // (support_preset_{mini,light,medium,heavy}_*, M2.18, M2.22) and from the values the config
 // definitions ship for a preset that does not carry the keys.

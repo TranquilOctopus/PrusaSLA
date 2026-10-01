@@ -125,7 +125,7 @@ SlaSupportNewValues sla_new_support_values(const SlaSupportPointsEditing& editin
     SlaSupportNewValues values;
     values.geometry                    = editing.support_geometry;
     values.sizes.tip_diameter_mm       = editing.support_geometry.tip_diameter_mm;
-    values.sizes.stem_diameter_mm      = editing.stem_diameter_mm;
+    values.sizes.stem_diameter_mm      = editing.pillar_diameter_mm;
     values.sizes.base_diameter_mm      = editing.base_diameter_mm;
     values.sizes.base_height_mm        = editing.base_height_mm;
     values.follow_global.tip_diameter  = editing.head_diameter_use_global;
@@ -205,7 +205,7 @@ void sla_new_support_setting_changed(
         set_geometry_field(editing.support_geometry, geometry_field_of(field), value);
         break;
     case SlaSupportPointField::StemDiameter:
-        editing.stem_diameter_mm = value;
+        editing.pillar_diameter_mm = value;
         // A number the user typed is a number the point takes, so this size stops following the
         // global settings. It is what the single control of before did, and the box next to the
         // slider is unchecked right after (M2.33).
@@ -357,7 +357,7 @@ void
 sla_new_support_preset_changed(SlaSupportPointsEditing& editing, const SlaSupportPreset& preset)
 {
     editing.support_geometry.tip_diameter_mm = preset.tip_diameter_mm;
-    editing.stem_diameter_mm                 = preset.stem_diameter_mm;
+    editing.pillar_diameter_mm               = preset.stem_diameter_mm;
     editing.base_diameter_mm                 = preset.base_diameter_mm;
     editing.base_height_mm                   = preset.base_height_mm;
     // A preset is a bundle of values of its own, so a point placed from now on carries them instead

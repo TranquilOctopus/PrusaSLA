@@ -149,13 +149,13 @@ TEST_CASE(
     SECTION("A preset of the group clears the follow the global setting switches")
     {
         SlaSupportPointsEditing editing    = make_editing();
-        editing.stem_diameter_mm           = 2.;
+        editing.pillar_diameter_mm         = 2.;
         editing.pillar_diameter_use_global = true;
 
         sla_new_support_preset_changed(editing, sla_support_preset("light"));
 
         CHECK(editing.pillar_diameter_use_global == false);
-        CHECK(editing.stem_diameter_mm == Approx(sla_support_preset("light").stem_diameter_mm));
+        CHECK(editing.pillar_diameter_mm == Approx(sla_support_preset("light").stem_diameter_mm));
     }
 }
 
@@ -185,14 +185,14 @@ TEST_CASE(
     {
         SlaSupportPointsEditing editing          = make_editing();
         editing.support_geometry.tip_diameter_mm = 0.4;
-        editing.stem_diameter_mm                 = 0.8;
+        editing.pillar_diameter_mm               = 0.8;
         editing.select_point(0);
 
         sla_selected_support_setting_changed(editing, SlaSupportPointField::TipDiameter, 1.2);
         sla_selected_support_setting_changed(editing, SlaSupportPointField::StemDiameter, 3.);
 
         CHECK(editing.support_geometry.tip_diameter_mm == Approx(0.4));
-        CHECK(editing.stem_diameter_mm == Approx(0.8));
+        CHECK(editing.pillar_diameter_mm == Approx(0.8));
 
         editing.add_point(Vec3d{0., 0., 0.});
         REQUIRE(editing.points.size() == 4u);
@@ -229,7 +229,7 @@ TEST_CASE(
     SECTION("A size of the group follows the global setting and leaves it again")
     {
         SlaSupportPointsEditing editing = make_editing();
-        editing.stem_diameter_mm        = 0.8;
+        editing.pillar_diameter_mm      = 0.8;
         editing.select_point(0);
         sla_selected_support_setting_changed(editing, SlaSupportPointField::StemDiameter, 1.5);
         REQUIRE(editing.points[0].pillar_diameter == Approx(1.5));
@@ -270,7 +270,7 @@ TEST_CASE(
     {
         SlaSupportPointsEditing editing          = make_editing();
         editing.support_geometry.tip_diameter_mm = 0.4;
-        editing.stem_diameter_mm                 = 0.8;
+        editing.pillar_diameter_mm               = 0.8;
         editing.select_point(2);
 
         sla_selected_support_preset_changed(editing, sla_support_preset("medium"));
@@ -285,7 +285,7 @@ TEST_CASE(
 
         // What a clicked point takes is left alone by the preset of the selection.
         CHECK(editing.support_geometry.tip_diameter_mm == Approx(0.4));
-        CHECK(editing.stem_diameter_mm == Approx(0.8));
+        CHECK(editing.pillar_diameter_mm == Approx(0.8));
     }
 }
 
@@ -373,7 +373,7 @@ TEST_CASE("The New supports group shows what a clicked point takes", "[SlaSuppor
     SlaSupportPointsEditing editing;
     editing.support_geometry.tip_diameter_mm = 0.45;
     editing.support_geometry.stem_sides      = 6;
-    editing.stem_diameter_mm                 = 1.2;
+    editing.pillar_diameter_mm               = 1.2;
     editing.base_diameter_mm                 = 3.;
     editing.base_height_mm                   = 0.7;
     editing.pillar_diameter_use_global       = false;
