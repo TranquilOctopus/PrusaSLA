@@ -313,6 +313,9 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     button_row->set_gap(gap_size());
 
     m_apply_button = button_row->emplace_back<LayoutButton>(_u8L("Apply"));
+    // Leaving the tool applies the generated points on its own, so Apply is for the user who wants
+    // them on the model right away and sees the tree right there (M2.31).
+    m_apply_button->set_tooltip(_u8L("Optional. The generated points are applied when you leave the tool."));
     m_apply_button->callbacks().action = [this]()
     { m_callbacks.apply(); };
 

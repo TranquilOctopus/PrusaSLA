@@ -91,6 +91,12 @@ public:
     void on_activated() override;
     void on_deactivated() override;
 
+    // The project being switched away from is the other way the tool ends: the pending points are
+    // applied on the way out, like every other way out (M2.31). Every other gizmo answers these two
+    // by calling on_activated / on_deactivated, so the tool follows.
+    void on_project_activated(size_t new_project_id) override;
+    void on_project_deactivated(size_t old_project_id) override;
+
     void on_scene_selection_changed(
         Domain::SelectionId project_id,
         const Biz::Scene::ObjectSelection& selection
@@ -134,6 +140,10 @@ private:
     void on_auto_support_completed(Domain::ObjectID obj_id, std::optional<Domain::SLA::SupportPoints> support_points);
     void on_generation_completed(std::optional<Domain::SLA::SupportPoints> support_points);
     void apply_generated_points();
+    // What every path that leaves the tool does with the points a generation produced: it applies
+    // them, exactly as the Apply button does, undo snapshot included (M2.31). Discard has cleared
+    // them by then, so it writes nothing.
+    void apply_pending_points_on_leaving();
     void discard_generated_points();
 
     // Editing helpers
@@ -258,6 +268,9 @@ private:
     bool m_points_job_running = false;
     bool m_gizmo_active = false;
 
+    // The project the tool works on, which is the project the pending points belong to when the tool
+    // is being left (M2.31).
+    Domain::SelectionId m_project_id{Domain::INVALID_ID};
     Domain::ObjectID m_selected_object_id;
     Domain::SelectionId m_selected_instance_id{Domain::INVALID_ID};
     std::optional<Domain::SLA::SupportPoints> m_generated_support_points;

@@ -125,6 +125,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Plater/SlaSupportPreviewSchedule.cpp
         include/Slic3r/App/Plater/SlaSupportPointsEditing.hpp
         src/Slic3r/App/Plater/SlaSupportPointsEditing.cpp
+        include/Slic3r/App/Plater/SlaSupportPointsLeaving.hpp
+        src/Slic3r/App/Plater/SlaSupportPointsLeaving.cpp
         include/Slic3r/App/Plater/SlaSupportGeometry.hpp
         src/Slic3r/App/Plater/SlaSupportGeometry.cpp
         include/Slic3r/App/Plater/SlaSupportOnModel.hpp
