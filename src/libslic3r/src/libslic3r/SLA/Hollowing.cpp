@@ -97,9 +97,15 @@ InteriorPtr generate_interior(const VoxelGrid       &vgrid,
     double voxsc    = get_voxel_scale(vgrid);      // voxels per world unit
     double offset   = hc.min_thickness * voxsc;    // voxel units
     double D        = hc.closing_distance * voxsc; // voxel units
-    float  in_range = 1.1f * float(offset + D) / float(voxsc); // world units
-    float  out_range = 1.f / voxsc; // world units
-    auto   narrowb  = 1.f;  // voxel units (voxel count)
+    auto   narrowb  = 2.f;                          // voxel units (voxel count)
+
+    // A grid only knows the values its narrow band holds, and a tool asked for a level outside
+    // that band answers with an empty grid. redistance_grid() always hands back a band of
+    // narrowb voxels on both sides of the level it is given, so the band a grid is widened to
+    // before that has to reach the level plus narrowb. The offset surface of the cavity is
+    // offset + D voxels inside the model, and that is the first level the grid is asked for.
+    float in_range  = 1.1f * float(offset + D + narrowb) / float(voxsc); // world units
+    float out_range = 1.1f * narrowb / float(voxsc);                      // world units
 
     if (ctl.stopcondition()) return {};
     else ctl.statuscb(0, _u8L("Hollowing"));
@@ -109,16 +115,31 @@ InteriorPtr generate_interior(const VoxelGrid       &vgrid,
     if (ctl.stopcondition()) return {};
     else ctl.statuscb(30, _u8L("Hollowing"));
 
-    double iso_surface = D;
+    // The surface of the interior is always taken off the zero crossing of the grid, which is the
+    // one level every grid is guaranteed to hold inside its own band. Asking for a level that is
+    // a distance away from that crossing asks for the band to reach it, and a band that stops one
+    // tenth short of it gives an empty mesh back rather than a thinner one.
+    double iso_surface = 0.;
+
     if (hc.closing_distance > EPSILON) {
+        // The offset surface of the cavity, which is where the closing distance starts to work.
         gridptr = redistance_grid(*gridptr, -float(offset + D), narrowb, narrowb);
 
-        gridptr = dilate_grid(*gridptr, 1.1 * std::ceil(iso_surface) / voxsc, 0.f);
+        // The closing: the cavity is eroded by the closing distance, which is what rounds the
+        // corners of it, and the surface is taken D voxels further out of the grid again. The
+        // dilation has to widen both sides of its band, the one the erosion moves the surface
+        // into and the one the surface is then taken out of.
+        const float closing_range =
+            1.1f * float(1.1 * std::ceil(D) + narrowb) / float(voxsc); // world units
+        gridptr = dilate_grid(*gridptr, closing_range, closing_range);
 
-        out_range = iso_surface / voxsc;
-        in_range  = narrowb / voxsc;
+        // The level that closing left behind, rebuilt once more so that the surface the hollow
+        // print wants is the zero crossing of the grid it is read from.
+        gridptr = redistance_grid(*gridptr, float(D), narrowb, narrowb);
     } else {
-        iso_surface = -offset;
+        // Without a closing distance the offset surface is the surface, and the same rebuild
+        // puts the zero crossing on it.
+        gridptr = redistance_grid(*gridptr, -float(offset), narrowb, narrowb);
     }
 
     if (ctl.stopcondition()) return {};
@@ -135,7 +156,9 @@ InteriorPtr generate_interior(const VoxelGrid       &vgrid,
 
     interior->iso_surface = iso_surface / voxsc;
     interior->thickness   = offset / voxsc;
-    interior->full_narrowb = (out_range + in_range) / 2.;
+    // The band of the grid the interior mesh was cut out of, which is the only part of it that
+    // answers a distance query.
+    interior->full_narrowb = narrowb / voxsc;
     interior->voxel_scale = voxsc;
 
     return interior;

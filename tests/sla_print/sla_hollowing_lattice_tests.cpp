@@ -53,13 +53,16 @@ namespace {
 constexpr double CUBE_MM = 12.;
 constexpr double WALL_MM = 2.;
 
+// The closing distance is what rounds the corners of the interior, half of the wall here.
+constexpr double CLOSING_MM = 0.5;
+
 // The hollowing of the model, the closing distance is what rounds the corners of the interior.
 Slic3r::sla::HollowingConfig hollowing_cfg()
 {
     Slic3r::sla::HollowingConfig cfg;
     cfg.min_thickness    = WALL_MM;
     cfg.quality          = 0.5;
-    cfg.closing_distance = 0.5;
+    cfg.closing_distance = CLOSING_MM;
     return cfg;
 }
 
@@ -118,7 +121,24 @@ Slic3r::sla::InteriorPtr hollowed_interior(const Cube &cube)
         sla::generate_interior(Slic3r::range(cube.parts), hollowing_cfg());
 
     REQUIRE(interior);
-    REQUIRE(!sla::get_mesh(*interior).indices.empty());
+
+    // Reported before the check that fails first, which is the emptiness of the mesh the lattice
+    // would be cut out of, and the settings of the hollowing that made it.
+    const indexed_triangle_set& mesh = sla::get_mesh(*interior);
+    INFO(
+        "a "
+        << CUBE_MM
+        << "mm cube hollowed with a "
+        << WALL_MM
+        << "mm wall and a closing distance of "
+        << CLOSING_MM
+        << "mm came out with "
+        << mesh.vertices.size()
+        << " vertices and "
+        << mesh.indices.size()
+        << " triangles"
+    );
+    REQUIRE(!mesh.indices.empty());
 
     return interior;
 }
@@ -436,12 +456,38 @@ TEST_CASE(
             CHECK(sides[2 * i + 1] - sides[2 * i] == Approx(cfg.strut_mm).margin(1e-3));
         }
 
-        // Every column runs the whole height of the box, so the bundle fills the box it was built
-        // in and nothing of it is outside.
+        // Every column runs the whole height of the box along its own axis, so the bundle fills the
+        // box in that direction and nothing of it is outside. The two axes the columns cross are a
+        // different matter: the outermost axes stand a whole spacing inside the ends of the box,
+        // which is the rule the first section pins and the one that keeps two neighbouring struts
+        // the same gap apart at the ends as in the middle, so the bundle there reaches from the
+        // first axis less half a strut to the last axis plus half a strut.
         const Domain::BoundingBox3d bundle_bb = Domain::bounding_box(lattice[0]);
-        for (int axis = 0; axis < 3; ++axis) {
-            CHECK(bundle_bb.min[axis] == Approx(bb.min[axis]).margin(1e-3));
-            CHECK(bundle_bb.max[axis] == Approx(bb.max[axis]).margin(1e-3));
+        CHECK(bundle_bb.min[2] == Approx(bb.min[2]).margin(1e-3));
+        CHECK(bundle_bb.max[2] == Approx(bb.max[2]).margin(1e-3));
+
+        for (int axis = 0; axis < 2; ++axis) {
+            const std::vector<double> axes = grid_axes(bb, axis, cfg.spacing_mm);
+            INFO(
+                "axis "
+                << axis
+                << ": the bundle runs from "
+                << bundle_bb.min[axis]
+                << " to "
+                << bundle_bb.max[axis]
+                << ", the outermost columns stand on "
+                << axes.front()
+                << " and "
+                << axes.back()
+                << " in a box that runs from "
+                << bb.min[axis]
+                << " to "
+                << bb.max[axis]
+            );
+            CHECK(bundle_bb.min[axis] == Approx(axes.front() - 0.5 * cfg.strut_mm).margin(1e-3));
+            CHECK(bundle_bb.max[axis] == Approx(axes.back() + 0.5 * cfg.strut_mm).margin(1e-3));
+            CHECK(bundle_bb.min[axis] >= bb.min[axis]);
+            CHECK(bundle_bb.max[axis] <= bb.max[axis]);
         }
     }
 
