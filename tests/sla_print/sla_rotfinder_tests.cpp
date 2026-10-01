@@ -23,18 +23,11 @@ using Catch::Approx;
 
 namespace {
 
-// A model mesh is kept in scaled coordinates: one unit is this many millimetres, so a length of it
-// is multiplied by it to get mm and an area by it squared. The meshes the importers hand over are
-// scaled up, and so is every mesh these models are built from.
+// A model mesh is in millimetres, the coordinate system a model keeps its mesh in: it is the mesh
+// the importers hand over, and the engine cuts its slicing planes at that Z. The polygons the
+// slicer hands back are the other way round, in the scaled coordinates of a layer, so an area of
+// those is multiplied by this squared to get mm².
 constexpr double sf = Slic3r::Biz::Algorithms::Scaling::SCALING_FACTOR;
-
-// A mesh in the coordinates a model keeps it in, the way the importers hand one over. The engine
-// searches those, and the helpers below convert back to mm and mm² on the way out.
-Slic3r::Domain::TriangleMesh into_model_coordinates(Slic3r::Domain::TriangleMesh mesh)
-{
-    mesh.scale(float(1. / sf));
-    return mesh;
-}
 
 // A model with one object holding a box of the given size, standing on the plate. The box can be
 // tilted in the mesh itself, because that is what the rotation optimizer works on.
@@ -46,7 +39,7 @@ struct BoxModel
     BoxModel(double x, double y, double z, double tilt_about_x_rad = 0.)
     {
         Slic3r::Domain::TriangleMesh mesh =
-            into_model_coordinates(Slic3r::Biz::Algorithms::TriangleMesh::make_cube(x, y, z));
+            Slic3r::Biz::Algorithms::TriangleMesh::make_cube(x, y, z);
         if (tilt_about_x_rad != 0.) {
             mesh.transform(Slic3r::Transform3d{
                 Eigen::AngleAxisd{tilt_about_x_rad, Slic3r::Vec3d::UnitX()}});
@@ -80,7 +73,7 @@ double height_after_rotation(const Slic3r::Domain::ModelObject& object, const Sl
             max_z = std::max(max_z, z);
         }
     }
-    return (max_z - min_z) * sf;
+    return max_z - min_z;
 }
 
 struct Faces
@@ -93,8 +86,8 @@ struct Faces
     Slic3r::Vec3d largest_normal{Slic3r::Vec3d::Zero()};
 };
 
-// The faces of the object's mesh after rotating it by the given X/Y angles. The vertices are scaled,
-// so the areas are scaled down to the mm² the tests compare against.
+// The faces of the object's mesh after rotating it by the given X/Y angles. The vertices are in
+// millimetres, so the areas are mm² the tests compare against.
 Faces faces_after_rotation(const Slic3r::Domain::ModelObject& object, const Slic3r::Vec2d& rotation)
 {
     const Slic3r::Transform3d trafo = rotation_transform(rotation);
@@ -106,7 +99,7 @@ Faces faces_after_rotation(const Slic3r::Domain::ModelObject& object, const Slic
             const Slic3r::Vec3d p1{trafo * its.vertices[face[1]].cast<double>()};
             const Slic3r::Vec3d p2{trafo * its.vertices[face[2]].cast<double>()};
             const Slic3r::Vec3d cross{(p1 - p0).cross(p2 - p0)};
-            const double area = 0.5 * cross.norm() * sf * sf;
+            const double area = 0.5 * cross.norm();
             if (area > faces.largest) {
                 faces.largest        = area;
                 faces.largest_normal = cross.normalized();
@@ -119,10 +112,10 @@ Faces faces_after_rotation(const Slic3r::Domain::ModelObject& object, const Slic
     return faces;
 }
 
-// A model with one object holding the mesh it is given, in millimetres, which is scaled into the
-// coordinates a model is kept in: the goals that slice the mesh (least peel, no cups) cut their
-// planes at that Z and read the areas of the slices back out of it, so a mesh left in millimetres
-// would be measured as a trillionth of its size.
+// A model with one object holding the mesh it is given, in millimetres, which is the coordinate
+// system a model keeps its mesh in: the goals that slice the mesh (least peel, no cups) cut their
+// planes at that Z and hand the mesh to the slicer in it, so a mesh in scaled coordinates would be
+// measured a million times too big.
 struct MeshModel
 {
     Slic3r::Domain::Model model;
@@ -130,9 +123,8 @@ struct MeshModel
 
     explicit MeshModel(Slic3r::Domain::TriangleMesh mesh)
     {
-        Slic3r::Domain::TriangleMesh scaled_mesh = into_model_coordinates(std::move(mesh));
         object = model.add_object();
-        Slic3r::Biz::Algorithms::ModelObject::add_volume(object, std::move(scaled_mesh));
+        Slic3r::Biz::Algorithms::ModelObject::add_volume(object, std::move(mesh));
         object->add_instance();
     }
 };
@@ -201,11 +193,11 @@ CoarseSlices coarse_slices_after_rotation(
         return result;
 
     // The planes sit between the extremes, as they do in the engine: a plane on a horizontal face
-    // of the mesh does not cut it. The Z of the mesh is scaled, so the step of the planes is scaled
-    // with it too: a millimetre of height is 1 / sf of its units.
-    const double step = 1. / sf;
+    // of the mesh does not cut it. The Z of the mesh is in millimetres, and so is the step of the
+    // planes: the slicer cuts at the Z of the mesh and scales the mesh up into the coordinates of
+    // a layer itself, so a millimetre here is a millimetre of the pose.
     std::vector<float> zs;
-    for (double z = double(zmin) + step_mm * step / 2.; z < double(zmax); z += step_mm * step)
+    for (double z = double(zmin) + step_mm / 2.; z < double(zmax); z += step_mm)
         zs.push_back(float(z));
     if (zs.empty())
         return result;
