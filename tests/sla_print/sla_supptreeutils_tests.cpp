@@ -131,7 +131,11 @@ TEST_CASE("Pillar search dumb case", "[suptreeutils]")
 
     SECTION("with empty mesh")
     {
-        sla::SupportableMesh sm{.emesh = AABBMesh(indexed_triangle_set{})};
+        // A named local, not a temporary: the AABBMesh of a SupportableMesh is a view on
+        // a triangle mesh and not a copy of it, so a temporary handed to it is freed
+        // before the first query of the search that reads the mesh through it.
+        const indexed_triangle_set empty_mesh;
+        sla::SupportableMesh sm{.emesh = AABBMesh(empty_mesh)};
 
         constexpr double EndR = 1.;
         sla::GroundConnection conn = sla::deepsearch_ground_connection(ex_seq, sm, j, EndR, sla::DOWN);
@@ -143,7 +147,8 @@ TEST_CASE("Pillar search dumb case", "[suptreeutils]")
 
     SECTION("with zero R source and destination")
     {
-        sla::SupportableMesh sm{.emesh = AABBMesh(indexed_triangle_set{})};
+        const indexed_triangle_set empty_mesh;
+        sla::SupportableMesh sm{.emesh = AABBMesh(empty_mesh)};
 
         j.r                   = 0.;
         constexpr double EndR = 0.;
@@ -157,7 +162,8 @@ TEST_CASE("Pillar search dumb case", "[suptreeutils]")
 
     SECTION("with zero init direction")
     {
-        sla::SupportableMesh sm{.emesh = AABBMesh(indexed_triangle_set{})};
+        const indexed_triangle_set empty_mesh;
+        sla::SupportableMesh sm{.emesh = AABBMesh(empty_mesh)};
 
         constexpr double EndR = 1.;
         Vec3d init_dir        = Vec3d::Zero();
@@ -288,7 +294,8 @@ TEST_CASE("Find ground route just above ground", "[suptreeutils]")
 
     sla::Junction j{Vec3d{0., 0., 2. * cfg.head_back_radius_mm}, cfg.head_back_radius_mm};
 
-    sla::SupportableMesh sm{.emesh = AABBMesh(indexed_triangle_set{})};
+    const indexed_triangle_set empty_mesh;
+    sla::SupportableMesh sm{.emesh = AABBMesh(empty_mesh)};
     sla::GroundConnection conn = sla::deepsearch_ground_connection(
         ex_seq,
         sm,

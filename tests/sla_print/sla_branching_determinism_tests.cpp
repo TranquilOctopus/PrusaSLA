@@ -165,15 +165,23 @@ Fixture close_points_fixture()
     return fx;
 }
 
-indexed_triangle_set sphere_mesh()
+// The sphere the trees below are built on, out of a static of its own: the AABBMesh of
+// a SupportableMesh is a view on a triangle mesh and not a copy of it, so a sphere built
+// into the argument of make_supportable_mesh() below is freed before the first query of
+// the tree and the tree then runs on released memory.
+const indexed_triangle_set &sphere_mesh()
 {
-    // The second argument of its_make_sphere is the wanted edge length relative to
-    // the radius, which puts the facets a few hundredths of a millimetre inside the
-    // smooth surface the points are placed on.
-    indexed_triangle_set mesh = triangle_mesh::its_make_sphere(sphere_radius, 0.08);
+    static const indexed_triangle_set mesh = [] {
+        // The second argument of its_make_sphere is the wanted edge length relative to
+        // the radius, which puts the facets a few hundredths of a millimetre inside the
+        // smooth surface the points are placed on.
+        indexed_triangle_set sphere = triangle_mesh::its_make_sphere(sphere_radius, 0.08);
 
-    for (auto &v : mesh.vertices)
-        v.z() += float(sphere_radius); // it is centred on the origin
+        for (auto &v : sphere.vertices)
+            v.z() += float(sphere_radius); // it is centred on the origin
+
+        return sphere;
+    }();
 
     return mesh;
 }
