@@ -670,7 +670,13 @@ indexed_triangle_set create_outer_pad_geometry(const ExPolygons & skeleton,
 
         double z_min = -cfg.height, z_max = 0;
         if (taper_z < 0) {
-            its_merge(ret, walls(bevel_poly.contour, top_poly.contour, taper_z, z_max));
+            // The rim is the first polygon of the bevel wall and the outline the bevel runs into
+            // is the second, the same way round as the wall below it: triangulate_wall() walks
+            // the ring of its first polygon one way and the ring of its second one the other
+            // way, so the two walls that share the outline have to take it as the same argument
+            // to close the raft. The other way round leaves the raft open along the rim and
+            // along the seam where the bevel meets the wall.
+            its_merge(ret, walls(top_poly.contour, bevel_poly.contour, z_max, taper_z));
             z_max = taper_z;
         }
 
