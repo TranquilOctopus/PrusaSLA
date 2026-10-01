@@ -10,21 +10,34 @@ namespace trianglulate_wall_detail {
 // A ring is the whole range [begin, end) and the walk over it starts at startidx, which
 // synchronize_rings() may have turned away from begin so that the two rings of a wall start at
 // corresponding points. Both indices therefore wrap to begin and not to startidx, and the walk is
-// over once it has come a full round: wrapping nextidx to startidx instead (which is what the
-// "nextidx != startidx" guard used to do) ends the walk early on a ring that was turned, and the
-// stretch of the ring in front of its start is then never built, so the band between the two rings
-// is left open along it. Two rings that already start at corresponding points - the same polygon
-// twice, which is every straight wall of a raft - walk exactly as they did before.
+// over once it has come a full round, so it visits every edge of the ring exactly once however far
+// it was turned. Two rings that already start at corresponding points - the same polygon twice,
+// which is every straight wall of a raft - walk exactly as they did before.
+//
+// is_lower() says which of the two rings of the wall this is, and it has to be told, not worked out
+// from an index: idx is an index into the points of the whole wall, so idx < size() says "this
+// point belongs to the first polygon" only while the two polygons have the same number of points.
+// On the bevel of a raft the two rings are two different offsets of a rounded outline, so the second
+// one is the longer as often as not, and every point of it whose index is still below the point
+// count of the first was taken for a point of the lower ring. The band was then wound against itself
+// over that stretch of the outline - the stretch from the start of the walk to where the index of
+// the upper ring passes the size of the lower one - which is neither built by the wall below it nor
+// by the wall above it, and the raft was open along it.
 class Ring {
     size_t idx = 0, nextidx = 1, startidx = 0, begin = 0, end = 0;
     size_t walked = 0;
+    bool   lower = false;
 
 public:
-    explicit Ring(size_t from, size_t to) : begin(from), end(to) { init(begin); }
+    Ring(size_t from, size_t to, bool is_lower)
+        : begin(from), end(to), lower(is_lower)
+    {
+        init(begin);
+    }
 
     size_t size() const { return end - begin; }
     std::pair<size_t, size_t> pos() const { return {idx, nextidx}; }
-    bool is_lower() const { return idx < size(); }
+    bool is_lower() const { return lower; }
 
     void inc()
     {
@@ -142,7 +155,7 @@ void triangulate_wall(std::vector<LegacyVec<3, Sc>> &pts,
 
     ind.reserve(2 * (lower.size() + upper.size()));
 
-    Ring lring{0, lower.points.size()}, uring{lower.points.size(), pts.size()};
+    Ring lring{0, lower.points.size(), true}, uring{lower.points.size(), pts.size(), false};
     Triangulator t{&pts, lring, uring};
     t.run(ind);
 }
