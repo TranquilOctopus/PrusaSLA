@@ -40,7 +40,6 @@ using Slic3r::App::Undo::load_serialized_model;
 using Slic3r::App::Undo::serialize_model;
 using Slic3r::App::Undo::SerializedData;
 using Slic3r::Biz::ProjectInteractor;
-using Slic3r::Biz::UndoSnapshotSelection;
 using Slic3r::Biz::UndoSnapshotType;
 using Slic3r::Domain::ElementRef;
 using Slic3r::Domain::Model;
@@ -52,7 +51,11 @@ using Slic3r::Domain::SLA::SupportPoint;
 using Slic3r::Domain::SLA::SupportPoints;
 using Slic3r::Domain::SLA::SupportPointType;
 
-namespace TriMesh = Slic3r::Biz::Algorithms::TriangleMesh;
+// The code of this file is outside namespace Slic3r, so the namespaces it uses are named here.
+namespace Biz                   = Slic3r::Biz;
+namespace Domain                = Slic3r::Domain;
+namespace TriMesh               = Slic3r::Biz::Algorithms::TriangleMesh;
+namespace UndoSnapshotSelection = Slic3r::Biz::UndoSnapshotSelection;
 
 namespace {
 
