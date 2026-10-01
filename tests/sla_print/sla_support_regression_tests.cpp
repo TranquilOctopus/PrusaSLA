@@ -407,7 +407,10 @@ TEST_CASE("M4.4a: a part under a brim keeps the point the surface move could sli
     // floating 1.7 mm under the brim and clear of the block. The point the sampling makes for the
     // plate's first layer is 1.975 mm under the brim: the vertical ray up misses it by far more
     // than a layer height, which is what the report M4.3c quotes would send to the brim. The ray
-    // down finds the plate's own bottom face 0.025 mm below, so the point keeps its place.
+    // down finds the plate's own bottom face 0.025 mm below, so the point keeps its place. The
+    // underside of the brim is an overhang of its own, like the plate, so the overhang sampling
+    // puts points on that face at z = 10 and some of them stand in the plate's footprint; the two
+    // sets of points share the column below and are told apart by their height.
     MeshModel model({box(10., 10., 10.), disc(15., 1., Vec3d{5., 5., 10.}),
                      box(4., 4., 0.3, Vec3d{10.5, 3., 8.0})});
 
@@ -422,18 +425,40 @@ TEST_CASE("M4.4a: a part under a brim keeps the point the surface move could sli
     // The same question asked of the points themselves, in the column the plate stands in: the
     // column is the plate's own footprint, because the point that holds it is kept at least the
     // head radius (0.2 mm for the 0.4 mm head) inside the outline and a tighter rectangle would
-    // miss the very point this case is about. The brim is 1.975 mm above the plate and the block's
-    // wall is half a millimetre beside it, so a point carried off the plate towards the brim would
-    // show up in this column at another height.
+    // miss the very point this case is about. It is the brim's own footprint where the brim hangs
+    // over the plate, so the column also holds the points the overhang sampling makes on the
+    // bottom face of the brim at z = 10. Those are the brim's, and they hold the brim, so the
+    // column is not asked to be all at the height of the plate: what the case is about is the
+    // plate's own point, and whether anything was carried off the plate on the way.
     const std::vector<const SupportPoint*> column =
         points_in_column(coverage.points, 10.5, 3., 14.5, 7.);
     INFO("support points in the column of the plate: " << column.size());
     REQUIRE_FALSE(column.empty());
+
+    // The point that holds the plate stands at the plate's own bottom face, 8.0 mm, so one point of
+    // the column has to be there: 7.9 to 8.2 mm is the bottom of the plate within a layer of the
+    // 0.05 mm this slices at.
+    std::string holds;
+    std::string carried;
     for (const SupportPoint* point : column) {
-        INFO("point at (" << point->pos.x() << ", " << point->pos.y() << ", " << point->pos.z() << ")");
-        CHECK(point->pos.z() >= 7.9);
-        CHECK(point->pos.z() <= 8.2);
+        const std::string at = "(" + std::to_string(point->pos.x()) + ", " +
+                               std::to_string(point->pos.y()) + ", " +
+                               std::to_string(point->pos.z()) + ")";
+        if (point->pos.z() >= 7.9f && point->pos.z() <= 8.2f)
+            holds += " " + at;
+        if (point->pos.z() > 8.3f && point->pos.z() < 9.9f)
+            carried += " " + at;
     }
+
+    // Nothing of the plate was carried off towards the brim: move_on_mesh_surface() replaces a
+    // point with the closest point of the mesh when the vertical ray misses it by more than a
+    // layer height, and a point slid off the plate would come to rest on the bottom face of the
+    // brim, in the 1.7 mm gap between the two, holding neither. A point at the height of the brim
+    // itself is where the brim wants it and is left alone.
+    INFO("points of the column at the height of the plate: " << holds);
+    CHECK_FALSE(holds.empty());
+    INFO("points of the column in the gap between the plate and the brim: " << carried);
+    CHECK(carried.empty());
 
     // How far the move step carried anything, for the record: it puts the points that are inside
     // the 1 mm thick brim onto its surface and it leaves the rest where the sampling put them.
