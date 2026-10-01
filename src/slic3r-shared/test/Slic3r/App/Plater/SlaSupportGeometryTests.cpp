@@ -185,7 +185,10 @@ TEST_CASE("The support geometry of a selection is only shown when the points agr
 
     SECTION("points that agree show the value they share")
     {
+        // Both points carry it: a field only one of them has is the disagreement above, not a
+        // value the selection can show.
         SupportPoints agreeing{make_point(), make_point()};
+        agreeing[0].stem_sides = 6;
         agreeing[1].stem_sides = 6;
         const std::optional<SlaSupportGeometry> shared = selection_support_geometry(agreeing, {0, 1});
         REQUIRE(shared.has_value());

@@ -77,8 +77,9 @@ std::string sla_issue_row_text(const SlaIssueRow& row);
 /**
  * @brief The area in mm² the slicer wrote into the note of an issue.
  *
- * The note reads e.g. "island, 4.20 mm2". Empty when it carries no number, in which case the
- * row is shown without an area.
+ * The note reads e.g. "island, 4.20 mm2". Only the number in front of the unit is read, so the
+ * 2 of "mm2" is never mistaken for an area. Empty when the note carries no such number, in which
+ * case the row is shown without an area.
  */
 std::optional<double> sla_issue_area_mm2(const std::string& note);
 
