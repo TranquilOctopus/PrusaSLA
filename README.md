@@ -142,11 +142,11 @@ branch, one commit, the box ticked in the same commit.
 
 ## Progress
 
-**304 of 343 todos done (89%)** · updated 2026-10-01 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**305 of 344 todos done (89%)** · updated 2026-10-01 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
-| M0: Foundation | 66/67 | `████████████` 99% |
+| M0: Foundation | 67/68 | `████████████` 99% |
 | M1: Look, feel and SLA-first shell | 44/45 | `████████████` 98% |
 | M2: SLA editing tools (porting the legacy gizmos) | 86/87 | `████████████` 99% |
 | M3: Resin profile import (Chitubox, Lychee and others) | 24/28 | `██████████░░` 86% |
