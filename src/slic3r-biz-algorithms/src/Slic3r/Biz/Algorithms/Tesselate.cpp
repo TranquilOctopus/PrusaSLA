@@ -275,16 +275,28 @@ indexed_triangle_set wall_strip(const Polygon &poly, double lower_z_mm, double u
 
     ret.vertices.reserve(ret.vertices.size() + 2 *offs);
 
-       // The expression unscaled(p).cast<float>().eval() is important here
-       // as it ensures identical conversion of 2D scaled coordinates to float 3D
-       // to that used by the tesselation. This way, the duplicated vertices in the
-       // output mesh can be found with the == operator of the points.
-       // its_merge_vertices will then reliably remove the duplicates.
+       // Scaling each coordinate on its own in double is important here as it makes the vertex of the
+       // wall the same float 3D point the tesselation of the face next to it produces
+       // (tessVertex() takes unscaled<double>(coord)). This way, the duplicated vertices in the
+       // output mesh can be found with the == operator of the points and its_merge_vertices will
+       // then reliably remove the duplicates.
+       //
+       // unscaled() of a scaled *vector* is not that expression: it casts the scaled integer to
+       // float and multiplies in float, and past 16 mm from the origin that float no longer holds
+       // the integer exactly. A wall and the face it stands on then end up a float apart at the
+       // same point, they do not weld, and the solid is open along that edge: every hole of a raft
+       // and every wall of an inner part is built as a strip, so a raft around a rounded outline
+       // (the ring, whose hole is a circle) comes out open along it while the same raft around
+       // axis aligned edges is whole, those having round scaled coordinates.
     for (const Point &p : poly.points)
-        ret.vertices.emplace_back(to_3d(unscaled(p).cast<float>().eval(), float(lower_z_mm)));
+        ret.vertices.emplace_back(to_3d(
+            Vec2f{float(unscaled<double>(p.x())), float(unscaled<double>(p.y()))},
+            float(lower_z_mm)));
 
     for (const Point &p : poly.points)
-        ret.vertices.emplace_back(to_3d(unscaled(p).cast<float>().eval(), float(upper_z_mm)));
+        ret.vertices.emplace_back(to_3d(
+            Vec2f{float(unscaled<double>(p.x())), float(unscaled<double>(p.y()))},
+            float(upper_z_mm)));
 
     for (size_t i = startidx + 1; i < startidx + offs; ++i) {
         ret.indices.emplace_back(Domain::Index3{

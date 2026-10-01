@@ -7,8 +7,17 @@ namespace Slic3r {
 
 namespace trianglulate_wall_detail {
 
+// A ring is the whole range [begin, end) and the walk over it starts at startidx, which
+// synchronize_rings() may have turned away from begin so that the two rings of a wall start at
+// corresponding points. Both indices therefore wrap to begin and not to startidx, and the walk is
+// over once it has come a full round: wrapping nextidx to startidx instead (which is what the
+// "nextidx != startidx" guard used to do) ends the walk early on a ring that was turned, and the
+// stretch of the ring in front of its start is then never built, so the band between the two rings
+// is left open along it. Two rings that already start at corresponding points - the same polygon
+// twice, which is every straight wall of a raft - walk exactly as they did before.
 class Ring {
     size_t idx = 0, nextidx = 1, startidx = 0, begin = 0, end = 0;
+    size_t walked = 0;
 
 public:
     explicit Ring(size_t from, size_t to) : begin(from), end(to) { init(begin); }
@@ -19,10 +28,9 @@ public:
 
     void inc()
     {
-        if (nextidx != startidx) nextidx++;
-        if (nextidx == end) nextidx = begin;
-        idx ++;
-        if (idx == end) idx = begin;
+        nextidx = nextidx + 1 == end ? begin : nextidx + 1;
+        idx     = idx + 1 == end ? begin : idx + 1;
+        ++walked;
     }
 
     void init(size_t pos)
@@ -30,9 +38,10 @@ public:
         startidx = begin + (pos - begin) % size();
         idx = startidx;
         nextidx = begin + (idx + 1 - begin) % size();
+        walked = 0;
     }
 
-    bool is_finished() const { return nextidx == idx; }
+    bool is_finished() const { return walked == size(); }
 };
 
 template<class Sc>
