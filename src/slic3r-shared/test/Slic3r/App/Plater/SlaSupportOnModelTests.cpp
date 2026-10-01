@@ -90,8 +90,9 @@ TEST_CASE("The switch of a selection is only shown when the points agree", "[Sla
 
     SECTION("points that agree show the state they share")
     {
-        SupportPoints agreeing{make_point(), make_point()};
-        agreeing[1].on_model = SupportOnModel::Allow;
+        // Both points carry it: a switch only one of them has is the disagreement above.
+        SupportPoints agreeing{make_point_with(SupportOnModel::Allow),
+                               make_point_with(SupportOnModel::Allow)};
         const std::optional<SupportOnModel> shared = selection_support_on_model(agreeing, {0, 1});
         REQUIRE(shared.has_value());
         CHECK(*shared == SupportOnModel::Allow);
