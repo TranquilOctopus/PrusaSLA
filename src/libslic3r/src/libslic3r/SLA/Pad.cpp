@@ -539,9 +539,9 @@ PadInfill cut_infill_cells(const ExPolygon &outline, const PadConfig3D &cfg)
     return infill;
 }
 
-// The open cells of the infill: the walls around them and the flat ceiling that closes them at the
-// top. What stands above the ceiling is the solid skin under the top face of the raft, which is
-// what the object rests on.
+// The open cells of the infill: a wall all the way round every one of them, from the bottom face
+// of the raft up to the flat ceiling that closes it at the top. What stands above the ceiling is
+// the solid skin under the top face of the raft, which is what the object rests on.
 indexed_triangle_set create_infill_geometry(const PadInfill & infill,
                                             const PadConfig3D & cfg,
                                             ThrowOnCancel       thr)
@@ -553,14 +553,20 @@ indexed_triangle_set create_infill_geometry(const PadInfill & infill,
 
     const double z_floor = -cfg.height, z_ceiling = cfg.infill_cells_top_z();
 
-    for (const ExPolygon &ribs : infill.ribs) {
+    // Every cell is a pocket of its own, walled on the outline it shares with the ceiling below it,
+    // so the wall and the ceiling cannot disagree about where the cell is. A cell that reaches the
+    // rim is walled along that reach as well, which is a face between two solids, but it is part
+    // of the ring of its own cell rather than a loop of the whole interior: a layer through the
+    // cells has to be the raft with the cells open in it, and a layer that is wound the interior
+    // up a second time cannot have a cell taken out of it any more.
+    for (const ExPolygon &cell : infill.cells) {
         thr();
 
-        // The boundary of what is left of the interior around the cells is what the walls are
-        // built on: the rim along the wall of the raft and the ribs between the cells.
-        its_merge(ret, straight_walls(ribs.contour, z_ceiling, z_floor));
-        for (const Polygon &h : ribs.holes)
-            its_merge(ret, straight_walls(h, z_ceiling, z_floor));
+        // The wall of a pocket faces the pocket, so it is built on the outline wound the other way
+        // round than the ceiling is triangulated from.
+        Polygon pocket = cell.contour;
+        Algorithms::Polygon::make_clockwise(pocket);
+        its_merge(ret, straight_walls(pocket, z_ceiling, z_floor));
     }
 
     // The cells are closed at the top by a ceiling, which is the underside of the skin above them,
