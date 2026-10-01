@@ -30,17 +30,19 @@ double area_of(const Domain::ExPolygons& polygons)
     return area;
 }
 
-/// The part of @p polygons that no other of the @p models on the layer covers, so that two models
-/// which overlap are not both charged for the resin in the overlap. With one model on the layer,
-/// which is the usual case, there is nothing to take away and the polygons are used as they are.
+/// The part of @p polygons that the models of the layer before this one have not claimed yet, so
+/// that two models which overlap are not both charged for the resin in the overlap while the models
+/// still add up to the merged layer: the first model of the layer takes the overlap, the ones
+/// behind it are charged where nothing covers them. With nothing claimed yet, which is the usual
+/// case of one model on the layer, there is nothing to take away and the polygons are used as
+/// they are.
 Domain::ExPolygons
-exclusive_of(const Domain::ExPolygons& polygons, const Domain::ExPolygons& merged, size_t models)
+unclaimed_of(const Domain::ExPolygons& polygons, const Domain::ExPolygons& claimed)
 {
-    if (models < 2 || polygons.empty())
+    if (polygons.empty() || claimed.empty())
         return polygons;
 
-    const Domain::ExPolygons others = diff_ex(merged, polygons);
-    return others.empty() ? polygons : diff_ex(polygons, others);
+    return diff_ex(polygons, claimed);
 }
 
 /// The part of @p polygons no model of the layer stands on, which is how the plate counts the
@@ -133,6 +135,10 @@ object_resin_use(const std::vector<ObjectLayerUse>& layers, double scaling_sq)
         }
 
         if (!layer_models.empty()) {
+            // The bodies the models of this layer have been charged for so far, which is what a
+            // model standing on another one is not charged for twice.
+            Domain::ExPolygons claimed;
+
             for (const LayerModel& layer_model : layer_models) {
                 Domain::ExPolygons model_polys;
                 Domain::ExPolygons support_polys;
@@ -157,9 +163,18 @@ object_resin_use(const std::vector<ObjectLayerUse>& layers, double scaling_sq)
                 // sliced and not on the part of it no other model covers.
                 use.footprint_mm2 = std::max(use.footprint_mm2, area_of(model_polys) * scaling_sq);
 
-                use.model_volume_mm3 +=
-                    area_of(exclusive_of(model_polys, merged_models, layer_models.size()))
-                    * layer_mm3;
+                use.model_volume_mm3 += area_of(unclaimed_of(model_polys, claimed)) * layer_mm3;
+
+                // The model claims its whole body for the models behind it, not only the part of
+                // it that was charged to this one.
+                if (!model_polys.empty()) {
+                    if (claimed.empty()) {
+                        claimed = model_polys;
+                    } else {
+                        claimed.insert(claimed.end(), model_polys.begin(), model_polys.end());
+                        claimed = union_ex(claimed);
+                    }
+                }
 
                 if (!support_polys.empty()) {
                     use.support_volume_mm3 +=
