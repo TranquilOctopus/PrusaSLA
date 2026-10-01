@@ -515,10 +515,13 @@ TEST_CASE("The raft type and the raft infill pattern together decide the raft ro
             CHECK(raft_uses_setting(type, infill, "pad_wall_height") == raft_printed);
             CHECK(raft_uses_setting(type, infill, "pad_wall_thickness") == raft_printed);
             CHECK(raft_uses_setting(type, infill, "pad_max_merge_distance") == raft_printed);
-            // Skate brings its own expansion and slope (SKATE_BRIM_FACTOR, SKATE_SLOPE_DEG).
-            const bool skate = type == RaftType::Skate;
-            CHECK(raft_uses_setting(type, infill, "pad_brim_size") != skate);
-            CHECK(raft_uses_setting(type, infill, "pad_wall_slope") != skate);
+            // Skate brings its own expansion and slope (SKATE_BRIM_FACTOR, SKATE_SLOPE_DEG), so
+            // those two are read by every printed raft that is not a skate one. A raft None prints
+            // no raft at all, so it reads neither, like every other raft knob above.
+            const bool skate            = type == RaftType::Skate;
+            const bool user_shaped_raft = raft_printed && !skate;
+            CHECK(raft_uses_setting(type, infill, "pad_brim_size") == user_shaped_raft);
+            CHECK(raft_uses_setting(type, infill, "pad_wall_slope") == user_shaped_raft);
 
             // Only a raft around the object reads the object gap and the connectors.
             const bool around_object = type == RaftType::AroundObject || type == RaftType::Skate;
