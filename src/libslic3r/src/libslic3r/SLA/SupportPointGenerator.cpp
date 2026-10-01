@@ -426,7 +426,7 @@ Points filter_blocked_samples(Points samples, const SupportFacetPaint &facet_pai
 /// <param name="regions">Enforced regions of the layer</param>
 /// <param name="blockers">Blocked regions of the same layer</param>
 /// <param name="enforced">OUT grid the created points are stored in</param>
-/// <param name="layer_grids">Grids of the layer, the points it already has</param>
+/// <param name="layer_grids">Grids of the layer, its own points and the ones it carries up</param>
 /// <param name="part_z">current z coordinate of the layer</param>
 /// <param name="config">Configuration of the sampling</param>
 void support_enforced_regions(
@@ -445,12 +445,24 @@ void support_enforced_regions(
     if (open_regions.empty())
         return;
 
-    // The head of a support point has a size, so two points may not lie on the same spot. The
-    // sampler keeps the distance of a head radius inside its own region, this is about the points
-    // the layer already has.
+    // The head of a support point has a size, so two heads of one layer may not lie on the same
+    // spot. The sampler keeps the distance of a head radius inside its own region, this is about
+    // the heads the layer made itself.
+    //
+    // A point of a layer below is not a head of this one: it was made further down and holds the
+    // surface from underneath, and holding a surface from underneath is the one thing an enforced
+    // region is painted over - the overhang rule would skip the surface, the painting asks for a
+    // head of its own there. So only the points of this very height count, the ones a support point
+    // carries up from a lower layer (`create_near_points`) do not. A box is the plain case: the
+    // island points of its bottom layer stand there and reach the top face of the prism, they sit
+    // at the very spots the enforced top face is sampled at, and with them counted the enforced
+    // region could never get a point.
     const coord_t head_diameter = static_cast<coord_t>(scale_(config.head_diameter));
     const double  head_radius_sq = sqr(0.5 * static_cast<double>(head_diameter));
-    auto is_nearer_than_head = [head_radius_sq](const LayerSupportPoint &point, const Point &pos) {
+    auto is_nearer_than_head = [head_radius_sq, part_z]
+    (const LayerSupportPoint &point, const Point &pos) {
+        if (point.pos.z() < part_z)
+            return false; // a point of a lower layer, it carries no head through this one
         return (point.position_on_layer - pos).cast<double>().squaredNorm() < head_radius_sq;
     };
     auto exist_near_point = [&layer_grids, head_diameter, &is_nearer_than_head](const Point &pos) {
@@ -465,7 +477,7 @@ void support_enforced_regions(
         for (const SupportIslandPointPtr &sample :
              uniform_support_island(region, no_permanent, config.island_configuration)) {
             if (exist_near_point(sample->point))
-                continue; // the layer has a support point at this spot already
+                continue; // the layer made a head at this spot already
 
             // The point is an island point: it is made of the shape of a region, not of a sample of
             // an overhang, and the tree builds it like the point of an island.
