@@ -28,23 +28,42 @@ struct HollowingInfillConfig
 // where the struts of a pattern stand, which is what places a drain hole on one of them.
 std::vector<double> hollowing_lattice_axes(double from, double to, double spacing_mm);
 
+// How far a strut reaches past the two ends of the box it is built in, along its own axis, when the
+// lattice is cut out of a cavity. The box of a lattice is the bounding box of the cavity, and the
+// wall of the cavity lies in the plane of that box wherever it is flat, which is everywhere except
+// the rounded corners: a strut that stops at the ends of the box therefore ends with a face that is
+// coplanar with, or tangent to, the surface it is to be subtracted from, and that is the one
+// configuration a mesh boolean cannot be asked about. A strut that reaches this far ends inside the
+// wall instead, so it crosses the wall of the cavity. Half a millimetre is well inside the wall of
+// any hollow print and well outside the wobble of a surface that comes out of a voxel grid, and the
+// pattern is untouched by it: the axes are the same and a strut is as wide as it was, it only begins
+// and ends inside the wall.
+constexpr double LATTICE_WALL_OVERLAP_MM = 0.5;
+
 // The struts of the lattice as they stand in the box, one mesh per strut direction. The struts of
 // one direction never touch each other, so every mesh is a set of disjoint closed solids, which is
 // what a mesh boolean can take as it is. A Grid is one direction (the columns of a square grid,
 // along Z), a Cubic is three (the same grid plus columns along X and along Y). None, or a box or
 // a spacing that leaves no room for a strut, gives no meshes at all.
+//
+// wall_overlap_mm is how far every strut reaches past the ends of the box along its own axis, which
+// is LATTICE_WALL_OVERLAP_MM for a lattice that is cut out of a cavity and nothing at all for the
+// pattern of the box, which then fills the box in the direction of its own struts.
 std::vector<indexed_triangle_set> make_hollowing_lattice(
     const Domain::BoundingBox3d &bb,
     const HollowingInfillConfig &cfg,
-    const JobController &ctl = {}
+    const JobController &ctl = {},
+    double wall_overlap_mm = 0.
 );
 
 // Cut the struts out of the cavity: what is left of it is what the hollowing step subtracts from
 // the model, so the struts are printed as solid material inside the print and the struts reach the
-// wall of the model wherever the cavity touches it. The drain holes are cut after the hollowing
-// step, so a strut that stands across a hole is opened by the hole and cannot plug it.
-// Returns false, and leaves the cavity as it was, when there is no lattice to cut or when a mesh
-// boolean of it failed.
+// wall of the model wherever the cavity touches it. The struts are built to reach into that wall
+// (LATTICE_WALL_OVERLAP_MM), so the cut is a difference of two solids that cross each other and
+// never a strut that ends in the plane of the surface it is cut out of. The drain holes are cut
+// after the hollowing step, so a strut that stands across a hole is opened by the hole and cannot
+// plug it. Returns false, and leaves the cavity as it was, when there is no lattice to cut or when
+// a mesh boolean of it failed.
 bool subtract_lattice_from_cavity(
     indexed_triangle_set &cavity,
     const HollowingInfillConfig &cfg,
