@@ -302,7 +302,15 @@ using SupportElements = std::deque<SupportElement>;
 
 } // namespace FFFTreeSupport
 
-void fff_tree_support_generate(PrintObject &print_object, std::function<void()> throw_on_cancel = []{});
+// The default of throw_on_cancel below is a named function and not a lambda on purpose.
+// MSVC mangles the lambdas of a default function argument with a counter that is per
+// namespace, so the same mangled name can stand for different lambdas in different
+// translation units and the linker keeps one body.
+namespace detail {
+inline void tree_no_throw_on_cancel() {}
+} // namespace detail
+
+void fff_tree_support_generate(PrintObject &print_object, std::function<void()> throw_on_cancel = &detail::tree_no_throw_on_cancel);
 
 } // namespace Slic3r
 

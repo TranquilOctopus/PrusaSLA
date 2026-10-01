@@ -13,6 +13,12 @@ namespace Slic3r { namespace csg {
 
 namespace detail {
 
+// The default of throw_on_cancel below is a named function and not a lambda on
+// purpose. MSVC mangles the lambdas of a default function argument with a counter
+// that is per namespace, so the same mangled name can stand for different lambdas in
+// different translation units and the linker keeps one body.
+inline void no_throw_on_cancel() {}
+
 inline void merge_slices(csg::CSGType op, size_t i,
                   std::vector<ExPolygons> &target,
                   std::vector<ExPolygons> &source)
@@ -52,7 +58,7 @@ std::vector<ExPolygons> slice_csgmesh_ex(
     const Range<ItCSG>          &csgrange,
     const std::vector<float>    &slicegrid,
     const MeshSlicingParamsEx   &params,
-    const std::function<void()> &throw_on_cancel = [] {})
+    const std::function<void()> &throw_on_cancel = &detail::no_throw_on_cancel)
 {
     using namespace detail;
     namespace execution = Slic3r::Biz::Algorithms::Execution;

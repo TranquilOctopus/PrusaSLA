@@ -88,6 +88,15 @@ struct PrintObjectInstance
 
 } // namespace GCode
 
+// The default of use_short_distance_acceleration below is a named function and not a
+// lambda on purpose. MSVC mangles the lambdas of a default function argument with a
+// counter that is per namespace, so the same mangled name can stand for different
+// lambdas in different translation units and the linker keeps one body - a void
+// `[]() {}` then replaced the body of a lambda returning a value.
+namespace detail {
+inline bool no_short_distance_acceleration() { return false; }
+} // namespace detail
+
 class GCodeGenerator {
 
 public:
@@ -331,7 +340,7 @@ private:
         const std::function<std::string()>& insert_gcode,
         const Biz::Slicing::ExtrudeConfig& config,
         const EnforceFirstZ enforce_first_z = EnforceFirstZ::False,
-        const std::function<bool()>& use_short_distance_acceleration = []() { return false; }
+        const std::function<bool()>& use_short_distance_acceleration = &detail::no_short_distance_acceleration
     );
     Polyline generate_travel_xy_path(
         const Point& start,

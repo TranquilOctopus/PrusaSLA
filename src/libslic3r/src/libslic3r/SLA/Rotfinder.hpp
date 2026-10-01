@@ -24,9 +24,18 @@ namespace sla {
 
 using RotOptimizeStatusCB = std::function<bool(int)>;
 
+// The default below is a named function and not a lambda on purpose. MSVC mangles
+// the lambdas of a default member initializer with a counter that is per namespace,
+// so the same mangled name can stand for different lambdas in different translation
+// units and the linker keeps one body - a void `[]() {}` then replaced the
+// `return true` body and the status callback returned whatever was in the register.
+namespace detail {
+inline bool keep_going(int) { return true; }
+} // namespace detail
+
 class RotOptimizeParams {
     float m_accuracy = 1.;
-    RotOptimizeStatusCB m_statuscb = [](int) { return true; };
+    RotOptimizeStatusCB m_statuscb = &detail::keep_going;
 
 public:
 

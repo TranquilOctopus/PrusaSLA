@@ -173,6 +173,17 @@ using ThrowOnCancel = std::function<void(void)>;
 // call to say progress of generation into gui in range from 0 to 100
 using StatusFunction= std::function<void(int)>;
 
+// The defaults of the functions below are named functions and not lambdas on
+// purpose. MSVC mangles the lambdas of a default function argument with a counter
+// that is per namespace, so the same mangled name can stand for different lambdas in
+// different translation units and the linker keeps one body. A void `[]() {}` then
+// replaced the body of a lambda returning a value, and the caller read whatever was
+// left in the return register.
+namespace detail {
+inline void generator_no_throw_on_cancel() {}
+inline void generator_no_status(int) {}
+} // namespace detail
+
 struct PrepareGeneratorDataConfig
 {
     // Discretization of overhangs outline,
@@ -202,8 +213,8 @@ SupportPointGeneratorData prepare_generator_data(
     std::vector<Domain::ExPolygons> &&slices,
     const std::vector<float> &heights,
     const PrepareSupportConfig &config = {},
-    ThrowOnCancel throw_on_cancel = []() {},
-    StatusFunction statusfn = [](int) {},
+    ThrowOnCancel throw_on_cancel = &detail::generator_no_throw_on_cancel,
+    StatusFunction statusfn = &detail::generator_no_status,
     SupportFacetPaint facet_paint = {}
 );
 
@@ -218,8 +229,8 @@ SupportPointGeneratorData prepare_generator_data(
 LayerSupportPoints generate_support_points(
     const SupportPointGeneratorData &data,
     const SupportPointGeneratorConfig &config,
-    ThrowOnCancel throw_on_cancel = []() {},
-    StatusFunction statusfn = [](int) {}
+    ThrowOnCancel throw_on_cancel = &detail::generator_no_throw_on_cancel,
+    StatusFunction statusfn = &detail::generator_no_status
 );
 } // namespace Slic3r::sla
 
@@ -238,7 +249,7 @@ Domain::SLA::SupportPoints move_on_mesh_surface(
     const LayerSupportPoints &points,
     const AABBMesh &mesh,
     double allowed_move,
-    ThrowOnCancel throw_on_cancel = []() {}
+    ThrowOnCancel throw_on_cancel = &detail::generator_no_throw_on_cancel
 );
 
 }}

@@ -51,6 +51,15 @@ public:
 template<size_t N> using Input = std::array<double, N>;
 template<size_t N> using Bounds = std::array<Bound, N>;
 
+// The default of m_stop_condition below is a named function and not a lambda on purpose.
+// MSVC mangles the lambdas of a default member initializer with a counter that is per
+// namespace, so the same mangled name can stand for different lambdas in different
+// translation units and the linker keeps one body - a void `[]() {}` then replaced the
+// body of `return false` and the stop condition returned whatever was in the register.
+namespace detail {
+inline bool never_stop() { return false; }
+} // namespace detail
+
 // A type for specifying the stop criteria. Setter methods can be concatenated
 class StopCriteria {
 
@@ -65,7 +74,7 @@ class StopCriteria {
 
     // A predicate that if evaluates to true, the optimization should terminate
     // and the best result found prior to termination should be returned.
-    std::function<bool()> m_stop_condition = [] { return false; };
+    std::function<bool()> m_stop_condition = &detail::never_stop;
 
     // The max allowed number of iterations.
     unsigned m_max_iterations = 0;

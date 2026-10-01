@@ -19,6 +19,15 @@ namespace Slic3r {
 class ColorPolygon;
 using ColorPolygons = std::vector<ColorPolygon>;
 
+// The defaults of the slicing functions below are named functions and not lambdas on
+// purpose. MSVC mangles the lambdas of a default function argument with a counter that
+// is per namespace, so the same mangled name can stand for different lambdas in
+// different translation units and the linker keeps one body - a void `[]() {}` then
+// replaced the body of a lambda returning a value.
+namespace detail {
+inline void slicer_no_throw_on_cancel() {}
+} // namespace detail
+
 struct MeshSlicingParams
 {
     enum class SlicingMode : uint32_t {
@@ -75,13 +84,13 @@ std::vector<Domain::Polygons>   slice_mesh(
     const indexed_triangle_set       &mesh,
     const std::vector<float>         &zs,
     const MeshSlicingParams          &params,
-    std::function<void()>             throw_on_cancel = []{});
+    std::function<void()>             throw_on_cancel = &detail::slicer_no_throw_on_cancel);
 
 std::vector<ColorPolygons>      slice_mesh(
     const Domain::indexed_triangle_set_with_color &mesh,
     const std::vector<float>              &zs,
     const MeshSlicingParams               &params,
-    std::function<void()>                  throw_on_cancel = []{});
+    std::function<void()>                  throw_on_cancel = &detail::slicer_no_throw_on_cancel);
 
 // Specialized version for a single slicing plane only, running on a single thread.
 Domain::Polygons                slice_mesh(
@@ -98,12 +107,12 @@ std::vector<Domain::ExPolygons> slice_mesh_ex(
     const indexed_triangle_set       &mesh,
     const std::vector<float>         &zs,
     const MeshSlicingParamsEx        &params,
-    std::function<void()>             throw_on_cancel = []{});
+    std::function<void()>             throw_on_cancel = &detail::slicer_no_throw_on_cancel);
 
 inline std::vector<Domain::ExPolygons> slice_mesh_ex(
     const indexed_triangle_set       &mesh,
     const std::vector<float>         &zs,
-    std::function<void()>             throw_on_cancel = []{})
+    std::function<void()>             throw_on_cancel = &detail::slicer_no_throw_on_cancel)
 {
     return slice_mesh_ex(mesh, zs, MeshSlicingParamsEx{}, throw_on_cancel);
 }
@@ -112,7 +121,7 @@ inline std::vector<Domain::ExPolygons> slice_mesh_ex(
     const indexed_triangle_set       &mesh,
     const std::vector<float>         &zs,
     float                             closing_radius,
-    std::function<void()>             throw_on_cancel = []{})
+    std::function<void()>             throw_on_cancel = &detail::slicer_no_throw_on_cancel)
 {
     MeshSlicingParamsEx params;
     params.closing_radius = closing_radius;

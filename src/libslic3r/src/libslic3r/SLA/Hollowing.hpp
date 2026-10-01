@@ -33,6 +33,14 @@ struct HollowingConfig
 
 enum HollowingFlags { hfRemoveInsideTriangles = 0x1 };
 
+// The default of on_hole_fail below is a named function and not a lambda on purpose.
+// MSVC mangles the lambdas of a default function argument with a counter that is per
+// namespace, so the same mangled name can stand for different lambdas in different
+// translation units and the linker keeps one body.
+namespace detail {
+inline void no_hole_failed(size_t) {}
+} // namespace detail
+
 // All data related to a generated mesh interior. Includes the 3D grid and mesh
 // and various metadata. No need to manipulate from outside.
 struct Interior;
@@ -144,7 +152,7 @@ int hollow_mesh_and_drill(
     indexed_triangle_set &mesh,
     const Interior& interior,
     const Domain::SLA::DrainHoles &holes,
-    std::function<void(size_t)> on_hole_fail = [](size_t){});
+    std::function<void(size_t)> on_hole_fail = &detail::no_hole_failed);
 
 void remove_inside_triangles(Domain::TriangleMesh &mesh, const Interior &interior,
                              const std::vector<bool> &exclude_mask = {});

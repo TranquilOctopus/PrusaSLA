@@ -207,6 +207,15 @@ Points3 generate_elevated_travel(
     const std::function<double(double)> &elevation
 );
 
+// The default of predicate below is a named function and not a lambda on purpose.
+// MSVC mangles the lambdas of a default function argument with a counter that is per
+// namespace, so the same mangled name can stand for different lambdas in different
+// translation units and the linker keeps one body - a void `[]() {}` then replaced the
+// body of a lambda returning a value.
+namespace detail {
+inline bool any_line(const ObjectOrExtrusionLinef &) { return true; }
+} // namespace detail
+
 /**
  * @brief Given a AABB tree over lines find intersection with xy_path closest to the xy_path start.
  *
@@ -223,7 +232,7 @@ double get_first_crossed_line_distance(
     std::span<const Line> xy_path,
     const Biz::Algorithms::AABBTreeLines::LinesDistancer<ObjectOrExtrusionLinef> &distancer,
     const ObjectsLayerToPrint &objects_to_print = {},
-    const std::function<bool(const ObjectOrExtrusionLinef &)> &predicate = [](const ObjectOrExtrusionLinef &) { return true; },
+    const std::function<bool(const ObjectOrExtrusionLinef &)> &predicate = &detail::any_line,
     bool ignore_starting_object_intersection = true);
 
 /**

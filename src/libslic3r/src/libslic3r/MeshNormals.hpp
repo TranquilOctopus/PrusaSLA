@@ -24,6 +24,15 @@ Domain::Vec3d get_normal(const AABBMesh &mesh,
 
 using PointSet = Eigen::MatrixXd;
 
+// The default of throw_on_cancel below is a named function and not a lambda on purpose.
+// MSVC mangles the lambdas of a default function argument with a counter that is per
+// namespace, so the same mangled name can stand for different lambdas in different
+// translation units and the linker keeps one body - a void `[]() {}` then replaced the
+// body of a lambda returning a value.
+namespace detail {
+inline void normals_no_throw_on_cancel() {}
+} // namespace detail
+
 // Calculate the normals for the selected points (from 'points' set) on the
 // mesh. This will call squared distance for each point.
 template<class Ex>
@@ -32,7 +41,7 @@ Eigen::MatrixXd normals(
     const PointSet              &points,
     const AABBMesh              &convert_mesh,
     double                       eps = 0.05, // min distance from edges
-    std::function<void()>        throw_on_cancel = []() {},
+    std::function<void()>        throw_on_cancel = &detail::normals_no_throw_on_cancel,
     const std::vector<unsigned> &selected_points = {});
 
 extern template Eigen::MatrixXd normals(

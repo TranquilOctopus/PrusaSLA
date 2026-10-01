@@ -15,19 +15,27 @@ namespace Slic3r::sla {
 
 using ThrowOnCancel = std::function<void(void)>;
 
+// The defaults of the functions below are named functions and not lambdas on purpose.
+// MSVC mangles the lambdas of a default function argument with a counter that is per
+// namespace, so the same mangled name can stand for different lambdas in different
+// translation units and the linker keeps one body.
+namespace detail {
+inline void pad_no_throw_on_cancel() {}
+} // namespace detail
+
 /// Calculate the polygon representing the silhouette.
 void pad_blueprint(
     const indexed_triangle_set &mesh,       // input mesh
     Domain::ExPolygons&        output,     // Output will be merged with
     const std::vector<float> &,     // Exact Z levels to sample
-    ThrowOnCancel thrfn = [] {}); // Function that throws if cancel was requested
+    ThrowOnCancel thrfn = &detail::pad_no_throw_on_cancel); // Function that throws if cancel was requested
 
 void pad_blueprint(
     const indexed_triangle_set &mesh,
     Domain::ExPolygons&         output,
     float         samplingheight = 0.1f,  // The height range to sample
     float         layerheight    = 0.05f, // The sampling height
-    ThrowOnCancel thrfn          = [] {});
+    ThrowOnCancel thrfn          = &detail::pad_no_throw_on_cancel);
 
 struct PadConfig {
     double wall_thickness_mm = 1.;
@@ -114,7 +122,7 @@ void create_pad(
     const Domain::ExPolygons& model_contours,
     indexed_triangle_set &output_mesh,
     const PadConfig &             = PadConfig(),
-    ThrowOnCancel throw_on_cancel = [] {});
+    ThrowOnCancel throw_on_cancel = &detail::pad_no_throw_on_cancel);
 
 } // namespace Slic3r::sla
 
