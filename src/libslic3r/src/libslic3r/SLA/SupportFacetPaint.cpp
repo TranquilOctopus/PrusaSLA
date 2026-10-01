@@ -76,7 +76,8 @@ indexed_triangle_set painted_facets(const SupportToolModelMesh &parts,
 /// layers, the first one below the first layer, so that the slab of the first layer is the one of its
 /// layer, and one more above the last layer, so that a facet above the last layer, like the top of
 /// the model, still has a slab to be projected into. A facet of a slab shows up in the entry of that
-/// slab, which is the layer it belongs to.
+/// slab, which is the layer it belongs to, and the slab of a layer is the entry one past it (see
+/// painted_facet_regions).
 std::vector<float> layer_slabs(const std::vector<float> &heights)
 {
     std::vector<float> slabs;
@@ -103,10 +104,14 @@ std::vector<float> layer_slabs(const std::vector<float> &heights)
 /// facet that is horizontal, and the facet of the top of the model, cross no layer at all, and
 /// slicing them on the layers would lose them.
 ///
-/// The slicer projects a facet that faces up from the top of the slab it is in, which is entry i of
-/// the top projection, and a facet that faces down from the bottom of it, which is entry i+1 of the
-/// bottom projection. The two of them are the two halves of the slab of the layer, so layer i is
-/// entry i of the top projection together with entry i+1 of the bottom one.
+/// The slicer projects a facet that faces up onto the upper plane of the slab it is in and a facet
+/// that faces down onto the lower plane of it, so the two projections of one slab are the same entry
+/// of their list: entry i+1 of both of them is the slab of layer i, the way layer_slabs builds it.
+/// A horizontal facet of a model crosses no plane of the grid at all, so the slicer projects it onto
+/// the plane it lies on, and that plane is a boundary of a slab: a facet that faces up goes into the
+/// entry of the slab below the plane, so the top of a model belongs to the topmost layer the model
+/// has, and a facet that faces down into the entry of the slab above it, so the bottom of a model
+/// belongs to the first one.
 std::vector<Domain::ExPolygons> painted_facet_regions(const indexed_triangle_set &facets,
                                                      const std::vector<float>           &heights,
                                                      const std::function<void(void)> &throw_on_cancel)
@@ -127,7 +132,7 @@ std::vector<Domain::ExPolygons> painted_facet_regions(const indexed_triangle_set
                 return;
             collected.insert(collected.end(), from[index].begin(), from[index].end());
         };
-        collect(from_top, layer_id);
+        collect(from_top, layer_id + 1);
         collect(from_bottom, layer_id + 1);
         if (collected.empty())
             continue;

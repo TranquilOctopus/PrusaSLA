@@ -129,12 +129,28 @@ std::vector<PointType> points_above(const std::vector<PointType> &points, float 
     return result;
 }
 
-// The grid the generator works on for a mesh, the same one the helper of the placement tests builds.
+// The layer height the tests slice on: the one `make_sla_config()` configures the support tool with.
+constexpr double layer_height_mm = 0.2;
+
+// The heights the generator works on for a mesh: the middle of every layer of the mesh. That is the
+// grid the support tool builds it from (`compute_slice_heights()` in SLASupportTool.cpp), the one the
+// slice pipeline builds it from (`SLAPrint::Steps::slice_model()`) and the one the regression tests
+// hand the generator, and a grid that starts on the bottom face of the model instead is not one the
+// generator ever sees. It is not harmless either: the slicer does not slice a horizontal facet that
+// faces down, so the first layer of a model that stands on the plate comes out empty, the island of
+// that model lands one layer higher, and the painted floor of the model belongs to the layer below
+// the island instead of the layer of it.
 std::vector<float> layer_heights(const Slic3r::Domain::TriangleMesh &mesh)
 {
     using Slic3r::Biz::Algorithms::BoundingBox::cast;
     const Slic3r::Domain::BoundingBox3f bb = cast<float>(mesh.bounding_box());
-    return std::vector<float>{Slic3r::grid(bb.min.z(), bb.max.z(), 0.2f)};
+
+    std::vector<float> heights;
+    for (double z = double(bb.min.z()) + 0.5 * layer_height_mm; z < double(bb.max.z());
+         z += layer_height_mm)
+        heights.push_back(float(z));
+
+    return heights;
 }
 
 // The generator over a mesh, the way the placement tests drive it: the points stay where the
@@ -283,6 +299,35 @@ TEST_CASE("An enforced region gets support points where the overhang rule has no
         INFO("Points on the enforced top: " << sparse_on_top << " at 50 %, " << dense_on_top << " at 200 %");
         REQUIRE(sparse_on_top > 0);
         CHECK(dense_on_top > sparse_on_top);
+    }
+
+    SECTION("a painted facet lands in the layer whose slab it is in")
+    {
+        // The layers the generator works on are the middles of the layers of the mesh, so the slab of
+        // a layer is half a layer height around its own middle, and the top of the box lies in the
+        // slab of the topmost layer of the grid. A region that is read into a layer the model does
+        // not have is a region nobody reads, and these sections above see the region of the enforced
+        // top or none of it, so the layer a painted facet is read in is what they are really asking
+        // for.
+        const Slic3r::Domain::TriangleMesh mesh    = painted.volume->mesh();
+        const std::vector<float>          heights = layer_heights(mesh);
+
+        painted.paint_faces_above(0.5, TriangleStateType::ENFORCER);
+
+        const Slic3r::sla::SupportFacetPaint paint = Slic3r::sla::support_facet_paint(
+            Slic3r::sla::support_tool_model_mesh(*painted.object),
+            Slic3r::Domain::Transform3d::Identity(), heights, [] { return false; });
+        REQUIRE(paint.has_enforcer_regions);
+        REQUIRE(paint.layers.size() == heights.size());
+
+        // The whole top face, in the topmost layer, and nowhere else: the sides of the box face
+        // sideways, and a facet that faces sideways is projected into no slab at all.
+        CHECK_FALSE(paint.enforcers(heights.size() - 1).empty());
+        size_t layers_with_regions = 0;
+        for (size_t layer_id = 0; layer_id < heights.size(); ++layer_id)
+            if (!paint.enforcers(layer_id).empty())
+                ++layers_with_regions;
+        CHECK(layers_with_regions == 1);
     }
 }
 
