@@ -5,7 +5,6 @@
 #include "fmt/format.h"
 
 #include <algorithm>
-#include <cctype>
 #include <charconv>
 #include <string_view>
 #include <utility>
@@ -149,23 +148,10 @@ std::optional<double> number_after(const std::string& note, size_t begin)
 
 std::optional<double> sla_issue_area_mm2(const std::string& note)
 {
-    size_t begin = note.find_first_of("0123456789");
-    if (begin == std::string::npos)
-        return std::nullopt;
-
-    size_t end = begin;
-    while (end < note.size()
-           && (std::isdigit(static_cast<unsigned char>(note[end])) || note[end] == '.'))
-        ++end;
-    if (end == begin)
-        return std::nullopt;
-
-    double area       = 0.;
-    const auto parsed = std::from_chars(note.data() + begin, note.data() + end, area);
-    if (parsed.ec != std::errc{} || parsed.ptr != note.data() + end)
-        return std::nullopt;
-
-    return area;
+    // The number in front of the unit, the way the volume reads its own and not the first digit
+    // anywhere in the note: a note whose size is missing ("island, . mm2") still carries the 2 of
+    // its unit, and an island of 2 mm2 is a number nobody sliced.
+    return number_before_unit(note, "mm2");
 }
 
 std::optional<double> sla_issue_volume_mm3(const std::string& note)
