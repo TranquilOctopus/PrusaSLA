@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-using Slic3r::Vec3f;
+using Slic3r::Domain::Vec3f;
 using Slic3r::Biz::FileLoadingLogic::SlaArchiveImport;
 using Slic3r::Biz::FileLoadingLogic::SlaArchiveRead;
 using Slic3r::Biz::FileLoadingLogic::SlaArchiveReadResult;

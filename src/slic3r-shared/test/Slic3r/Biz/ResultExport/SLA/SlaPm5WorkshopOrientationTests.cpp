@@ -20,11 +20,14 @@
 #include "Slic3r/App/Platform/StdMainThreadDispatcher.hpp"
 #include "Slic3r/Biz/Algorithms/ModelObject.hpp"
 #include "Slic3r/Biz/Format/STL.hpp"
+#include "Slic3r/Biz/Platform/PlatformServices.hpp"
 #include "Slic3r/Biz/Preset/IO/BundlePaths.hpp"
 #include "Slic3r/Biz/Preset/PresetInteractor.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/Biz/ResultExport/SLA/SlaArchiveFormat.hpp"
 #include "Slic3r/Biz/ResultExport/SLA/SlaLayerDecoders.hpp"
+#include "Slic3r/Biz/SLAResultCache.hpp"
+#include "Slic3r/Biz/SecretStoreDummy.hpp"
 #include "Slic3r/Biz/SlaFixture.hpp"
 #include "Slic3r/Biz/Slicing/TestUtils.hpp"
 #include "Slic3r/Directories.hpp"
@@ -40,6 +43,8 @@
 #include "Slic3r/Domain/TriangleMesh.hpp"
 #include "Slic3r/Domain/Types.hpp"
 #include "Slic3r/Domain/Workbench.hpp"
+#include "Slic3r/TestUtils/AppInstanceMessageHandlerScope.hpp"
+#include "Slic3r/TestUtils/JobManagerScope.hpp"
 #include "Slic3r/TestUtils/TestData.hpp"
 #include "Slic3r/TestUtils/TestTempDir.hpp"
 #include "libslic3r/SLAResult.hpp"
@@ -50,6 +55,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -97,12 +103,14 @@ namespace {
 constexpr std::uint32_t photon_workshop_version = 517u;
 
 // Catch2's INFO takes a single streamed expression, so the longer messages are built here first:
-// that keeps them readable in the source and in the failure output.
-template <typename T>
-std::string message(const T& value)
+// that keeps them readable in the source and in the failure output. The pieces are arguments
+// rather than one streamed expression, because a string literal has no << of its own to start the
+// stream with.
+template <typename... Args>
+std::string message(const Args&... args)
 {
     std::ostringstream stream;
-    stream << value;
+    (stream << ... << args);
 
     return stream.str();
 }
@@ -551,9 +559,18 @@ struct M5ProfileFixture
 
     // The scratch tree is the first member on purpose, so it is the last one destroyed: the
     // interactor owns a preset bundle that points into it, and it may only be removed once the
-    // interactor is gone.
+    // interactor is gone. The rest is the interactor stack the app runs on: the workbench, the
+    // dispatcher the interactors post to, the services they need registered and the interactor
+    // itself, in the order they depend on each other.
     ScratchDir scratch{Tests::get_datadir() / "datadir" / "pm5_workshop_orientation"};
-    Slic3r::Test::SlaSlicingFixture slicer;
+    Slic3r::Domain::Workbench workbench;
+    Slic3r::App::Platform::StdMainThreadDispatcher dispatcher;
+    Tests::AppInstanceMessageHandlerScope app_instance_message_handler_scope{dispatcher};
+    Tests::JobManagerScope job_manager_scope{dispatcher};
+    Slic3r::Test::MockThumbnailImageGenerator thumbnail_image_generator;
+    Slic3r::Biz::ProjectInteractor
+        project_interactor{workbench, dispatcher, thumbnail_image_generator};
+    Slic3r::Test::StatusListener status_listener;
     Slic3r::Biz::Preset::IO::BundlePaths bundle_paths;
 
     M5ProfileFixture()
@@ -566,9 +583,14 @@ struct M5ProfileFixture
         fs::create_directories(scratch.path / "user");
         fs::create_directories(scratch.path / "config");
 
-        // The slicing fixture's constructor pointed the data dir at the test data dir and loaded
-        // the small test bundle, which carries only the SL1. This is the shipped bundle, and the
-        // cache it writes belongs in the scratch tree as well.
+        std::unique_ptr<Slic3r::Biz::SecretStoreDummy> store_dummy =
+            std::make_unique<Slic3r::Biz::SecretStoreDummy>();
+        Slic3r::Biz::Platform::PlatformServices::instance().set_secret_store(
+            std::move(store_dummy)
+        );
+
+        // This is the shipped bundle, and the cache it writes belongs in the scratch tree as well,
+        // so the data dir points at the scratch tree while it is loaded.
         Slic3r::set_data_dir(scratch.path.string());
         bundle_paths = Slic3r::Biz::Preset::IO::BundlePaths{
             .app_bundle_path       = fs::path{TEST_APP_PRESETS_DIR}.string(),
@@ -578,11 +600,10 @@ struct M5ProfileFixture
             .user_config_path      = (scratch.path / "config").string(),
         };
 
-        Slic3r::Biz::Preset::PresetInteractor& presets =
-            slicer.project_interactor.preset_interactor();
+        Slic3r::Biz::Preset::PresetInteractor& presets = project_interactor.preset_interactor();
         presets.set_use_hw_config_short_name(false);
         presets.load_preset_bundle(bundle_paths);
-        slicer.project_interactor.new_project();
+        project_interactor.new_project();
         select_printer(m5_printer_name);
         // SelectedPreset::config() needs a resin to build the SLA config out of; selecting a
         // printer is expected to pick one, and this only covers the case where it does not.
@@ -592,19 +613,73 @@ struct M5ProfileFixture
 
     ~M5ProfileFixture()
     {
-        // Selecting presets posted main-thread work, which the slicing interactors want drained
-        // before they are gone. A destructor body runs before the members are destroyed, so this
-        // is the last moment at which the interactor is still alive.
-        slicer.dispatcher.dispatch_enqueued();
+        // Selecting presets posted main-thread work, which the interactors want drained while the
+        // interactor and the preset bundle are all still alive. A destructor body runs before the
+        // members are destroyed, so this is the last moment at which that is true.
+        dispatcher.dispatch_enqueued();
+        dispatcher.close();
     }
 
     M5ProfileFixture(const M5ProfileFixture&)            = delete;
     M5ProfileFixture& operator=(const M5ProfileFixture&) = delete;
 
+    /// @brief Slices one model with the config as it is, the way SlaSlicingFixture does it: a new
+    /// project, the model on its bed, one slice, and the result out of the SLA result cache once
+    /// the slicer reports it finished.
+    std::shared_ptr<const Slic3r::Biz::Slicing::SLAResultData> slice_sla_model(
+        const Slic3r::Domain::Model& model,
+        const Slic3r::Domain::ConfigPackSLA& config
+    )
+    {
+        project_interactor.slicing_interactor()
+            .add_listener<Slic3r::Biz::Slicing::IStatusListener>(&status_listener);
+
+        Slic3r::Domain::Model model_copy = model;
+        Slic3r::Domain::ConfigPack config_copy{config};
+
+        project_interactor.new_project();
+
+        Slic3r::Test::ModelOnBed on_bed{std::move(model_copy), std::move(config_copy)};
+
+        project_interactor.slicing_interactor().update_process(
+            on_bed.model,
+            on_bed.project_metadata,
+            on_bed.preset_metadata,
+            on_bed.config,
+            on_bed.bed_instance
+        );
+        project_interactor.slicing_interactor().slice_all();
+
+        // Slicing results are delivered through the main-thread dispatcher, so it is pumped while
+        // waiting for them.
+        const bool finished = Slic3r::Test::wait_for_status(
+            dispatcher,
+            status_listener,
+            std::chrono::seconds(120),
+            [](const Slic3r::Test::StatusEvents& events) {
+                return events.back().status_code == Slic3r::Biz::Slicing::StatusCode::Finished;
+            }
+        );
+        // The listener lives on this stack frame: unregister it and drain queued events before
+        // returning.
+        project_interactor.slicing_interactor()
+            .remove_listener<Slic3r::Biz::Slicing::IStatusListener>(&status_listener);
+        dispatcher.dispatch_enqueued();
+        REQUIRE(finished);
+        REQUIRE(!status_listener.status_events.empty());
+
+        const Slic3r::Biz::SLAResultOptRef result =
+            project_interactor.sla_result_cache().get_result(
+                status_listener.status_events.back().slicing_id
+            );
+        REQUIRE(result.has_value());
+
+        return result->get().export_data;
+    }
+
     void select_printer(std::string_view hw_config_name)
     {
-        Slic3r::Biz::Preset::PresetInteractor& presets =
-            slicer.project_interactor.preset_interactor();
+        Slic3r::Biz::Preset::PresetInteractor& presets = project_interactor.preset_interactor();
         const Slic3r::Biz::Preset::PresetItemObservableList& printers = presets.printer_presets();
         std::optional<std::pair<std::string, std::string>> found; // hw config id, printer preset id
         for (size_t i = 0, n = printers.items().size(); i < n && !found.has_value(); ++i) {
@@ -618,11 +693,10 @@ struct M5ProfileFixture
 
     void select_first_material()
     {
-        Slic3r::Biz::Preset::PresetInteractor& presets =
-            slicer.project_interactor.preset_interactor();
+        Slic3r::Biz::Preset::PresetInteractor& presets = project_interactor.preset_interactor();
         const Slic3r::Domain::Preset::SelectedPreset& selected = presets.selected_printer_preset();
         for (const auto& entry : presets.get_material_presets(
-                 slicer.project_interactor.selected_project_id(),
+                 project_interactor.selected_project_id(),
                  selected.hw_config.id,
                  selected.printer.id,
                  selected.print.id,
@@ -637,23 +711,22 @@ struct M5ProfileFixture
     // The config of the selected printer, print profile and resin, as the bundle evaluates them.
     Slic3r::Domain::ConfigPackSLA sla_config()
     {
-        Slic3r::Biz::Preset::PresetInteractor& presets =
-            slicer.project_interactor.preset_interactor();
+        Slic3r::Biz::Preset::PresetInteractor& presets = project_interactor.preset_interactor();
         const Slic3r::Domain::Preset::SelectedPreset& selected = presets.selected_printer_preset();
         const std::string resin =
             selected.materials.empty() ? std::string("none") : selected.materials.front().name;
         INFO(message(
-            "printer preset \""
-            << selected.printer.name
-            << "\", print profile \""
-            << selected.print.name
-            << "\", resin \""
-            << resin
-            << "\""
+            "printer preset \"",
+            selected.printer.name,
+            "\", print profile \"",
+            selected.print.name,
+            "\", resin \"",
+            resin,
+            "\""
         ));
 
         const Slic3r::Domain::ConfigContainer* cc =
-            slicer.workbench.project(slicer.project_interactor.selected_project_id())
+            workbench.project(project_interactor.selected_project_id())
                 .find_config_container(
                     presets.selected_config_container_context().config_container_id
                 );
@@ -675,38 +748,38 @@ void report_profile(const Slic3r::Domain::ConfigPackSLA& config)
         printer.opt("display_orientation").get<SLADisplayOrientation>();
     const char* orientation_name =
         orientation == SLADisplayOrientation::sladoPortrait ? "portrait" : "landscape";
-    INFO(message("archive format: " << printer.opt("sla_archive_format").get<std::string>()));
+    INFO(message("archive format: ", printer.opt("sla_archive_format").get<std::string>()));
     INFO(message(
-        "display: "
-        << printer.opt("display_pixels_x").get<int>()
-        << " x "
-        << printer.opt("display_pixels_y").get<int>()
-        << " px, "
-        << printer.opt("display_width").get<double>()
-        << " x "
-        << printer.opt("display_height").get<double>()
-        << " mm, "
-        << orientation_name
+        "display: ",
+        printer.opt("display_pixels_x").get<int>(),
+        " x ",
+        printer.opt("display_pixels_y").get<int>(),
+        " px, ",
+        printer.opt("display_width").get<double>(),
+        " x ",
+        printer.opt("display_height").get<double>(),
+        " mm, ",
+        orientation_name
     ));
     // The two flags this todo is about: every community-sla printer inherits mirror_x.
     INFO(message(
-        "mirroring: x "
-        << printer.opt("display_mirror_x").get<bool>()
-        << ", y "
-        << printer.opt("display_mirror_y").get<bool>()
+        "mirroring: x ",
+        printer.opt("display_mirror_x").get<bool>(),
+        ", y ",
+        printer.opt("display_mirror_y").get<bool>()
     ));
     INFO(message(
-        "layer height: "
-        << config.sla_print_settings.items.opt("layer_height").get<double>()
-        << " mm, first layer "
-        << config.sla_material_settings.items.opt("initial_layer_height").get<double>()
-        << " mm"
+        "layer height: ",
+        config.sla_print_settings.items.opt("layer_height").get<double>(),
+        " mm, first layer ",
+        config.sla_material_settings.items.opt("initial_layer_height").get<double>(),
+        " mm"
     ));
     INFO(message(
-        "supports "
-        << config.sla_print_settings.items.opt("supports_enable").get<bool>()
-        << ", pad "
-        << config.sla_print_settings.items.opt("pad_enable").get<bool>()
+        "supports ",
+        config.sla_print_settings.items.opt("supports_enable").get<bool>(),
+        ", pad ",
+        config.sla_print_settings.items.opt("pad_enable").get<bool>()
     ));
 }
 
@@ -732,9 +805,9 @@ Slic3r::Domain::Model load_model(const fs::path& path, double plate_centre_x, do
 
     Slic3r::Domain::Model model;
     Slic3r::Domain::ModelObject* object = model.add_object();
-    Slic3r::Biz::Algorithms::add_volume(object, *mesh);
+    Slic3r::Biz::Algorithms::ModelObject::add_volume(object, *mesh);
     object->add_instance();
-    Slic3r::Biz::Algorithms::ensure_on_bed(*object);
+    Slic3r::Biz::Algorithms::ModelObject::ensure_on_bed(*object);
 
     return model;
 }
@@ -748,11 +821,11 @@ fs::path benchmark_model(const fs::path& samples)
     }
 
     FAIL(message(
-        "The model the reference file was sliced from was not found. Looked for "
-        << (samples / "benchmark models" / "5.stl").string()
-        << " and "
-        << (samples / "5.stl").string()
-        << " under SLA_LOCAL_SAMPLES."
+        "The model the reference file was sliced from was not found. Looked for ",
+        (samples / "benchmark models" / "5.stl").string(),
+        " and ",
+        (samples / "5.stl").string(),
+        " under SLA_LOCAL_SAMPLES."
     ));
 
     return fs::path{};
@@ -785,15 +858,15 @@ TEST_CASE(
     REQUIRE(reference.res_y() > 0u);
     REQUIRE(reference.layers().size() > 4u);
     INFO(message(
-        "reference "
-        << reference_path.string()
-        << ": "
-        << reference.res_x()
-        << " x "
-        << reference.res_y()
-        << " px, "
-        << reference.layers().size()
-        << " layers"
+        "reference ",
+        reference_path.string(),
+        ": ",
+        reference.res_x(),
+        " x ",
+        reference.res_y(),
+        " px, ",
+        reference.layers().size(),
+        " layers"
     ));
 
     // Our own file: the same model, sliced with the Photon Mono M5 of the shipped bundle and
@@ -811,7 +884,7 @@ TEST_CASE(
         load_model(model_path, display_width / 2., display_height / 2.);
 
     const std::shared_ptr<const Slic3r::Biz::Slicing::SLAResultData> sla_result =
-        fixture.slicer.slice_sla_model(model, config);
+        fixture.slice_sla_model(model, config);
     REQUIRE(sla_result != nullptr);
     REQUIRE(sla_result->files.type == FileDataType::pm5);
     REQUIRE(sla_result->files.data.size() > 4u);
@@ -826,15 +899,15 @@ TEST_CASE(
     Pm5Archive ours;
     ours.open(written_path);
     INFO(message(
-        "ours "
-        << written_path.string()
-        << ": "
-        << ours.res_x()
-        << " x "
-        << ours.res_y()
-        << " px, "
-        << ours.layers().size()
-        << " layers"
+        "ours ",
+        written_path.string(),
+        ": ",
+        ours.res_x(),
+        " x ",
+        ours.res_y(),
+        " px, ",
+        ours.layers().size(),
+        " layers"
     ));
     // The two files have to be on the same pixel grid for a pixel-for-pixel comparison to mean
     // anything, and the reference is the one that says what the M5's display is.
@@ -853,17 +926,17 @@ TEST_CASE(
         const size_t reference_index = nearest_layer(reference_z, fraction * reference_z.back());
         const size_t our_index       = nearest_layer(our_z, reference_z[reference_index]);
         INFO(message(
-            "at "
-            << fraction * 100.
-            << "% of the height: reference layer "
-            << reference_index
-            << " at z "
-            << reference_z[reference_index]
-            << " mm, our layer "
-            << our_index
-            << " at z "
-            << our_z[our_index]
-            << " mm"
+            "at ",
+            fraction * 100.,
+            "% of the height: reference layer ",
+            reference_index,
+            " at z ",
+            reference_z[reference_index],
+            " mm, our layer ",
+            our_index,
+            " at z ",
+            our_z[our_index],
+            " mm"
         ));
         if (std::abs(our_z[our_index] - reference_z[reference_index]) > layer_height / 2.) {
             WARN(
@@ -881,18 +954,18 @@ TEST_CASE(
         REQUIRE(theirs.count > 0u);
         REQUIRE(mine.count > 0u);
         INFO(message(
-            "lit pixels: reference "
-            << theirs.count
-            << " at centroid "
-            << theirs.centre_x
-            << ", "
-            << theirs.centre_y
-            << ", ours "
-            << mine.count
-            << " at centroid "
-            << mine.centre_x
-            << ", "
-            << mine.centre_y
+            "lit pixels: reference ",
+            theirs.count,
+            " at centroid ",
+            theirs.centre_x,
+            ", ",
+            theirs.centre_y,
+            ", ours ",
+            mine.count,
+            " at centroid ",
+            mine.centre_x,
+            ", ",
+            mine.centre_y
         ));
 
         // Identity first, and a later turn only wins on a strictly better score, so a layer that
@@ -901,7 +974,7 @@ TEST_CASE(
         double best_iou = 0.;
         for (const Turn turn : TURNS) {
             const double iou = iou_of_turned(mine, theirs, turn);
-            INFO(message("IoU under " << turn_name(turn) << ": " << iou));
+            INFO(message("IoU under ", turn_name(turn), ": ", iou));
             if (iou > best_iou) {
                 best_iou = iou;
                 best     = turn;
@@ -909,11 +982,11 @@ TEST_CASE(
         }
         if (best != Turn::identity) {
             WARN(message(
-                "our layer matches Photon Workshop's under "
-                << turn_name(best)
-                << " (IoU "
-                << best_iou
-                << "), not under identity"
+                "our layer matches Photon Workshop's under ",
+                turn_name(best),
+                " (IoU ",
+                best_iou,
+                "), not under identity"
             ));
         }
 
@@ -979,7 +1052,7 @@ TEST_CASE(
     Tests::TestTempDir temp_dir;
 
     for (const PmWorkshopCase& printer : PM_WORKSHOP_CASES) {
-        INFO(message("archive format: " << printer.extension));
+        INFO(message("archive format: ", printer.extension));
         // The engine picks the raster path from the archive format and the export from the file
         // data type, so the two registry lookups together are what picks this writer.
         Slic3r::Test::SlaSlicingFixture fixture;
@@ -1012,7 +1085,7 @@ TEST_CASE(
         const std::unique_ptr<Slic3r::Biz::PrintHost::Sla::ISlaArchiveFormat> format =
             registry.find_by_file_data_type(printer.type);
         REQUIRE(format != nullptr);
-        const fs::path out_path = temp_dir.path() / ("out." + printer.extension);
+        const fs::path out_path = temp_dir.path() / ("out." + std::string(printer.extension));
         REQUIRE_NOTHROW(format->store(out_path.string(), *sla_result));
 
         // The container read back, which the reader's open() checks the magic, the version and the
@@ -1020,9 +1093,15 @@ TEST_CASE(
         Pm5Archive archive;
         archive.open(out_path);
         INFO(message(
-            "wrote "
-                << out_path.filename().string() << ": " << archive.res_x() << " x " << archive.res_y()
-                << " px, " << archive.layers().size() << " layers"
+            "wrote ",
+                out_path.filename().string(),
+                ": ",
+                archive.res_x(),
+                " x ",
+                archive.res_y(),
+                " px, ",
+                archive.layers().size(),
+                " layers"
         ));
         REQUIRE(archive.res_x() == uint32_t(printer.pixels_x));
         REQUIRE(archive.res_y() == uint32_t(printer.pixels_y));
@@ -1048,7 +1127,7 @@ TEST_CASE(
         // through the writer and back.
         const size_t pixels = size_t(printer.pixels_x) * size_t(printer.pixels_y);
         for (size_t i = 0; i < archive.layers().size(); ++i) {
-            INFO(message("layer " << i));
+            INFO(message("layer ", i));
             const Pm5Layer& layer = archive.layers()[i];
             const std::vector<uint8_t> image = archive.layer_image(i);
             REQUIRE(layer.size == image.size());

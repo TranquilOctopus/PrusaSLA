@@ -59,12 +59,12 @@ static Slic3r::Domain::Model make_pattern_model()
 
     for (const PatternRectangle& r : PATTERN) {
         Slic3r::Domain::ModelObject* object = model.add_object();
-        Slic3r::Biz::Algorithms::add_volume(
+        Slic3r::Biz::Algorithms::ModelObject::add_volume(
             object,
             Slic3r::Biz::Algorithms::TriangleMesh::make_cube(r.size_x, r.size_y, r.height)
         );
         object->add_instance();
-        Slic3r::Biz::Algorithms::ensure_on_bed(*object);
+        Slic3r::Biz::Algorithms::ModelObject::ensure_on_bed(*object);
         // The instance offset puts the rectangle where the pattern says, measured from the plate
         // corner the display is mapped to.
         object->instances[0]->set_offset(Vec3d{r.x, r.y, 0.});
