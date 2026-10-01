@@ -331,7 +331,10 @@ struct RotfinderBoilerplate {
 
 // Assemble the mesh with the correct transformation to be used in rotation optimization: the mesh
 // of the object with the scaling and mirroring of its first instance applied and no rotation. The
-// vertices stay in millimetres, which is what the rest of the engine reads them as.
+// vertices stay in millimetres, which is what the rest of the engine reads them as: the slicer
+// scales a mesh up into the coordinates of a layer itself, so a mesh handed to it in scaled
+// coordinates would be measured a million times too big and its polygons would overflow the int32
+// of a Point.
 TriangleMesh mesh_to_rotate(const Domain::ModelObject &mo)
 {
     TriangleMesh mesh = mo.raw_mesh();
