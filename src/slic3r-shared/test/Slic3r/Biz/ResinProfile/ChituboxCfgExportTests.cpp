@@ -436,8 +436,10 @@ TEST_CASE("ChituboxCfgExport - a setting with no Chitubox key is left out and na
         const bool wrote = !row.chitubox_key.empty();
         CHECK(wrote == !row.value.empty());
         // A row that writes a value and its unit writes both, and a row that writes nothing has
-        // no unit either: the unit of a price is what makes it a price.
-        CHECK(wrote == !row.unit_key.empty());
+        // no unit either: the unit of a price is what makes it a price. Only a price is stated as
+        // two keys, so a written row with no unit of its own is the normal case, not a broken one.
+        if (!wrote)
+            CHECK(row.unit_key.empty());
         CHECK(row.unit_key.empty() == row.unit_value.empty());
         if (wrote)
             ++written;
