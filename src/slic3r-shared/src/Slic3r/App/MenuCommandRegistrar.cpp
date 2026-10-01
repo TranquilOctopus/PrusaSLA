@@ -1,3 +1,4 @@
+#include "Slic3r/App/IsSlaActive.hpp"
 #include "Slic3r/App/MenuCommandRegistrar.hpp"
 
 #include "Slic3r/Directories.hpp"
@@ -34,9 +35,16 @@
 #include "Slic3r/Biz/VolumeReloadLogic.hpp"
 #include "Slic3r/Biz/Algorithms/BoundingBox.hpp"
 
+#include "Slic3r/Domain/ElementRef.hpp"
+#include "Slic3r/Domain/ModelInstance.hpp"
+#include "Slic3r/Domain/ModelObject.hpp"
+#include "Slic3r/Domain/Project.hpp"
+
 #include "Slic3r/App/Plater/PlaterRenderModule.hpp"
+#include "Slic3r/App/Plater/SlaSupportPointsClear.hpp"
 #include "Slic3r/App/Plater/TextGizmo.hpp"
 
+#include <algorithm>
 #include <optional>
 
 namespace Slic3r::App {
@@ -655,7 +663,83 @@ void MenuCommandRegistrar::register_object_menu_commands()
                 .checked = [this]()
                 { return m_project_interactor.scene_interactor().selected_instances_printable(); },
             }
+        )
+        .append_separator()
+        // The support points of the selected models go without opening the support points tool
+        // (M2.32). It is an SLA row, so it is only offered for a resin printer.
+        .append_item(
+            MenuItemName::ClearSupportPoints,
+            "clear-support-points",
+            [this]() { this->clear_support_points_of_selection(); },
+            UIItemCommandExtraOpts{
+                .enabled = [this]()
+                {
+                    return !Plater::sla_support_points_clear_plan(sla_selected_supportable_models()).empty();
+                },
+                .visible = [this]() { return is_sla_active(m_project_interactor); }
+            }
         );
+}
+
+/// The selected models the SLA support points can be cleared on: the ones of the selection that sit
+/// on a build plate and carry support points. Empty for a selection of another kind, which leaves
+/// the context menu row off.
+std::vector<const Domain::ModelObject*> MenuCommandRegistrar::sla_selected_supportable_models() const
+{
+    std::vector<const Domain::ModelObject*> models;
+
+    const Biz::Scene::ObjectSelection& selection = m_project_interactor.scene_interactor().object_selection();
+    if (selection.mode != Biz::Scene::SelectionMode::Instance) {
+        return models;
+    }
+
+    const Domain::Project& project = m_project_interactor.selected_project();
+    for (const Domain::ElementRef& element : selection.elements) {
+        const Domain::ModelObject* model_object = project.find_object_by_id(element.object_id);
+        if (model_object == nullptr) {
+            continue;
+        }
+        // Only a model a printable instance of which sits on a build plate has support points, which
+        // is the rule the support tool works by as well.
+        const bool supportable = std::ranges::any_of(
+            model_object->instances,
+            [&project](const Domain::ModelInstance* instance)
+            {
+                return instance != nullptr && instance->is_printable() &&
+                       project.find_bed_instance_by_id(instance->get_last_bed().instance_id) != nullptr;
+            }
+        );
+        if (supportable && std::ranges::find(models, model_object) == models.end()) {
+            models.push_back(model_object);
+        }
+    }
+
+    return models;
+}
+
+void MenuCommandRegistrar::clear_support_points_of_selection()
+{
+    if (!is_sla_active(m_project_interactor)) {
+        return;
+    }
+
+    const Plater::SlaSupportPointsClearPlan plan =
+        Plater::sla_support_points_clear_plan(sla_selected_supportable_models());
+    if (plan.empty()) {
+        return;
+    }
+
+    AppServices::instance().dialog_manager().show_yesno_dialog(
+        Biz::_u8L("Clear support points"),
+        Plater::sla_support_points_clear_question(plan),
+        [this, plan](bool answer)
+        {
+            if (!answer) {
+                return;
+            }
+            Plater::clear_sla_support_points(m_project_interactor, plan);
+        }
+    );
 }
 
 void MenuCommandRegistrar::register_object_menu_add_volume_commands()

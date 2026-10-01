@@ -5,7 +5,10 @@
 #include "Slic3r/App/Yoga/LayoutButton.hpp"
 #include "Slic3r/App/Yoga/Text.hpp"
 #include "Slic3r/App/Yoga/Item.hpp"
+#include "Slic3r/App/AppServices.hpp"
+#include "Slic3r/App/IDialogManager.hpp"
 #include "Slic3r/App/Navigator.hpp"
+#include "Slic3r/App/Plater/SlaSupportPointsClear.hpp"
 #include "Slic3r/App/Scene/IGizmo.hpp"
 
 #include "Slic3r/Biz/ProjectInteractor.hpp"
@@ -73,6 +76,28 @@ SidebarSlaSupports::SidebarSlaSupports(ProjectInteractor& project_interactor, Ap
     );
     m_auto_support_all_button->set_flex_grow(1.f);
     m_auto_support_all_button->callbacks().action = [this]() { auto_support(false); };
+
+    // Removing the points again without opening the tool (M2.32), on the same terms: the selected
+    // models or every model on the build plate.
+    Item* clear_support_row = emplace_back<Item>();
+    clear_support_row->set_orientation(Orientation::Horizontal);
+    clear_support_row->set_gap(10_fpx);
+
+    m_clear_selected_button = clear_support_row->emplace_back<LayoutButton>(
+        _u8L("Clear selected"),
+        Render::Icon::None,
+        _u8L("Remove the support points of the selected models")
+    );
+    m_clear_selected_button->set_flex_grow(1.f);
+    m_clear_selected_button->callbacks().action = [this]() { clear_supports(true); };
+
+    m_clear_all_button = clear_support_row->emplace_back<LayoutButton>(
+        _u8L("Clear all"),
+        Render::Icon::None,
+        _u8L("Remove the support points of every model on the build plate")
+    );
+    m_clear_all_button->set_flex_grow(1.f);
+    m_clear_all_button->callbacks().action = [this]() { clear_supports(false); };
 
     // Edit supports button
     m_edit_supports_button = emplace_back<LayoutButton>(
@@ -178,17 +203,24 @@ void SidebarSlaSupports::update_controls()
     const std::size_t models_with_supports = static_cast<std::size_t>(
         std::ranges::count_if(printable, [](const ModelObject* object) { return !object->sla_support_points.empty(); })
     );
+    const std::vector<const ModelObject*> selected = selected_printable_objects();
+    const std::size_t selected_models_with_supports = static_cast<std::size_t>(
+        std::ranges::count_if(selected, [](const ModelObject* object) { return !object->sla_support_points.empty(); })
+    );
 
     const SlaSupportsPanelState state = sla_supports_panel_state(
         printable.size(),
-        selected_printable_objects().size(),
+        selected.size(),
         models_with_supports,
+        selected_models_with_supports,
         m_auto_support_running
     );
 
     m_edit_supports_button->set_enabled(state.edit_supports_enabled);
     m_auto_support_selected_button->set_enabled(state.auto_support_selected_enabled);
     m_auto_support_all_button->set_enabled(state.auto_support_all_enabled);
+    m_clear_selected_button->set_enabled(state.clear_selected_enabled);
+    m_clear_all_button->set_enabled(state.clear_all_enabled);
 
     switch (state.status) {
     case SlaSupportsStatus::NoModels:
@@ -366,6 +398,38 @@ void SidebarSlaSupports::auto_support(bool selected_only)
 
     m_auto_support_running = true;
     update_controls();
+}
+
+// Removing the support points does not need the support tool at all (M2.32), so the section does it
+// from here: what would go is worked out first, the user is asked how many points of how many models
+// that is, and only an answer of yes takes them away.
+void SidebarSlaSupports::clear_supports(bool selected_only)
+{
+    if (m_auto_support_running) {
+        return;
+    }
+
+    const std::vector<const ModelObject*> objects = selected_only ? selected_printable_objects()
+                                                                 : listed_printable_objects();
+    const Plater::SlaSupportPointsClearPlan plan = Plater::sla_support_points_clear_plan(objects);
+    if (plan.empty()) {
+        return;
+    }
+
+    AppServices::instance().dialog_manager().show_yesno_dialog(
+        _u8L("Clear support points"),
+        Plater::sla_support_points_clear_question(plan),
+        [this, plan](bool answer)
+        {
+            if (!answer) {
+                return;
+            }
+            Plater::clear_sla_support_points(m_project_interactor, plan);
+            // The points of the section's list and its rows are the ones that went, so it reads the
+            // new state of the build plate.
+            refresh();
+        }
+    );
 }
 
 void SidebarSlaSupports::open_support_tool(const std::vector<const ModelObject*>& objects)

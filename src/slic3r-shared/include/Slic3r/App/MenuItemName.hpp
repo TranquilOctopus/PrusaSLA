@@ -150,6 +150,9 @@ enum class MenuItemName
     SetAsSeparateObject,
     PrintableObject,
     ObjectSettings,
+    /// The SLA support points of the selected models (M2.32), an SLA only row of the object
+    /// context menu.
+    ClearSupportPoints,
 
     MultiObjectsContextMenu,
     CopyMultiObjects,

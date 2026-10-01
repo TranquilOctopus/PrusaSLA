@@ -290,8 +290,13 @@ Do not confuse these with the FFF `SupportSpotsGenerator::SupportPoint` in
 - `App/Preview/SlaSupportsPanel.{hpp,cpp}` — `SlaSupportsStatus {NoModels, NeedsSupports,
   Generating, ReadyToSlice}`, `SlaSupportsPanelState`, the pure `sla_supports_panel_state()`
 - `App/Preview/SidebarSlaSupports.{hpp,cpp}` — the Preview block with "Auto support selected",
-  "Auto support all" and "Edit supports". It navigates to Prepare and asks
-  `Navigator::run_sla_auto_support()`; it does not slice
+  "Auto support all", "Clear selected" / "Clear all" and "Edit supports". It navigates to Prepare and
+  asks `Navigator::run_sla_auto_support()`; it does not slice
+- `App/Plater/SlaSupportPointsClear.{hpp,cpp}` — taking the support points away without the tool
+  (M2.32), shared by that block, the tool's "Remove all points" and the object context menu:
+  `sla_support_points_clear_plan()` (the models of a list that have points, with the counts),
+  `sla_support_points_clear_question()` (the yes/no body) and `clear_sla_support_points()` (one undo
+  snapshot, then `modify_sla_support_points` per model, leaving `PointsStatus::NoPoints`)
 
 ### The engine call the tool makes, and why nothing slices
 

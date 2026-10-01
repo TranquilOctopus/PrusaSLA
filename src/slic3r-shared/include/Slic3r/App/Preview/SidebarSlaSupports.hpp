@@ -67,6 +67,10 @@ private:
     void edit_supports();
     void auto_support(bool selected_only);
 
+    /// Removes the support points of the selected models or of every listed one (M2.32), after the
+    /// yes/no dialog that names how many points of how many models go.
+    void clear_supports(bool selected_only);
+
     /// Models having an instance on the bed selected in the scene, in model order.
     std::vector<const Domain::ModelObject*> listed_objects() const;
 
@@ -104,6 +108,8 @@ private:
     Yoga::LayoutButton* m_edit_supports_button{nullptr};
     Yoga::LayoutButton* m_auto_support_selected_button{nullptr};
     Yoga::LayoutButton* m_auto_support_all_button{nullptr};
+    Yoga::LayoutButton* m_clear_selected_button{nullptr};
+    Yoga::LayoutButton* m_clear_all_button{nullptr};
     Yoga::Text* m_status_text{nullptr};
     /// Set when a generation was started from here and cleared as soon as the support tool reports
     /// it is not running any more, which is also how the section recovers from a cancelled run.

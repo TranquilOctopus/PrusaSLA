@@ -115,6 +115,9 @@ enum class UndoSnapshotType
     SlaDrainHolesEdit,
     SlaSupportPointsApply,
     SlaDrainHolesApply,
+    /// The support points of one or more models were removed (M2.32). Its own type, so the undo
+    /// reads as removing points rather than applying them.
+    SlaSupportPointsClear,
 };
 
 namespace UndoSnapshotSelection {

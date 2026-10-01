@@ -513,6 +513,44 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
     That list says to add any option found later, which is a job for the M7 research pass: a row
     claiming a Lychee option this fork has never seen would be a guess written into a parity table.
     NOT BUILT (docs only, nothing to compile) and NOT CHECKED in a running app.
+- [x] **M2.32** The support points of a model can be cleared without opening the support points tool
+  (user: "It doesn't seem like there's a way to clear the supports when you've left the dialogue
+  either."). Next to "Auto support selected" / "Auto support all" the Preview sidebar's Supports
+  section gets "Clear selected" and "Clear all"; the support points tool gets "Remove all points"
+  for the model it works on; the object context menu gets "Clear support points". Every one of them
+  asks how many points of how many models go, and takes the points away in one undo snapshot.
+  · M · needs M2.17d
+    Result: by OpenCode, NOT BUILT (a human builds and runs the tests). One module carries the
+    action so the three entries cannot drift apart: the new `App/Plater/SlaSupportPointsClear.{hpp,cpp}`
+    (`sla_support_points_clear_plan()`, `sla_support_points_clear_question()`,
+    `clear_sla_support_points()`), listed in CMake once. The plan is the models of the caller's list
+    that *have* points (a model with none is left out, so nothing without points is ever written),
+    with the points they carry between them; the question names both counts and that one undo brings
+    them back; the clear takes ONE snapshot before the first model is touched and then goes through
+    `SceneInteractor::modify_sla_support_points` per model, setting `sla_points_status` to
+    `NoPoints`, which is what the M2.21 preview service watches for, so the tree and the lift drop
+    by themselves. Nothing here slices: the points only reach the project as slicing input.
+    The undo step has its own type, `UndoSnapshotType::SlaSupportPointsClear` ("Remove SLA support
+    points"), so the history reads as removing points rather than applying them. In Preview,
+    `SidebarSlaSupports` gets a "Clear selected" / "Clear all" row under the Auto support row, driven
+    by the same pure rule as the rest of the section: `sla_supports_panel_state()` takes one count
+    more (the selected models that have points) and answers `clear_selected_enabled` /
+    `clear_all_enabled`, both off while a generation runs and on only where there is something to
+    remove; the section asks through the dialog manager and refreshes itself after. In the tool, the
+    dialog gets a "Remove all points" row and the `Callbacks::remove_all_points` slot, which the
+    gizmo answers with `remove_all_points()` / `remove_all_points_now()` (new methods, kept apart
+    from what M2.31 changes in the same file): it asks, and on yes drops the pending generated points
+    and the edit session first, then clears the model, so nothing waiting to be applied can land on
+    it, and it resets what Discard would restore. The row is on while the model has points
+    (`set_remove_all_points_enabled`, next to the point count it follows). The object context menu
+    gets `MenuItemName::ClearSupportPoints`, an SLA-only row (visible for a resin printer, enabled
+    while a selected model on a build plate has points) with the same plan, question and clear.
+    Tests: the new `test/Slic3r/App/Plater/SlaSupportPointsClearTests.cpp` (the plan leaves out the
+    models without points and adds the counts up, the question names the counts, the clear takes the
+    points away and leaves `NoPoints` under exactly one `SlaSupportPointsClear` snapshot, a model
+    without points is not written, one undo brings the points and their status back through
+    `SceneInteractor::set_state`, and an empty plan asks nothing and takes nothing) plus five cases
+    for the two new panel flags in `SlaSupportsPanelTests.cpp`. NOT CHECKED in a running app.
 
 - [x] **M2.31** Leaving the support point tool keeps the points it generated: closing the dialogue applies what is waiting, so the model keeps its supports and the preview, the lift and the slice see them. Every path that ends the tool applies the pending points, exactly as the Apply button does, undo snapshot included; Discard stays the explicit way to throw them away, and a generation that is still running is cancelled and its result dropped. · M · needs M2.1, M2.21
   Result: the generated points no longer die with the tool. `on_deactivated` reset `m_has_generated_points` and `m_generated_support_points`, so Generate followed by closing the dialogue left the ModelObject without points: `SlaSupportPreviewService` (M2.21) only previews an object whose ModelObject has points, so there was no tree and no lift, and `SLAPrint::Steps::support_points` sliced the model's own (empty) points, which is what the user reported (supports on, no points on the object). Every path out of the tool now ends in `apply_pending_points_on_leaving()`, which calls `apply_generated_points()`: `on_deactivated` (Escape, the window's close, another tool, going to Preview), the selection change onto another object, and `on_project_deactivated`, which the tool now answers the way every other gizmo does (the project view closing) by calling `on_deactivated`. The write needs the tool's project to be the selected one, since that is where `SceneInteractor::modify_sla_support_points` puts it; once the selection has moved on to another project the points are dropped, because there is no model left to put them on. The write is the one the Apply button makes: the `SlaSupportPointsApply` snapshot first, then the points on the object through `SceneInteractor::modify_sla_support_points` with `sla_points_status` AutoGenerated, so the preview service lifts the model and draws the tree, the Slice button slices the points and one Ctrl+Z takes them off again (the `DeactivateGizmo` snapshot `GizmoManager::deactivate_current_tool` takes after the tool is done sits on the state that has them, so the undo of the close is the state without). A generation that is still running is cancelled and its result dropped, so there is nothing to apply; Auto support keeps no pending points either, `on_auto_support_completed` writes every model's points as the run goes under the one snapshot of the run (M2.6b), so what it already did stays and only the rest of the queue is dropped. Discard is unchanged and stays the one way to throw the points away: it still clears them before it closes the tool, so the close finds nothing pending. The selection change also stopped calling `discard_edited_points()`, which put back the points an edit session started from; those edits are on the model already (`commit_edited_points_live`, one `SlaSupportPointsEdit` snapshot each), so they stay, which is what `end_editing()` in `on_deactivated` always did. The rule and the write are one new file, `App/Plater/SlaSupportPointsLeaving.{hpp,cpp}`: `apply_generated_points_on_leaving(has_generated_points, discard_requested)` and `apply_generated_support_points(object, points)`, now the only write of generated points (the Apply button, leaving the tool and Auto support all share it). The Apply button stays, with a tooltip saying it is optional, and the *Generate* bullet of `doc/sla-fork/user-guide/getting-started.md` was corrected to say the points are written when you leave the tool. If an edit session is open while generated points are pending, the generated points are what lands, which is what pressing Apply did as well. Tests: `SlaSupportPointsGizmoTests.cpp` (the points a generation produced land on the ModelObject with AutoGenerated, nothing is written with none pending or with a generation still running, Discard leaves an object without points and an object that had points untouched, an edit session left by deactivation keeps its edits) and `SlaSupportPointsUndoTests.cpp` (one undo removes the points leaving the tool applied, Discard plus the close write nothing undo can see). NOT BUILT (a human builds and runs the tests in this session); not checked in a running app.
