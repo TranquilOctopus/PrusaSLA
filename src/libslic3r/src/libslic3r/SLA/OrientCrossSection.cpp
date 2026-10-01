@@ -40,8 +40,8 @@ CrossSectionScore score_cross_sections(
         return result;
 
     // The rotation goes into the slicing parameters instead of into a copy of the mesh, so the mesh
-    // is only read from here on. The slice planes are in millimetres, which is the Z the mesh's
-    // vertices are in and the Z the slicer cuts at.
+    // is only read from here on. The slice planes are cut at the Z the mesh's vertices are in, which
+    // are the scaled coordinates of a model, so the step of the planes has to be scaled with them.
     const Transform3f tr{rotation};
     float zmin = std::numeric_limits<float>::max();
     float zmax = std::numeric_limits<float>::lowest();
@@ -56,10 +56,15 @@ CrossSectionScore score_cross_sections(
         return result; // flat enough that there is nothing between two planes to slice
 
     // One plane per mm, but never more planes than a pose of cross_section_plane_height_mm mm
-    // needs, so that a tall pose costs no more than a short one.
-    const float step =
-        std::max(float(cross_section_slice_step_mm), height / float(cross_section_plane_height_mm));
-    const size_t plane_count = std::max(size_t(1), size_t(std::ceil(height / step)));
+    // needs, so that a tall pose costs no more than a short one. The mesh is in the scaled
+    // coordinates a model is kept in, so the millimetres of both constants are scaled up as well:
+    // a step of one unit would ask the slicer for a million planes per millimetre of height, and
+    // a pose would cost more to measure than the print it stands for.
+    const double height_mm = unscaled<double>(height);
+    const double step_mm =
+        std::max(cross_section_slice_step_mm, height_mm / cross_section_plane_height_mm);
+    const float step         = float(scaled<double>(step_mm));
+    const size_t plane_count = std::max(size_t(1), size_t(std::ceil(height_mm / step_mm)));
 
     // The planes sit between the extremes rather than on them: a plane on a horizontal face of the
     // mesh does not cut it (the slicer counts a downward face as being above the plane), and a
@@ -81,7 +86,9 @@ CrossSectionScore score_cross_sections(
     // coarse slices of this pose: a pocket that is enclosed in its layer and stays enclosed going
     // up until a layer closes it. Only the least peel goal skips them, it does not score them.
     if (weights.cup_opening > 0.) {
-        const std::vector<float> thicknesses(layers.size(), step);
+        // The layers are handed to the detection in the coordinates it documents, scaled, but the
+        // thicknesses of its signature are in millimetres.
+        const std::vector<float> thicknesses(layers.size(), float(unscaled<double>(step)));
         const SLA::CavityAnalysis cavities = SLA::detect_cavities(layers, thicknesses);
         for (const SLA::CupHit& cup : cavities.cups)
             result.cup_opening_mm2 += cup.opening_area_mm2;

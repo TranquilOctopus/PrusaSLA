@@ -58,9 +58,11 @@ constexpr size_t cross_section_pose_limit = 24;
  * @brief Score one candidate orientation by its coarse cross sections.
  *
  * @param mesh The mesh to rotate, in the coordinates auto_orient() searches: the mesh of the object
- *        with the scaling and mirroring of its instance applied and no rotation. Its vertices are
- *        in millimetres, which is what the slicer takes (it scales the XY up itself and leaves the Z
- *        alone).
+ *        with the scaling and mirroring of its instance applied and no rotation. Its vertices are in
+ *        the scaled coordinates a model mesh is kept in (one unit is
+ *        Biz::Algorithms::Scaling::SCALING_FACTOR mm), which is where the slice planes are cut at
+ *        and where the areas of the slices come back in, so the step of the planes is scaled up and
+ *        their areas are scaled back down into mm².
  * @param rotation The candidate rotation, R = Ry(y) * Rx(x), as angle radians.
  * @param weights How much the peak cross section and the cup openings count.
  * @return The two terms and the weighted sum. An empty mesh, or one too flat to slice, scores zero.
