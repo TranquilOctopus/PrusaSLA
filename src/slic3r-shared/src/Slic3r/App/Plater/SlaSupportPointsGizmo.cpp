@@ -2,6 +2,8 @@
 #include "Slic3r/App/Plater/SlaSupportPointsClear.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsEditing.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsLeaving.hpp"
+#include "Slic3r/App/Plater/SlaSupportPointsLift.hpp"
+#include "Slic3r/App/Plater/SlaSupportPointsSettings.hpp"
 #include "Slic3r/App/Plater/SlaSupportToolShortcuts.hpp"
 
 #include "Slic3r/App/Plater/SlaSupportPointsDialog.hpp"
@@ -109,184 +111,35 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
             }
         }
     };
-    m_dialog->callbacks().head_diameter_changed = [this](double value)
+    // The two groups of the support settings (M2.33). Before this the same field set both jobs, which
+    // is what made it unclear what a changed value touched: the group says whether the value is what
+    // the next clicked point takes or what the selected points carry.
+    m_dialog->callbacks().support_setting_changed =
+        [this](SlaSupportSettingsGroup group, SlaSupportPointField field, double value)
     {
         if (m_syncing_dialog) {
             return;
         }
-        if (m_edit_state.has_value()) {
-            // The tip diameter is the head diameter of the tool (M2.24), one of the per-point
-            // geometry fields, so it goes on the points that are selected like the others.
-            m_edit_state->editing.support_geometry.tip_diameter_mm = value;
-            this->apply_support_geometry_to_selected(SupportGeometryField::TipDiameter);
+        if (!m_edit_state.has_value()) {
+            return;
+        }
+        if (group == SlaSupportSettingsGroup::NewSupports) {
+            this->apply_new_support_setting(field, value);
+        } else {
+            this->apply_selected_support_setting(field, value);
         }
     };
-    m_dialog->callbacks().pillar_diameter_changed = [this](double value)
+    m_dialog->callbacks().support_preset_selected = [this](SlaSupportSettingsGroup group, int index)
     {
         if (m_syncing_dialog) {
             return;
         }
-        if (m_edit_state.has_value()) {
-            m_edit_state->editing.pillar_diameter_mm = value;
-            m_edit_state->editing.pillar_diameter_use_global = false;
-            m_dialog->set_pillar_diameter_use_global(false);
-            this->apply_pillar_diameter_to_selected();
+        if (group == SlaSupportSettingsGroup::NewSupports) {
+            this->apply_new_support_preset(index);
+        } else {
+            this->apply_selected_support_preset(index);
         }
     };
-    m_dialog->callbacks().base_diameter_changed = [this](double value)
-    {
-        if (m_syncing_dialog) {
-            return;
-        }
-        if (m_edit_state.has_value()) {
-            m_edit_state->editing.base_diameter_mm = value;
-            m_edit_state->editing.base_diameter_use_global = false;
-            m_dialog->set_base_diameter_use_global(false);
-            this->apply_base_diameter_to_selected();
-        }
-    };
-    m_dialog->callbacks().base_height_changed = [this](double value)
-    {
-        if (m_syncing_dialog) {
-            return;
-        }
-        if (m_edit_state.has_value()) {
-            m_edit_state->editing.base_height_mm = value;
-            m_edit_state->editing.base_height_use_global = false;
-            m_dialog->set_base_height_use_global(false);
-            this->apply_base_height_to_selected();
-        }
-    };
-    m_dialog->callbacks().head_diameter_use_global_changed = [this](bool value)
-    {
-        if (m_syncing_dialog) {
-            return;
-        }
-        if (m_edit_state.has_value()) {
-            m_edit_state->editing.head_diameter_use_global = value;
-            if (value) {
-                this->apply_support_geometry_to_selected(SupportGeometryField::TipDiameter);
-            }
-        }
-    };
-    m_dialog->callbacks().pillar_diameter_use_global_changed = [this](bool value)
-    {
-        if (m_syncing_dialog) {
-            return;
-        }
-        if (m_edit_state.has_value()) {
-            m_edit_state->editing.pillar_diameter_use_global = value;
-            if (value) {
-                this->apply_pillar_diameter_to_selected();
-            }
-        }
-    };
-    m_dialog->callbacks().base_diameter_use_global_changed = [this](bool value)
-    {
-        if (m_syncing_dialog) {
-            return;
-        }
-        if (m_edit_state.has_value()) {
-            m_edit_state->editing.base_diameter_use_global = value;
-            if (value) {
-                this->apply_base_diameter_to_selected();
-            }
-        }
-    };
-    m_dialog->callbacks().base_height_use_global_changed = [this](bool value)
-    {
-        if (m_syncing_dialog) {
-            return;
-        }
-        if (m_edit_state.has_value()) {
-            m_edit_state->editing.base_height_use_global = value;
-            if (value) {
-                this->apply_base_height_to_selected();
-            }
-        }
-    };
-    m_dialog->callbacks().preset_mini = [this]() { this->apply_preset_mini(); };
-    // The per-point support geometry (M2.16c). Every one of them is a value of its own, so unlike
-    // the sizes above there is no "use global" checkbox: the value is written on the points that
-    // are selected, and the one the fields show is the one those points carry. One field at a time,
-    // so setting the tip shape keeps the knot, the cross-section and the taper a point has.
-    m_dialog->callbacks().tip_shape_changed = [this](Domain::SLA::SupportPoint::TipShape shape)
-    {
-        if (m_syncing_dialog) {
-            return;
-        }
-        if (m_edit_state.has_value()) {
-            m_edit_state->editing.support_geometry.tip_shape = shape;
-            this->apply_support_geometry_to_selected(SupportGeometryField::TipShape);
-        }
-    };
-    m_dialog->callbacks().tip_length_changed = [this](double value)
-    {
-        if (m_syncing_dialog) {
-            return;
-        }
-        if (m_edit_state.has_value()) {
-            m_edit_state->editing.support_geometry.tip_length_mm = value;
-            this->apply_support_geometry_to_selected(SupportGeometryField::TipLength);
-        }
-    };
-    m_dialog->callbacks().knot_diameter_changed = [this](double value)
-    {
-        if (m_syncing_dialog) {
-            return;
-        }
-        if (m_edit_state.has_value()) {
-            m_edit_state->editing.support_geometry.knot_diameter_mm = value;
-            this->apply_support_geometry_to_selected(SupportGeometryField::KnotDiameter);
-        }
-    };
-    m_dialog->callbacks().stem_sides_changed = [this](double value)
-    {
-        if (m_syncing_dialog) {
-            return;
-        }
-        if (m_edit_state.has_value()) {
-            m_edit_state->editing.support_geometry.stem_sides = static_cast<int>(value);
-            this->apply_support_geometry_to_selected(SupportGeometryField::StemSides);
-        }
-    };
-    m_dialog->callbacks().stem_taper_changed = [this](double value)
-    {
-        if (m_syncing_dialog) {
-            return;
-        }
-        if (m_edit_state.has_value()) {
-            m_edit_state->editing.support_geometry.stem_taper = value;
-            this->apply_support_geometry_to_selected(SupportGeometryField::StemTaper);
-        }
-    };
-    // The per-point "may this support end on the model" switch (M2.26). Like the geometry above it
-    // is a value of its own, written on the points that are selected.
-    m_dialog->callbacks().on_model_changed = [this](SupportOnModel on_model)
-    {
-        if (m_syncing_dialog) {
-            return;
-        }
-        if (m_edit_state.has_value()) {
-            this->apply_support_on_model_to_selected(on_model);
-        }
-    };
-    // The shape of the foot of the selected points (M2.23b), a value of its own like the rest of the
-    // per-point geometry: the foot of a point is a cone, a cylinder or a flat disc, and the tree is
-    // built again for the ones that changed.
-    m_dialog->callbacks().base_shape_changed = [this](Domain::SLA::SupportPoint::BaseShape shape)
-    {
-        if (m_syncing_dialog) {
-            return;
-        }
-        if (m_edit_state.has_value()) {
-            m_edit_state->editing.support_geometry.base_shape = shape;
-            this->apply_support_geometry_to_selected(SupportGeometryField::BaseShape);
-        }
-    };
-    m_dialog->callbacks().preset_light = [this]() { this->apply_preset_light(); };
-    m_dialog->callbacks().preset_medium = [this]() { this->apply_preset_medium(); };
-    m_dialog->callbacks().preset_heavy = [this]() { this->apply_preset_heavy(); };
     m_dialog->callbacks().clipping_plane_changed = [this](double value)
     {
         if (m_syncing_dialog) {
@@ -386,6 +239,11 @@ void SlaSupportPointsGizmo::on_deactivated()
     // the slice finds no points.
     this->apply_pending_points_on_leaving();
 
+    // The lift the tool took for its object is given back on the way out, so a model with no support
+    // points falls onto the plate again (M2.33). A model with points has the lift of the M2.21
+    // support preview by now, which stays.
+    this->release_tool_lift();
+
     // Cancel auto-support all queue
     if (!m_auto_support_queue.empty()) {
         m_auto_support_queue.clear();
@@ -401,6 +259,9 @@ void SlaSupportPointsGizmo::on_deactivated()
     }
 
     m_paintable_volumes.clear();
+    // The tool is on no object any more, so there is nothing to rebuild the volumes of (M2.33).
+    m_selected_element = Domain::ElementRef{};
+    m_applied_lift     = 0.;
 
     // Deactivate clipping plane presenter
     m_clipping_plane_presenter.deactivate();
@@ -414,6 +275,8 @@ void SlaSupportPointsGizmo::on_deactivated()
     m_dialog->set_apply_enabled(false);
     m_dialog->set_auto_support_all_enabled(false);
     m_dialog->set_point_count(0);
+    // The edit session is gone, so there is no selection and no "Selected supports" group (M2.33).
+    m_dialog->set_selected_support_values(SlaSupportSelectionView{});
 }
 
 void SlaSupportPointsGizmo::collect_paintable_volumes(const Domain::SelectionId project_id, const Domain::ElementRef& element)
@@ -431,8 +294,10 @@ void SlaSupportPointsGizmo::collect_paintable_volumes(const Domain::SelectionId 
     using MeshManager = PlaterScenePresenter::MeshManager;
     const MeshManager& mesh_manager = m_scene_presenter.model_triangle_mesh_manager(project_id);
 
-    const double elevation = support_elevation();
-    const Domain::Transform3d lift = Domain::translation_transform(Domain::Vec3d(0., 0., elevation));
+    // The lift the scene draws the model with, which is the one the raycast has to use: on a model
+    // with no support points the scene draws it on the plate and every click that tested a copy of it
+    // 5 mm higher missed (M2.33).
+    const double elevation = applied_lift();
 
     for (Domain::ModelVolume* model_volume : model_object->volumes) {
         if (!model_volume->is_model_part()) {
@@ -448,19 +313,20 @@ void SlaSupportPointsGizmo::collect_paintable_volumes(const Domain::SelectionId 
             continue;
         }
 
-        const Domain::Transform3d instance_trafo = model_instance->get_matrix();
-        const Domain::Transform3d lifted_instance_trafo = lift * instance_trafo;
-
         m_paintable_volumes.push_back({
             *model_object,
             *model_instance,
             *model_volume,
             *scene_mesh,
             scene_mesh->aabb_mesh(),
-            lifted_instance_trafo * model_volume->get_matrix(),
+            sla_support_points_drawing_trafo(model_instance->get_matrix(), elevation) * model_volume->get_matrix(),
             model_instance->get_matrix_no_offset() * model_volume->get_matrix_no_offset()
         });
     }
+
+    // The volumes above are the ones every raycast of the tool uses, so what they carry is the lift
+    // the scene drew the model with (M2.33).
+    m_applied_lift = elevation;
 }
 
 void SlaSupportPointsGizmo::on_scene_selection_changed(
@@ -491,7 +357,15 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
         // The edits are on the model already, so the new object starts from them (M2.31).
         end_editing();
     }
+    // The selection of the session is gone, so the "Selected supports" group has nothing to show
+    // on the object the tool moves to (M2.33).
+    this->update_selected_support_values();
     m_hovered_point_idx.reset();
+
+    // Whatever lift the tool took belongs to the object it was on, and it gives it back before the
+    // tool moves on: a model with no support points falls onto the plate again, and one the M2.21
+    // support preview lifts keeps the service's own lift (M2.33).
+    this->release_tool_lift();
 
     if (!enabled() || selection.elements.empty()) {
         m_dialog->set_generate_enabled(false);
@@ -525,6 +399,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
 
     m_selected_object_id = model_object->id();
     m_selected_instance_id = element.instance_id;
+    m_selected_element = element;
 
     const Domain::ModelInstance* instance = project.find_instance_by_id(element.object_id, element.instance_id);
     if (!instance) {
@@ -560,15 +435,17 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
     // "Remove all points" is on while there are points to remove (M2.32).
     m_dialog->set_remove_all_points_enabled(existing_count > 0);
 
-    double head_diameter = 0.4;
-    auto head_result = model_object->object_settings_sla.find("support_head_front_diameter");
-    if (head_result.item) {
-        head_diameter = head_result.item->get<double>();
-    }
-    m_dialog->set_head_diameter(head_diameter);
+    // The values the "New supports" group shows are the ones of this object, and they are filled into
+    // the group when the edit session opens (begin_editing), which is also where the object settings
+    // behind the old head diameter row are read (M2.33).
 
     // Auto support all is available when we have a valid selection
     m_dialog->set_auto_support_all_enabled(true);
+
+    // The model is raised by its support elevation while the tool is open, so a click lands on the
+    // surface as it is drawn and the point glyphs sit on it (M2.33). From here on the tool works with
+    // the lift the scene actually applies.
+    this->refresh_tool_lift();
 
     // Collect paintable volumes for raycasting
     this->collect_paintable_volumes(project_id, element);
@@ -594,7 +471,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
         model_object,
         instance,
         m_main_node,
-        support_elevation(),
+        applied_lift(),
         Scene::BuildMeshesNodes::Yes
     );
     m_clipping_plane_presenter.set_behavior(true, true, 0.);
@@ -744,6 +621,10 @@ void SlaSupportPointsGizmo::apply_generated_points()
         apply_generated_support_points(mo, std::move(domain_points));
     });
 
+    // The model has points now, so the M2.21 support preview draws its tree and lifts the model, and
+    // the lift it uses is the one the tool works with from here on (M2.33).
+    this->refresh_tool_lift();
+
     DialogSyncGuard guard(*this);
     m_dialog->set_apply_enabled(false);
     m_dialog->set_point_count(model_object->sla_support_points.size());
@@ -839,6 +720,10 @@ void SlaSupportPointsGizmo::remove_all_points_now()
     const SlaSupportPointsClearPlan plan = sla_support_points_clear_plan({ model_object });
     clear_sla_support_points(m_project_interactor, plan);
 
+    // The model has no points now, so the M2.21 support preview dropped its tree and its lift, and
+    // the tool raises the model again for as long as it is open (M2.33).
+    this->refresh_tool_lift();
+
     DialogSyncGuard guard(*this);
 
     // Points that are only waiting to be applied belong to the points that are gone now, so they go
@@ -854,6 +739,8 @@ void SlaSupportPointsGizmo::remove_all_points_now()
     m_dialog->set_apply_enabled(false);
     m_dialog->set_point_count(0);
     m_dialog->set_remove_all_points_enabled(false);
+    // The session is gone with the points, so the "Selected supports" group goes too (M2.33).
+    this->update_selected_support_values();
     update_point_visuals();
 }
 
@@ -1059,6 +946,10 @@ void SlaSupportPointsGizmo::on_auto_support_completed(Domain::ObjectID obj_id, s
                 // Fallback: no valid instance found, just update without notification
                 apply_generated_support_points(*model_object, std::move(*support_points));
             }
+
+            // The model of the tool has its points now, so the M2.21 support preview lifts it and
+            // the tool follows that lift (M2.33).
+            this->refresh_tool_lift();
         }
     } else {
         SPDLOG_WARN("Auto support all: No support points could be generated for object {}", obj_id.id);
@@ -1085,6 +976,10 @@ void SlaSupportPointsGizmo::begin_editing()
     m_edit_state = SupportPointEditState{};
     m_edit_state->editing.points = model_object->sla_support_points;
 
+    // The values of the "New supports" group, i.e. what a clicked point takes (M2.33): the stem and
+    // the base sizes of the object settings, each of them followed from the global settings, and the
+    // per-point tip diameter, tip shape, tip length, knot, stem cross-section, stem taper and foot
+    // shape (M2.16c, M2.24, M2.23b).
     double pillar_diameter = 0.8;
     auto pillar_result = model_object->object_settings_sla.find("support_pillar_diameter");
     if (pillar_result.item) {
@@ -1092,8 +987,6 @@ void SlaSupportPointsGizmo::begin_editing()
     }
     m_edit_state->editing.pillar_diameter_mm = pillar_diameter;
     m_edit_state->editing.pillar_diameter_use_global = true;
-    m_dialog->set_pillar_diameter(pillar_diameter);
-    m_dialog->set_pillar_diameter_use_global(true);
 
     double base_diameter = 2.0;
     auto base_dia_result = model_object->object_settings_sla.find("support_base_diameter");
@@ -1102,8 +995,6 @@ void SlaSupportPointsGizmo::begin_editing()
     }
     m_edit_state->editing.base_diameter_mm = base_diameter;
     m_edit_state->editing.base_diameter_use_global = true;
-    m_dialog->set_base_diameter(base_diameter);
-    m_dialog->set_base_diameter_use_global(true);
 
     double base_height = 1.0;
     auto base_ht_result = model_object->object_settings_sla.find("support_base_height");
@@ -1112,16 +1003,13 @@ void SlaSupportPointsGizmo::begin_editing()
     }
     m_edit_state->editing.base_height_mm = base_height;
     m_edit_state->editing.base_height_use_global = true;
-    m_dialog->set_base_height(base_height);
-    m_dialog->set_base_height_use_global(true);
+    m_edit_state->editing.head_diameter_use_global = true;
 
-    // The tip diameter, tip shape, tip length, knot, stem cross-section and stem taper a new point
-    // takes (M2.16c, M2.24). The tip diameter is the head diameter control above, which takes the
-    // configured value; the fields then show the selection, empty while the tool opens.
     m_edit_state->editing.support_geometry = support_geometry_defaults(model_object);
-    m_dialog->set_head_diameter(m_edit_state->editing.support_geometry.tip_diameter_mm);
-    m_dialog->set_head_diameter_use_global(true);
-    update_selected_support_geometry();
+    m_dialog->set_new_support_values(sla_new_support_values(m_edit_state->editing));
+    // The "Selected supports" group has nothing to show while the session opens: no point is
+    // selected yet, so it stays hidden until one is.
+    m_dialog->set_selected_support_values(selection_support_view(m_edit_state->editing));
 
     m_dialog->set_lock_island_supports(false);
 
@@ -1157,6 +1045,11 @@ void SlaSupportPointsGizmo::commit_edited_points_live()
         mo.sla_support_points = m_edit_state->editing.points;
         mo.sla_points_status = PointsStatus::UserModified;
     });
+
+    // The points are the model's now, so the M2.21 support preview has built its tree for them (or
+    // dropped it for a model without points), and the lift the scene draws the model with may have
+    // changed with it. The raycast and the glyphs follow that lift, not the one they had (M2.33).
+    this->refresh_tool_lift();
 }
 
 void SlaSupportPointsGizmo::apply_edited_points()
@@ -1181,6 +1074,10 @@ void SlaSupportPointsGizmo::apply_edited_points()
         mo.sla_points_status = PointsStatus::UserModified;
     });
 
+    // The lift of the model may have changed with its points, so the volumes the raycast uses
+    // follow it (M2.33).
+    this->refresh_tool_lift();
+
     m_dialog->set_point_count(model_object->sla_support_points.size());
     m_dialog->set_remove_all_points_enabled(!model_object->sla_support_points.empty());
     end_editing();
@@ -1203,6 +1100,9 @@ void SlaSupportPointsGizmo::discard_edited_points()
             mo.sla_support_points = m_points_before_edit;
             mo.sla_points_status = m_status_before_edit;
         });
+        // Putting the points of the session back can change the lift of the model as well
+        // (M2.33).
+        this->refresh_tool_lift();
         m_dialog->set_point_count(model_object->sla_support_points.size());
     }
 }
@@ -1233,10 +1133,13 @@ void SlaSupportPointsGizmo::on_value_editing_ended()
     m_value_edit_action.end();
 }
 
-// Hits are in the hit volume's local frame; sla_support_points live in the object's mesh frame.
+// Hits are in the hit volume's local frame; sla_support_points live in the object's mesh frame. The
+// lift the scene drew the model by is not part of it: it moved the mesh, not the point on it
+// (M2.33).
 Domain::Vec3d SlaSupportPointsGizmo::hit_to_object_pos(const VolumeHitPoint& hit) const
 {
-    return m_paintable_volumes[hit.volume_idx].model_volume.get_matrix() * hit.volume_hit_position;
+    return sla_support_points_hit_position(m_paintable_volumes[hit.volume_idx].model_volume.get_matrix(),
+                                           hit.volume_hit_position);
 }
 
 std::optional<size_t> SlaSupportPointsGizmo::find_nearest_point(const Domain::Vec3d& mesh_pos, double max_distance_mm) const
@@ -1366,6 +1269,12 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
     if (m_paintable_volumes.empty()) {
         return Scene::GizmoActivationState::Inactive;
     }
+
+    // The volumes the raycast uses are the ones of the lift the scene draws the model with, brought
+    // in step with it here: a click has to land on the surface that is on the screen (M2.33). The lift
+    // itself was taken on activation, on the selection change and after every edit of a point; this
+    // is the cheap half of it, which a mouse move can do without asking the configuration again.
+    this->sync_paintable_lift();
 
     if (!m_edit_state.has_value()) {
         begin_editing();
@@ -1532,15 +1441,15 @@ void SlaSupportPointsGizmo::update_point_visuals()
 
     Scene::Scene& scene = m_scene_presenter.scene();
 
-    // Get the instance transform with support elevation applied
+    // Get the instance transform with the lift the scene draws the model with applied, so a glyph
+    // sits on the model as it is on the screen and not on a copy of it somewhere else (M2.33).
     const Domain::Project& project = m_project_interactor.selected_project();
     const Domain::ModelInstance* instance = project.find_instance_by_id(m_selected_object_id.id, m_selected_instance_id);
     if (!instance) {
         return;
     }
-    const double elevation = support_elevation();
-    const Domain::Transform3d lift = Domain::translation_transform(Domain::Vec3d(0., 0., elevation));
-    const Domain::Transform3d instance_trafo = lift * instance->get_matrix();
+    const Domain::Transform3d instance_trafo =
+        sla_support_points_drawing_trafo(instance->get_matrix(), applied_lift());
 
     // Sphere geometry (shared for all points)
     static constexpr double SPHERE_RESOLUTION_ANGLE = Slic3r::deg2rad(360.0 / 32.0);
@@ -1728,7 +1637,7 @@ void SlaSupportPointsGizmo::select_point(size_t idx, bool add_to_selection)
         return;
     }
     m_edit_state->editing.select_point(idx, add_to_selection);
-    update_selected_support_geometry();
+    this->update_selected_support_values();
 }
 
 void SlaSupportPointsGizmo::deselect_point(size_t idx)
@@ -1737,7 +1646,7 @@ void SlaSupportPointsGizmo::deselect_point(size_t idx)
         return;
     }
     m_edit_state->editing.deselect_point(idx);
-    update_selected_support_geometry();
+    this->update_selected_support_values();
 }
 
 void SlaSupportPointsGizmo::select_all_points()
@@ -1747,7 +1656,7 @@ void SlaSupportPointsGizmo::select_all_points()
     }
     m_edit_state->editing.select_all_points();
     update_point_visuals();
-    update_selected_support_geometry();
+    this->update_selected_support_values();
 }
 
 void SlaSupportPointsGizmo::clear_selection()
@@ -1757,7 +1666,7 @@ void SlaSupportPointsGizmo::clear_selection()
     }
     m_edit_state->editing.clear_selection();
     update_point_visuals();
-    update_selected_support_geometry();
+    this->update_selected_support_values();
 }
 
 void SlaSupportPointsGizmo::delete_selected_points()
@@ -1773,215 +1682,117 @@ void SlaSupportPointsGizmo::delete_selected_points()
         m_dialog->set_point_count(m_edit_state->editing.points.size());
         take_undo_snapshot();
         update_point_visuals();
-        update_selected_support_geometry();
+        this->update_selected_support_values();
         commit_edited_points_live();
     }
 }
 
-void SlaSupportPointsGizmo::apply_pillar_diameter_to_selected()
+// One value of the "New supports" group: what a clicked point takes from now on (M2.33). No point is
+// touched here, not even a selected one: that is what the other group is for.
+void SlaSupportPointsGizmo::apply_new_support_setting(SlaSupportPointField field, double value)
 {
     if (!m_edit_state.has_value()) {
         return;
     }
+    sla_new_support_setting_changed(m_edit_state->editing, field, value);
+    this->refresh_new_support_values();
+}
+
+// One value of the "Selected supports" group: it lands on the points that are selected and on
+// nothing else, and what a clicked point takes is left alone (M2.33). One field at a time, so
+// setting the tip shape keeps the sizes a point already has, and one undo step per edit.
+void SlaSupportPointsGizmo::apply_selected_support_setting(SlaSupportPointField field, double value)
+{
+    if (!m_edit_state.has_value() || m_edit_state->editing.selected_point_indices.empty()) {
+        return;
+    }
     take_undo_snapshot_for_value_edit();
-    m_edit_state->editing.apply_pillar_diameter_to_selected();
+    sla_selected_support_setting_changed(m_edit_state->editing, field, value);
+    // The points now carry the new value, so the fields keep showing it.
+    this->update_selected_support_values();
     update_point_visuals();
+    // The tree the preview shows is built from the points, so a change of a value of a point has to
+    // reach the model like any other edit of a point (M2.26, M2.16c).
     commit_edited_points_live();
 }
 
-void SlaSupportPointsGizmo::apply_base_diameter_to_selected()
+// A preset of the "New supports" group: the four values a clicked point takes from now on. The points
+// that exist keep what they carry, so a preset picked while three points are selected does not
+// change those three behind the user's back (M2.33).
+void SlaSupportPointsGizmo::apply_new_support_preset(int preset_index)
 {
     if (!m_edit_state.has_value()) {
         return;
     }
-    take_undo_snapshot_for_value_edit();
-    m_edit_state->editing.apply_base_diameter_to_selected();
-    update_point_visuals();
-    commit_edited_points_live();
+    DialogSyncGuard guard(*this);
+    sla_new_support_preset_changed(m_edit_state->editing,
+                                   this->get_support_preset_values(sla_support_preset_name(preset_index)));
+    this->refresh_new_support_values();
+    m_dialog->set_active_preset(preset_index, SlaSupportSettingsGroup::NewSupports);
 }
 
-void SlaSupportPointsGizmo::apply_base_height_to_selected()
+// A preset of the "Selected supports" group: the same four values on the points that are selected,
+// in one undo step, and not on what a clicked point takes.
+void SlaSupportPointsGizmo::apply_selected_support_preset(int preset_index)
 {
+    if (!m_edit_state.has_value() || m_edit_state->editing.selected_point_indices.empty()) {
+        return;
+    }
+    DialogSyncGuard guard(*this);
+    take_undo_snapshot();
+    sla_selected_support_preset_changed(m_edit_state->editing,
+                                        this->get_support_preset_values(sla_support_preset_name(preset_index)));
+    this->update_selected_support_values();
+    update_point_visuals();
+    commit_edited_points_live();
+    m_dialog->set_active_preset(preset_index, SlaSupportSettingsGroup::SelectedSupports);
+}
+
+void SlaSupportPointsGizmo::refresh_new_support_values()
+{
+    DialogSyncGuard guard(*this);
     if (!m_edit_state.has_value()) {
         return;
     }
-    take_undo_snapshot_for_value_edit();
-    m_edit_state->editing.apply_base_height_to_selected();
-    update_point_visuals();
-    commit_edited_points_live();
+    m_dialog->set_new_support_values(sla_new_support_values(m_edit_state->editing));
+}
+
+// What the "Selected supports (N)" group is shown with. With no point selected the group is hidden
+// by the dialog itself, so an empty selection asks for nothing.
+void SlaSupportPointsGizmo::update_selected_support_values()
+{
+    DialogSyncGuard guard(*this);
+    if (!m_edit_state.has_value()) {
+        m_dialog->set_selected_support_values(SlaSupportSelectionView{});
+        return;
+    }
+    m_dialog->set_selected_support_values(selection_support_view(m_edit_state->editing));
 }
 
 void SlaSupportPointsGizmo::apply_preset_mini()
 {
-    const auto [head_diameter, pillar_diameter, base_diameter, base_height] = get_support_preset_values("mini");
-    apply_support_preset(static_cast<float>(head_diameter), static_cast<float>(pillar_diameter),
-                         static_cast<float>(base_diameter), static_cast<float>(base_height), 0);
+    this->apply_new_support_preset(0);
 }
 
-void SlaSupportPointsGizmo::apply_support_geometry_to_selected(SupportGeometryField field)
+// The four values of a preset, from the print preset of the printer where it belongs
+// (support_preset_{mini,light,medium,heavy}_*, M2.18, M2.22) and from the values the config
+// definitions ship for a preset that does not carry the keys.
+SlaSupportPreset SlaSupportPointsGizmo::get_support_preset_values(const std::string& preset_name) const
 {
-    if (!m_edit_state.has_value()) {
-        return;
-    }
-    take_undo_snapshot_for_value_edit();
-    m_edit_state->editing.apply_support_geometry_to_selected(field);
-    // The points now carry the new value, so the fields keep showing it.
-    update_selected_support_geometry();
-    update_point_visuals();
-    commit_edited_points_live();
-}
+    const SlaSupportPreset defaults = sla_support_preset(preset_name);
 
-void SlaSupportPointsGizmo::apply_support_on_model_to_selected(SupportOnModel on_model)
-{
-    if (!m_edit_state.has_value()) {
-        return;
-    }
-    take_undo_snapshot_for_value_edit();
-    m_edit_state->editing.apply_support_on_model_to_selected(on_model);
-    // The points now carry the new state, so the control keeps showing it.
-    update_selected_support_geometry();
-    update_point_visuals();
-    // The tree the preview shows is built from the points, so a change of where a pillar ends
-    // has to reach the model like any other edit of a point (M2.26).
-    commit_edited_points_live();
-}
-
-void SlaSupportPointsGizmo::update_selected_support_geometry()
-{
-    DialogSyncGuard guard(*this);
-    if (!m_edit_state.has_value()) {
-        m_dialog->set_support_geometry(std::nullopt, false);
-        m_dialog->set_support_on_model(std::nullopt);
-        return;
-    }
-    // The dialog needs to tell "nothing is selected" from "the points disagree": the tip diameter is
-    // the head diameter control as well, which keeps showing what a new point takes when there is
-    // no selection to show.
-    m_dialog->set_support_geometry(m_edit_state->editing.selected_support_geometry(),
-                                   !m_edit_state->editing.selected_point_indices.empty());
-    // The "may rest on the model" switch has a value of its own, so it is shown for a selection
-    // that agrees on it even when the selection shows no geometry at all (M2.26).
-    m_dialog->set_support_on_model(m_edit_state->editing.selected_support_on_model());
-}
-
-SlaSupportGeometry SlaSupportPointsGizmo::support_geometry_defaults(const Domain::ModelObject* model_object) const
-{
-    SlaSupportGeometry geometry;
-    if (!model_object) {
-        return geometry;
-    }
-
-    const auto& settings = model_object->object_settings_sla;
-
-    // The tip diameter is the "head diameter" control of the tool (M2.24), so a point placed by hand
-    // takes the configured one and a preset button replaces it.
-    if (auto result = settings.find("support_head_front_diameter"); result.item != nullptr) {
-        geometry.tip_diameter_mm = result.item->get<double>();
-    }
-    if (auto result = settings.find("support_tip_shape"); result.item != nullptr) {
-        geometry.tip_shape = support_tip_shape_of(result.item->get<Domain::sla::SupportTipShape>());
-    }
-    if (auto result = settings.find("support_tip_length"); result.item != nullptr) {
-        geometry.tip_length_mm = result.item->get<double>();
-    }
-    if (auto result = settings.find("support_knot_diameter"); result.item != nullptr) {
-        geometry.knot_diameter_mm = result.item->get<double>();
-    }
-    if (auto result = settings.find("support_stem_sides"); result.item != nullptr) {
-        geometry.stem_sides = result.item->get<int>();
-    }
-    if (auto result = settings.find("support_stem_taper"); result.item != nullptr) {
-        geometry.stem_taper = result.item->get<double>();
-    }
-    // The foot of a new point is the shape support_base_shape asks for (M2.23b), so a point placed
-    // by hand gets the foot the user configured rather than the cone of before.
-    if (auto result = settings.find("support_base_shape"); result.item != nullptr) {
-        geometry.base_shape = support_base_shape_of(result.item->get<Domain::sla::SupportBaseShape>());
-    }
-
-    return geometry;
-}
-
-void SlaSupportPointsGizmo::apply_preset_light()
-{
-    const auto [head_diameter, pillar_diameter, base_diameter, base_height] = get_support_preset_values("light");
-    apply_support_preset(static_cast<float>(head_diameter), static_cast<float>(pillar_diameter),
-                         static_cast<float>(base_diameter), static_cast<float>(base_height), 1);
-}
-
-void SlaSupportPointsGizmo::apply_preset_medium()
-{
-    const auto [head_diameter, pillar_diameter, base_diameter, base_height] = get_support_preset_values("medium");
-    apply_support_preset(static_cast<float>(head_diameter), static_cast<float>(pillar_diameter),
-                         static_cast<float>(base_diameter), static_cast<float>(base_height), 2);
-}
-
-void SlaSupportPointsGizmo::apply_preset_heavy()
-{
-    const auto [head_diameter, pillar_diameter, base_diameter, base_height] = get_support_preset_values("heavy");
-    apply_support_preset(static_cast<float>(head_diameter), static_cast<float>(pillar_diameter),
-                         static_cast<float>(base_diameter), static_cast<float>(base_height), 3);
-}
-
-std::tuple<double, double, double, double> SlaSupportPointsGizmo::get_support_preset_values(const std::string& preset_name) const
-{
     const auto& config_box = m_project_interactor.preset_interactor().selected_printer_preset().print.config_box();
     const std::string prefix = "support_preset_" + preset_name + "_";
 
-    auto get_value = [&](const std::string& suffix, double fallback) -> double {
+    const auto get_value = [&](const std::string& suffix, double fallback) -> double {
         const auto* item = config_box.items.find(prefix + suffix);
         return item ? item->get<double>() : fallback;
     };
 
-    // The same defaults as the config definitions, for a preset the config box does not have.
-    const double head_diameter = get_value("head_diameter",
-        preset_name == "mini" ? 0.2 : (preset_name == "light" ? 0.30 : (preset_name == "medium" ? 0.45 : 0.60)));
-    const double pillar_diameter = get_value("pillar_diameter",
-        preset_name == "mini" ? 0.5 : (preset_name == "light" ? 0.8 : (preset_name == "medium" ? 1.2 : 1.8)));
-    const double base_diameter = get_value("base_diameter",
-        preset_name == "mini" ? 1.4 : (preset_name == "light" ? 2.0 : (preset_name == "medium" ? 3.0 : 4.0)));
-    const double base_height = get_value("base_height",
-        preset_name == "mini" ? 0.4 : (preset_name == "light" ? 0.5 : (preset_name == "medium" ? 0.7 : 1.0)));
-
-    return {head_diameter, pillar_diameter, base_diameter, base_height};
-}
-
-void SlaSupportPointsGizmo::apply_support_preset(float head_diameter, float pillar_diameter, float base_diameter, float base_height, int preset_index)
-{
-    DialogSyncGuard guard(*this);
-
-    if (!m_edit_state.has_value()) {
-        return;
-    }
-
-    m_edit_state->editing.support_geometry.tip_diameter_mm = head_diameter;
-    m_edit_state->editing.pillar_diameter_mm = pillar_diameter;
-    m_edit_state->editing.base_diameter_mm = base_diameter;
-    m_edit_state->editing.base_height_mm = base_height;
-    m_edit_state->editing.head_diameter_use_global = false;
-    m_edit_state->editing.pillar_diameter_use_global = false;
-    m_edit_state->editing.base_diameter_use_global = false;
-    m_edit_state->editing.base_height_use_global = false;
-
-    m_dialog->set_head_diameter(head_diameter);
-    m_dialog->set_pillar_diameter(pillar_diameter);
-    m_dialog->set_base_diameter(base_diameter);
-    m_dialog->set_base_height(base_height);
-    m_dialog->set_head_diameter_use_global(false);
-    m_dialog->set_pillar_diameter_use_global(false);
-    m_dialog->set_base_diameter_use_global(false);
-    m_dialog->set_base_height_use_global(false);
-    m_dialog->set_active_preset(preset_index);
-
-    if (!m_edit_state->editing.selected_point_indices.empty()) {
-        take_undo_snapshot();
-        m_edit_state->editing.apply_support_geometry_to_selected(SupportGeometryField::TipDiameter);
-        m_edit_state->editing.apply_pillar_diameter_to_selected();
-        m_edit_state->editing.apply_base_diameter_to_selected();
-        m_edit_state->editing.apply_base_height_to_selected();
-        update_point_visuals();
-        commit_edited_points_live();
-    }
+    return {get_value("head_diameter", defaults.tip_diameter_mm),
+            get_value("pillar_diameter", defaults.stem_diameter_mm),
+            get_value("base_diameter", defaults.base_diameter_mm),
+            get_value("base_height", defaults.base_height_mm)};
 }
 
 // Rectangle selection
@@ -2041,7 +1852,7 @@ void SlaSupportPointsGizmo::finish_rectangle_selection()
 
     m_edit_state->rect_select_active = false;
     update_point_visuals();
-    update_selected_support_geometry();
+    this->update_selected_support_values();
 }
 
 void SlaSupportPointsGizmo::project_points_to_screen(std::vector<Domain::Vec2d>& out_screen_positions) const
@@ -2056,9 +1867,8 @@ void SlaSupportPointsGizmo::project_points_to_screen(std::vector<Domain::Vec2d>&
     if (!instance) {
         return;
     }
-    const double elevation = support_elevation();
-    const Domain::Transform3d lift = Domain::translation_transform(Domain::Vec3d(0., 0., elevation));
-    const Domain::Transform3d instance_trafo = lift * instance->get_matrix();
+    const Domain::Transform3d instance_trafo =
+        sla_support_points_drawing_trafo(instance->get_matrix(), applied_lift());
 
     out_screen_positions.resize(m_edit_state->editing.points.size());
 
@@ -2130,11 +1940,15 @@ void SlaSupportPointsGizmo::on_keyboard(Scene::GizmoKeyEventContext& ctx)
     case SupportToolAction::AutoSupportAll:
         auto_support();
         break;
-    case SupportToolAction::ToggleSupportOnModel:
-        apply_support_on_model_to_selected(
-            support_tool_toggled_on_model(m_edit_state->editing.selected_support_on_model())
-        );
+    case SupportToolAction::ToggleSupportOnModel: {
+        const SupportOnModel on_model =
+            support_tool_toggled_on_model(m_edit_state->editing.selected_support_on_model());
+        // The shortcut flips the state of the selected points, like the "Selected supports" field of
+        // the same switch does (M2.26, M2.33).
+        this->apply_selected_support_setting(SlaSupportPointField::SupportOnModel,
+                                            sla_support_point_field_value(on_model));
         break;
+    }
     case SupportToolAction::ClearSelection:
         clear_selection();
         // The selection was the tool's own answer to Escape, so the tool keeps open and the next
@@ -2152,8 +1966,76 @@ void SlaSupportPointsGizmo::on_keyboard(Scene::GizmoKeyEventContext& ctx)
 
 void SlaSupportPointsGizmo::render_scene(Render::CommandBuffer& cmd_buffer)
 {
+    // The support preview may have taken the lift of the model or given it back since the last frame
+    // (a point added, the points of the model cleared), so the volumes the raycast uses are brought
+    // in step with it before the glyphs are drawn (M2.33).
+    this->sync_paintable_lift();
+
     // Update point visuals each frame to reflect hover/drag state
     update_point_visuals();
+}
+
+// The lift the scene draws the object of the tool with, which is the one the raycast and the point
+// glyphs use (M2.33). It is what PlaterScenePresenter applies, never support_elevation() computed
+// again here: the two could disagree, and then every click would test a mesh somewhere else than the
+// one on the screen.
+double SlaSupportPointsGizmo::applied_lift() const
+{
+    return m_selected_object_id.valid() ? m_scene_presenter.sla_lift(m_selected_object_id) : 0.;
+}
+
+// Asks the scene for the lift of the object the tool works on, and keeps the paintable volumes in
+// step with the lift that comes back (M2.33).
+void SlaSupportPointsGizmo::refresh_tool_lift()
+{
+    if (!m_selected_object_id.valid()) {
+        return;
+    }
+
+    const SlaSupportPointsLiftDecision decision = sla_support_points_lift(
+        m_gizmo_active,
+        m_scene_presenter.sla_lift(m_selected_object_id),
+        support_elevation(),
+        m_tool_owns_lift
+    );
+
+    if (decision.action == SlaSupportPointsLiftAction::Take
+        || decision.action == SlaSupportPointsLiftAction::GiveBack) {
+        m_scene_presenter.set_sla_lift(m_selected_object_id, decision.lift);
+    }
+    m_tool_owns_lift = decision.tool_owns_lift;
+
+    this->sync_paintable_lift();
+}
+
+// The tool hands back the lift it took (M2.33). A model the M2.21 support preview lifts keeps the
+// service's own lift, so only a lift the tool holds itself goes.
+void SlaSupportPointsGizmo::release_tool_lift()
+{
+    if (!m_tool_owns_lift) {
+        return;
+    }
+    m_tool_owns_lift = false;
+    if (m_selected_object_id.valid()) {
+        m_scene_presenter.set_sla_lift(m_selected_object_id, 0.);
+    }
+    this->sync_paintable_lift();
+}
+
+// The scene may change the lift of the object behind the tool's back: the support preview takes it
+// for a model that has points and gives it back for one that has none. The volumes the raycast tests
+// are rebuilt when it does, so a click always lands on the drawn surface.
+void SlaSupportPointsGizmo::sync_paintable_lift()
+{
+    const double lift = applied_lift();
+    if (lift == m_applied_lift) {
+        return;
+    }
+    m_applied_lift = lift;
+    if (m_selected_element.object_id == 0 || m_project_id == Domain::INVALID_ID) {
+        return;
+    }
+    this->collect_paintable_volumes(m_project_id, m_selected_element);
 }
 
 double SlaSupportPointsGizmo::support_elevation() const

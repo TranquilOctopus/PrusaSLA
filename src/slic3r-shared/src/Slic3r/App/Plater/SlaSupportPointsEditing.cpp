@@ -41,6 +41,9 @@ void SlaSupportPointsEditing::add_point(const Domain::Vec3d& mesh_pos)
     // And the tip diameter of the settings, which is the head diameter of the tool: the configured
     // one, or the tip of the preset that was chosen (M2.24).
     apply_support_geometry(new_point, support_geometry, SupportGeometryField::TipDiameter);
+    // Where the pillar of this point may end is a value of its own, the one of the "New supports"
+    // group (M2.33, M2.26). Inherit is what a point without a switch of its own gets.
+    new_point.on_model = new_support_on_model;
     new_point.type = Domain::SLA::SupportPointType::manual_add;
     points.push_back(new_point);
 }

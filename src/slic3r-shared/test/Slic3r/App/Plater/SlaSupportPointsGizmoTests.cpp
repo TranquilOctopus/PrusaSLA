@@ -1,7 +1,14 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 #include "Slic3r/App/Plater/SlaSupportPointsEditing.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsLeaving.hpp"
+#include "Slic3r/App/Plater/SlaSupportPointsLift.hpp"
+#include "Slic3r/App/Plater/SlaSupportPointsSettings.hpp"
+#include "Slic3r/App/Scene/Ray.hpp"
+#include "Slic3r/Biz/Algorithms/AABBMesh.hpp"
+#include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
+#include "Slic3r/Biz/Utils/MeshRaycaster.hpp"
 #include "Slic3r/Domain/Model.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
@@ -22,6 +29,12 @@ using Slic3r::Domain::Vec2d;
 using Slic3r::Domain::Vec4d;
 using Slic3r::App::Plater::apply_generated_points_on_leaving;
 using Slic3r::App::Plater::apply_generated_support_points;
+using Slic3r::App::Plater::sla_support_points_drawing_trafo;
+using Slic3r::App::Plater::sla_support_points_hit_position;
+using Slic3r::App::Plater::sla_support_points_lift;
+using Slic3r::App::Plater::SlaSupportPointsLiftAction;
+using Slic3r::App::Plater::SlaSupportPointsLiftDecision;
+using Slic3r::App::Plater::sla_new_support_setting_changed;
 using Slic3r::App::Plater::SlaSupportPointsEditing;
 using Slic3r::App::Plater::SupportGeometryField;
 
@@ -674,5 +687,161 @@ TEST_CASE("SlaSupportPointsEditing - rectangle selection", "[SlaSupportPointsGiz
         REQUIRE(indices.size() == 2);
         REQUIRE(indices[0] == 0);
         REQUIRE(indices[1] == 1);
+    }
+}
+
+// M2.33: the lift of the object the tool works on. The scene draws a model lifted only when the M2.21
+// support preview asks for it, which it does for a model that has support points, and the tool used
+// to raycast and draw its point glyphs with the support elevation computed here instead. On a model
+// with no points the two were 5 mm apart, so a click did not land on the surface that is drawn. The
+// tool now takes the lift while it is open and works with the lift the scene actually applies, and
+// these are the rules of that and of the raycast that follows it.
+namespace {
+
+// A 20 mm cube standing on the plate, where the object of the tool sits.
+struct CubeOnThePlate
+{
+    Slic3r::AABBMesh aabb{Slic3r::Biz::Algorithms::TriangleMesh::its_make_cube(20., 20., 20.)};
+    Transform3d      instance{Transform3d::Identity()};
+
+    CubeOnThePlate()
+    {
+        instance.translate(Vec3d{100., 110., 0.});
+    }
+};
+
+} // namespace
+
+TEST_CASE("SlaSupportPointsGizmo - a click on the drawn model adds a point where the surface is",
+          "[SlaSupportPointsGizmo][lift]")
+{
+    CubeOnThePlate cube;
+
+    // The tool is open on a model with no support points, so the scene has no tree to draw and draws
+    // the model where it is. The tool raises it by its support elevation, the way Chitubox raises the
+    // model while the supports are edited (M2.33).
+    const SlaSupportPointsLiftDecision decision = sla_support_points_lift(
+        /* tool_open */ true,
+        /* scene_lift */ 0.,
+        /* support_elevation */ 5.,
+        /* tool_owns_lift */ false
+    );
+    REQUIRE(decision.action == SlaSupportPointsLiftAction::Take);
+    REQUIRE(decision.lift == Catch::Approx(5.));
+    REQUIRE(decision.tool_owns_lift == true);
+
+    // The raycast uses the lift the scene applies, and no other one.
+    const Transform3d drawing = sla_support_points_drawing_trafo(cube.instance, decision.lift);
+
+    // A click in the middle of the top face of the model as it is drawn.
+    const Slic3r::App::Scene::Ray ray{Vec3d{110., 120., 60.}, Vec3d{0., 0., -1.}};
+    const std::optional<Slic3r::Biz::Utils::MeshRaycaster::UnprojectResult> hit =
+        Slic3r::Biz::Utils::MeshRaycaster::unproject_on_mesh(cube.aabb, ray, drawing);
+    REQUIRE(hit.has_value());
+
+    // The point of that hit is the clicked surface: the lift moved the model, not the point on it,
+    // so the mesh position is the one the user clicked on.
+    const Vec3d mesh_pos = sla_support_points_hit_position(Transform3d::Identity(), hit->position);
+    CHECK(mesh_pos.x() == Catch::Approx(10.));
+    CHECK(mesh_pos.y() == Catch::Approx(10.));
+    CHECK(mesh_pos.z() == Catch::Approx(20.));
+
+    // And the point the click places sits on the drawn surface, 5 mm above the plate.
+    SlaSupportPointsEditing editing;
+    sla_new_support_setting_changed(editing,
+                                    Slic3r::App::Plater::SlaSupportPointField::TipDiameter,
+                                    0.8);
+    editing.add_point(mesh_pos);
+    REQUIRE(editing.points.size() == 1u);
+    const Vec3d world_pos = drawing * editing.points.front().pos.cast<double>();
+    CHECK(world_pos.x() == Catch::Approx(110.));
+    CHECK(world_pos.z() == Catch::Approx(25.));
+    CHECK(editing.points.front().head_front_radius == Catch::Approx(0.4));
+
+    SECTION("A separately computed elevation is a trafo the model is not drawn with")
+    {
+        // What the tool used to do: the support elevation of the object computed here, while the
+        // scene draws the model on the plate. Every hit was then on a surface that is 5 mm away from
+        // the one the user clicked on.
+        const Transform3d drawn    = sla_support_points_drawing_trafo(cube.instance, 0.);
+        const Transform3d old_tool = sla_support_points_drawing_trafo(cube.instance, 5.);
+        const Vec3d       mesh_top = Vec3d{10., 10., 20.};
+
+        CHECK((drawn * mesh_top).z() == Catch::Approx(20.));
+        CHECK((old_tool * mesh_top).z() == Catch::Approx(25.));
+        // One lift for the drawing, the raycast and the glyphs: the trafo the raycast is built from is
+        // the one the decision asked the scene for.
+        CHECK((drawing * mesh_top).isApprox(old_tool * mesh_top));
+    }
+}
+
+TEST_CASE("SlaSupportPointsGizmo - the tool owns the lift of its object for as long as it is open",
+          "[SlaSupportPointsGizmo][lift]")
+{
+    SECTION("A model with no points is raised while the tool is open and lowered again when it closes")
+    {
+        // Nothing lifts the model yet: the support preview has no tree for it.
+        const SlaSupportPointsLiftDecision decision = sla_support_points_lift(true, 0., 5., false);
+        CHECK(decision.action == SlaSupportPointsLiftAction::Take);
+        CHECK(decision.lift == Catch::Approx(5.));
+        CHECK(decision.tool_owns_lift == true);
+
+        // The tool closes: the model falls onto the plate again, where the scene drew it before.
+        const SlaSupportPointsLiftDecision leaving =
+            sla_support_points_lift(false, decision.lift, 5., decision.tool_owns_lift);
+        CHECK(leaving.action == SlaSupportPointsLiftAction::GiveBack);
+        CHECK(leaving.lift == Catch::Approx(0.));
+        CHECK(leaving.tool_owns_lift == false);
+    }
+
+    SECTION("A model with points keeps the lift of the support preview")
+    {
+        // The model has points now, so the preview service lifts it by exactly the support elevation.
+        const SlaSupportPointsLiftDecision decision = sla_support_points_lift(true, 5., 5., true);
+        CHECK(decision.action == SlaSupportPointsLiftAction::None);
+        CHECK(decision.lift == Catch::Approx(5.));
+        // The service holds this lift, so the tool does not take it away when it closes.
+        CHECK(decision.tool_owns_lift == false);
+
+        const SlaSupportPointsLiftDecision leaving = sla_support_points_lift(false, 5., 5., false);
+        CHECK(leaving.action == SlaSupportPointsLiftAction::None);
+        CHECK(leaving.lift == Catch::Approx(5.));
+    }
+
+    SECTION("A zero elevation is not lifted at all")
+    {
+        // Zero elevation, the object on the plate: the model is drawn there and raycast there.
+        const SlaSupportPointsLiftDecision decision = sla_support_points_lift(true, 0., 0., false);
+        CHECK(decision.action == SlaSupportPointsLiftAction::None);
+        CHECK(decision.lift == Catch::Approx(0.));
+        CHECK(decision.tool_owns_lift == false);
+        CHECK(sla_support_points_drawing_trafo(Transform3d::Identity(), decision.lift)
+              .isApprox(Transform3d::Identity()));
+    }
+
+    SECTION("A lift of the scene the tool did not take is never taken away")
+    {
+        // The preview service lifted the model by an elevation of its own (the object settings ask for
+        // another one), so the tool works with that lift instead of over it.
+        const SlaSupportPointsLiftDecision decision = sla_support_points_lift(true, 2., 5., false);
+        CHECK(decision.action == SlaSupportPointsLiftAction::None);
+        CHECK(decision.lift == Catch::Approx(2.));
+        CHECK(decision.tool_owns_lift == false);
+    }
+
+    SECTION("An elevation that changes while the tool is open moves the model the tool lifted")
+    {
+        // The user raised support_object_elevation in the settings: the lift the tool took is stale,
+        // and the tool follows the new one instead of leaving the model where it was.
+        const SlaSupportPointsLiftDecision decision = sla_support_points_lift(true, 5., 8., true);
+        CHECK(decision.action == SlaSupportPointsLiftAction::Take);
+        CHECK(decision.lift == Catch::Approx(8.));
+        CHECK(decision.tool_owns_lift == true);
+
+        // And a zero elevation while the tool holds a lift hands it back.
+        const SlaSupportPointsLiftDecision back = sla_support_points_lift(true, 8., 0., true);
+        CHECK(back.action == SlaSupportPointsLiftAction::GiveBack);
+        CHECK(back.lift == Catch::Approx(0.));
+        CHECK(back.tool_owns_lift == false);
     }
 }

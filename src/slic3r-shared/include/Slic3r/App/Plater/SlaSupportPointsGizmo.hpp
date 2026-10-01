@@ -3,9 +3,11 @@
 #include "Slic3r/App/Scene/IGizmo.hpp"
 #include "Slic3r/App/Plater/GizmoWindow.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsEditing.hpp"
+#include "Slic3r/App/Plater/SlaSupportPointsSettings.hpp"
 #include "Slic3r/App/Plater/SlaUndoAction.hpp"
 #include "Slic3r/Biz/SLAObjectCache.hpp"
 #include "Slic3r/Biz/Scene/SceneInteractor.hpp"
+#include "Slic3r/Domain/ElementRef.hpp"
 #include "Slic3r/Domain/ObjectID.hpp"
 #include "Slic3r/Domain/SelectionId.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
@@ -198,27 +200,24 @@ private:
     void select_all_points();
     void clear_selection();
     void delete_selected_points();
-    void apply_pillar_diameter_to_selected();
-    void apply_base_diameter_to_selected();
-    void apply_base_height_to_selected();
+
+    // The two groups of the support settings (M2.33). "New supports" is what a clicked point takes
+    // and changes no point that is already there, "Selected supports" is what the selected points
+    // carry and only ever changes those. One field set used to do both jobs at once.
+    void apply_new_support_setting(SlaSupportPointField field, double value);
+    void apply_new_support_preset(int preset_index);
+    void apply_selected_support_setting(SlaSupportPointField field, double value);
+    void apply_selected_support_preset(int preset_index);
+    void refresh_new_support_values();
+    void update_selected_support_values();
     void apply_preset_mini();
-    void apply_support_geometry_to_selected(SupportGeometryField field);
-    // Writes the per-point "may this support end on the model" state on the selected points and
-    // asks for the tree again, because it changes where their pillars end (M2.26).
-    void apply_support_on_model_to_selected(SupportOnModel on_model);
-    // Shows the tip diameter, tip shape, tip length, knot, stem cross-section and stem taper of the
-    // selected points, empty when nothing is selected or the points disagree on one of them
-    // (M2.16c, M2.24), and the per-point "may rest on the model" state, which is a value of its own
-    // (M2.26).
-    void update_selected_support_geometry();
-    // The tip diameter, tip shape, tip length, knot, stem cross-section and stem taper a new point
-    // takes, from the Supports & raft settings of @p model_object.
-    SlaSupportGeometry support_geometry_defaults(const Domain::ModelObject* model_object) const;
     void apply_preset_light();
     void apply_preset_medium();
     void apply_preset_heavy();
-    void apply_support_preset(float head_diameter, float pillar_diameter, float base_diameter, float base_height, int preset_index);
-    std::tuple<double, double, double, double> get_support_preset_values(const std::string& preset_name) const;
+    // The tip diameter, tip shape, tip length, knot, stem cross-section and stem taper a new point
+    // takes, from the Supports & raft settings of @p model_object.
+    SlaSupportGeometry support_geometry_defaults(const Domain::ModelObject* model_object) const;
+    SlaSupportPreset get_support_preset_values(const std::string& preset_name) const;
 
     // Rectangle selection
     void start_rectangle_selection(const Domain::Vec2d& mouse_pos, bool is_add);
@@ -233,6 +232,21 @@ private:
     using ObjectSlaConfig = SlaSupportPreviewService::ObjectSlaConfig;
     std::optional<ObjectSlaConfig> build_object_sla_config(const Domain::ModelObject* model_object, const Domain::ModelInstance* instance) const;
     double support_elevation() const;
+
+    // The lift of the model the tool works on (M2.33). The scene draws a model lifted only when the
+    // M2.21 support preview asks for it, and it does that for an object that has support points and
+    // supports on. The tool raises its object while it is open, the way Chitubox raises the model
+    // while the supports are edited, so a click lands on the surface as it is drawn instead of on a
+    // copy of the mesh 5 mm above it, and there is no jump when the first point is added: by then the
+    // preview service lifts the model by the same elevation.
+    void refresh_tool_lift();
+    void release_tool_lift();
+    /// The lift the scene draws the object of the tool with, which is the one the raycast and the
+    /// point glyphs use. Never a separately computed one, or the two could disagree.
+    double applied_lift() const;
+    /// Rebuilds the paintable volumes when the lift the scene applies changed, so every raycast
+    /// tests the model as it is drawn.
+    void sync_paintable_lift();
 
     // Worker helpers
     enum class WorkerJobType { Points };
@@ -280,6 +294,13 @@ private:
     Domain::SelectionId m_project_id{Domain::INVALID_ID};
     Domain::ObjectID m_selected_object_id;
     Domain::SelectionId m_selected_instance_id{Domain::INVALID_ID};
+    // The object the tool works on, which the paintable volumes are rebuilt from whenever the lift
+    // the scene applies to it changes (M2.33).
+    Domain::ElementRef m_selected_element;
+    // The lift the paintable volumes were built with, and whether the tool is the one holding it (so
+    // only it gives it back, an object the preview service lifts keeps the service's own lift).
+    double m_applied_lift{0.};
+    bool m_tool_owns_lift{false};
     std::optional<Domain::SLA::SupportPoints> m_generated_support_points;
     bool m_has_generated_points = false;
     Scene::IGizmoController* m_gizmo_controller = nullptr;

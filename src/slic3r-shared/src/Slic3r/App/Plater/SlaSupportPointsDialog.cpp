@@ -51,191 +51,40 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     m_density_slider->callbacks().value_changed = [this](double value)
     { m_callbacks.density_changed(value); };
 
-    add_row_with_slider(
-        settings,
-        &m_head_diameter_slider,
-        _u8L("Head diameter"),
-        _u8L("mm")
-    );
-    m_head_diameter_slider->set_begin_value(0.1);
-    m_head_diameter_slider->set_end_value(5.0);
-    m_head_diameter_slider->set_step(0.1);
-    m_head_diameter_slider->set_validator_precision(1);
-    m_head_diameter_slider->callbacks().value_changed = [this](double value)
-    { m_callbacks.head_diameter_changed(value); };
-
-    m_head_diameter_use_global_checkbox = settings->emplace_back<ToggleButton>(_u8L("Use global head diameter"));
-    m_head_diameter_use_global_checkbox->callbacks().checked_changed = [this](bool value)
-    { m_callbacks.head_diameter_use_global_changed(value); };
-
-    add_row_with_slider(
-        settings,
-        &m_pillar_diameter_slider,
-        _u8L("Stem diameter"),
-        _u8L("mm")
-    );
-    m_pillar_diameter_slider->set_begin_value(0.1);
-    m_pillar_diameter_slider->set_end_value(10.0);
-    m_pillar_diameter_slider->set_step(0.1);
-    m_pillar_diameter_slider->set_validator_precision(1);
-    m_pillar_diameter_slider->callbacks().value_changed = [this](double value)
-    { m_callbacks.pillar_diameter_changed(value); };
-
-    m_pillar_diameter_use_global_checkbox = settings->emplace_back<ToggleButton>(_u8L("Use global stem diameter"));
-    m_pillar_diameter_use_global_checkbox->callbacks().checked_changed = [this](bool value)
-    { m_callbacks.pillar_diameter_use_global_changed(value); };
-
-    add_row_with_slider(
-        settings,
-        &m_base_diameter_slider,
-        _u8L("Base diameter"),
-        _u8L("mm")
-    );
-    m_base_diameter_slider->set_begin_value(0.1);
-    m_base_diameter_slider->set_end_value(20.0);
-    m_base_diameter_slider->set_step(0.1);
-    m_base_diameter_slider->set_validator_precision(1);
-    m_base_diameter_slider->callbacks().value_changed = [this](double value)
-    { m_callbacks.base_diameter_changed(value); };
-
-    m_base_diameter_use_global_checkbox = settings->emplace_back<ToggleButton>(_u8L("Use global base diameter"));
-    m_base_diameter_use_global_checkbox->callbacks().checked_changed = [this](bool value)
-    { m_callbacks.base_diameter_use_global_changed(value); };
-
-    add_row_with_slider(
-        settings,
-        &m_base_height_slider,
-        _u8L("Base height"),
-        _u8L("mm")
-    );
-    m_base_height_slider->set_begin_value(0.1);
-    m_base_height_slider->set_end_value(10.0);
-    m_base_height_slider->set_step(0.1);
-    m_base_height_slider->set_validator_precision(1);
-    m_base_height_slider->callbacks().value_changed = [this](double value)
-    { m_callbacks.base_height_changed(value); };
-
-    m_base_height_use_global_checkbox = settings->emplace_back<ToggleButton>(_u8L("Use global base height"));
-    m_base_height_use_global_checkbox->callbacks().checked_changed = [this](bool value)
-    { m_callbacks.base_height_use_global_changed(value); };
-
-    // The per-point support geometry (M2.16c, M2.24): the tip shape and the knot around the tip,
-    // then the cross-section and the taper of the stem. They take no global override, they are the
-    // values a new point is placed with. The tip diameter is not here: it is the head diameter
-    // slider above, which is one of these fields and the value a new point is placed with.
+    // The support settings of the tool are two groups (M2.33), the way Chitubox shows them. "New
+    // supports" is what a clicked point takes and changes no point that is already there, "Selected
+    // supports (N)" is what the points of the selection carry and only ever changes those. One set
+    // of fields doing both jobs at once is what made it unclear what a changed value touched.
     this->add_separator(settings);
 
-    add_row_with_combo_box(_u8L("Tip shape"), settings, &m_tip_shape_combo);
-    m_tip_shape_combo->set_items({_u8L("Default"), _u8L("Cone"), _u8L("Ball")});
-    m_tip_shape_combo->callbacks().selection_changed = [this](int index)
-    {
-        switch (index) {
-        case 1:
-            m_callbacks.tip_shape_changed(Domain::SLA::SupportPoint::TipShape::Cone);
-            break;
-        case 2:
-            m_callbacks.tip_shape_changed(Domain::SLA::SupportPoint::TipShape::Ball);
-            break;
-        default:
-            m_callbacks.tip_shape_changed(Domain::SLA::SupportPoint::TipShape::Default);
-            break;
-        }
-    };
-
-    add_row_with_slider(
-        settings,
-        &m_tip_length_slider,
-        _u8L("Tip length"),
-        _u8L("mm")
+    m_new_supports_window = settings->emplace_back<CollapsibleWindow>(
+        _u8L("New supports"),
+        "SlaSupportPointsNewSupports"
     );
-    m_tip_length_slider->set_begin_value(0);
-    m_tip_length_slider->set_end_value(20.0);
-    m_tip_length_slider->set_step(0.1);
-    m_tip_length_slider->set_validator_precision(1);
-    m_tip_length_slider->callbacks().value_changed = [this](double value)
-    { m_callbacks.tip_length_changed(value); };
+    m_new_supports_window->set_padding(0.f);
+    m_new_supports_window->set_collapsed(false);
+    Item* new_supports = m_new_supports_window->content();
+    new_supports->set_padding(0.f);
+    new_supports->set_gap(2.f * gap_size());
+    this->add_support_value_group(new_supports, SlaSupportSettingsGroup::NewSupports, m_new_supports);
 
-    add_row_with_slider(
-        settings,
-        &m_knot_diameter_slider,
-        _u8L("Knot diameter"),
-        _u8L("mm")
+    m_selected_supports_window = settings->emplace_back<CollapsibleWindow>(
+        _u8L("Selected supports"),
+        "SlaSupportPointsSelectedSupports"
     );
-    m_knot_diameter_slider->set_begin_value(0);
-    m_knot_diameter_slider->set_end_value(20.0);
-    m_knot_diameter_slider->set_step(0.1);
-    m_knot_diameter_slider->set_validator_precision(1);
-    m_knot_diameter_slider->callbacks().value_changed = [this](double value)
-    { m_callbacks.knot_diameter_changed(value); };
-
-    add_row_with_slider(
-        settings,
-        &m_stem_sides_slider,
-        _u8L("Stem sides")
+    m_selected_supports_window->set_padding(0.f);
+    m_selected_supports_window->set_collapsed(false);
+    Item* selected_supports = m_selected_supports_window->content();
+    selected_supports->set_padding(0.f);
+    selected_supports->set_gap(2.f * gap_size());
+    this->add_support_value_group(
+        selected_supports,
+        SlaSupportSettingsGroup::SelectedSupports,
+        m_selected_supports
     );
-    m_stem_sides_slider->set_begin_value(0);
-    m_stem_sides_slider->set_end_value(64);
-    m_stem_sides_slider->set_step(1);
-    m_stem_sides_slider->set_validator_precision(0);
-    m_stem_sides_slider->callbacks().value_changed = [this](double value)
-    { m_callbacks.stem_sides_changed(value); };
-
-    add_row_with_slider(
-        settings,
-        &m_stem_taper_slider,
-        _u8L("Stem taper")
-    );
-    m_stem_taper_slider->set_begin_value(0.);
-    m_stem_taper_slider->set_end_value(1.);
-    m_stem_taper_slider->set_step(0.01);
-    m_stem_taper_slider->set_validator_precision(2);
-    m_stem_taper_slider->callbacks().value_changed = [this](double value)
-    { m_callbacks.stem_taper_changed(value); };
-
-    // The per-point "may this support end on the model" switch (M2.26). It is not a dimension of
-    // the support but where its pillar ends, so it sits with the geometry of the point, after the
-    // stem. Inherit is what a point without a switch of its own gets, i.e. the object's own
-    // setting decides.
-    add_row_with_combo_box(_u8L("Support on model"), settings, &m_on_model_combo);
-    m_on_model_combo->set_items({_u8L("Inherit"), _u8L("Allow"), _u8L("Forbid")});
-    m_on_model_combo->callbacks().selection_changed = [this](int index)
-    {
-        switch (index) {
-        case 1:
-            m_callbacks.on_model_changed(SupportOnModel::Allow);
-            break;
-        case 2:
-            m_callbacks.on_model_changed(SupportOnModel::Forbid);
-            break;
-        default:
-            m_callbacks.on_model_changed(SupportOnModel::Inherit);
-            break;
-        }
-    };
-
-    // The shape of the foot where the pillar of the selected points meets the raft or the plate
-    // (M2.23b). It sits with the rest of the per-point geometry and names the same three shapes as
-    // the support_base_shape setting of "Supports & raft", which a new point takes.
-    add_row_with_combo_box(_u8L("Foot shape"), settings, &m_base_shape_combo);
-    m_base_shape_combo->set_items(
-        {_u8L("Default"), _u8L("Cone"), _u8L("Cylinder"), _u8L("Flat disc")});
-    m_base_shape_combo->callbacks().selection_changed = [this](int index)
-    {
-        switch (index) {
-        case 1:
-            m_callbacks.base_shape_changed(Domain::SLA::SupportPoint::BaseShape::Cone);
-            break;
-        case 2:
-            m_callbacks.base_shape_changed(Domain::SLA::SupportPoint::BaseShape::Cylinder);
-            break;
-        case 3:
-            m_callbacks.base_shape_changed(Domain::SLA::SupportPoint::BaseShape::Flat);
-            break;
-        default:
-            m_callbacks.base_shape_changed(Domain::SLA::SupportPoint::BaseShape::Default);
-            break;
-        }
-    };
+    // There is nothing to edit while no point is selected, so the group is only there with a
+    // selection (M2.33).
+    m_selected_supports_window->set_visible(false);
 
     add_row_with_slider(
         content(),
@@ -249,33 +98,6 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     m_clipping_plane_slider->set_validator_precision(2);
     m_clipping_plane_slider->callbacks().value_changed = [this](double value)
     { m_callbacks.clipping_plane_changed(value); };
-
-    this->add_separator(settings);
-
-    Item* preset_row = settings->emplace_back<Item>();
-    preset_row->set_orientation(Orientation::Horizontal);
-    preset_row->set_justify_content(YGJustifySpaceBetween);
-    preset_row->set_gap(gap_size());
-
-    m_preset_mini_button = preset_row->emplace_back<LayoutButton>(_u8L("Mini"));
-    m_preset_mini_button->set_checkable(true);
-    m_preset_mini_button->callbacks().action = [this]()
-    { m_callbacks.preset_mini(); };
-
-    m_preset_light_button = preset_row->emplace_back<LayoutButton>(_u8L("Light"));
-    m_preset_light_button->set_checkable(true);
-    m_preset_light_button->callbacks().action = [this]()
-    { m_callbacks.preset_light(); };
-
-    m_preset_medium_button = preset_row->emplace_back<LayoutButton>(_u8L("Medium"));
-    m_preset_medium_button->set_checkable(true);
-    m_preset_medium_button->callbacks().action = [this]()
-    { m_callbacks.preset_medium(); };
-
-    m_preset_heavy_button = preset_row->emplace_back<LayoutButton>(_u8L("Heavy"));
-    m_preset_heavy_button->set_checkable(true);
-    m_preset_heavy_button->callbacks().action = [this]()
-    { m_callbacks.preset_heavy(); };
 
     // The keyboard shortcuts of the tool (M2.28), one line each, at the end of the settings they
     // belong to. The section is closed, so the list is there for the one who looks for it without
@@ -357,23 +179,417 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     // of the edit, so a drag of one of them is a single undo step (M2.6b). The clipping plane is not
     // among them: it only moves where the scene is cut and never changes the model.
     report_value_editing({m_density_slider,
-                          m_head_diameter_slider,
-                          m_pillar_diameter_slider,
-                          m_base_diameter_slider,
-                          m_base_height_slider,
-                          m_tip_length_slider,
-                          m_knot_diameter_slider,
-                          m_stem_sides_slider,
-                          m_stem_taper_slider});
+                          m_new_supports.tip_diameter_slider,
+                          m_new_supports.stem_diameter_slider,
+                          m_new_supports.base_diameter_slider,
+                          m_new_supports.base_height_slider,
+                          m_new_supports.tip_length_slider,
+                          m_new_supports.knot_diameter_slider,
+                          m_new_supports.stem_sides_slider,
+                          m_new_supports.stem_taper_slider,
+                          m_selected_supports.tip_diameter_slider,
+                          m_selected_supports.stem_diameter_slider,
+                          m_selected_supports.base_diameter_slider,
+                          m_selected_supports.base_height_slider,
+                          m_selected_supports.tip_length_slider,
+                          m_selected_supports.knot_diameter_slider,
+                          m_selected_supports.stem_sides_slider,
+                          m_selected_supports.stem_taper_slider});
 }
 
-void SlaSupportPointsDialog::report_value_editing(std::initializer_list<SliderWithInput*> sliders)
+// One group of support settings: the preset row a user of Chitubox or Lychee starts with (M2.18,
+// M2.22), then the four sizes with their "follow the global setting" switches, then the per-point
+// tip shape, tip length, knot, stem cross-section, stem taper, foot shape and "support on model".
+void SlaSupportPointsDialog::add_support_value_group(
+    Yoga::Item*            parent,
+    SlaSupportSettingsGroup group,
+    SupportValueControls&   controls)
 {
-    for (SliderWithInput* slider : sliders) {
-        slider->callbacks().value_editing_started = [this]()
-        { m_callbacks.value_editing_started(); };
-        slider->callbacks().value_editing_ended = [this]()
-        { m_callbacks.value_editing_ended(); };
+    const auto setting_changed = [this, group](SlaSupportPointField field, double value)
+    { m_callbacks.support_setting_changed(group, field, value); };
+    const auto preset_selected = [this, group](int index)
+    { m_callbacks.support_preset_selected(group, index); };
+
+    Item* preset_row = parent->emplace_back<Item>();
+    preset_row->set_orientation(Orientation::Horizontal);
+    preset_row->set_justify_content(YGJustifySpaceBetween);
+    preset_row->set_gap(gap_size());
+
+    controls.preset_mini_button = preset_row->emplace_back<LayoutButton>(_u8L("Mini"));
+    controls.preset_mini_button->set_checkable(true);
+    controls.preset_mini_button->callbacks().action = [preset_selected]()
+    { preset_selected(0); };
+
+    controls.preset_light_button = preset_row->emplace_back<LayoutButton>(_u8L("Light"));
+    controls.preset_light_button->set_checkable(true);
+    controls.preset_light_button->callbacks().action = [preset_selected]()
+    { preset_selected(1); };
+
+    controls.preset_medium_button = preset_row->emplace_back<LayoutButton>(_u8L("Medium"));
+    controls.preset_medium_button->set_checkable(true);
+    controls.preset_medium_button->callbacks().action = [preset_selected]()
+    { preset_selected(2); };
+
+    controls.preset_heavy_button = preset_row->emplace_back<LayoutButton>(_u8L("Heavy"));
+    controls.preset_heavy_button->set_checkable(true);
+    controls.preset_heavy_button->callbacks().action = [preset_selected]()
+    { preset_selected(3); };
+
+    // The four sizes. The tip diameter is the head diameter control of the tool (M2.24) and the other
+    // three are the stem and the base of the support, the values a point carries or leaves to the
+    // global setting.
+    add_row_with_slider(
+        parent,
+        &controls.tip_diameter_slider,
+        _u8L("Head diameter"),
+        _u8L("mm")
+    );
+    controls.tip_diameter_slider->set_begin_value(0.1);
+    controls.tip_diameter_slider->set_end_value(5.0);
+    controls.tip_diameter_slider->set_step(0.1);
+    controls.tip_diameter_slider->set_validator_precision(1);
+    controls.tip_diameter_slider->callbacks().value_changed =
+        [setting_changed](double value) { setting_changed(SlaSupportPointField::TipDiameter, value); };
+
+    controls.tip_diameter_follow_global_checkbox =
+        parent->emplace_back<ToggleButton>(_u8L("Use global head diameter"));
+    controls.tip_diameter_follow_global_checkbox->callbacks().checked_changed =
+        [setting_changed](bool value)
+    { setting_changed(SlaSupportPointField::FollowGlobalTipDiameter, value ? 1. : 0.); };
+
+    add_row_with_slider(
+        parent,
+        &controls.stem_diameter_slider,
+        _u8L("Stem diameter"),
+        _u8L("mm")
+    );
+    controls.stem_diameter_slider->set_begin_value(0.1);
+    controls.stem_diameter_slider->set_end_value(10.0);
+    controls.stem_diameter_slider->set_step(0.1);
+    controls.stem_diameter_slider->set_validator_precision(1);
+    controls.stem_diameter_slider->callbacks().value_changed =
+        [setting_changed](double value) { setting_changed(SlaSupportPointField::StemDiameter, value); };
+
+    controls.stem_diameter_follow_global_checkbox =
+        parent->emplace_back<ToggleButton>(_u8L("Use global stem diameter"));
+    controls.stem_diameter_follow_global_checkbox->callbacks().checked_changed =
+        [setting_changed](bool value)
+    { setting_changed(SlaSupportPointField::FollowGlobalStemDiameter, value ? 1. : 0.); };
+
+    add_row_with_slider(
+        parent,
+        &controls.base_diameter_slider,
+        _u8L("Base diameter"),
+        _u8L("mm")
+    );
+    controls.base_diameter_slider->set_begin_value(0.1);
+    controls.base_diameter_slider->set_end_value(20.0);
+    controls.base_diameter_slider->set_step(0.1);
+    controls.base_diameter_slider->set_validator_precision(1);
+    controls.base_diameter_slider->callbacks().value_changed =
+        [setting_changed](double value) { setting_changed(SlaSupportPointField::BaseDiameter, value); };
+
+    controls.base_diameter_follow_global_checkbox =
+        parent->emplace_back<ToggleButton>(_u8L("Use global base diameter"));
+    controls.base_diameter_follow_global_checkbox->callbacks().checked_changed =
+        [setting_changed](bool value)
+    { setting_changed(SlaSupportPointField::FollowGlobalBaseDiameter, value ? 1. : 0.); };
+
+    add_row_with_slider(
+        parent,
+        &controls.base_height_slider,
+        _u8L("Base height"),
+        _u8L("mm")
+    );
+    controls.base_height_slider->set_begin_value(0.1);
+    controls.base_height_slider->set_end_value(10.0);
+    controls.base_height_slider->set_step(0.1);
+    controls.base_height_slider->set_validator_precision(1);
+    controls.base_height_slider->callbacks().value_changed =
+        [setting_changed](double value) { setting_changed(SlaSupportPointField::BaseHeight, value); };
+
+    controls.base_height_follow_global_checkbox =
+        parent->emplace_back<ToggleButton>(_u8L("Use global base height"));
+    controls.base_height_follow_global_checkbox->callbacks().checked_changed =
+        [setting_changed](bool value)
+    { setting_changed(SlaSupportPointField::FollowGlobalBaseHeight, value ? 1. : 0.); };
+
+    // The per-point support geometry (M2.16c, M2.24): the tip shape and the knot around the tip, then
+    // the cross-section and the taper of the stem. The tip diameter is not among them: it is the head
+    // diameter row above, which is one of these fields.
+    add_row_with_combo_box(_u8L("Tip shape"), parent, &controls.tip_shape_combo);
+    controls.tip_shape_combo->set_items({_u8L("Default"), _u8L("Cone"), _u8L("Ball")});
+    controls.tip_shape_combo->callbacks().selection_changed = [setting_changed](int index)
+    {
+        Domain::SLA::SupportPoint::TipShape shape = Domain::SLA::SupportPoint::TipShape::Default;
+        switch (index) {
+        case 1:
+            shape = Domain::SLA::SupportPoint::TipShape::Cone;
+            break;
+        case 2:
+            shape = Domain::SLA::SupportPoint::TipShape::Ball;
+            break;
+        default:
+            break;
+        }
+        setting_changed(SlaSupportPointField::TipShape, sla_support_point_field_value(shape));
+    };
+
+    add_row_with_slider(
+        parent,
+        &controls.tip_length_slider,
+        _u8L("Tip length"),
+        _u8L("mm")
+    );
+    controls.tip_length_slider->set_begin_value(0);
+    controls.tip_length_slider->set_end_value(20.0);
+    controls.tip_length_slider->set_step(0.1);
+    controls.tip_length_slider->set_validator_precision(1);
+    controls.tip_length_slider->callbacks().value_changed =
+        [setting_changed](double value) { setting_changed(SlaSupportPointField::TipLength, value); };
+
+    add_row_with_slider(
+        parent,
+        &controls.knot_diameter_slider,
+        _u8L("Knot diameter"),
+        _u8L("mm")
+    );
+    controls.knot_diameter_slider->set_begin_value(0);
+    controls.knot_diameter_slider->set_end_value(20.0);
+    controls.knot_diameter_slider->set_step(0.1);
+    controls.knot_diameter_slider->set_validator_precision(1);
+    controls.knot_diameter_slider->callbacks().value_changed =
+        [setting_changed](double value) { setting_changed(SlaSupportPointField::KnotDiameter, value); };
+
+    add_row_with_slider(
+        parent,
+        &controls.stem_sides_slider,
+        _u8L("Stem sides")
+    );
+    controls.stem_sides_slider->set_begin_value(0);
+    controls.stem_sides_slider->set_end_value(64);
+    controls.stem_sides_slider->set_step(1);
+    controls.stem_sides_slider->set_validator_precision(0);
+    controls.stem_sides_slider->callbacks().value_changed =
+        [setting_changed](double value) { setting_changed(SlaSupportPointField::StemSides, value); };
+
+    add_row_with_slider(
+        parent,
+        &controls.stem_taper_slider,
+        _u8L("Stem taper")
+    );
+    controls.stem_taper_slider->set_begin_value(0.);
+    controls.stem_taper_slider->set_end_value(1.);
+    controls.stem_taper_slider->set_step(0.01);
+    controls.stem_taper_slider->set_validator_precision(2);
+    controls.stem_taper_slider->callbacks().value_changed =
+        [setting_changed](double value) { setting_changed(SlaSupportPointField::StemTaper, value); };
+
+    // The shape of the foot where the pillar meets the raft or the plate (M2.23b), the same three
+    // shapes as the support_base_shape setting of "Supports & raft", which a new point takes.
+    add_row_with_combo_box(_u8L("Foot shape"), parent, &controls.foot_shape_combo);
+    controls.foot_shape_combo->set_items(
+        {_u8L("Default"), _u8L("Cone"), _u8L("Cylinder"), _u8L("Flat disc")});
+    controls.foot_shape_combo->callbacks().selection_changed = [setting_changed](int index)
+    {
+        Domain::SLA::SupportPoint::BaseShape shape = Domain::SLA::SupportPoint::BaseShape::Default;
+        switch (index) {
+        case 1:
+            shape = Domain::SLA::SupportPoint::BaseShape::Cone;
+            break;
+        case 2:
+            shape = Domain::SLA::SupportPoint::BaseShape::Cylinder;
+            break;
+        case 3:
+            shape = Domain::SLA::SupportPoint::BaseShape::Flat;
+            break;
+        default:
+            break;
+        }
+        setting_changed(SlaSupportPointField::FootShape, sla_support_point_field_value(shape));
+    };
+
+    // The per-point "may this support end on the model" switch (M2.26). It is not a dimension of the
+    // support but where its pillar ends, so it sits with the geometry of the point, after the stem.
+    // Inherit is what a point without a switch of its own gets, i.e. the object's own setting
+    // decides.
+    add_row_with_combo_box(_u8L("Support on model"), parent, &controls.on_model_combo);
+    controls.on_model_combo->set_items({_u8L("Inherit"), _u8L("Allow"), _u8L("Forbid")});
+    controls.on_model_combo->callbacks().selection_changed = [setting_changed](int index)
+    {
+        SupportOnModel on_model = SupportOnModel::Inherit;
+        switch (index) {
+        case 1:
+            on_model = SupportOnModel::Allow;
+            break;
+        case 2:
+            on_model = SupportOnModel::Forbid;
+            break;
+        default:
+            break;
+        }
+        setting_changed(SlaSupportPointField::SupportOnModel, sla_support_point_field_value(on_model));
+    };
+}
+
+void SlaSupportPointsDialog::show_size(SliderWithInput* slider, bool has_value, double value_mm)
+{
+    if (has_value) {
+        slider->set_value(value_mm);
+    } else {
+        slider->set_undef_value();
+    }
+}
+
+void SlaSupportPointsDialog::show_new_support_values(
+    SupportValueControls&      controls,
+    const SlaSupportNewValues& values)
+{
+    controls.tip_diameter_slider->set_value(values.sizes.tip_diameter_mm);
+    controls.tip_diameter_follow_global_checkbox->set_checked(values.follow_global.tip_diameter);
+    controls.tip_diameter_slider->set_enabled(!values.follow_global.tip_diameter);
+
+    controls.stem_diameter_slider->set_value(values.sizes.stem_diameter_mm);
+    controls.stem_diameter_follow_global_checkbox->set_checked(values.follow_global.stem_diameter);
+    controls.stem_diameter_slider->set_enabled(!values.follow_global.stem_diameter);
+
+    controls.base_diameter_slider->set_value(values.sizes.base_diameter_mm);
+    controls.base_diameter_follow_global_checkbox->set_checked(values.follow_global.base_diameter);
+    controls.base_diameter_slider->set_enabled(!values.follow_global.base_diameter);
+
+    controls.base_height_slider->set_value(values.sizes.base_height_mm);
+    controls.base_height_follow_global_checkbox->set_checked(values.follow_global.base_height);
+    controls.base_height_slider->set_enabled(!values.follow_global.base_height);
+
+    controls.tip_shape_combo->set_override_label(std::string());
+    switch (values.geometry.tip_shape) {
+    case Domain::SLA::SupportPoint::TipShape::Cone:
+        controls.tip_shape_combo->set_current_index(1);
+        break;
+    case Domain::SLA::SupportPoint::TipShape::Ball:
+        controls.tip_shape_combo->set_current_index(2);
+        break;
+    case Domain::SLA::SupportPoint::TipShape::Default:
+    default:
+        controls.tip_shape_combo->set_current_index(0);
+        break;
+    }
+    controls.tip_length_slider->set_value(values.geometry.tip_length_mm);
+    controls.knot_diameter_slider->set_value(values.geometry.knot_diameter_mm);
+    controls.stem_sides_slider->set_value(values.geometry.stem_sides);
+    controls.stem_taper_slider->set_value(values.geometry.stem_taper);
+
+    controls.foot_shape_combo->set_override_label(std::string());
+    switch (values.geometry.base_shape) {
+    case Domain::SLA::SupportPoint::BaseShape::Cone:
+        controls.foot_shape_combo->set_current_index(1);
+        break;
+    case Domain::SLA::SupportPoint::BaseShape::Cylinder:
+        controls.foot_shape_combo->set_current_index(2);
+        break;
+    case Domain::SLA::SupportPoint::BaseShape::Flat:
+        controls.foot_shape_combo->set_current_index(3);
+        break;
+    case Domain::SLA::SupportPoint::BaseShape::Default:
+    default:
+        controls.foot_shape_combo->set_current_index(0);
+        break;
+    }
+
+    controls.on_model_combo->set_override_label(std::string());
+    switch (values.on_model) {
+    case SupportOnModel::Allow:
+        controls.on_model_combo->set_current_index(1);
+        break;
+    case SupportOnModel::Forbid:
+        controls.on_model_combo->set_current_index(2);
+        break;
+    case SupportOnModel::Inherit:
+    default:
+        controls.on_model_combo->set_current_index(0);
+        break;
+    }
+}
+
+void SlaSupportPointsDialog::show_selected_support_values(
+    SupportValueControls&           controls,
+    const SlaSupportSelectionView&  view)
+{
+    const bool has_sizes = view.sizes.has_value();
+    show_size(controls.tip_diameter_slider, has_sizes, has_sizes ? view.sizes->tip_diameter_mm : 0.);
+    show_size(controls.stem_diameter_slider, has_sizes, has_sizes ? view.sizes->stem_diameter_mm : 0.);
+    show_size(controls.base_diameter_slider, has_sizes, has_sizes ? view.sizes->base_diameter_mm : 0.);
+    show_size(controls.base_height_slider, has_sizes, has_sizes ? view.sizes->base_height_mm : 0.);
+
+    // A point carries a size of zero to follow the global setting, so the box says whether the
+    // selection leaves it to the settings of Supports & raft.
+    controls.tip_diameter_follow_global_checkbox->set_checked(view.follow_global.tip_diameter);
+    controls.tip_diameter_follow_global_checkbox->set_enabled(view.count > 0);
+    controls.stem_diameter_follow_global_checkbox->set_checked(view.follow_global.stem_diameter);
+    controls.stem_diameter_follow_global_checkbox->set_enabled(view.count > 0);
+    controls.base_diameter_follow_global_checkbox->set_checked(view.follow_global.base_diameter);
+    controls.base_diameter_follow_global_checkbox->set_enabled(view.count > 0);
+    controls.base_height_follow_global_checkbox->set_checked(view.follow_global.base_height);
+    controls.base_height_follow_global_checkbox->set_enabled(view.count > 0);
+
+    const bool has_geometry = view.geometry.has_value();
+    controls.tip_shape_combo->set_override_label(has_geometry ? std::string() : _u8L("Mixed"));
+    if (has_geometry) {
+        switch (view.geometry->tip_shape) {
+        case Domain::SLA::SupportPoint::TipShape::Cone:
+            controls.tip_shape_combo->set_current_index(1);
+            break;
+        case Domain::SLA::SupportPoint::TipShape::Ball:
+            controls.tip_shape_combo->set_current_index(2);
+            break;
+        case Domain::SLA::SupportPoint::TipShape::Default:
+        default:
+            controls.tip_shape_combo->set_current_index(0);
+            break;
+        }
+        controls.tip_length_slider->set_value(view.geometry->tip_length_mm);
+        controls.knot_diameter_slider->set_value(view.geometry->knot_diameter_mm);
+        controls.stem_sides_slider->set_value(view.geometry->stem_sides);
+        controls.stem_taper_slider->set_value(view.geometry->stem_taper);
+    } else {
+        controls.tip_length_slider->set_undef_value();
+        controls.knot_diameter_slider->set_undef_value();
+        controls.stem_sides_slider->set_undef_value();
+        controls.stem_taper_slider->set_undef_value();
+    }
+
+    controls.foot_shape_combo->set_override_label(has_geometry ? std::string() : _u8L("Mixed"));
+    if (has_geometry) {
+        switch (view.geometry->base_shape) {
+        case Domain::SLA::SupportPoint::BaseShape::Cone:
+            controls.foot_shape_combo->set_current_index(1);
+            break;
+        case Domain::SLA::SupportPoint::BaseShape::Cylinder:
+            controls.foot_shape_combo->set_current_index(2);
+            break;
+        case Domain::SLA::SupportPoint::BaseShape::Flat:
+            controls.foot_shape_combo->set_current_index(3);
+            break;
+        case Domain::SLA::SupportPoint::BaseShape::Default:
+        default:
+            controls.foot_shape_combo->set_current_index(0);
+            break;
+        }
+    }
+
+    const std::optional<SupportOnModel> on_model = view.on_model;
+    controls.on_model_combo->set_override_label(on_model.has_value() ? std::string() : _u8L("Mixed"));
+    switch (on_model.value_or(SupportOnModel::Inherit)) {
+    case SupportOnModel::Allow:
+        controls.on_model_combo->set_current_index(1);
+        break;
+    case SupportOnModel::Forbid:
+        controls.on_model_combo->set_current_index(2);
+        break;
+    case SupportOnModel::Inherit:
+    default:
+        controls.on_model_combo->set_current_index(0);
+        break;
     }
 }
 
@@ -411,9 +627,28 @@ void SlaSupportPointsDialog::set_point_count(size_t count)
     }
 }
 
-void SlaSupportPointsDialog::set_head_diameter(double diameter_mm)
+void SlaSupportPointsDialog::set_new_support_values(const SlaSupportNewValues& values)
 {
-    m_head_diameter_slider->set_value(diameter_mm);
+    this->show_new_support_values(m_new_supports, values);
+}
+
+void SlaSupportPointsDialog::set_selected_support_values(const SlaSupportSelectionView& view)
+{
+    this->show_selected_support_values(m_selected_supports, view);
+    // The group is only there while points are selected, and its title names how many (M2.33).
+    m_selected_supports_window->set_visible(view.count > 0);
+    m_selected_supports_window->set_label(
+        fmt::format("{} ({})", _u8L("Selected supports"), view.count));
+}
+
+void SlaSupportPointsDialog::set_active_preset(int index, SlaSupportSettingsGroup group)
+{
+    SupportValueControls& controls = group == SlaSupportSettingsGroup::NewSupports ? m_new_supports
+                                                                                   : m_selected_supports;
+    controls.preset_mini_button->set_checked(index == 0);
+    controls.preset_light_button->set_checked(index == 1);
+    controls.preset_medium_button->set_checked(index == 2);
+    controls.preset_heavy_button->set_checked(index == 3);
 }
 
 void SlaSupportPointsDialog::set_clipping_plane_position(double pos)
@@ -426,143 +661,19 @@ void SlaSupportPointsDialog::set_lock_island_supports(bool locked)
     m_lock_island_supports_checkbox->set_checked(locked);
 }
 
-void SlaSupportPointsDialog::set_pillar_diameter(double diameter_mm)
-{
-    m_pillar_diameter_slider->set_value(diameter_mm);
-}
-
-void SlaSupportPointsDialog::set_base_diameter(double diameter_mm)
-{
-    m_base_diameter_slider->set_value(diameter_mm);
-}
-
-void SlaSupportPointsDialog::set_base_height(double height_mm)
-{
-    m_base_height_slider->set_value(height_mm);
-}
-
-void SlaSupportPointsDialog::set_head_diameter_use_global(bool use_global)
-{
-    m_head_diameter_use_global_checkbox->set_checked(use_global);
-    m_head_diameter_slider->set_enabled(!use_global);
-}
-
-void SlaSupportPointsDialog::set_pillar_diameter_use_global(bool use_global)
-{
-    m_pillar_diameter_use_global_checkbox->set_checked(use_global);
-    m_pillar_diameter_slider->set_enabled(!use_global);
-}
-
-void SlaSupportPointsDialog::set_base_diameter_use_global(bool use_global)
-{
-    m_base_diameter_use_global_checkbox->set_checked(use_global);
-    m_base_diameter_slider->set_enabled(!use_global);
-}
-
-void SlaSupportPointsDialog::set_base_height_use_global(bool use_global)
-{
-    m_base_height_use_global_checkbox->set_checked(use_global);
-    m_base_height_slider->set_enabled(!use_global);
-}
-
-void SlaSupportPointsDialog::set_support_geometry(
-    const std::optional<SlaSupportGeometry>& geometry,
-    bool has_selection)
-{
-    if (!geometry.has_value()) {
-        // Nothing is selected, or the selected points disagree on one of the values: the fields
-        // show no value, so the user is never shown a value only some of the points have. A
-        // dropdown has no empty state of its own, so it says the one word the app uses for this.
-        m_tip_shape_combo->set_override_label(_u8L("Mixed"));
-        m_base_shape_combo->set_override_label(_u8L("Mixed"));
-        m_tip_length_slider->set_undef_value();
-        m_knot_diameter_slider->set_undef_value();
-        m_stem_sides_slider->set_undef_value();
-        m_stem_taper_slider->set_undef_value();
-        // The tip diameter is the head diameter control as well. While the control takes
-        // the global diameter it shows that one, so only a selection that disagrees blanks it, and
-        // with nothing selected it keeps showing the diameter a new point takes.
-        if (has_selection && !m_head_diameter_use_global_checkbox->checked()) {
-            m_head_diameter_slider->set_undef_value();
-        }
-        return;
-    }
-
-    m_tip_shape_combo->set_override_label(std::string());
-    switch (geometry->tip_shape) {
-    case Domain::SLA::SupportPoint::TipShape::Cone:
-        m_tip_shape_combo->set_current_index(1);
-        break;
-    case Domain::SLA::SupportPoint::TipShape::Ball:
-        m_tip_shape_combo->set_current_index(2);
-        break;
-    case Domain::SLA::SupportPoint::TipShape::Default:
-    default:
-        m_tip_shape_combo->set_current_index(0);
-        break;
-    }
-    // While the control takes the global diameter it shows that one, the way the stem, base diameter
-    // and base height sliders do; otherwise it shows what the selected points carry.
-    if (!m_head_diameter_use_global_checkbox->checked()) {
-        m_head_diameter_slider->set_value(geometry->tip_diameter_mm);
-    }
-    m_tip_length_slider->set_value(geometry->tip_length_mm);
-    m_knot_diameter_slider->set_value(geometry->knot_diameter_mm);
-    m_stem_sides_slider->set_value(geometry->stem_sides);
-    m_stem_taper_slider->set_value(geometry->stem_taper);
-    m_base_shape_combo->set_override_label(std::string());
-    switch (geometry->base_shape) {
-    case Domain::SLA::SupportPoint::BaseShape::Cone:
-        m_base_shape_combo->set_current_index(1);
-        break;
-    case Domain::SLA::SupportPoint::BaseShape::Cylinder:
-        m_base_shape_combo->set_current_index(2);
-        break;
-    case Domain::SLA::SupportPoint::BaseShape::Flat:
-        m_base_shape_combo->set_current_index(3);
-        break;
-    case Domain::SLA::SupportPoint::BaseShape::Default:
-    default:
-        m_base_shape_combo->set_current_index(0);
-        break;
-    }
-}
-
-void SlaSupportPointsDialog::set_support_on_model(const std::optional<SupportOnModel>& on_model)
-{
-    if (!on_model.has_value()) {
-        // Nothing is selected, or the selected points disagree: a dropdown has no empty state of
-        // its own, so it says the one word the app uses for this.
-        m_on_model_combo->set_override_label(_u8L("Mixed"));
-        return;
-    }
-
-    m_on_model_combo->set_override_label(std::string());
-    switch (*on_model) {
-    case SupportOnModel::Allow:
-        m_on_model_combo->set_current_index(1);
-        break;
-    case SupportOnModel::Forbid:
-        m_on_model_combo->set_current_index(2);
-        break;
-    case SupportOnModel::Inherit:
-    default:
-        m_on_model_combo->set_current_index(0);
-        break;
-    }
-}
-
-void SlaSupportPointsDialog::set_active_preset(int index)
-{
-    m_preset_mini_button->set_checked(index == 0);
-    m_preset_light_button->set_checked(index == 1);
-    m_preset_medium_button->set_checked(index == 2);
-    m_preset_heavy_button->set_checked(index == 3);
-}
-
 void SlaSupportPointsDialog::set_settings_expanded(bool expanded)
 {
     m_settings_window->set_collapsed(!expanded);
+}
+
+void SlaSupportPointsDialog::report_value_editing(std::initializer_list<SliderWithInput*> sliders)
+{
+    for (SliderWithInput* slider : sliders) {
+        slider->callbacks().value_editing_started = [this]()
+        { m_callbacks.value_editing_started(); };
+        slider->callbacks().value_editing_ended = [this]()
+        { m_callbacks.value_editing_ended(); };
+    }
 }
 
 } // namespace Slic3r::App::Plater

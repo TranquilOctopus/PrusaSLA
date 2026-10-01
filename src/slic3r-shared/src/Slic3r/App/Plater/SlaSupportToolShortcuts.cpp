@@ -72,10 +72,10 @@ std::vector<std::string> support_tool_shortcut_lines()
     // The key is not translated, only what it does is. The order is the order of the section: the
     // presets, then the two auto support keys, then the keys of the selection.
     static const std::vector<std::pair<std::string, std::string>> lines{
-        {Biz::L("1"), Biz::_u8L("Mini preset")},
-        {Biz::L("2"), Biz::_u8L("Light preset")},
-        {Biz::L("3"), Biz::_u8L("Medium preset")},
-        {Biz::L("4"), Biz::_u8L("Heavy preset")},
+        {Biz::L("1"), Biz::_u8L("Mini preset for new supports")},
+        {Biz::L("2"), Biz::_u8L("Light preset for new supports")},
+        {Biz::L("3"), Biz::_u8L("Medium preset for new supports")},
+        {Biz::L("4"), Biz::_u8L("Heavy preset for new supports")},
         {Biz::L("A"), Biz::_u8L("Auto support the selected model")},
         {Biz::L("Shift+A"), Biz::_u8L("Auto support all models")},
         {Biz::L("G"), Biz::_u8L("Toggle Support on model of the selection")},

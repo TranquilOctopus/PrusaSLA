@@ -31,6 +31,12 @@ struct SlaSupportPointsEditing
     // only home of that number, which a preset button also writes.
     SlaSupportGeometry support_geometry;
 
+    // The "may this support end on the model" state a clicked point takes (M2.33). It belongs to
+    // the "New supports" group, so a point placed by hand is an ordinary support (Inherit, the
+    // object's own setting) until the group is changed, and editing the state of points that are
+    // already there leaves it alone.
+    SupportOnModel new_support_on_model{SupportOnModel::Inherit};
+
     // Core editing operations
     std::optional<size_t> find_nearest_point(const Domain::Vec3d& mesh_pos, double max_distance_mm) const;
     void add_point(const Domain::Vec3d& mesh_pos);
