@@ -124,9 +124,10 @@ TEST_CASE(
     {
         // The exact saving is the solid cube less the 34 mm cube a 3 mm shell leaves, and the
         // estimate overstates it because the corners of the shell are counted twice.
+        // 40^3 - 34^3 = 24696 mm3, so the truth is 24.7 ml against the 44.8 the estimate says.
         const ObjectSliceStats cube = solid_block(40., 40., 40.);
         const double exact_ml       = (40. * 40. * 40. - 34. * 34. * 34.) / 1000.;
-        CHECK(exact_ml == Approx(17.7).margin(0.1));
+        CHECK(exact_ml == Approx(24.7).margin(0.1));
         CHECK(hollowing_saved_ml(cube, settings.wall_mm) > exact_ml);
     }
 

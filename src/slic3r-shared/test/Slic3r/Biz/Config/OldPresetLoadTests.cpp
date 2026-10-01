@@ -657,15 +657,22 @@ TEST_CASE_METHOD(
             CHECK_FALSE(evaluated.id.empty());
             CHECK(evaluated.config_box().items.opt("exposure_time").get<double>() > 0.);
 
-            // A resin of the bundle inherits '*common*', which is where its material type and its
-            // layer height come from since M1.13c2. A user resin of this file stands on its own,
-            // so it has neither, and that is the state it was saved in.
+            // A box carries every option of its location, each at its own default until a preset
+            // says otherwise, so material_type reads 'Tough' here whichever kind of resin this is
+            // and cannot tell the two apart.
+            CHECK(evaluated.config_box().items.opt("material_type").get<std::string>() == "Tough");
+
+            // A resin of the bundle inherits '*common*', which is where its layer height comes
+            // from since M1.13c2. A user resin of this file names no inherits at all, so it stands
+            // on its own: the exposure time of its own values is what it carries, and the layer
+            // height is the one it names - 0 for the resin written before the move, its own 0.03
+            // for the other - never the 0.05 of '*common*'.
             if (evaluated.origin == Slic3r::Domain::Preset::PresetOrigin::User) {
-                CHECK(evaluated.config_box().items.opt("material_type").get<std::string>().empty());
+                CHECK(evaluated.config_box().items.opt("exposure_time").get<double>()
+                      == Catch::Approx(3.5));
                 CHECK(evaluated.config_box().items.opt("resin_layer_height").get<double>()
-                      == Catch::Approx(0.));
+                      != Catch::Approx(0.05));
             } else {
-                CHECK(evaluated.config_box().items.opt("material_type").get<std::string>() == "Tough");
                 CHECK(evaluated.config_box().items.opt("resin_layer_height").get<double>()
                       == Catch::Approx(0.05));
             }
