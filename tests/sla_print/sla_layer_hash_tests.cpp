@@ -182,6 +182,14 @@ uint64_t hash_with(std::function<void(Slic3r::Domain::ConfigPackSLA&)> tweak)
     config.sla_material_settings.items.opt("initial_layer_height").set(0.5);
     config.sla_print_settings.items.opt("supports_enable").set(true);
     config.sla_print_settings.items.opt("pad_enable").set(true);
+    // The elephant foot compensation is ramped over the first faded_layers layers OF THE PRINT,
+    // and apply_printer_corrections() walks po.m_slice_index, which starts an elevation below the
+    // object: the default support_object_elevation (5 mm) plus the 2 mm raft wall puts the cube's
+    // own first layer at layer 14 of a 0.5 mm print, so the default ramp of 10 layers stops at
+    // layer 9 and rewrites raft polygons only, and this hash reads the model slices as the
+    // benchmark's does. Raised to the maximum the key allows, 20, the ramp reaches the cube, which
+    // is what the case below measures. The raft, the tree and the elevation are as they are.
+    config.sla_print_settings.items.opt("faded_layers").set(20);
     tweak(config);
 
     auto hw_config = Slic3r::Test::create_dummy_hw_config(1, 0, Slic3r::Domain::PrinterTechnology::SLA);
@@ -234,6 +242,8 @@ TEST_CASE("A setting that rewrites the first layers moves the layer hash", "[SLA
     // elefant_foot_compensation shrinks the first faded_layers layers by up to its value, in
     // SLAPrint::Steps::apply_printer_corrections. A 20 mm cube is far above the 0.2 mm
     // elefant_foot_min_width below which nothing is compensated, so the first layer must change.
+    // It is a ramp over the print's first layers and this hash reads the model slices, so the
+    // print is built with a ramp long enough for the cube to be inside it: see hash_with.
     const uint64_t baseline = hash_with([](Slic3r::Domain::ConfigPackSLA&) {});
     const uint64_t shrunk   = hash_with([](Slic3r::Domain::ConfigPackSLA& config) {
         config.sla_printer_settings.items.opt("elefant_foot_compensation").set(0.5);
