@@ -101,6 +101,12 @@ void SlaSupportPreviewSchedule::clear()
         m_cancel_building();
     }
 
+    // Every window that was armed goes with the wait it belongs to, the way forget() and a newer
+    // request drop one: a callback left in the platform queue is a callback that runs for nothing,
+    // and the header promises that anything armed before this is dead.
+    for (const auto& entry : m_waiting) {
+        m_timer.cancel(entry.second.timer);
+    }
     m_waiting.clear();
 
     // The counters keep counting up over a project change, so a debounce armed before it can

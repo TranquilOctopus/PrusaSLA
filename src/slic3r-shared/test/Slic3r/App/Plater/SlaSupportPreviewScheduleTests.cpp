@@ -389,8 +389,9 @@ TEST_CASE("SlaSupportPreviewSchedule - a build start shares the model's meshes",
     ManualTimer      timer;
     SnapshotBuilder  builder;
     SlaSupportPreviewSchedule schedule{timer, [&builder, small, large](const SlaSupportPreviewSchedule::Request& request) {
-        builder.start(request, *small);
-        builder.start(request, *large);
+        // One build per object, the object the request names: a build is never started for an object
+        // that did not ask for one.
+        builder.start(request, request.object_id == ObjectID{7} ? *small : *large);
     }};
 
     // A burst of edits of both objects, each with a key of its own.
