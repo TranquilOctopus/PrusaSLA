@@ -376,7 +376,7 @@ TEST_CASE("Auto orient: no cups turns an upside down cup off the plate", "[SLA][
 
     // Its opening (the pocket, which is the local -Z of the cup after the turn) may end up sideways,
     // which is cup free too, but it may not end up facing the plate.
-    const Slic3r::Vec3d opening{rotation_transform(rotation) * Slic3r::Vec3d::NegZ()};
+    const Slic3r::Vec3d opening{rotation_transform(rotation) * -Slic3r::Vec3d::UnitZ()};
     CHECK(opening.z() > -0.5);
 
     // A second run finds the same rotation.
