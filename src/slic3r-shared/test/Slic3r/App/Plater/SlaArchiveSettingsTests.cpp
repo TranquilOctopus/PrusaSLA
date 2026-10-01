@@ -252,8 +252,10 @@ TEST_CASE(
 
     const SlaArchiveSettings settings = analyze_archive_settings(result);
     REQUIRE(settings.has_material());
+    // The density and the cost of a bottle have labels of their own, the size of the bottle has none
+    // in the table, so it is named by its resin key rather than left out of the list.
     CHECK(
-        std::find(settings.applied.begin(), settings.applied.end(), "material_density")
+        std::find(settings.applied.begin(), settings.applied.end(), "bottle_volume")
         != settings.applied.end()
     );
 }

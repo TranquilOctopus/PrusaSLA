@@ -600,10 +600,12 @@ TEST_CASE(
 
     SECTION("more entries than the cap, in an archive of one")
     {
-        // The promise is in the record, not in the file: one entry on disk, half a million declared,
-        // which is the number miniz would size its index from.
+        // The promise is in the record, not in the file: one entry on disk and 40000 declared,
+        // which is the number miniz would size its index from. The ordinary record counts entries
+        // in 16 bits, so a count over the cap is the most a plain record can say; a bigger one
+        // only fits in a zip64 record, which the section below writes.
         Claims claims;
-        claims.entries = 500000;
+        claims.entries = 40000;
         const fs::path path = dir.path() / "too-many.sl1";
         write_text(path, raw_zip({{"config.ini", CONFIG_INI}}, claims));
 
@@ -614,7 +616,7 @@ TEST_CASE(
         // merely not a zip.
         REQUIRE(result.error().find("too-many.sl1") != std::string::npos);
         REQUIRE(result.error().find("entries") != std::string::npos);
-        REQUIRE(result.error().find("500000") != std::string::npos);
+        REQUIRE(result.error().find("40000") != std::string::npos);
         REQUIRE(result.error().find(std::to_string(SlicedArchiveResinReader::MAX_ENTRIES_SCANNED))
                 != std::string::npos);
         // The file is still a sliced archive as far as the format goes, so the registry hands it to
@@ -625,7 +627,7 @@ TEST_CASE(
         register_resin_profile_readers(registry);
         const auto                 through_registry = registry.read_file(path);
         REQUIRE_FALSE(through_registry.has_value());
-        REQUIRE(through_registry.error().find("500000") != std::string::npos);
+        REQUIRE(through_registry.error().find("40000") != std::string::npos);
     }
 
     SECTION("a central directory over the cap, in an archive of one")

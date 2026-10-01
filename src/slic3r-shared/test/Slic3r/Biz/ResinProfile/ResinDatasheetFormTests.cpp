@@ -39,10 +39,6 @@ struct OptionField
     /// How many units of @ref option one unit of the form is worth: the speeds are asked in mm/min
     /// and the setting holds mm/s, everything else is one.
     double to_option_unit;
-    /// Whether the mapping table writes the setting, or only reads the value with another one. A
-    /// bottle volume is the latter: it turns a per-litre price into a bottle cost and is written
-    /// nowhere of its own.
-    bool written;
     /// A key the mapping table reads together with @ref key, where the value only means something
     /// next to it: a price is only a bottle cost when the unit says it is a per-litre price.
     const char* companion_key;
@@ -58,7 +54,6 @@ const std::vector<OptionField>& option_fields()
          "layerHeight",
          "resin_layer_height",
          1.,
-         true,
          nullptr,
          nullptr,
          &ResinDatasheet::layer_height_mm},
@@ -66,7 +61,6 @@ const std::vector<OptionField>& option_fields()
          "normalExposureTime",
          "exposure_time",
          1.,
-         true,
          nullptr,
          nullptr,
          &ResinDatasheet::normal_exposure_s},
@@ -74,7 +68,6 @@ const std::vector<OptionField>& option_fields()
          "bottomLayerExposureTime",
          "initial_exposure_time",
          1.,
-         true,
          nullptr,
          nullptr,
          &ResinDatasheet::bottom_exposure_s},
@@ -82,7 +75,6 @@ const std::vector<OptionField>& option_fields()
          "bottomLayerCount",
          "bottom_layer_count",
          1.,
-         true,
          nullptr,
          nullptr,
          &ResinDatasheet::bottom_layer_count},
@@ -90,7 +82,6 @@ const std::vector<OptionField>& option_fields()
          "lightOffTime",
          "delay_before_exposure",
          1.,
-         true,
          nullptr,
          nullptr,
          &ResinDatasheet::light_off_delay_s},
@@ -101,7 +92,6 @@ const std::vector<OptionField>& option_fields()
          "resinPrice",
          "bottle_cost",
          1.,
-         true,
          "resinUnit",
          "/bottle",
          &ResinDatasheet::price_per_bottle},
@@ -109,7 +99,6 @@ const std::vector<OptionField>& option_fields()
          "bottleVolume",
          "bottle_volume",
          1.,
-         false,
          nullptr,
          nullptr,
          &ResinDatasheet::bottle_volume_ml},
@@ -117,7 +106,6 @@ const std::vector<OptionField>& option_fields()
          "normalLayerLiftHeight",
          "lift_height",
          1.,
-         true,
          nullptr,
          nullptr,
          &ResinDatasheet::lift_distance_mm},
@@ -127,7 +115,6 @@ const std::vector<OptionField>& option_fields()
          "normalLayerLiftSpeed",
          "lift_speed",
          1. / 60.,
-         true,
          nullptr,
          nullptr,
          &ResinDatasheet::lift_speed_mm_min},
@@ -135,7 +122,6 @@ const std::vector<OptionField>& option_fields()
          "normalDropSpeed",
          "retract_speed",
          1. / 60.,
-         true,
          nullptr,
          nullptr,
          &ResinDatasheet::retract_speed_mm_min},
@@ -143,7 +129,6 @@ const std::vector<OptionField>& option_fields()
          "transitionLayers",
          "resin_faded_layers",
          1.,
-         true,
          nullptr,
          nullptr,
          &ResinDatasheet::transition_layer_count},
@@ -423,14 +408,10 @@ TEST_CASE(
                 row = &candidate;
         REQUIRE(row != nullptr);
 
-        if (field.written) {
-            CHECK(row->target_key == field.option);
-        } else {
-            // A bottle volume is read with the price and written nowhere of its own, so the setting
-            // it is checked against is the one a resin preset holds a bottle's size in rather than
-            // the one its row names.
-            CHECK(row->target_key.empty());
-        }
+        // Every field of the form lands in the setting its rule checks the range against, the bottle
+        // volume included: M3.15b gave bottleVolume a row of its own, so what it writes is the very
+        // setting the rule names.
+        CHECK(row->target_key == field.option);
     }
 }
 

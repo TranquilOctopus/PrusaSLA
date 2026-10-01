@@ -102,9 +102,9 @@ const std::vector<FieldRule>& field_rules()
          .allow_zero     = true,
          .option         = "bottle_cost",
          .to_option_unit = 1.},
-        // The mapping table only reads a bottle volume to turn a per-litre price into a bottle
-        // cost, and writes none of its own; the option is the one that holds a bottle's size, and
-        // it is the range a bottle of that size has to be in either way.
+        // A bottle volume is what a per-litre price is turned into a bottle cost with, and M3.15b
+        // keeps it as a resin setting of its own, so the option named here is where the value of
+        // this field lands, and the range a bottle of that size has to be in is checked against it.
         {.key            = "bottleVolume",
          .label          = "Bottle volume",
          .value          = &ResinDatasheet::bottle_volume_ml,

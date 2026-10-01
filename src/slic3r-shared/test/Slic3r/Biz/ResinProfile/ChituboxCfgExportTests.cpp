@@ -158,24 +158,30 @@ void check_round_trip(
     int expected_keys
 )
 {
-    const ChituboxCfgExport exported =
-        export_chitubox_cfg_report(material, printer_class, "Round trip resin");
     const ChituboxCfgReader reader;
+    const auto               original = reader.read(original_path);
+    REQUIRE(original.has_value());
+
+    // The name of a profile is a key of its own and it makes the trip like any other value: the
+    // export is written under the name the file states, which is what the check below reads back.
+    // A file that states no name is exported under the name of this round trip, and then there is
+    // nothing to compare a name with.
+    const auto             original_name = original->raw_values.find("currProfile");
+    const std::string      name = original_name == original->raw_values.end() ? "Round trip resin"
+                                                                             : original_name->second;
+    const ChituboxCfgExport exported = export_chitubox_cfg_report(material, printer_class, name);
 
     // A file the registry would pick this reader for, not a text file that only looks like one.
     REQUIRE(reader.sniff(exported.text));
 
     const fs::path exported_path = fx.write_profile("round_trip_exported.cfg", exported.text);
-    const auto reread   = reader.read(exported_path);
-    const auto original = reader.read(original_path);
+    const auto     reread        = reader.read(exported_path);
     REQUIRE(reread.has_value());
-    REQUIRE(original.has_value());
     // Everything the export wrote is a line the reader understands, so it has nothing to warn
     // about: no key with a value it cannot read, no line that is neither.
     CHECK(reread->warnings.empty());
 
     // The name of the profile is a key of its own and comes back as it went in.
-    const auto original_name = original->raw_values.find("currProfile");
     if (original_name != original->raw_values.end()) {
         const auto reread_name = reread->raw_values.find("currProfile");
         REQUIRE(reread_name != reread->raw_values.end());
@@ -436,8 +442,10 @@ TEST_CASE("ChituboxCfgExport - a setting with no Chitubox key is left out and na
         const bool wrote = !row.chitubox_key.empty();
         CHECK(wrote == !row.value.empty());
         // A row that writes a value and its unit writes both, and a row that writes nothing has
-        // no unit either: the unit of a price is what makes it a price.
-        CHECK(wrote == !row.unit_key.empty());
+        // no unit either: the unit of a price is what makes it a price. Only a price is stated as
+        // two keys, so a written row with no unit of its own is the normal case, not a broken one.
+        if (!wrote)
+            CHECK(row.unit_key.empty());
         CHECK(row.unit_key.empty() == row.unit_value.empty());
         if (wrote)
             ++written;
