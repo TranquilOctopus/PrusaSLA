@@ -44,13 +44,15 @@ std::string sla_support_points_clear_question(const SlaSupportPointsClearPlan& p
     const std::size_t models = plan.object_refs.size();
     if (models == 1) {
         return fmt::format(
-            _u8L("Remove the {} support points of this model? One undo brings them back."),
+            fmt::runtime(
+                _u8L("Remove the {} support points of this model? One undo brings them back.")
+            ),
             plan.point_count
         );
     }
 
     return fmt::format(
-        _u8L("Remove {} support points of {} models? One undo brings them back."),
+        fmt::runtime(_u8L("Remove {} support points of {} models? One undo brings them back.")),
         plan.point_count,
         models
     );
