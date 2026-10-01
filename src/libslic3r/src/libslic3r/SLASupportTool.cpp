@@ -104,9 +104,15 @@ SupportToolTree build_support_tree_for_tool(const SupportToolModelMesh& model_me
 
         const SLAPrintObjectConfigView cfg{full_config, object_settings};
 
-        // Check if supports are enabled
+        // A support tree needs support points. A raft around the object does not: that one is cut
+        // from the object itself, so an object the generator found no point on at all still gets
+        // the raft the slice gives it, and the raft that comes out of a frame around the object
+        // that stands on the plate is empty rather than absent. A raft under the object is a slab
+        // at the foot of the pillars, so with no tree to stand on there is nothing to build,
+        // which is what SLAPrint::Steps::generate_pad() keeps as well.
         bool supports_enable = cfg.get<bool>("supports_enable");
-        if (!supports_enable || points.empty()) {
+        const bool tree_built = supports_enable && !points.empty();
+        if (!tree_built && !is_zero_elevation(cfg)) {
             return empty_tree();
         }
 
@@ -137,11 +143,13 @@ SupportToolTree build_support_tree_for_tool(const SupportToolModelMesh& model_me
         };
 
         // Create support tree
-        indexed_triangle_set tree_its = sla::create_support_tree(supportable_mesh, ctl);
         std::shared_ptr<const Domain::TriangleMesh> tree_mesh;
-        if (!tree_its.empty()) {
-            Domain::TriangleMeshStats stats = Biz::Algorithms::TriangleMesh::calculate_stats(tree_its);
-            tree_mesh = std::make_shared<const Domain::TriangleMesh>(std::move(tree_its), std::move(stats));
+        if (tree_built) {
+            indexed_triangle_set tree_its = sla::create_support_tree(supportable_mesh, ctl);
+            if (!tree_its.empty()) {
+                Domain::TriangleMeshStats stats = Biz::Algorithms::TriangleMesh::calculate_stats(tree_its);
+                tree_mesh = std::make_shared<const Domain::TriangleMesh>(std::move(tree_its), std::move(stats));
+            }
         }
 
         // Create pad if enabled

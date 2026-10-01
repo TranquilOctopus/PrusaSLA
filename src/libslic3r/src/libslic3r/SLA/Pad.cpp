@@ -676,7 +676,13 @@ indexed_triangle_set create_outer_pad_geometry(const ExPolygons & skeleton,
 
         double z_min = -cfg.height, z_max = 0;
         if (taper_z < 0) {
-            its_merge(ret, walls(bevel_poly.contour, top_poly.contour, taper_z, z_max));
+            // The rim is the first polygon of the bevel wall and the outline the bevel runs into
+            // is the second, the same way round as the wall below it: triangulate_wall() walks
+            // the ring of its first polygon one way and the ring of its second one the other
+            // way, so the two walls that share the outline have to take it as the same argument
+            // to close the raft. The other way round leaves the raft open along the rim and
+            // along the seam where the bevel meets the wall.
+            its_merge(ret, walls(top_poly.contour, bevel_poly.contour, z_max, taper_z));
             z_max = taper_z;
         }
 
@@ -698,6 +704,16 @@ indexed_triangle_set create_outer_pad_geometry(const ExPolygons & skeleton,
             its_merge(ret, straight_walls(h, hole_z_max, z_min));
 
         its_merge(ret, create_infill_floor(bottom_poly, infill, z_min));
+
+        // A hole in a part is a straight tube, so the top face and the bottom face of that tube
+        // have to be the same polygon: every edge of it is shared by one face of the wall and one
+        // face of the top. The outline is at a different height on every level, which the wall
+        // between them joins, but the holes run straight, and the offset that gives the outline
+        // on the build plate runs them through a boolean operation, which drops the collinear
+        // points a connector stick leaves on a hole. A top face with the part's own idea of the
+        // hole is then a few points away from the wall under it, and a raft with a hole in it (a
+        // ring, anything the object stands in the middle of) is open along it.
+        top_poly.holes = bottom_poly.holes;
         its_merge(ret, triangulate_expolygon_3d(top_poly, NORMALS_UP));
     }
 
