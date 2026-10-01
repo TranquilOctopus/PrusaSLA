@@ -57,7 +57,9 @@ struct ObjectResinUse
  *
  * The areas are the ones of the merged layers of the whole plate, so the result adds up to
  * PrintStatistics: a model is only counted where no other model covers the same resin, and a
- * support is only counted where no model stands on it, which is how the plate counts them.
+ * support is only counted where no model stands on it, which is how the plate counts them. Two
+ * models that overlap on a layer are counted once, the first of them taking the resin of the
+ * overlap, so that the models of the plate add up to its merged layers.
  *
  * THE RAFT RULE: the pad is generated around the models that stand close enough to share one, so
  * its volume is counted once for the print and then split between those models by FOOTPRINT: the
