@@ -85,6 +85,19 @@ SupportPoints preset_points()
     return SupportPoints{light_point(), heavy_point()};
 }
 
+// The cube above, as a mesh that outlives every tree built from it. The AABBMesh of
+// a SupportableMesh is a view on a triangle mesh and not a copy of it: it keeps the
+// pointer, builds its AABB tree on it and reads its vertices and its indices for
+// every query, so a cube built inside make_supportable_mesh() below is freed before
+// the first of them and the tree then runs on released memory.
+const indexed_triangle_set &cube_mesh()
+{
+    static const indexed_triangle_set cube =
+        triangle_mesh::its_make_cube(cube_edge, cube_edge, cube_edge);
+
+    return cube;
+}
+
 Slic3r::sla::SupportableMesh make_supportable_mesh(const SupportPoints &pts,
                                                   double              object_elevation = elevation)
 {
@@ -92,8 +105,7 @@ Slic3r::sla::SupportableMesh make_supportable_mesh(const SupportPoints &pts,
     cfg.object_elevation_mm = object_elevation;
 
     Slic3r::sla::SupportableMesh sm{
-        .emesh = Slic3r::AABBMesh(
-            triangle_mesh::its_make_cube(cube_edge, cube_edge, cube_edge)),
+        .emesh = Slic3r::AABBMesh(cube_mesh()),
         .pts = std::make_shared<const SupportPoints>(pts),
         .cfg = cfg};
 
