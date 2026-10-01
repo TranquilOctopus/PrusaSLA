@@ -67,10 +67,16 @@ indexed_triangle_set model_of(const std::vector<indexed_triangle_set>& boxes)
 // first on two sides. A support under the overhanging part of the upper block cannot go straight
 // down, but it can be routed off the lower block to the plate: the tree of the point is the same
 // with and without the switch, which is what the tests here check for a point marked Forbid.
-indexed_triangle_set ledge_model()
+// The two models are returned by reference, out of a static of their own: the AABBMesh of a
+// SupportableMesh is a view on a triangle mesh and not a copy of it, so a model built into the
+// argument of make_supportable_mesh() is freed before the first query of the tree and the tree
+// then runs on released memory.
+const indexed_triangle_set& ledge_model()
 {
-    return model_of({box(20., 20., 10., Vec3f{0.f, 0.f, 0.f}),
-                     box(20., 20., 20., Vec3f{10.f, 10.f, 20.f})});
+    static const indexed_triangle_set model{model_of(
+        {box(20., 20., 10., Vec3f{0.f, 0.f, 0.f}), box(20., 20., 20., Vec3f{10.f, 10.f, 20.f})})};
+
+    return model;
 }
 
 // A 40x40x10mm floor with four walls on it and a roof 30mm above the floor, leaving a 6x6x30mm
@@ -78,14 +84,17 @@ indexed_triangle_set ledge_model()
 // pocket is closed on all four sides and too deep to leave within the 45 degrees a bridge may be
 // tilted by, so the support can only be anchored on the pocket floor. Nothing about the shape of
 // the tree depends on which point asked for it, only on where the pillar is allowed to end.
-indexed_triangle_set pocket_model()
+const indexed_triangle_set& pocket_model()
 {
-    return model_of({box(40., 40., 10., Vec3f{0.f, 0.f, 0.f}),      // the floor of the pocket
-                     box(40., 40., 10., Vec3f{0.f, 0.f, 40.f}),      // the roof of the pocket
-                     box(17., 40., 30., Vec3f{0.f, 0.f, 10.f}),     // a wall
-                     box(17., 40., 30., Vec3f{23.f, 0.f, 10.f}),    // the opposite wall
-                     box(6., 17., 30., Vec3f{17.f, 0.f, 10.f}),     // a wall
-                     box(6., 17., 30., Vec3f{17.f, 23.f, 10.f})});  // the opposite wall
+    static const indexed_triangle_set model{model_of(
+        {box(40., 40., 10., Vec3f{0.f, 0.f, 0.f}),      // the floor of the pocket
+         box(40., 40., 10., Vec3f{0.f, 0.f, 40.f}),      // the roof of the pocket
+         box(17., 40., 30., Vec3f{0.f, 0.f, 10.f}),     // a wall
+         box(17., 40., 30., Vec3f{23.f, 0.f, 10.f}),    // the opposite wall
+         box(6., 17., 30., Vec3f{17.f, 0.f, 10.f}),     // a wall
+         box(6., 17., 30., Vec3f{17.f, 23.f, 10.f})})}; // the opposite wall
+
+    return model;
 }
 
 // Under the overhanging corner of the upper block, so the way down is blocked by the lower one.
