@@ -6,6 +6,7 @@
 #include <Slic3r/App/FixtureRender.hpp>
 #include <Slic3r/App/Platform/CameraSynchData.hpp>
 #include <Slic3r/App/Scene/Camera.hpp>
+#include <Slic3r/App/Scene/CameraTrackballController.hpp>
 #include <Slic3r/App/Theme.hpp>
 #include <Slic3r/App/ThemeTypes.hpp>
 #include <Slic3r/Domain/Color.hpp>
@@ -81,16 +82,32 @@ Domain::ColorRGBA rgba8(int r, int g, int b, int a)
 }
 
 /// The camera data a view hands over when a tab is switched, moved away from every default.
-Platform::CameraSynchData view_camera_data(double distance, double zoom)
+///
+/// It is read out of a camera and a trackball the way PreviewScenePresenter reads it, because that
+/// is the whole handover: a struct written by hand leaves the model of the view at the identity,
+/// and the model is what puts the eye where the target, the distance and the angles of the view
+/// say it is. A data without a model is not a view anyone hands over.
+Platform::CameraSynchData
+view_camera_data(double distance, double zoom, Scene::CameraProjectionType type = Scene::CameraProjectionType::Perspective)
 {
+    const Domain::Vec3d target{100.0, 50.0, 10.0};
+
+    Scene::Camera view;
+    view.set_viewport(Render::Rect{0, 0, 1280, 960});
+    if (type == Scene::CameraProjectionType::Orthographic) {
+        view.switch_projection_type();
+    }
+    view.set_zoom(zoom);
+
+    Scene::CameraTrackballController trackball{view};
+    trackball.set_target(target);
+    trackball.set_pivot(target);
+    trackball.set_distance_to_target(distance);
+    trackball.set_azimuth_and_zenith(0.5, 1.0);
+
     Platform::CameraSynchData data;
-    data.type     = uint8_t(Scene::CameraProjectionType::Perspective);
-    data.target   = Domain::Vec3d{100.0, 50.0, 10.0};
-    data.pivot    = data.target;
-    data.distance = distance;
-    data.azimuth  = 0.5;
-    data.zenith   = 1.0;
-    data.zoom     = zoom;
+    view.update_synch_data(data);
+    trackball.update_synch_data(data);
     return data;
 }
 
@@ -178,8 +195,8 @@ TEST_CASE("[FixtureRender] A render of a view is drawn with the camera of that v
     CHECK(camera.zoom() == Approx(data.zoom));
 
     // A view that is orthographic is rendered orthographic, as the view is.
-    Platform::CameraSynchData ortho = view_camera_data(250.0, 0.05);
-    ortho.type                      = uint8_t(Scene::CameraProjectionType::Orthographic);
+    const Platform::CameraSynchData ortho =
+        view_camera_data(250.0, 0.05, Scene::CameraProjectionType::Orthographic);
     Scene::Camera ortho_camera;
     ortho_camera.set_viewport(Render::Rect{0, 0, 1280, 960});
     set_fixture_view_camera(ortho, ortho_camera);
