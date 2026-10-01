@@ -20,10 +20,12 @@ namespace fs = boost::filesystem;
 namespace Slic3r::Biz::PhysicalPrinter {
 
 namespace {
+// The data dir is read on every call and not remembered: it is a global that the app sets once at
+// startup but a test sets per fixture, and a path cached from the first of those would leave every
+// later fixture reading and writing a scratch tree that is already gone.
 inline fs::path storage_dir()
 {
-    static const fs::path dir = fs::path{data_dir()} / "physical_printer";
-    return dir;
+    return fs::path{data_dir()} / "physical_printer";
 }
 
 PhysicalPrinterConfig default_new_printer()
