@@ -233,7 +233,7 @@ TEST_CASE("Undo and redo cover the sizes a support preset writes", "[SlaUndo][SL
     commit(model, editing);
     stack.push(model);
 
-    const Model& preset = model.objects.front()->sla_support_points.front();
+    const SupportPoint& preset = model.objects.front()->sla_support_points.front();
     CHECK(preset.head_front_radius == 0.6f);
     CHECK(preset.pillar_diameter == 2.4f);
     CHECK(preset.base_diameter == 6.6f);

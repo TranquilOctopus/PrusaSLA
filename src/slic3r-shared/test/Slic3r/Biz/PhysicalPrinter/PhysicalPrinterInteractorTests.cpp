@@ -444,3 +444,5 @@ TEST_CASE_METHOD(
     project_interactor.select_config_container(second_plate);
     REQUIRE(printers.selected_uuid() == local_drive_uuid());
 }
+
+} // namespace
