@@ -235,6 +235,25 @@ void check_wall(const Model& model, const HollowParams& params)
     REQUIRE(interior);
 
     const indexed_triangle_set& inner = sla::get_mesh(*interior);
+
+    // Reported before the check below, which is the one that fails first when the interior comes
+    // out empty: the emptiness is a property of the grid the generator ended up with, and the
+    // two settings that decide how coarse that grid is are in here.
+    INFO(
+        "a wall of "
+        << params.thickness
+        << "mm, quality "
+        << params.quality
+        << " and a closing distance of "
+        << params.closing
+        << "mm is voxelized at "
+        << voxel_mm
+        << "mm, and the interior came out with "
+        << inner.vertices.size()
+        << " vertices and "
+        << inner.indices.size()
+        << " triangles"
+    );
     REQUIRE(!inner.indices.empty());
 
     const AABBMesh outer(model.outer);

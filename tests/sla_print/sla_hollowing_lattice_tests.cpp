@@ -53,13 +53,16 @@ namespace {
 constexpr double CUBE_MM = 12.;
 constexpr double WALL_MM = 2.;
 
+// The closing distance is what rounds the corners of the interior, half of the wall here.
+constexpr double CLOSING_MM = 0.5;
+
 // The hollowing of the model, the closing distance is what rounds the corners of the interior.
 Slic3r::sla::HollowingConfig hollowing_cfg()
 {
     Slic3r::sla::HollowingConfig cfg;
     cfg.min_thickness    = WALL_MM;
     cfg.quality          = 0.5;
-    cfg.closing_distance = 0.5;
+    cfg.closing_distance = CLOSING_MM;
     return cfg;
 }
 
@@ -118,7 +121,24 @@ Slic3r::sla::InteriorPtr hollowed_interior(const Cube &cube)
         sla::generate_interior(Slic3r::range(cube.parts), hollowing_cfg());
 
     REQUIRE(interior);
-    REQUIRE(!sla::get_mesh(*interior).indices.empty());
+
+    // Reported before the check that fails first, which is the emptiness of the mesh the lattice
+    // would be cut out of, and the settings of the hollowing that made it.
+    const indexed_triangle_set& mesh = sla::get_mesh(*interior);
+    INFO(
+        "a "
+        << CUBE_MM
+        << "mm cube hollowed with a "
+        << WALL_MM
+        << "mm wall and a closing distance of "
+        << CLOSING_MM
+        << "mm came out with "
+        << mesh.vertices.size()
+        << " vertices and "
+        << mesh.indices.size()
+        << " triangles"
+    );
+    REQUIRE(!mesh.indices.empty());
 
     return interior;
 }
