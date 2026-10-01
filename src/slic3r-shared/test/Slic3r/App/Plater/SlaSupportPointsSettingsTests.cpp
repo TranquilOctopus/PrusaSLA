@@ -327,9 +327,12 @@ TEST_CASE(
     SECTION("Points that disagree on a geometry value show no geometry at all")
     {
         SlaSupportPointsEditing editing = make_editing();
+        // The change lands on the points that are selected when it is made, so the second point
+        // joins the selection afterwards: selected before the change, it would have been given the
+        // same value and the two would agree.
         editing.select_point(0);
-        editing.select_point(1, true);
         sla_selected_support_setting_changed(editing, SlaSupportPointField::TipDiameter, 0.8);
+        editing.select_point(1, true);
 
         const SlaSupportSelectionView view = selection_support_view(editing);
 
@@ -341,9 +344,11 @@ TEST_CASE(
     SECTION("Points that disagree only on a size show the geometry and no size")
     {
         SlaSupportPointsEditing editing = make_editing();
+        // Point 0 alone is given the stem diameter, and point 1 joins the selection with the zero
+        // it was made with, so the two disagree on that size and on nothing else.
         editing.select_point(0);
-        editing.select_point(1, true);
         sla_selected_support_setting_changed(editing, SlaSupportPointField::StemDiameter, 1.5);
+        editing.select_point(1, true);
 
         const SlaSupportSelectionView view = selection_support_view(editing);
 
