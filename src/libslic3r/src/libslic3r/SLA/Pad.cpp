@@ -30,6 +30,7 @@ using Slic3r::Domain::its_merge;
 namespace Slic3r { namespace sla {
 
 using Slic3r::Biz::Algorithms::Tesselate::triangulate_expolygon_3d;
+using Slic3r::Biz::Algorithms::Tesselate::triangulate_expolygons_3d;
 using Slic3r::Biz::Algorithms::Tesselate::NORMALS_UP;
 using Slic3r::Biz::Algorithms::Tesselate::NORMALS_DOWN;
 
@@ -182,13 +183,11 @@ struct PadConfig3D {
 
     /// The z where the open cells of the infill begin, that is, the top of the cells. The object
     /// rests on the solid skin under the top face and, in a raft with a cavity, on the floor of
-    /// the cavity, so the cells may not reach into either of them. The skin is what is left of the
-    /// raft height after the cells.
+    /// the cavity, so the cells may not reach into either of them, which is the lower of the two.
+    /// The skin is what is left of the raft height after the cells.
     inline double infill_cells_top_z() const
     {
-        double z = -infill.skin_mm;
-        double floor_z = -wing_height;
-        return z > floor_z ? z : floor_z;
+        return -std::max(infill.skin_mm, wing_height);
     }
 };
 
@@ -562,11 +561,13 @@ indexed_triangle_set create_infill_geometry(const PadInfill & infill,
         its_merge(ret, straight_walls(ribs.contour, z_ceiling, z_floor));
         for (const Polygon &h : ribs.holes)
             its_merge(ret, straight_walls(h, z_ceiling, z_floor));
-
-        // The cells are closed at the top by the ribs, so the ceiling of a cell is the floor of the
-        // skin above it and no cell ever reaches under the object.
-        its_merge(ret, triangulate_expolygon_3d(ribs, z_ceiling, NORMALS_DOWN));
     }
+
+    // The cells are closed at the top by a ceiling, which is the underside of the skin above them,
+    // so no cell ever reaches under the object and the raft is still one closed solid. What stands
+    // on top of the ribs is the skin itself, which needs no face of its own there.
+    thr();
+    its_merge(ret, triangulate_expolygons_3d(infill.cells, z_ceiling, NORMALS_DOWN));
 
     return ret;
 }

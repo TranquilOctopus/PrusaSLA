@@ -180,3 +180,34 @@ TEST_CASE("A filled raft keeps a solid skin under its top face", "[SLA][RaftInfi
     CHECK(cells.holes > 0);
     CHECK(cells.area < layer_at(solid.mesh, cell_z).area);
 }
+
+TEST_CASE("The cells of a filled raft stop below the cavity the object sits in", "[SLA][RaftInfill]")
+{
+    // A raft with a cavity: the object rests on the floor of the cavity, which is the top of the
+    // raft material in the middle, so not even a thin skin may let a cell reach up into it.
+    sla::PadConfig grid = infilled_raft(Domain::sla::RaftInfillType::Grid);
+    grid.wall_height_mm = 1.5;
+
+    sla::PadConfig none          = grid;
+    none.infill.type             = Domain::sla::RaftInfillType::None;
+
+    PadByproducts solid, filled;
+    test_pad("20mm_cube.obj", none, solid);
+    test_pad("20mm_cube.obj", grid, filled);
+
+    // Between the top face and the floor of the cavity a filled raft is the solid raft: the same
+    // ring of material around the cavity the object sits in, with no cell in it.
+    const double cavity_z = -0.5 * grid.wall_height_mm;
+    const Layer  in_cavity = layer_at(filled.mesh, cavity_z);
+    const Layer  reference = layer_at(solid.mesh, cavity_z);
+    REQUIRE(reference.holes > 0);
+    CHECK(in_cavity.holes == reference.holes);
+    CHECK(in_cavity.area == Approx(reference.area));
+
+    // Under the floor of the cavity, which is the top of the slab on the build plate, the pattern is
+    // open over its whole height.
+    const double cell_z = -(grid.full_height() + grid.wall_height_mm) / 2.;
+    const Layer  cells  = layer_at(filled.mesh, cell_z);
+    CHECK(cells.holes > 0);
+    CHECK(cells.area < layer_at(solid.mesh, cell_z).area);
+}
