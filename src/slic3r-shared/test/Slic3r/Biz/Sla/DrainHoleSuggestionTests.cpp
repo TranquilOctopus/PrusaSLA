@@ -247,8 +247,12 @@ TEST_CASE("DrainHoleSuggestion - the hole is placed in the coordinates of the mo
     mesh_to_world.translate(Vec3d{100., 50., 3.});
     mesh_to_world.scale(2.);
 
+    // The issue is where the slice found it, which is in the frame of the plate, so the point in
+    // the cup is pulled through the transformation before it is handed over.
     const Vec3d issue_in_the_cup{0.4, 0.3, 2.};
-    const auto suggestion = suggest_drain_hole(aabb, mesh_to_world, SlaIssue::Kind::Cup, issue_in_the_cup);
+    const Vec3d issue_on_the_plate = mesh_to_world * issue_in_the_cup;
+    const auto suggestion =
+        suggest_drain_hole(aabb, mesh_to_world, SlaIssue::Kind::Cup, issue_on_the_plate);
 
     REQUIRE(suggestion.has_value());
     // The roof of the cup is at z = 15 in the mesh, which is z = 33 on the plate.
