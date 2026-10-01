@@ -26,6 +26,7 @@
 #include <Slic3r/App/Plater/SlaDrainHolesEditing.hpp>
 #include <Slic3r/Biz/Algorithms/AABBMesh.hpp>
 #include <Slic3r/Biz/Algorithms/TriangleMesh.hpp>
+#include <Slic3r/Biz/CGAL/Algorithms/MeshBoolean.hpp>
 #include <Slic3r/Domain/TriangleMesh.hpp>
 #include <Slic3r/Domain/Types.hpp>
 #include <Slic3r/Utils.hpp>
@@ -36,7 +37,8 @@
 using namespace Slic3r;
 using Catch::Approx;
 
-namespace TriMesh = Slic3r::Biz::Algorithms::TriangleMesh;
+namespace TriMesh     = Slic3r::Biz::Algorithms::TriangleMesh;
+namespace MeshBoolean = Slic3r::Biz::CGAL::Algorithms::MeshBoolean;
 
 namespace {
 
@@ -52,7 +54,7 @@ struct HollowParams
     double closing   = 0.5;
 };
 
-// A model to hollow: the positive CSG parts it is made of and the merged outer surface to measure
+// A model to hollow: the positive CSG parts it is made of and the outer surface to measure the wall
 // against. The CSG parts only point into the meshes, so the meshes are kept next to them.
 struct Model
 {
@@ -61,6 +63,28 @@ struct Model
     std::vector<csg::CSGPart> parts;
     indexed_triangle_set outer;
 };
+
+// The outer surface of the model: the surface a solid print of it would have, which is what the
+// wall of the hollow print is measured against. A single part is its own outer surface. More than
+// one part is not the pile of their surfaces that csgmesh_merge_positive_parts() makes: that only
+// concatenates, so where two parts stand on each other both of the faces they share stay in it and
+// they lie inside the solid - the bottom disc of the neck and the top of the body under it, in the
+// plane z = 8, the bottom of the arm and the top of the base under it, in the plane z = 10. The
+// cavity runs straight through both of those planes, and a face in the middle of the solid is not
+// a surface the resin can reach, so a wall measured against one of them is measured against
+// nothing. Union the parts for real, the way the CSG of a model with more volumes is.
+indexed_triangle_set outer_surface(const std::vector<indexed_triangle_set>& meshes)
+{
+    if (meshes.size() < 2)
+        return meshes.front();
+
+    indexed_triangle_set outer = meshes.front();
+
+    for (size_t i = 1; i < meshes.size(); ++i)
+        MeshBoolean::cgal::plus(outer, meshes[i]);
+
+    return outer;
+}
 
 Model make_model(std::string name, std::vector<indexed_triangle_set> meshes)
 {
@@ -79,7 +103,7 @@ Model make_model(std::string name, std::vector<indexed_triangle_set> meshes)
         model.parts.emplace_back(&mesh, csg::CSGType::Union);
     }
 
-    model.outer = csg::csgmesh_merge_positive_parts(model.parts);
+    model.outer = outer_surface(model.meshes);
     REQUIRE(!model.outer.indices.empty());
 
     return model;
