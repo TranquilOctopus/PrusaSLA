@@ -23,6 +23,19 @@ using Catch::Approx;
 
 namespace {
 
+// A model mesh is kept in scaled coordinates: one unit is this many millimetres, so a length of it
+// is multiplied by it to get mm and an area by it squared. The meshes the importers hand over are
+// scaled up, and so is every mesh these models are built from.
+constexpr double sf = Slic3r::Biz::Algorithms::Scaling::SCALING_FACTOR;
+
+// A mesh in the coordinates a model keeps it in, the way the importers hand one over. The engine
+// searches those, and the helpers below convert back to mm and mm² on the way out.
+Slic3r::Domain::TriangleMesh into_model_coordinates(Slic3r::Domain::TriangleMesh mesh)
+{
+    mesh.scale(float(1. / sf));
+    return mesh;
+}
+
 // A model with one object holding a box of the given size, standing on the plate. The box can be
 // tilted in the mesh itself, because that is what the rotation optimizer works on.
 struct BoxModel
@@ -32,7 +45,8 @@ struct BoxModel
 
     BoxModel(double x, double y, double z, double tilt_about_x_rad = 0.)
     {
-        Slic3r::Domain::TriangleMesh mesh{Slic3r::Biz::Algorithms::TriangleMesh::make_cube(x, y, z)};
+        Slic3r::Domain::TriangleMesh mesh =
+            into_model_coordinates(Slic3r::Biz::Algorithms::TriangleMesh::make_cube(x, y, z));
         if (tilt_about_x_rad != 0.) {
             mesh.transform(Slic3r::Transform3d{
                 Eigen::AngleAxisd{tilt_about_x_rad, Slic3r::Vec3d::UnitX()}});
@@ -53,7 +67,7 @@ Slic3r::Transform3d rotation_transform(const Slic3r::Vec2d& rotation)
     return t;
 }
 
-// Height of the object's mesh after rotating it by the given X/Y angles.
+// Height of the object's mesh after rotating it by the given X/Y angles, in mm.
 double height_after_rotation(const Slic3r::Domain::ModelObject& object, const Slic3r::Vec2d& rotation)
 {
     const Slic3r::Transform3d trafo = rotation_transform(rotation);
@@ -66,20 +80,21 @@ double height_after_rotation(const Slic3r::Domain::ModelObject& object, const Sl
             max_z = std::max(max_z, z);
         }
     }
-    return max_z - min_z;
+    return (max_z - min_z) * sf;
 }
 
 struct Faces
 {
-    // Area of the biggest face of the mesh.
+    // Area of the biggest face of the mesh, in mm².
     double largest{0.};
-    // Area of the biggest face lying flat on the build plate.
+    // Area of the biggest face lying flat on the build plate, in mm².
     double largest_horizontal{0.};
     // Normal of the biggest face of the mesh.
     Slic3r::Vec3d largest_normal{Slic3r::Vec3d::Zero()};
 };
 
-// The faces of the object's mesh after rotating it by the given X/Y angles.
+// The faces of the object's mesh after rotating it by the given X/Y angles. The vertices are scaled,
+// so the areas are scaled down to the mm² the tests compare against.
 Faces faces_after_rotation(const Slic3r::Domain::ModelObject& object, const Slic3r::Vec2d& rotation)
 {
     const Slic3r::Transform3d trafo = rotation_transform(rotation);
@@ -91,7 +106,7 @@ Faces faces_after_rotation(const Slic3r::Domain::ModelObject& object, const Slic
             const Slic3r::Vec3d p1{trafo * its.vertices[face[1]].cast<double>()};
             const Slic3r::Vec3d p2{trafo * its.vertices[face[2]].cast<double>()};
             const Slic3r::Vec3d cross{(p1 - p0).cross(p2 - p0)};
-            const double area = 0.5 * cross.norm();
+            const double area = 0.5 * cross.norm() * sf * sf;
             if (area > faces.largest) {
                 faces.largest        = area;
                 faces.largest_normal = cross.normalized();
@@ -104,7 +119,10 @@ Faces faces_after_rotation(const Slic3r::Domain::ModelObject& object, const Slic
     return faces;
 }
 
-// A model with one object holding the mesh it is given.
+// A model with one object holding the mesh it is given, in millimetres, which is scaled into the
+// coordinates a model is kept in: the goals that slice the mesh (least peel, no cups) cut their
+// planes at that Z and read the areas of the slices back out of it, so a mesh left in millimetres
+// would be measured as a trillionth of its size.
 struct MeshModel
 {
     Slic3r::Domain::Model model;
@@ -112,8 +130,9 @@ struct MeshModel
 
     explicit MeshModel(Slic3r::Domain::TriangleMesh mesh)
     {
+        Slic3r::Domain::TriangleMesh scaled_mesh = into_model_coordinates(std::move(mesh));
         object = model.add_object();
-        Slic3r::Biz::Algorithms::ModelObject::add_volume(object, std::move(mesh));
+        Slic3r::Biz::Algorithms::ModelObject::add_volume(object, std::move(scaled_mesh));
         object->add_instance();
     }
 };
@@ -163,8 +182,6 @@ CoarseSlices coarse_slices_after_rotation(
     double step_mm = 1.
 )
 {
-    constexpr double sf = Slic3r::Biz::Algorithms::Scaling::SCALING_FACTOR;
-
     CoarseSlices result;
     const Slic3r::Domain::TriangleMesh mesh = Slic3r::sla::auto_orient_mesh(object);
     if (mesh.its.vertices.empty())
@@ -184,10 +201,12 @@ CoarseSlices coarse_slices_after_rotation(
         return result;
 
     // The planes sit between the extremes, as they do in the engine: a plane on a horizontal face
-    // of the mesh does not cut it.
+    // of the mesh does not cut it. The Z of the mesh is scaled, so the step of the planes is scaled
+    // with it too: a millimetre of height is 1 / sf of its units.
+    const double step = 1. / sf;
     std::vector<float> zs;
-    for (float z = zmin + float(step_mm / 2.); z < zmax; z += float(step_mm))
-        zs.push_back(z);
+    for (double z = double(zmin) + step_mm * step / 2.; z < double(zmax); z += step_mm * step)
+        zs.push_back(float(z));
     if (zs.empty())
         return result;
 
@@ -355,9 +374,9 @@ TEST_CASE("Auto orient: no cups turns an upside down cup off the plate", "[SLA][
     CHECK(turned.cup_count == 0);
     CHECK(turned.cup_opening_mm2 == 0.);
 
-    // Its opening (the local +Z of the cup) may end up sideways, which is cup free too, but it may
-    // not end up facing the plate.
-    const Slic3r::Vec3d opening{rotation_transform(rotation) * Slic3r::Vec3d::UnitZ()};
+    // Its opening (the pocket, which is the local -Z of the cup after the turn) may end up sideways,
+    // which is cup free too, but it may not end up facing the plate.
+    const Slic3r::Vec3d opening{rotation_transform(rotation) * Slic3r::Vec3d::NegZ()};
     CHECK(opening.z() > -0.5);
 
     // A second run finds the same rotation.
