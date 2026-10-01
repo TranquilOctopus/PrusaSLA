@@ -5,7 +5,8 @@
 // thicknesses and hollowing_quality / hollowing_closing_distance settings, points are sampled on
 // the inner surface and the distance to the outer model is measured for each of them. The observed
 // min / mean / max are reported for every case so a regression shows how far it moved, not only
-// that a bound was crossed.
+// that a bound was crossed, and the sample that came closest is reported with the point of the
+// outer model it was measured against, so a minimum under the bound says where the wall is thin.
 //
 // The one test at the end is about the drain holes rather than the wall: what the hollow gizmo
 // stores when the user clicks a hole onto the surface, and whether cutting that hole opens the
@@ -175,13 +176,22 @@ struct WallStats
     double mean    = 0.;
     double max     = 0.;
     size_t samples = 0;
+
+    // Where the wall is thinnest and what it is thin against: the sample of the inner surface that
+    // came closest to the outer model, the point of the outer model that is closest to that sample,
+    // and how many of the samples are under the bound the case checks. A minimum of zero on its own
+    // says that something is wrong with the wall and neither what nor where.
+    size_t thin           = 0;
+    Domain::Vec3d thin_at = Domain::Vec3d::Zero();
+    Domain::Vec3d thin_to = Domain::Vec3d::Zero();
 };
 
-// The distance from points on the inner surface to the outer surface of the model. A face centroid
-// is sampled rather than a vertex: it belongs to exactly one triangle, so no part of the surface is
-// weighted by how many triangles happen to meet at a vertex, and a centroid always lies on the face
-// it belongs to.
-WallStats measure_wall(const indexed_triangle_set& interior, const AABBMesh& outer)
+// The distance from points on the inner surface to the outer surface of the model, where the
+// thinnest of those walls is and how many of them are under `bound`. A face centroid is sampled
+// rather than a vertex: it belongs to exactly one triangle, so no part of the surface is weighted
+// by how many triangles happen to meet at a vertex, and a centroid always lies on the face it
+// belongs to.
+WallStats measure_wall(const indexed_triangle_set& interior, const AABBMesh& outer, double bound)
 {
     WallStats stats;
     stats.min = std::numeric_limits<double>::infinity();
@@ -198,9 +208,19 @@ WallStats measure_wall(const indexed_triangle_set& interior, const AABBMesh& out
              + interior.vertices[size_t(face[2])].cast<double>())
             / 3.;
 
-        const double d = std::sqrt(outer.squared_distance(p));
+        int closest_face      = -1;
+        Domain::Vec3d nearest = Domain::Vec3d::Zero();
+        const double d        = std::sqrt(outer.squared_distance(p, closest_face, nearest));
 
-        stats.min = std::min(stats.min, d);
+        if (d < stats.min) {
+            stats.min     = d;
+            stats.thin_at = p;
+            stats.thin_to = nearest;
+        }
+
+        if (d < bound)
+            ++stats.thin;
+
         stats.max = std::max(stats.max, d);
         sum += d;
         ++stats.samples;
@@ -256,8 +276,10 @@ void check_wall(const Model& model, const HollowParams& params)
     );
     REQUIRE(!inner.indices.empty());
 
+    const double required = params.thickness - tolerance;
+
     const AABBMesh outer(model.outer);
-    const WallStats stats = measure_wall(inner, outer);
+    const WallStats stats = measure_wall(inner, outer, required);
     REQUIRE(stats.samples > 0);
 
     INFO(
@@ -284,7 +306,19 @@ void check_wall(const Model& model, const HollowParams& params)
         << "mm"
     );
 
-    const double required = params.thickness - tolerance;
+    // Where the thinnest of those walls is, so a minimum that went under the bound can be read
+    // rather than only reported: which point of the inner surface it is, the point of the outer
+    // model that point is measured against, and how much of the interior is under the bound at all.
+    INFO(
+        "the thinnest wall is the sample at ("
+        << stats.thin_at.x() << ", " << stats.thin_at.y() << ", " << stats.thin_at.z()
+        << ")mm, measured against the outer model at ("
+        << stats.thin_to.x() << ", " << stats.thin_to.y() << ", " << stats.thin_to.z()
+        << ")mm, and "
+        << stats.thin << " of " << stats.samples << " samples are under the bound of " << required
+        << "mm"
+    );
+
     CHECK(stats.min >= required);
 }
 
