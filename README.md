@@ -142,15 +142,15 @@ branch, one commit, the box ticked in the same commit.
 
 ## Progress
 
-**305 of 344 todos done (89%)** · updated 2026-10-01 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**312 of 351 todos done (89%)** · updated 2026-10-02 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
-| M0: Foundation | 67/68 | `████████████` 99% |
+| M0: Foundation | 68/69 | `████████████` 99% |
 | M1: Look, feel and SLA-first shell | 44/45 | `████████████` 98% |
-| M2: SLA editing tools (porting the legacy gizmos) | 86/87 | `████████████` 99% |
+| M2: SLA editing tools (porting the legacy gizmos) | 91/92 | `████████████` 99% |
 | M3: Resin profile import (Chitubox, Lychee and others) | 24/28 | `██████████░░` 86% |
-| M4: Engine quality (measure first; every PR includes before/after metrics) | 25/35 | `█████████░░░` 71% |
+| M4: Engine quality (measure first; every PR includes before/after metrics) | 26/36 | `█████████░░░` 72% |
 | M5: Formats and inspection | 38/43 | `███████████░` 88% |
 | M6: Quality gates and release | 16/21 | `█████████░░░` 76% |
 | M7: Excellent auto-supports *(parked)* | 5/17 | `████░░░░░░░░` 29% |
