@@ -6,6 +6,7 @@ SlaSupportsPanelState sla_supports_panel_state(
     std::size_t printable_models,
     std::size_t selected_printable_models,
     std::size_t models_with_supports,
+    std::size_t selected_models_with_supports,
     bool generating
 )
 {
@@ -20,7 +21,11 @@ SlaSupportsPanelState sla_supports_panel_state(
     state.edit_supports_enabled         = something_to_support;
     state.auto_support_all_enabled      = something_to_support;
     state.auto_support_selected_enabled = idle && selected_printable_models > 0;
-    state.slice_call_to_action          = idle && every_model_supported;
+    // Removing points needs points to remove, so both rows follow the models that have them and
+    // neither of them is on while a generation is running (M2.32).
+    state.clear_all_enabled      = idle && models_with_supports > 0;
+    state.clear_selected_enabled = idle && selected_models_with_supports > 0;
+    state.slice_call_to_action   = idle && every_model_supported;
 
     if (generating) {
         state.status = SlaSupportsStatus::Generating;

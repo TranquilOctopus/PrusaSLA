@@ -282,6 +282,8 @@ static std::string to_string(Biz::UndoSnapshotType type, bool is_sla)
         return _u8L("Apply SLA support points");
     case Type::SlaDrainHolesApply:
         return _u8L("Apply SLA drain holes");
+    case Type::SlaSupportPointsClear:
+        return _u8L("Remove SLA support points");
     }
     PANIC("Unknown option");
     return {};

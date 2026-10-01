@@ -136,6 +136,13 @@ private:
     void apply_generated_points();
     void discard_generated_points();
 
+    // The tool's own "Remove all points" (M2.32): takes every support point of the model the tool
+    // works on away, after asking how many go, in one undo snapshot. It drops the points that are
+    // only waiting to be applied and the edit session of the tool first, so nothing of them can come
+    // back over the cleared model.
+    void remove_all_points();
+    void remove_all_points_now();
+
     // Editing helpers
     void begin_editing();
     void end_editing();

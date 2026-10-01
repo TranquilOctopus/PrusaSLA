@@ -513,6 +513,44 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
     That list says to add any option found later, which is a job for the M7 research pass: a row
     claiming a Lychee option this fork has never seen would be a guess written into a parity table.
     NOT BUILT (docs only, nothing to compile) and NOT CHECKED in a running app.
+- [x] **M2.32** The support points of a model can be cleared without opening the support points tool
+  (user: "It doesn't seem like there's a way to clear the supports when you've left the dialogue
+  either."). Next to "Auto support selected" / "Auto support all" the Preview sidebar's Supports
+  section gets "Clear selected" and "Clear all"; the support points tool gets "Remove all points"
+  for the model it works on; the object context menu gets "Clear support points". Every one of them
+  asks how many points of how many models go, and takes the points away in one undo snapshot.
+  · M · needs M2.17d
+    Result: by OpenCode, NOT BUILT (a human builds and runs the tests). One module carries the
+    action so the three entries cannot drift apart: the new `App/Plater/SlaSupportPointsClear.{hpp,cpp}`
+    (`sla_support_points_clear_plan()`, `sla_support_points_clear_question()`,
+    `clear_sla_support_points()`), listed in CMake once. The plan is the models of the caller's list
+    that *have* points (a model with none is left out, so nothing without points is ever written),
+    with the points they carry between them; the question names both counts and that one undo brings
+    them back; the clear takes ONE snapshot before the first model is touched and then goes through
+    `SceneInteractor::modify_sla_support_points` per model, setting `sla_points_status` to
+    `NoPoints`, which is what the M2.21 preview service watches for, so the tree and the lift drop
+    by themselves. Nothing here slices: the points only reach the project as slicing input.
+    The undo step has its own type, `UndoSnapshotType::SlaSupportPointsClear` ("Remove SLA support
+    points"), so the history reads as removing points rather than applying them. In Preview,
+    `SidebarSlaSupports` gets a "Clear selected" / "Clear all" row under the Auto support row, driven
+    by the same pure rule as the rest of the section: `sla_supports_panel_state()` takes one count
+    more (the selected models that have points) and answers `clear_selected_enabled` /
+    `clear_all_enabled`, both off while a generation runs and on only where there is something to
+    remove; the section asks through the dialog manager and refreshes itself after. In the tool, the
+    dialog gets a "Remove all points" row and the `Callbacks::remove_all_points` slot, which the
+    gizmo answers with `remove_all_points()` / `remove_all_points_now()` (new methods, kept apart
+    from what M2.31 changes in the same file): it asks, and on yes drops the pending generated points
+    and the edit session first, then clears the model, so nothing waiting to be applied can land on
+    it, and it resets what Discard would restore. The row is on while the model has points
+    (`set_remove_all_points_enabled`, next to the point count it follows). The object context menu
+    gets `MenuItemName::ClearSupportPoints`, an SLA-only row (visible for a resin printer, enabled
+    while a selected model on a build plate has points) with the same plan, question and clear.
+    Tests: the new `test/Slic3r/App/Plater/SlaSupportPointsClearTests.cpp` (the plan leaves out the
+    models without points and adds the counts up, the question names the counts, the clear takes the
+    points away and leaves `NoPoints` under exactly one `SlaSupportPointsClear` snapshot, a model
+    without points is not written, one undo brings the points and their status back through
+    `SceneInteractor::set_state`, and an empty plan asks nothing and takes nothing) plus five cases
+    for the two new panel flags in `SlaSupportsPanelTests.cpp`. NOT CHECKED in a running app.
 
 ## M3: Resin profile import (Chitubox, Lychee and others)
 

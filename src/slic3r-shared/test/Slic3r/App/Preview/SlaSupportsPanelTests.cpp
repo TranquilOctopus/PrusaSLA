@@ -9,7 +9,7 @@ TEST_CASE("sla_supports_panel_state - an empty build plate", "[sla_supports_pane
 {
     SECTION("nothing to support and nothing to say")
     {
-        const auto state = sla_supports_panel_state(0, 0, 0, false);
+        const auto state = sla_supports_panel_state(0, 0, 0, 0, false);
 
         CHECK_FALSE(state.edit_supports_enabled);
         CHECK_FALSE(state.auto_support_selected_enabled);
@@ -20,7 +20,7 @@ TEST_CASE("sla_supports_panel_state - an empty build plate", "[sla_supports_pane
 
     SECTION("a running generation says so")
     {
-        const auto state = sla_supports_panel_state(0, 0, 0, true);
+        const auto state = sla_supports_panel_state(0, 0, 0, 0, true);
 
         CHECK(state.status == SlaSupportsStatus::Generating);
     }
@@ -30,7 +30,7 @@ TEST_CASE("sla_supports_panel_state - models on the build plate", "[sla_supports
 {
     SECTION("a model without support points still needs them")
     {
-        const auto state = sla_supports_panel_state(2, 1, 1, false);
+        const auto state = sla_supports_panel_state(2, 1, 1, 1, false);
 
         CHECK(state.edit_supports_enabled);
         CHECK(state.auto_support_selected_enabled);
@@ -41,7 +41,7 @@ TEST_CASE("sla_supports_panel_state - models on the build plate", "[sla_supports
 
     SECTION("no selected model leaves only Auto support all")
     {
-        const auto state = sla_supports_panel_state(2, 0, 1, false);
+        const auto state = sla_supports_panel_state(2, 0, 1, 0, false);
 
         CHECK(state.auto_support_all_enabled);
         CHECK_FALSE(state.auto_support_selected_enabled);
@@ -50,7 +50,7 @@ TEST_CASE("sla_supports_panel_state - models on the build plate", "[sla_supports
 
     SECTION("a model without points is the one selected, and Auto support all is on it too")
     {
-        const auto state = sla_supports_panel_state(1, 1, 0, false);
+        const auto state = sla_supports_panel_state(1, 1, 0, 0, false);
 
         CHECK(state.auto_support_selected_enabled);
         CHECK(state.auto_support_all_enabled);
@@ -59,7 +59,7 @@ TEST_CASE("sla_supports_panel_state - models on the build plate", "[sla_supports
 
     SECTION("every model with points asks for the Slice button")
     {
-        const auto state = sla_supports_panel_state(3, 2, 3, false);
+        const auto state = sla_supports_panel_state(3, 2, 3, 3, false);
 
         CHECK(state.slice_call_to_action);
         CHECK(state.status == SlaSupportsStatus::ReadyToSlice);
@@ -67,10 +67,53 @@ TEST_CASE("sla_supports_panel_state - models on the build plate", "[sla_supports
 
     SECTION("a count above the model count still counts as every model supported")
     {
-        const auto state = sla_supports_panel_state(2, 2, 3, false);
+        const auto state = sla_supports_panel_state(2, 2, 3, 3, false);
 
         CHECK(state.slice_call_to_action);
         CHECK(state.status == SlaSupportsStatus::ReadyToSlice);
+    }
+}
+
+TEST_CASE("sla_supports_panel_state - removing the support points (M2.32)", "[sla_supports_panel]")
+{
+    SECTION("nothing to remove leaves both rows off")
+    {
+        const auto state = sla_supports_panel_state(2, 1, 0, 0, false);
+
+        CHECK_FALSE(state.clear_selected_enabled);
+        CHECK_FALSE(state.clear_all_enabled);
+    }
+
+    SECTION("a model with points is what turns both rows on")
+    {
+        const auto state = sla_supports_panel_state(2, 1, 1, 1, false);
+
+        CHECK(state.clear_selected_enabled);
+        CHECK(state.clear_all_enabled);
+    }
+
+    SECTION("points only outside the selection leave Clear selected off")
+    {
+        const auto state = sla_supports_panel_state(3, 1, 2, 0, false);
+
+        CHECK_FALSE(state.clear_selected_enabled);
+        CHECK(state.clear_all_enabled);
+    }
+
+    SECTION("no model at all leaves both rows off")
+    {
+        const auto state = sla_supports_panel_state(0, 0, 0, 0, false);
+
+        CHECK_FALSE(state.clear_selected_enabled);
+        CHECK_FALSE(state.clear_all_enabled);
+    }
+
+    SECTION("a running generation owns the points and both rows")
+    {
+        const auto state = sla_supports_panel_state(2, 1, 1, 1, true);
+
+        CHECK_FALSE(state.clear_selected_enabled);
+        CHECK_FALSE(state.clear_all_enabled);
     }
 }
 
@@ -78,7 +121,7 @@ TEST_CASE("sla_supports_panel_state - a running generation", "[sla_supports_pane
 {
     SECTION("nothing may start while one is running")
     {
-        const auto state = sla_supports_panel_state(2, 2, 1, true);
+        const auto state = sla_supports_panel_state(2, 2, 1, 1, true);
 
         CHECK_FALSE(state.edit_supports_enabled);
         CHECK_FALSE(state.auto_support_selected_enabled);
@@ -89,7 +132,7 @@ TEST_CASE("sla_supports_panel_state - a running generation", "[sla_supports_pane
 
     SECTION("the generation wins over every model already having points")
     {
-        const auto state = sla_supports_panel_state(2, 2, 2, true);
+        const auto state = sla_supports_panel_state(2, 2, 2, 2, true);
 
         CHECK(state.status == SlaSupportsStatus::Generating);
         CHECK_FALSE(state.slice_call_to_action);

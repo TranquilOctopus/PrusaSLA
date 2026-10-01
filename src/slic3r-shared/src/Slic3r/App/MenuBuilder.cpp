@@ -264,6 +264,8 @@ std::string MenuBuilder::item_name_translated(UniversalMenuItemName menu_item_na
 
                 case MenuItemName::InvalidateCutInfo:
                     return Biz::_u8L("Invalidate cut info");
+                case MenuItemName::ClearSupportPoints:
+                    return Biz::_u8L("Clear support points");
 
                 case MenuItemName::Plugins:
                     return Biz::_u8L("Plugins");

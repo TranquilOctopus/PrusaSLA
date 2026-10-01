@@ -54,6 +54,9 @@ public:
         std::function<void()> preset_medium = []() {};
         std::function<void()> preset_heavy = []() {};
         std::function<void()> auto_support_all = []() {};
+        // Take the support points of the model the tool works on away (M2.32). It asks first, like
+        // the same action of the Preview sidebar and of the object context menu do.
+        std::function<void()> remove_all_points = []() {};
 
         // The user started and stopped changing one of the value sliders (M2.6b). Every value the
         // tool writes on the points comes from one of them, and a drag of a slider reports a value
@@ -69,6 +72,9 @@ public:
     void set_generate_enabled(bool enabled);
     void set_auto_support_all_enabled(bool enabled);
     void set_apply_enabled(bool enabled);
+    /// "Remove all points" is on while the model the tool works on has support points to remove
+    /// (M2.32), so the row asks for nothing where there is nothing to clear.
+    void set_remove_all_points_enabled(bool enabled);
     void set_point_count(size_t count);
     void set_head_diameter(double diameter_mm);
     void set_pillar_diameter(double diameter_mm);
@@ -137,6 +143,7 @@ private:
     Yoga::LayoutButton* m_auto_support_all_button = nullptr;
     Yoga::LayoutButton* m_apply_button = nullptr;
     Yoga::LayoutButton* m_discard_button = nullptr;
+    Yoga::LayoutButton* m_remove_all_points_button = nullptr;
     Yoga::LayoutButton* m_clipping_plane_reset_button = nullptr;
     Yoga::ToggleButton* m_lock_island_supports_checkbox = nullptr;
     Yoga::LayoutButton* m_preset_mini_button = nullptr;

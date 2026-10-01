@@ -1,4 +1,5 @@
 #include "Slic3r/App/Plater/SlaSupportPointsGizmo.hpp"
+#include "Slic3r/App/Plater/SlaSupportPointsClear.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsEditing.hpp"
 #include "Slic3r/App/Plater/SlaSupportToolShortcuts.hpp"
 
@@ -86,6 +87,7 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     m_dialog->callbacks().apply = [this]() { this->apply_generated_points(); };
     m_dialog->callbacks().discard = [this]() { this->discard_generated_points(); };
     m_dialog->callbacks().auto_support_all = [this]() { this->auto_support(); };
+    m_dialog->callbacks().remove_all_points = [this]() { this->remove_all_points(); };
     m_dialog->callbacks().value_editing_started = [this]() { this->on_value_editing_started(); };
     m_dialog->callbacks().value_editing_ended = [this]() { this->on_value_editing_ended(); };
     m_dialog->callbacks().density_changed = [this](double value)
@@ -468,6 +470,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
         m_dialog->set_generate_enabled(false);
         m_dialog->set_apply_enabled(false);
         m_dialog->set_auto_support_all_enabled(false);
+        m_dialog->set_remove_all_points_enabled(false);
         m_dialog->set_point_count(0);
         return;
     }
@@ -477,6 +480,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
         m_dialog->set_generate_enabled(false);
         m_dialog->set_apply_enabled(false);
         m_dialog->set_auto_support_all_enabled(false);
+        m_dialog->set_remove_all_points_enabled(false);
         m_dialog->set_point_count(0);
         return;
     }
@@ -487,6 +491,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
         m_dialog->set_generate_enabled(false);
         m_dialog->set_apply_enabled(false);
         m_dialog->set_auto_support_all_enabled(false);
+        m_dialog->set_remove_all_points_enabled(false);
         m_dialog->set_point_count(0);
         return;
     }
@@ -499,6 +504,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
         m_dialog->set_generate_enabled(false);
         m_dialog->set_apply_enabled(false);
         m_dialog->set_auto_support_all_enabled(false);
+        m_dialog->set_remove_all_points_enabled(false);
         m_dialog->set_point_count(0);
         return;
     }
@@ -508,6 +514,7 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
         m_dialog->set_generate_enabled(false);
         m_dialog->set_apply_enabled(false);
         m_dialog->set_auto_support_all_enabled(false);
+        m_dialog->set_remove_all_points_enabled(false);
         m_dialog->set_point_count(0);
         return;
     }
@@ -523,6 +530,8 @@ void SlaSupportPointsGizmo::on_scene_selection_changed(
 
     size_t existing_count = model_object->sla_support_points.size();
     m_dialog->set_point_count(existing_count);
+    // "Remove all points" is on while there are points to remove (M2.32).
+    m_dialog->set_remove_all_points_enabled(existing_count > 0);
 
     double head_diameter = 0.4;
     auto head_result = model_object->object_settings_sla.find("support_head_front_diameter");
@@ -708,6 +717,7 @@ void SlaSupportPointsGizmo::apply_generated_points()
     m_has_generated_points = false;
     m_dialog->set_apply_enabled(false);
     m_dialog->set_point_count(model_object->sla_support_points.size());
+    m_dialog->set_remove_all_points_enabled(!model_object->sla_support_points.empty());
 }
 
 void SlaSupportPointsGizmo::discard_generated_points()
@@ -723,6 +733,74 @@ void SlaSupportPointsGizmo::discard_generated_points()
     if (m_gizmo_controller) {
         m_gizmo_controller->deactivate_current_tool();
     }
+}
+
+// The "Remove all points" of the tool (M2.32). It asks first, the way the same action of the Preview
+// sidebar and of the object context menu does, and only an answer of yes removes anything.
+void SlaSupportPointsGizmo::remove_all_points()
+{
+    if (!m_selected_object_id.valid()) {
+        return;
+    }
+
+    Domain::Project& project = m_project_interactor.selected_project();
+    Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
+    if (!model_object) {
+        return;
+    }
+
+    const SlaSupportPointsClearPlan plan = sla_support_points_clear_plan({ model_object });
+    if (plan.empty()) {
+        return;
+    }
+
+    // The answer comes back later, and the user may have selected another model in the meantime. The
+    // plan names the model it was made for, so the answer only removes that one.
+    const ObjectID asked_for_object_id = m_selected_object_id;
+    AppServices::instance().dialog_manager().show_yesno_dialog(
+        _u8L("Clear support points"),
+        sla_support_points_clear_question(plan),
+        [this, asked_for_object_id](bool answer)
+        {
+            if (!answer || m_selected_object_id != asked_for_object_id) {
+                return;
+            }
+            this->remove_all_points_now();
+        }
+    );
+}
+
+void SlaSupportPointsGizmo::remove_all_points_now()
+{
+    if (!m_selected_object_id.valid()) {
+        return;
+    }
+
+    Domain::Project& project = m_project_interactor.selected_project();
+    Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
+    if (!model_object || model_object->sla_support_points.empty()) {
+        return;
+    }
+
+    const SlaSupportPointsClearPlan plan = sla_support_points_clear_plan({ model_object });
+    clear_sla_support_points(m_project_interactor, plan);
+
+    DialogSyncGuard guard(*this);
+
+    // Points that are only waiting to be applied belong to the points that are gone now, so they go
+    // with them instead of landing on the cleared model.
+    m_has_generated_points = false;
+    m_generated_support_points.reset();
+    end_editing();
+
+    // What Discard would bring back is the state the model is in now, which carries no points.
+    m_points_before_edit.clear();
+    m_status_before_edit = PointsStatus::NoPoints;
+
+    m_dialog->set_apply_enabled(false);
+    m_dialog->set_point_count(0);
+    m_dialog->set_remove_all_points_enabled(false);
+    update_point_visuals();
 }
 
 bool SlaSupportPointsGizmo::auto_support(const std::vector<ObjectID>& object_ids)
@@ -998,6 +1076,7 @@ void SlaSupportPointsGizmo::begin_editing()
     m_dialog->set_apply_enabled(true);
     m_dialog->set_generate_enabled(true);
     m_dialog->set_auto_support_all_enabled(true);
+    m_dialog->set_remove_all_points_enabled(!model_object->sla_support_points.empty());
 
     update_point_visuals();
 }
@@ -1051,6 +1130,7 @@ void SlaSupportPointsGizmo::apply_edited_points()
     });
 
     m_dialog->set_point_count(model_object->sla_support_points.size());
+    m_dialog->set_remove_all_points_enabled(!model_object->sla_support_points.empty());
     end_editing();
 }
 

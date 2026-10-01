@@ -5,6 +5,11 @@
 
 #include <boost/filesystem/path.hpp>
 #include <string>
+#include <vector>
+
+namespace Slic3r::Domain {
+class ModelObject;
+} // namespace Slic3r::Domain
 
 namespace Slic3r::App::Platform {
 class AbstractRenderModule;
@@ -101,6 +106,23 @@ private:
     void replace_selected_volume_with_stl();
 
     void reload_selection_from_disk();
+
+    /**
+     * @brief The selected models the SLA support points can be cleared on (M2.32).
+     *
+     * The models of the selection that sit on a build plate with a printable instance and carry
+     * support points, each of them once. A selection of another kind, a volume selection say, has
+     * none, which is what keeps the context menu row off.
+     */
+    std::vector<const Domain::ModelObject*> sla_selected_supportable_models() const;
+
+    /**
+     * @brief Removes the SLA support points of the selected models (M2.32).
+     *
+     * Asks with a yes/no dialog how many points of how many models go, and removes them in one undo
+     * snapshot when the answer is yes. Nothing here slices.
+     */
+    void clear_support_points_of_selection();
 
     Platform::AbstractRenderModule& m_render_module;
     MenuManager& m_menu_manager;

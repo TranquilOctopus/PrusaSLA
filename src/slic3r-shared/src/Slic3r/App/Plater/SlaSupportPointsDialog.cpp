@@ -320,6 +320,14 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     m_discard_button->callbacks().action = [this]()
     { m_callbacks.discard(); };
 
+    // Taking every point of the model away is here as well as in the Preview sidebar (M2.32): the
+    // tool knows how many points the model has, and the action asks before it removes them.
+    add_row_with_button(content(), &m_remove_all_points_button, _u8L("Remove all points"));
+    m_remove_all_points_button->callbacks().action = [this]()
+    { m_callbacks.remove_all_points(); };
+    // Nothing to remove until the tool is on a model that has points.
+    m_remove_all_points_button->set_enabled(false);
+
     this->add_separator(this->content());
 
     m_lock_island_supports_checkbox = content()->emplace_back<ToggleButton>(_u8L("Lock island supports"));
@@ -384,6 +392,11 @@ void SlaSupportPointsDialog::set_auto_support_all_enabled(bool enabled)
 void SlaSupportPointsDialog::set_apply_enabled(bool enabled)
 {
     m_apply_button->set_enabled(enabled);
+}
+
+void SlaSupportPointsDialog::set_remove_all_points_enabled(bool enabled)
+{
+    m_remove_all_points_button->set_enabled(enabled);
 }
 
 void SlaSupportPointsDialog::set_point_count(size_t count)
