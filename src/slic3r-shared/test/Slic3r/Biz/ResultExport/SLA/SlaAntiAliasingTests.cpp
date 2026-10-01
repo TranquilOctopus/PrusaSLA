@@ -68,9 +68,12 @@ constexpr size_t GOO_GREY_LEVEL_OFFSET = 190; // int16 big endian
 // padding, the two 25-byte software strings with 7 bytes of padding each, a 20-byte time stamp
 // with 4 bytes of padding, a 32-byte printer name with 4 bytes of padding, then seven words of
 // resolution, mirroring and preview count. What follows is the two fixed-size previews and the
-// 27 print parameters, with the 8-byte price unit as the last of them.
+// 27 print parameters, with the 8-byte price unit as the last of them. A preview carries a SEVEN
+// word sub-header (write_preview): reserved, width, height, bytes per pixel, the two offsets and
+// the type, and the pixels start at +28 (ctb.md), so each preview is 8 bytes longer than a
+// six-word count makes it and both of them together put the flag 8 bytes further out.
 constexpr size_t CTB_HEADER_BYTES  = 12 + (25 + 7) + (25 + 7) + (20 + 4) + (32 + 4) + 7 * 4;
-constexpr size_t CTB_PREVIEW_WORDS = 6; // the sub-header write_preview puts in front of the pixels
+constexpr size_t CTB_PREVIEW_WORDS = 7; // the sub-header write_preview puts in front of the pixels
 constexpr size_t CTB_PARAM_WORDS  = 29;
 constexpr size_t CTB_AA_OFFSET    = CTB_HEADER_BYTES + 2 * CTB_PREVIEW_WORDS * 4 + 800 * 600 * 3
                         + 400 * 300 + CTB_PARAM_WORDS * 4;
