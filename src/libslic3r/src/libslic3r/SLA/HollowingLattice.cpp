@@ -65,9 +65,16 @@ std::vector<double> strut_axes(double from, double to, double spacing_mm)
 }
 
 // A square prism of width_mm, centred on the line (u, v) of the two axes that are not its own, and
-// running the whole length of the box along that own axis.
-indexed_triangle_set
-make_strut(const Domain::BoundingBox3d &bb, int axis, double u, double v, double width_mm)
+// running the whole length of the box along that own axis, reaching overlap_mm past both ends of
+// that length.
+indexed_triangle_set make_strut(
+    const Domain::BoundingBox3d &bb,
+    int                          axis,
+    double                       u,
+    double                       v,
+    double                       width_mm,
+    double                       overlap_mm
+)
 {
     using Biz::Algorithms::TriangleMesh::its_make_cube;
 
@@ -76,15 +83,17 @@ make_strut(const Domain::BoundingBox3d &bb, int axis, double u, double v, double
     const double half = 0.5 * width_mm;
 
     Domain::Vec3d size = Domain::Vec3d::Zero();
-    size[axis]         = bb.max[axis] - bb.min[axis];
+    size[axis]         = bb.max[axis] - bb.min[axis] + 2. * overlap_mm;
     size[u_axis]       = width_mm;
     size[v_axis]       = width_mm;
 
-    // its_make_cube builds from the origin, so the strut starts at the near end of the box and at
-    // its own centre line less half its width on the two other axes.
+    // its_make_cube builds from the origin, so the strut starts at the near end of the box, less the
+    // overlap when there is one, and at its own centre line less half its width on the two other
+    // axes.
     Domain::Vec3d origin = bb.min;
-    origin[u_axis]       = u - half;
-    origin[v_axis]       = v - half;
+    origin[axis]         -= overlap_mm;
+    origin[u_axis]        = u - half;
+    origin[v_axis]        = v - half;
 
     const Domain::Vec3f offset = origin.cast<float>();
     indexed_triangle_set strut = its_make_cube(size.x(), size.y(), size.z());
@@ -96,9 +105,15 @@ make_strut(const Domain::BoundingBox3d &bb, int axis, double u, double v, double
 
 // All the struts of one direction inside the box: a grid of square prisms. The number of them is
 // the product of the number of axes of the two directions they cross, which is the reason for the
-// cap in strut_axes.
-indexed_triangle_set
-make_strut_bundle(const Domain::BoundingBox3d &bb, int axis, double width_mm, double spacing_mm)
+// cap in strut_axes. A strut reaches overlap_mm past both ends of the box along its own axis, which
+// puts its ends inside the wall of the cavity and off the plane of that wall.
+indexed_triangle_set make_strut_bundle(
+    const Domain::BoundingBox3d &bb,
+    int                          axis,
+    double                       width_mm,
+    double                       spacing_mm,
+    double                       overlap_mm
+)
 {
     const std::vector<double> u_axes =
         strut_axes(bb.min[(axis + 1) % 3], bb.max[(axis + 1) % 3], spacing_mm);
@@ -108,7 +123,7 @@ make_strut_bundle(const Domain::BoundingBox3d &bb, int axis, double width_mm, do
     indexed_triangle_set bundle;
     for (double u : u_axes)
         for (double v : v_axes)
-            Domain::its_merge(bundle, make_strut(bb, axis, u, v, width_mm));
+            Domain::its_merge(bundle, make_strut(bb, axis, u, v, width_mm, overlap_mm));
 
     return bundle;
 }
@@ -139,7 +154,8 @@ std::vector<double> hollowing_lattice_axes(double from, double to, double spacin
 std::vector<indexed_triangle_set> make_hollowing_lattice(
     const Domain::BoundingBox3d &bb,
     const HollowingInfillConfig &cfg,
-    const JobController &ctl
+    const JobController &ctl,
+    double             wall_overlap_mm
 )
 {
     std::vector<indexed_triangle_set> lattice;
@@ -157,7 +173,8 @@ std::vector<indexed_triangle_set> make_hollowing_lattice(
         if (!(width > 0.))
             continue;
 
-        indexed_triangle_set bundle = make_strut_bundle(bb, axis, width, cfg.spacing_mm);
+        indexed_triangle_set bundle =
+            make_strut_bundle(bb, axis, width, cfg.spacing_mm, wall_overlap_mm);
 
         if (!bundle.indices.empty())
             lattice.emplace_back(std::move(bundle));
@@ -175,8 +192,13 @@ bool subtract_lattice_from_cavity(
     if (cavity.indices.empty())
         return false;
 
+    // The struts are built to reach past the bounds of the box they stand in, so that they end
+    // inside the wall of the cavity and cross it. A strut that stopped at the bound would end with
+    // a face in the plane of the wall of the cavity, which is the plane the flat of that wall lies
+    // in, and a boolean of two surfaces that share a face over the whole of a strut cross section
+    // is the one configuration corefinement does not answer (see LATTICE_WALL_OVERLAP_MM).
     const std::vector<indexed_triangle_set> lattice =
-        make_hollowing_lattice(Domain::bounding_box(cavity), cfg, ctl);
+        make_hollowing_lattice(Domain::bounding_box(cavity), cfg, ctl, LATTICE_WALL_OVERLAP_MM);
 
     if (lattice.empty())
         return false;

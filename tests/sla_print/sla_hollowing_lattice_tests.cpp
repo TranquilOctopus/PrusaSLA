@@ -154,12 +154,28 @@ indexed_triangle_set hollowed_shell(const Cube &cube, const indexed_triangle_set
 }
 
 // The struts of a lattice as they are printed: the material that the lattice adds to a print, which
-// is what the shell with the lattice in it has and the plain hollow shell has not.
+// is the part of the lattice that lies inside the cavity, because the print is the model with the
+// cavity minus the lattice taken out of it.
+//
+// It is not cut out of the two shells with a mesh boolean, and that is not a shortcut: the shell
+// with the lattice in it and the plain hollow shell are two solids that share their whole outer
+// surface and the wall of the cavity around every strut, so the faces of the two are coplanar over
+// the whole of that surface. A mesh boolean wants the two surfaces to cross in segments, and two
+// solids that share a surface never do, which is why CGAL refuses that difference and not this one.
+// The lattice and the cavity cross each other instead, which is a boolean it does answer.
 indexed_triangle_set
-lattice_struts(const indexed_triangle_set &infilled_shell, const indexed_triangle_set &plain_shell)
+printed_struts(const indexed_triangle_set &cavity, const Slic3r::sla::HollowingInfillConfig &cfg)
 {
-    indexed_triangle_set struts = infilled_shell;
-    MeshBoolean::cgal::minus(struts, plain_shell);
+    const Domain::BoundingBox3d bb = Domain::bounding_box(cavity);
+
+    indexed_triangle_set struts;
+    for (const indexed_triangle_set &bundle :
+         sla::make_hollowing_lattice(bb, cfg, sla::JobController{}, sla::LATTICE_WALL_OVERLAP_MM)) {
+        indexed_triangle_set inside = bundle;
+        MeshBoolean::cgal::intersect(inside, cavity);
+        Domain::its_merge(struts, inside);
+    }
+
     return struts;
 }
 
@@ -281,7 +297,11 @@ double middle_axis(const std::vector<double> &axes, double middle)
 // the column by a twentieth of a millimetre on purpose: on it, the cutter would run exactly along
 // the faces of the strut, which is the one geometry a mesh boolean is least happy about, while a
 // hundredth of a millimetre off leaves the cutter clear of them and the column cut right through.
-// It is as deep as the model, so the column is severed from end to end and not only at its foot.
+// It reaches past the model on both ends, so the column is severed from end to end and not only at
+// its foot, and the cap of the cutter stands clear of the faces of the model on purpose as well: a
+// cap that ends exactly in the face of the model is a cap coplanar with a face of the shell, and a
+// mesh boolean does not answer a cutter that lies in the surface it is to cut, the same way it does
+// not answer a strut that ends in the wall of the cavity.
 Domain::SLA::DrainHoles hole_through_the_column(
     const Domain::BoundingBox3d &cavity_bb,
     const Slic3r::sla::HollowingInfillConfig &cfg,
@@ -299,13 +319,14 @@ Domain::SLA::DrainHoles hole_through_the_column(
     hole.pos    = Domain::Vec3f(static_cast<float>(x), static_cast<float>(y), 0.f);
     hole.normal = Domain::Vec3f(0.f, 0.f, 1.f);
     hole.radius = 1.5f;
-    hole.height = 12.f;
+    hole.height = 14.f;
     hole.failed = false;
 
     Domain::SLA::DrainHoles holes{hole};
     // The hole goes through the transformation of the object on its way to the cutter, which pulls
     // the near cap a millimetre back and makes the hole that much deeper. The slicing step does the
-    // same before it drills, so the test does it here.
+    // same before it drills, so the test does it here: the cutter then runs from z = -1 to z = 15 and
+    // stands clear of the top face of the cube, which is at z = 12.
     sla::transform_drainhole_points(holes, Domain::Transform3d::Identity());
 
     return holes;
@@ -578,7 +599,7 @@ TEST_CASE(
 
     // The struts themselves, which is what the lattice added to the print, and no strut reached the
     // outer surface: the cavity is a full wall away from it everywhere.
-    const indexed_triangle_set struts = lattice_struts(infilled_shell, plain_shell);
+    const indexed_triangle_set struts = printed_struts(sla::get_mesh(*plain_interior), grid_cfg());
     REQUIRE(!struts.indices.empty());
 
     const AABBMesh outer(cube.outer);
@@ -609,12 +630,13 @@ TEST_CASE(
 {
     const Cube cube                                  = make_cube();
     const Slic3r::sla::InteriorPtr infilled_interior = hollowed_interior(cube);
-    indexed_triangle_set infilled_cavity             = sla::get_mesh(*infilled_interior);
+    const indexed_triangle_set cavity                = sla::get_mesh(*infilled_interior);
+    indexed_triangle_set infilled_cavity             = cavity;
 
     // The hole goes through the column of the grid that stands in the middle of the cavity, so it
     // asks the engine where the struts are before it drills.
     const Slic3r::sla::HollowingInfillConfig cfg = grid_cfg();
-    const Domain::BoundingBox3d cavity_bb        = Domain::bounding_box(infilled_cavity);
+    const Domain::BoundingBox3d cavity_bb        = Domain::bounding_box(cavity);
     double hole_x                                = 0.;
     double hole_y                                = 0.;
     const Domain::SLA::DrainHoles holes  = hole_through_the_column(cavity_bb, cfg, hole_x, hole_y);
@@ -622,14 +644,10 @@ TEST_CASE(
 
     REQUIRE(sla::subtract_lattice_from_cavity(infilled_cavity, cfg));
 
-    // The two shells of the print, the one with the lattice and the plain hollow one, and the
-    // material the lattice is: the struts are printed as solid, so they are exactly what the two
-    // shells do not have in common.
-    const indexed_triangle_set infilled_shell     = hollowed_shell(cube, infilled_cavity);
-    const Slic3r::sla::InteriorPtr plain_interior = hollowed_interior(cube);
-    const indexed_triangle_set plain_shell = hollowed_shell(cube, sla::get_mesh(*plain_interior));
-
-    const indexed_triangle_set struts = lattice_struts(infilled_shell, plain_shell);
+    // The shell of the print with the lattice in it, and the material the lattice is: the struts are
+    // printed as solid, so they are the part of the lattice that the cavity left standing.
+    const indexed_triangle_set infilled_shell = hollowed_shell(cube, infilled_cavity);
+    const indexed_triangle_set struts        = printed_struts(cavity, cfg);
     REQUIRE(!struts.indices.empty());
 
     // The hole is cut in the drilling step, which comes after the hollowing one, so it reaches the
