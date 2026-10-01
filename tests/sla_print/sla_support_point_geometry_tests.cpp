@@ -86,20 +86,22 @@ double volume(const indexed_triangle_set &mesh)
     return std::abs(double(Slic3r::Domain::its_volume(mesh)));
 }
 
-// A closed, consistently wound surface: every directed edge of every triangle
-// is there exactly once, so nothing is open and no two triangles share a face.
+// A closed, consistently wound surface: every directed edge of every triangle is
+// there exactly once and it has its opposite as well, so nothing is open and no
+// two triangles share a face. The opposite of an edge belongs to the triangle
+// next to it, so a closed surface gives every direction of every edge one
+// triangle, a hole leaves the opposite of its edge out, and two triangles on one
+// face wind the same direction of it twice.
 bool closed(const indexed_triangle_set &mesh)
 {
     std::map<std::pair<int, int>, int> edges;
 
     for (const auto &idx : mesh.indices)
-        for (int i = 0; i < 3; ++i) {
+        for (int i = 0; i < 3; ++i)
             ++edges[{idx[i], idx[(i + 1) % 3]}];
-            ++edges[{idx[(i + 1) % 3], idx[i]}];
-        }
 
     for (const auto &edge : edges)
-        if (edge.second != 1)
+        if (edge.second != 1 || edges.count({edge.first.second, edge.first.first}) != 1)
             return false;
 
     return !edges.empty();
