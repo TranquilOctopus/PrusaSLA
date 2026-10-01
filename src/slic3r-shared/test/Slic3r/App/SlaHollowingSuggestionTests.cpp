@@ -122,12 +122,17 @@ TEST_CASE(
 
     SECTION("the estimate is an upper bound: the true saving of the cube is well under it")
     {
-        // The exact saving is the solid cube less the 34 mm cube a 3 mm shell leaves, and the
-        // estimate overstates it because the corners of the shell are counted twice.
-        // 40^3 - 34^3 = 24696 mm3, so the truth is 24.7 ml against the 44.8 the estimate says.
+        // What hollowing a solid 40 mm cube takes out of it is the interior a 3 mm shell leaves
+        // behind, 34^3 = 39304 mm3. 40^3 - 34^3 = 24696 mm3 is the shell that stays and is not
+        // the saving, so the truth is 39.3 ml against the 44.8 the estimate says.
+        // The estimate is the high side of that because it charges the side walls on every layer
+        // and never charges the floor and the roof, 3 mm of each, where a shell has no interior
+        // to take out: 6.7 ml too much. The corner squares counted twice on every layer the
+        // interior does reach make the estimate smaller by 1.2 ml, not bigger, so the floor and
+        // the roof are what the difference is made of.
         const ObjectSliceStats cube = solid_block(40., 40., 40.);
-        const double exact_ml       = (40. * 40. * 40. - 34. * 34. * 34.) / 1000.;
-        CHECK(exact_ml == Approx(24.7).margin(0.1));
+        const double exact_ml       = (34. * 34. * 34.) / 1000.;
+        CHECK(exact_ml == Approx(39.3).margin(0.1));
         CHECK(hollowing_saved_ml(cube, settings.wall_mm) > exact_ml);
     }
 
