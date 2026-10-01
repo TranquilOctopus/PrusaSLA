@@ -99,7 +99,7 @@ struct SlaHollowingSuggestion
  *
  * It is an UPPER bound, and deliberately not sharpened into an exact figure: where two offset
  * surfaces meet in a corner they cut away the same resin twice, so the real saving of a 40 mm cube
- * with 3 mm walls is nearer 18 ml than the 45 ml this says. An upper bound is the safe direction
+ * with 3 mm walls is nearer 25 ml than the 45 ml this says. An upper bound is the safe direction
  * for a suggestion - it never tells the user a hollow print saves less than it does - and the
  * notification says "about" for the same reason. A layer whose shell would be thicker than the
  * layer itself (a sliver, where a wall cannot be stood at all) counts as no saving rather than as a
