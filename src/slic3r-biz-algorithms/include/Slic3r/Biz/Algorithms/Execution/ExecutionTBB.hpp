@@ -41,6 +41,14 @@ public:
     static void for_each(const ExecutionTBB &,
                          It from, It to, Fn &&fn, size_t granularity)
     {
+        // Inside a SequentialRegion the loop belongs to the calling thread: same
+        // range, same order, no waiting, so the thread is never handed a task of
+        // some other loop while it holds whatever it holds. See SequentialRegion.
+        if (in_sequential_region()) {
+            loop_(tbb::blocked_range{from, to, granularity}, std::forward<Fn>(fn));
+            return;
+        }
+
         tbb::parallel_for(tbb::blocked_range{from, to, granularity},
                           [&fn](const auto &range) {
             loop_(range, std::forward<Fn>(fn));
@@ -57,6 +65,15 @@ public:
                     size_t     granularity = 1
                     )
     {
+        // The same one thread reduction as above, and the one way round: the
+        // identity is the left operand of the final merge, as it is in TBB.
+        if (in_sequential_region()) {
+            T acc = init;
+            loop_(tbb::blocked_range{from, to, granularity},
+                  [&](auto &i) { acc = mergefn(acc, accessfn(i)); });
+            return mergefn(init, acc);
+        }
+
         return tbb::parallel_reduce(
             tbb::blocked_range{from, to, granularity}, init,
             [&](const auto &range, T subinit) {

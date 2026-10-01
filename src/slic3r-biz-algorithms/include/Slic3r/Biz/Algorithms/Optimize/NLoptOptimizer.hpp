@@ -14,6 +14,7 @@
 #include <mutex>
 #include <utility>
 
+#include "Slic3r/Biz/Algorithms/Execution/Execution.hpp"
 #include "Slic3r/Biz/Algorithms/Optimize/Optimizer.hpp"
 
 namespace Slic3r::Biz::Algorithms::Optimize {
@@ -27,8 +28,10 @@ namespace detail {
 // which is the scheduling and nothing else. This lock is held from the seeding
 // to the end of the optimization, so that every search starts from its own seed
 // and runs to the end before the next one starts. The searches themselves are
-// not what runs in parallel here: the ray casts of one beam are, inside a single
-// call.
+// not what runs in parallel here, and neither is anything inside one of them:
+// optimize() puts a SequentialRegion around nlopt_optimize() for as long as it
+// holds this lock, so the objective of a search runs its loops on the calling
+// thread (see the comment at the lock below).
 inline std::mutex &nlopt_rng_lock()
 {
     static std::mutex mtx;
@@ -260,6 +263,21 @@ class NLoptOpt {
         // thread it runs on and whatever runs next to it.
         std::lock_guard<std::mutex> lk{nlopt_rng_lock()};
         nlopt_srand(static_cast<unsigned long>(m_seed));
+
+        // The lock above is a plain std::mutex and it is held for the whole
+        // search, which runs the objective, and the objective of every search of
+        // the support tree runs the model queries: pinhead_mesh_hit and
+        // beam_mesh_hit are loops over the samples of a ring, under the TBB
+        // policy. A thread which waits for such a loop may be handed any task of
+        // its arena, and the tasks of the support tree's own loops (the pinheads
+        // of add_pinheads, the model facing heads of routing_to_model) start a
+        // search of their own: this thread would then ask this lock for a second
+        // time and std::mutex throws "resource deadlock would occur". So inside a
+        // search every loop runs on the calling thread, which never waits and so
+        // is never handed another task. Searches were one at a time anyway, the
+        // lock above says so; what is given up is only that the ray casts of one
+        // search no longer run beside each other.
+        Slic3r::Biz::Algorithms::Execution::SequentialRegion sequential;
 
         r.resultcode = nlopt_optimize(nl.ptr, r.optimum.data(), &r.score);
 
