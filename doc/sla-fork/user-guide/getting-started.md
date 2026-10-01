@@ -138,10 +138,12 @@ opens, and everything below it comes after that section:
 - **Mini** / **Light** / **Medium** / **Heavy** set all four shape values at once, and clear the
   four *Use global* toggles. Like the sliders they apply to the selected points only. Their four
   dimensions each live in *Supports & raft*, so the buttons follow that preset.
-- **Generate** computes points for the selected model and shows them; **Apply** then writes them to
-  the model. **Discard** throws the pending points away and closes the tool. **Auto support all**
-  does the whole build plate one model at a time and writes each result as it finishes, so it needs
-  no Apply; if some models already have supports it asks whether to keep them and add around them.
+- **Generate** computes points for the selected model and shows them. They are written to the
+  model when you leave the tool, so nothing is lost by closing it; **Apply** is there for the
+  times you want them on the model straight away, and **Discard** throws the pending points away
+  and closes the tool. **Auto support all** does the whole build plate one model at a time and
+  writes each result as it finishes; if some models already have supports it asks whether to keep
+  them and add around them.
 - **Lock island supports** protects the points that were placed to catch small floating islands, so
   you cannot move or delete them by accident.
 - **Clipping of view** (%) just limits how far into the model you can see, and **Reset** restores

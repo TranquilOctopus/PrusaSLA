@@ -85,8 +85,8 @@ including a `src/libslic3r/src/...` path from another library is a layering mist
 SLA files, all new and all small:
 
 - `App/Plater/` — `SlaSupportPointsGizmo`, `SlaSupportPointsDialog`, `SlaSupportPointsEditing`,
-  `SlaSupportGeometry`, `SlaSupportOnModel`, `SlaSupportPreviewService`, `SlaHollowGizmo`,
-  `SlaHollowDialog`, `SlaDrainHolesEditing`, `SlaHeightBand`, `SlaHeightBandMeshes`,
+  `SlaSupportGeometry`, `SlaSupportOnModel`, `SlaSupportPointsLeaving`, `SlaSupportPreviewService`,
+  `SlaHollowGizmo`, `SlaHollowDialog`, `SlaDrainHolesEditing`, `SlaHeightBand`, `SlaHeightBandMeshes`,
   `SlaIssueAnalysis`, `SlaIssueNotification`, `SlaUnsupportedNotification`,
   `SlaUnsupportedObjects`, `SlaFirstModelNotification`
 - `App/Preview/` — `SlaLayerImageWindow`, `SlaSupportsPanel`, `SidebarSlaSupports`,
@@ -280,6 +280,10 @@ Do not confuse these with the FFF `SupportSpotsGenerator::SupportPoint` in
   `support_geometry_of`, `apply_support_geometry`, `selection_support_geometry`
 - `App/Plater/SlaSupportOnModel.{hpp,cpp}` — `using SupportOnModel = Domain::SLA::SupportPoint::OnModel`
   and the mixed-value helper
+- `App/Plater/SlaSupportPointsLeaving.{hpp,cpp}` — `apply_generated_points_on_leaving(has_points, discard)`,
+  what leaving the tool does with the points a generation produced (M2.31: it applies them, unless
+  Discard cleared them first), and `apply_generated_support_points(model_object, points)`, the one
+  write of generated points
 - Registration: `App/Plater/ToolGizmosUiInfo.cpp` (name, shortcut `P`, icon, SLA-only visibility),
   `App/Plater/PlaterRenderModule.cpp` (hotspot: creates the gizmo, the dialog and the toolbar item),
   `App/Scene/IGizmo.hpp` (hotspot: `ToolType::SlaSupportPoints`)
