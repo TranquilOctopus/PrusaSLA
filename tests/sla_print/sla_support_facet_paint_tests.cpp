@@ -145,6 +145,27 @@ LayerSupportPoints generate_points(const Slic3r::Domain::TriangleMesh &mesh,
     return Slic3r::sla::generate_support_points(data, {});
 }
 
+// A cone that widens upwards, so that the model has an overhang for the blocker to take away at
+// all: every layer is a larger disc than the one below it, so the generator samples the overhang all
+// around it, and the first layer is the island of the small footprint the tip stands on.
+//
+// `make_cone` builds the other cone: its wide base is on the plate and it narrows upwards, so every
+// layer is a *smaller* disc than the one below it, there is no overhang anywhere and the generator
+// returns no slope point to block. The cone is mirrored in Z - which keeps the faces wound outwards,
+// so the normals the paint below reads are the outward ones - and lifted so that the tip it now
+// stands on clears the plate and its first layer is a real island.
+Slic3r::Domain::TriangleMesh widening_cone(double radius, double height)
+{
+    Slic3r::Domain::TriangleMesh mesh = triangle_mesh::make_cone(radius, height);
+    mesh.mirror(Slic3r::Domain::Axis::Z);
+    // The mirrored cone hangs from z = 0 down to z = -height, tip at the bottom. Lifting it by half
+    // its height again stands the tip that far above the plate, so its first layer is a disc of half
+    // the radius to be the island of.
+    mesh.translate(Slic3r::Domain::Vec3f{0.f, 0.f, float(1.5 * height)});
+
+    return mesh;
+}
+
 // A blocker over the whole model in every layer, written by hand so that the test does not depend on
 // what the slicer makes of a painted facet. The island of the model lies inside the blocked region
 // here, which is the case the test is about.
@@ -168,10 +189,9 @@ Slic3r::sla::SupportFacetPaint blocking_everywhere(size_t layer_count)
 
 TEST_CASE("A painted blocker takes the automatic points of its overhang away", "[SupportFacetPaint]")
 {
-    // A wide cone: every layer is a disc a little smaller than the one below it, so the generator
-    // samples the overhang all around it. The first layer is an island, and the bottom of the cone is
-    // a downward facing facet which is left unpainted.
-    PaintedModel painted{triangle_mesh::make_cone(25., 20.)};
+    // A wide cone: every layer is a disc a little larger than the one below it, so the generator
+    // samples the overhang all around it. The first layer is the island of the tip it stands on.
+    PaintedModel painted{widening_cone(25., 20.)};
     const SlaConfig config = make_sla_config();
 
     const Slic3r::Domain::SLA::SupportPoints unpainted = generate(painted, config);
@@ -188,8 +208,11 @@ TEST_CASE("A painted blocker takes the automatic points of its overhang away", "
     {
         REQUIRE(overhangs > 0);
 
-        // Every facet of the cone but the bottom one, which is the island layer.
-        painted.paint_faces_above(-0.5, TriangleStateType::BLOCKER);
+        // Every facet of the cone: it stands on its tip, so it has no downward facing facet to leave
+        // alone - its island is a region of the first layer and not a surface that can be painted.
+        // The sides of a cone that widens upwards face outwards and downwards, so the threshold is
+        // below their normal.
+        painted.paint_faces_above(-0.7, TriangleStateType::BLOCKER);
 
         const Slic3r::Domain::SLA::SupportPoints blocked = generate(painted, config);
         INFO("Automatic points left: " << blocked.size());

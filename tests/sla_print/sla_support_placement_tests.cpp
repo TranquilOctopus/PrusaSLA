@@ -32,13 +32,29 @@ using Slic3r::sla::SupportPointGeneratorConfig;
 
 namespace {
 
-// A cone standing on the plate is a slope all around: every layer is a smaller disc than the one
-// below it, so the generator puts overhang points along the whole circumference. The first layer
-// is an island. A wide and low cone (slope about 22 degrees) has a long overhang outline, a
-// steep one (about 63 degrees) is steeper than the threshold the angle test uses.
+// A cone that widens upwards, which is what has to be standing on the plate for the cases below to
+// ask the generator about overhangs at all: every layer is a larger disc than the one below it, so
+// the overhang outline runs along the whole circumference and the generator puts slope points all
+// around it. The first layer is the island of the small footprint the tip stands on.
+//
+// `make_cone` builds the other cone: its wide base is on the plate and it narrows upwards, so every
+// layer is a *smaller* disc than the one below it, the overhang outline is empty and the generator
+// returns no slope point at all. The cone is mirrored in Z - which keeps the faces wound outwards,
+// so the normals and the overhang rule read them as they are - and lifted so that the tip it now
+// stands on clears the plate and its first layer is a real island.
+//
+// A wide and low cone (slope about 22 degrees) has a long overhang outline, a steep one (about 63
+// degrees) is steeper than the threshold the angle test uses.
 Slic3r::Domain::TriangleMesh cone_mesh(double radius, double height)
 {
-    return triangle_mesh::make_cone(radius, height);
+    Slic3r::Domain::TriangleMesh mesh = triangle_mesh::make_cone(radius, height);
+    mesh.mirror(Slic3r::Domain::Axis::Z);
+    // The mirrored cone hangs from z = 0 down to z = -height, tip at the bottom. Lifting it by half
+    // its height again stands the tip that far above the plate, so its first layer is a disc of half
+    // the radius to be the island of.
+    mesh.translate(Slic3r::Domain::Vec3f{0.f, 0.f, float(1.5 * height)});
+
+    return mesh;
 }
 
 // Slice the mesh and run the generator, but keep the points where the generator put them:
