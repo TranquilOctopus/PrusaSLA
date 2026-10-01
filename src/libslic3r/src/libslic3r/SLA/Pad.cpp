@@ -698,6 +698,16 @@ indexed_triangle_set create_outer_pad_geometry(const ExPolygons & skeleton,
             its_merge(ret, straight_walls(h, hole_z_max, z_min));
 
         its_merge(ret, create_infill_floor(bottom_poly, infill, z_min));
+
+        // A hole in a part is a straight tube, so the top face and the bottom face of that tube
+        // have to be the same polygon: every edge of it is shared by one face of the wall and one
+        // face of the top. The outline is at a different height on every level, which the wall
+        // between them joins, but the holes run straight, and the offset that gives the outline
+        // on the build plate runs them through a boolean operation, which drops the collinear
+        // points a connector stick leaves on a hole. A top face with the part's own idea of the
+        // hole is then a few points away from the wall under it, and a raft with a hole in it (a
+        // ring, anything the object stands in the middle of) is open along it.
+        top_poly.holes = bottom_poly.holes;
         its_merge(ret, triangulate_expolygon_3d(top_poly, NORMALS_UP));
     }
 
