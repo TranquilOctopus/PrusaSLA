@@ -56,6 +56,16 @@ constexpr int    DISPLAY_PIXELS_X = 320;
 constexpr int    DISPLAY_PIXELS_Y = 180;
 constexpr size_t LAYER_PIXELS     = size_t(DISPLAY_PIXELS_X) * DISPLAY_PIXELS_Y;
 
+// The display in mm, 68.04 x 38.04 as the other export tests use. The size is not free: a pixel has
+// to be a size the 20 mm cube of generate_cubes() does not divide into a whole number of pixels,
+// because agg antialiasing is per pixel coverage and a polygon edge that falls exactly on a pixel
+// boundary covers every pixel it touches either wholly or not at all. On a 64 x 36 mm display of
+// 320 x 180 pixels, where a pixel is exactly 0.2 mm, the cube is exactly 100 pixels wide and its
+// raster is 0 or 255 whatever gamma_correction says, which is what an anti-aliased file must not
+// look like. These pixels are 0.213 x 0.211 mm, so the edges of the cube cross them.
+constexpr double DISPLAY_WIDTH  = 68.04;
+constexpr double DISPLAY_HEIGHT = 38.04;
+
 // Body offsets of the fields under test, counted from the first byte after a section's 12-byte tag
 // and 4-byte declared length (pm5.md, and the writers themselves).
 constexpr size_t PM5_LEVELS_OFFSET      = 40; // u32 grey level count
@@ -68,9 +78,12 @@ constexpr size_t GOO_GREY_LEVEL_OFFSET = 190; // int16 big endian
 // padding, the two 25-byte software strings with 7 bytes of padding each, a 20-byte time stamp
 // with 4 bytes of padding, a 32-byte printer name with 4 bytes of padding, then seven words of
 // resolution, mirroring and preview count. What follows is the two fixed-size previews and the
-// 27 print parameters, with the 8-byte price unit as the last of them.
+// 27 print parameters, with the 8-byte price unit as the last of them. A preview carries a SEVEN
+// word sub-header (write_preview): reserved, width, height, bytes per pixel, the two offsets and
+// the type, and the pixels start at +28 (ctb.md), so each preview is 8 bytes longer than a
+// six-word count makes it and both of them together put the flag 8 bytes further out.
 constexpr size_t CTB_HEADER_BYTES  = 12 + (25 + 7) + (25 + 7) + (20 + 4) + (32 + 4) + 7 * 4;
-constexpr size_t CTB_PREVIEW_WORDS = 6; // the sub-header write_preview puts in front of the pixels
+constexpr size_t CTB_PREVIEW_WORDS = 7; // the sub-header write_preview puts in front of the pixels
 constexpr size_t CTB_PARAM_WORDS  = 29;
 constexpr size_t CTB_AA_OFFSET    = CTB_HEADER_BYTES + 2 * CTB_PREVIEW_WORDS * 4 + 800 * 600 * 3
                         + 400 * 300 + CTB_PARAM_WORDS * 4;
@@ -143,8 +156,8 @@ ExportedCube export_cube(const std::string& format, double gamma_correction)
     config.sla_printer_settings.items.opt("display_pixels_y").set(DISPLAY_PIXELS_Y);
     config.sla_printer_settings.items.opt("display_orientation").set(
         Slic3r::Domain::SLADisplayOrientation::sladoLandscape);
-    config.sla_printer_settings.items.opt("display_width").set(64.0);
-    config.sla_printer_settings.items.opt("display_height").set(36.0);
+    config.sla_printer_settings.items.opt("display_width").set(DISPLAY_WIDTH);
+    config.sla_printer_settings.items.opt("display_height").set(DISPLAY_HEIGHT);
     config.sla_printer_settings.items.opt("display_mirror_x").set(false);
     config.sla_printer_settings.items.opt("display_mirror_y").set(false);
     // 0 thresholds the raster, 1 anti-aliases it. Nothing in between: the test is about the two

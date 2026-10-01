@@ -296,13 +296,6 @@ void store_ctb(const std::string& file_path, const Biz::Slicing::SLAResultData& 
         write_f32(out, normal_exposure);
         write_f32(out, bottom_exposure);
         write_u32(out, bottom_layers);
-        // The transition (burn-in) count is the one header field that has to know about the
-        // interface, because the printer is told to fade the exposure from the first layer to the
-        // normal one: the interface is another block of layers it has to fade over. Its exact
-        // meaning is still unverified (see ctb.md), so this is the reading that fits both, and the
-        // band is counted the way Domain::sla_raft_interface() counts it, so the two cannot
-        // disagree. Without an interface the field is the transition layer count as before.
-        write_u32(out, std::min(layer_count, transition_layers + interface_layers));
         write_f32(out, light_off_time);
         write_f32(out, before_lift_time);
         write_f32(out, after_lift_time);
@@ -318,6 +311,15 @@ void store_ctb(const std::string& file_path, const Biz::Slicing::SLAResultData& 
         write_f32(out, bottom_lift_speed);
         write_f32(out, bottom_retract_distance);
         write_f32(out, bottom_retract_speed);
+        // Word 19 of the print parameters, the place ctb.md gives the field and the place the
+        // light-off time has always been written after, so the layout of the block is unchanged.
+        // The count itself is the one header field that has to know about the interface, because
+        // the printer is told to fade the exposure from the first layer to the normal one: the
+        // interface is another block of layers it has to fade over. Its exact meaning is still
+        // unverified (see ctb.md), so this is the reading that fits both, and the band is counted
+        // the way Domain::sla_raft_interface() counts it, so the two cannot disagree. Without an
+        // interface the field is the transition layer count as before.
+        write_u32(out, std::min(layer_count, transition_layers + interface_layers));
         write_u32(out, bottom_light_pwm);
         write_u32(out, light_pwm);
         write_u32(out, 0); // advance mode
