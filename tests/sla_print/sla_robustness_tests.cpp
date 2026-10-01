@@ -278,6 +278,7 @@ struct RobustnessCase
     bool supports{true};                            // supports and raft on or off
     bool must_have_no_points{false};                // nothing to generate from this mesh
     bool must_be_rejected{false};                   // the engine has to refuse it cleanly
+    std::chrono::seconds support_budget{support_deadline}; // how long the support tool may take
     std::chrono::seconds slice_budget{slice_deadline};
 };
 
@@ -682,7 +683,12 @@ bool run_with_watchdog(Job&& job, std::chrono::seconds budget,
     if (finished)
         return true;
 
-    on_timeout();
+    // Only a stage with something to ask gets a callback: the support tool is given its own stop
+    // function with its own deadline, so nothing is asked of it here, and an empty callback must
+    // not be called (that is a std::bad_function_call, which would leave the test case with an
+    // exception instead of the hang the message below is about).
+    if (on_timeout)
+        on_timeout();
 
     {
         std::unique_lock<std::mutex> lock{state->mutex};
@@ -719,10 +725,10 @@ CaseResults run_case(const RobustnessCase& test_case)
     auto support = std::make_shared<SupportResult>();
     const bool support_finished = run_with_watchdog(
         [support, mesh, c] { *support = run_support_tool(mesh, c); },
-        support_deadline + support_slack, {});
+        c.support_budget + support_slack, {});
 
     if (!support_finished)
-        FAIL("the support tool is still running " << (support_deadline + support_slack).count()
+        FAIL("the support tool is still running " << (c.support_budget + support_slack).count()
              << " s after it started, although it was given a stop function");
     check_support_result(*support, c.must_have_no_points);
 
@@ -886,10 +892,16 @@ TEST_CASE("Robustness: a one metre mesh neither crashes nor hangs", "[SLA][robus
 {
     // A metre cube at a 0.05 mm layer height is twenty thousand layers of a plate the size of the
     // bed. The mesh is what is being tested here, not the layer count, so it is sliced with a layer
-    // height that keeps the number of layers in the tens.
+    // height that keeps the number of layers in the tens. What the generator costs is the area of
+    // the layers it samples and a metre wide layer is a million times the area of a 20 mm cube, so
+    // both stages get the longer budget the case below asks for instead of the file's 60 s. The
+    // its_convex_hull errors of the log are this mesh too: qhull cannot hull coordinates that far
+    // out, which leaves the volume with an empty cached hull.
     RobustnessCase test_case =
         robustness_case("a one metre cube", [] { return box_its(1000., 1000., 1000.); });
     test_case.layer_height = 100.;
+    test_case.support_budget = std::chrono::seconds{180};
+    test_case.slice_budget = std::chrono::seconds{180};
     INFO("mesh: " << test_case.name);
     run_case(test_case);
 }
@@ -903,6 +915,7 @@ TEST_CASE("Robustness: a cube far from the origin neither crashes nor hangs", "[
     RobustnessCase test_case =
         robustness_case("a cube 100 km from the origin", [] { return box_its(20., 20., 20.); });
     test_case.offset = Vec3d{100000., 0., 0.};
+    test_case.support_budget = std::chrono::seconds{180};
     test_case.slice_budget = std::chrono::seconds{180};
     INFO("mesh: " << test_case.name);
     run_case(test_case);

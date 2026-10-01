@@ -141,10 +141,13 @@ Slic3r::Domain::TriangleMesh make_cup(double outer, double height, double wall, 
 
     indexed_triangle_set its;
 
+    // make_cube() stands the box on the origin, so it is the lower corner that goes on
+    // (x0, y0, z0) and not the middle of its footprint: with the middle in x and y the floor
+    // ends up beside the two walls meant to stand on it and the mesh has no pocket at all.
     const auto add_box = [&its](double x0, double x1, double y0, double y1, double z0, double z1) {
         Slic3r::Domain::TriangleMesh box{
             Slic3r::Biz::Algorithms::TriangleMesh::make_cube(x1 - x0, y1 - y0, z1 - z0)};
-        box.translate(Slic3r::Vec3f{float((x0 + x1) / 2.), float((y0 + y1) / 2.), float(z0)});
+        box.translate(Slic3r::Vec3f{float(x0), float(y0), float(z0)});
         Slic3r::Domain::its_merge(its, box.its);
     };
 

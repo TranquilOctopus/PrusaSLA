@@ -419,11 +419,14 @@ TEST_CASE("M4.4a: a part under a brim keeps the point the surface move could sli
     REQUIRE(coverage.islands.size() >= 1);
     CHECK(coverage.uncovered.empty());
 
-    // The same question asked of the points themselves, in the column the plate stands in. The
-    // brim is 1.975 mm above the plate and the block's wall is half a millimetre beside it, so a
-    // point carried off the plate would show up in this column at another height.
+    // The same question asked of the points themselves, in the column the plate stands in: the
+    // column is the plate's own footprint, because the point that holds it is kept at least the
+    // head radius (0.2 mm for the 0.4 mm head) inside the outline and a tighter rectangle would
+    // miss the very point this case is about. The brim is 1.975 mm above the plate and the block's
+    // wall is half a millimetre beside it, so a point carried off the plate towards the brim would
+    // show up in this column at another height.
     const std::vector<const SupportPoint*> column =
-        points_in_column(coverage.points, 10.8, 3.3, 14.2, 6.7);
+        points_in_column(coverage.points, 10.5, 3., 14.5, 7.);
     INFO("support points in the column of the plate: " << column.size());
     REQUIRE_FALSE(column.empty());
     for (const SupportPoint* point : column) {
