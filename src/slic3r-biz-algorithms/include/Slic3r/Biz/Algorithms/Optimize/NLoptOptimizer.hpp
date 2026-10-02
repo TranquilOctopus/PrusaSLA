@@ -12,26 +12,85 @@
 #endif
 
 #include <mutex>
+#include <thread>
 #include <utility>
+#include <vector>
 
-#include "Slic3r/Biz/Algorithms/Execution/Execution.hpp"
+#include <tbb/task_arena.h>
+
 #include "Slic3r/Biz/Algorithms/Optimize/Optimizer.hpp"
 
 namespace Slic3r::Biz::Algorithms::Optimize {
 
 namespace detail {
 
-// NLopt draws from one process wide random generator: nlopt_srand() seeds the
-// single stream every running algorithm takes its numbers from. Two searches
-// that run at the same time therefore consume each other's numbers, and what a
-// search returns depends on which thread happened to reach nlopt_srand() first,
-// which is the scheduling and nothing else. This lock is held from the seeding
-// to the end of the optimization, so that every search starts from its own seed
-// and runs to the end before the next one starts. The searches themselves are
-// not what runs in parallel here, and neither is anything inside one of them:
-// optimize() puts a SequentialRegion around nlopt_optimize() for as long as it
-// holds this lock, so the objective of a search runs its loops on the calling
-// thread (see the comment at the lock below).
+// NLopt's stochastic algorithms (ESCH, the genetic search of the support tree,
+// ISRES, CRS, MLSL without LDS, ...) draw from NLopt's Mersenne twister, which
+// nlopt_srand() seeds. NLopt keeps that generator in thread local storage when
+// it is built with its THREADLOCAL option (on by default, and on in the
+// dependency build of this repository), so every thread has a stream of its
+// own: a search seeded on the thread it runs on draws exactly the numbers of its
+// own seed, whatever runs on the other threads. The deterministic algorithms
+// (Subplex, Nelder-Mead, COBYLA, MLSL with LDS) draw nothing.
+//
+// One thing can still feed a search the numbers of another one on the same
+// thread: a thread that waits for a parallel loop inside the objective may be
+// handed a task of an outer loop, and that task may start a search of its own,
+// which reseeds this thread's stream and draws from it before the first search
+// continues. optimize() therefore runs the search in an isolated TBB region (see
+// there). Nothing else is needed for a repeatable search, so the searches of the
+// support tree run in parallel, and so do the ray casts inside each of them.
+//
+// Whether the generator really is per thread is asked of the NLopt library at
+// hand once per process: one genetic search on a thread of its own, from one
+// seed, with and without another thread reseeding NLopt at its first
+// evaluation. The searches visit the same points exactly when the other thread
+// cannot touch this thread's generator.
+inline std::vector<double> nlopt_probe_trace(bool disturb)
+{
+    struct Probe { std::vector<double> xs; bool disturb; };
+    Probe probe{{}, disturb};
+
+    std::thread searcher([&probe] {
+        nlopt_opt o = nlopt_create(NLOPT_GN_ESCH, 1);
+        if (!o)
+            return;
+
+        double lb = 0., ub = 1., x = .5, f = 0.;
+        nlopt_set_lower_bounds(o, &lb);
+        nlopt_set_upper_bounds(o, &ub);
+        nlopt_set_maxeval(o, 200);
+        nlopt_set_min_objective(o, [](unsigned, const double *in, double *, void *data) {
+            auto &p = *static_cast<Probe *>(data);
+            if (p.disturb && p.xs.empty())
+                std::thread([] { nlopt_srand(2); }).join();
+            p.xs.emplace_back(in[0]);
+            return (in[0] - .3) * (in[0] - .3);
+        }, &probe);
+
+        nlopt_srand(1);
+        nlopt_optimize(o, &x, &f);
+        nlopt_destroy(o);
+    });
+    searcher.join();
+
+    return probe.xs;
+}
+
+inline bool nlopt_rng_is_thread_local()
+{
+    static const bool per_thread = [] {
+        std::vector<double> quiet = nlopt_probe_trace(false);
+        return !quiet.empty() && quiet == nlopt_probe_trace(true);
+    }();
+
+    return per_thread;
+}
+
+// Only for an NLopt that shares one generator between all threads: then a
+// search has to own it from the seeding to its end, and that is this lock. The
+// isolation of optimize() also keeps a thread holding it from being handed a
+// task that would ask for it again.
 inline std::mutex &nlopt_rng_lock()
 {
     static std::mutex mtx;
@@ -139,8 +198,8 @@ class NLoptOpt {
     OptDir m_dir = OptDir::MIN;
 
     // The seed of the search. It is given to NLopt's generator when the search
-    // runs rather than when it is asked for, since the generator is the one of
-    // the whole process and another search may reseed it in between.
+    // runs rather than when it is asked for: the generator is the one of the
+    // thread the search runs on, which need not be the thread that set the seed.
     long m_seed = 0;
 
     static constexpr double ConstraintEps = 1e-6;
@@ -258,28 +317,34 @@ class NLoptOpt {
 
         r.optimum = initvals;
 
-        // The same seed for every call, and no other search in between: the same
-        // search on the same input then returns the same result whatever the
-        // thread it runs on and whatever runs next to it.
-        std::lock_guard<std::mutex> lk{nlopt_rng_lock()};
+        // The same seed for every call, and no other search drawing from the
+        // generator in between: the same search on the same input then returns
+        // the same result whatever the thread it runs on and whatever runs next
+        // to it. The generator is the calling thread's own (see
+        // nlopt_rng_is_thread_local), so the seed goes to this thread, and only
+        // an NLopt with one generator for the process needs the lock.
+        std::unique_lock<std::mutex> lk{nlopt_rng_lock(), std::defer_lock};
+        if (!nlopt_rng_is_thread_local())
+            lk.lock();
+
         nlopt_srand(static_cast<unsigned long>(m_seed));
 
-        // The lock above is a plain std::mutex and it is held for the whole
-        // search, which runs the objective, and the objective of every search of
-        // the support tree runs the model queries: pinhead_mesh_hit and
-        // beam_mesh_hit are loops over the samples of a ring, under the TBB
-        // policy. A thread which waits for such a loop may be handed any task of
-        // its arena, and the tasks of the support tree's own loops (the pinheads
-        // of add_pinheads, the model facing heads of routing_to_model) start a
-        // search of their own: this thread would then ask this lock for a second
-        // time and std::mutex throws "resource deadlock would occur". So inside a
-        // search every loop runs on the calling thread, which never waits and so
-        // is never handed another task. Searches were one at a time anyway, the
-        // lock above says so; what is given up is only that the ray casts of one
-        // search no longer run beside each other.
-        Slic3r::Biz::Algorithms::Execution::SequentialRegion sequential;
-
-        r.resultcode = nlopt_optimize(nl.ptr, r.optimum.data(), &r.score);
+        // The objective of a search of the support tree runs the model queries,
+        // and pinhead_mesh_hit and beam_mesh_hit are loops over the samples of a
+        // ring under the TBB policy. A thread which waits for such a loop may be
+        // handed any task of its arena, including a task of the support tree's
+        // own loops (the pinheads of add_pinheads, the model facing heads of
+        // routing_to_model), and such a task starts a search of its own on this
+        // thread: it would reseed this thread's generator and draw from it in the
+        // middle of this search (and, with the lock, ask for the lock a second
+        // time, which std::mutex refuses with "resource deadlock would occur").
+        // Inside an isolated region the waiting thread only runs tasks spawned in
+        // that region, i.e. the ray casts of this search, which draw nothing,
+        // while the other threads are free to help with them. The search runs on
+        // the calling thread either way.
+        tbb::this_task_arena::isolate([&] {
+            r.resultcode = nlopt_optimize(nl.ptr, r.optimum.data(), &r.score);
+        });
 
         return r;
     }

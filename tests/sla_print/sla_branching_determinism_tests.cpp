@@ -4,14 +4,16 @@
 // The tree of a model used to come out differently from one run to the next, for
 // three reasons. The points of the bed and of the model it merges branches between
 // were drawn from std::rand (libigl's random_points_on_mesh on Eigen's generator,
-// BranchingTree/PointCloud.cpp); the searches of the leaves - the ground ones and
-// the pinhead ones - ran on several threads over the one process wide generator
-// NLopt draws from, so they raced each other; and the candidates a node tries were
-// sorted by their distance alone, which leaves two of them at the same distance in
-// whatever order the point cloud handed them over. All three are seeded or ordered
-// from the input now: the sampler hashes the mesh and the radius it samples at,
-// every search is seeded and runs to its end before the next one starts, and a tie
-// between two candidates is broken by node id. The cases below build the same model
+// BranchingTree/PointCloud.cpp); the genetic searches of the leaves were not
+// seeded where they ran, and a thread waiting inside one of them could be handed
+// another one, which reseeded and drew from the same NLopt generator; and the
+// candidates a node tries were sorted by their distance alone, which leaves two
+// of them at the same distance in whatever order the point cloud handed them
+// over. All three are seeded or ordered from the input now: the sampler hashes the
+// mesh and the radius it samples at, every search seeds NLopt's generator (one per
+// thread) on the thread it runs on and runs isolated from the other searches
+// (NLoptOptimizer.hpp, M4.5d), and a tie between two candidates is broken by node
+// id. The cases below build the same model
 // five times over and compare the vertex and face data of the trees bit for bit,
 // and build it once more with the thread count of the whole process pinned to one.
 //

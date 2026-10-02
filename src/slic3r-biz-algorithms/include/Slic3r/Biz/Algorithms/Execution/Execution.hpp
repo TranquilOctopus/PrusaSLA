@@ -9,47 +9,6 @@
 
 namespace Slic3r::Biz::Algorithms::Execution {
 
-namespace detail {
-
-// How many SequentialRegion objects the calling thread is inside of. A thread
-// local one, because what is being switched off is the parallelism of the
-// thread that asks for it, not of the process.
-inline thread_local unsigned int sequential_nesting = 0;
-
-} // namespace detail
-
-// A thread which may not leave its own task raises this guard for as long as it
-// may not: every execution policy then runs its loops on the calling thread, in
-// the order of the range, whatever the policy is. A parallel loop is not only
-// slower that way, it also makes the calling thread wait, and a thread that waits
-// for a parallel loop may be handed any task of its arena - including another
-// task of a loop it is already inside. That is fatal for a thread which holds a
-// lock across the loop: the task it is handed may ask for that same lock, and
-// std::mutex refuses a second lock by the thread that owns it with "resource
-// deadlock would occur". The NLopt searches of the support tree hold the lock of
-// the one process wide NLopt generator for the whole search, and the objective
-// of a search runs the model queries, which are loops (see
-// Slic3r/Biz/Algorithms/Optimize/NLoptOptimizer.hpp).
-//
-// The guard counts, so a nested region is left by the inner one only, and it
-// belongs to the thread which raised it: another thread's loops are not touched.
-class SequentialRegion
-{
-public:
-    SequentialRegion() noexcept { ++detail::sequential_nesting; }
-    ~SequentialRegion() { --detail::sequential_nesting; }
-
-    SequentialRegion(const SequentialRegion &) = delete;
-    SequentialRegion &operator=(const SequentialRegion &) = delete;
-};
-
-// Whether the calling thread is inside a SequentialRegion, i.e. whether the
-// loops of an execution policy are to run on the calling thread.
-inline bool in_sequential_region() noexcept
-{
-    return detail::sequential_nesting > 0;
-}
-
 // Override for valid execution policies
 template<class EP>
 struct IsExecutionPolicy_ : public std::false_type

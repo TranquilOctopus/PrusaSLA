@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <thread>
 #include <unordered_set>
@@ -418,98 +419,105 @@ TEST_CASE("BranchingSupports::MergePointFinder", "[suptreeutils]")
     }
 }
 
-TEST_CASE("A search runs its own loops on its own thread", "[suptreeutils]")
+TEST_CASE("Searches run beside each other and stay repeatable", "[suptreeutils]")
 {
     namespace ex  = Slic3r::Biz::Algorithms::Execution;
     namespace opt = Slic3r::Biz::Algorithms::Optimize;
 
-    // Every search of the support tree holds the lock of the one process wide
-    // NLopt generator (nlopt_rng_lock) from the seeding to the end of the search,
-    // so that the same search on the same input is the same search twice. The
-    // objective of such a search is a model query, and a model query is a loop
-    // under the TBB policy (pinhead_mesh_hit, beam_mesh_hit shoot one ray per
-    // sample of a ring). A thread that waits for a parallel loop may be handed
-    // any task of its arena, and the tasks of the support tree's own loops start
-    // a search of their own (add_pinheads, routing_to_model): this thread would
-    // then ask that lock for the second time and std::mutex answers that with
-    // "resource deadlock would occur". A loop started inside a search therefore
-    // belongs to the thread which started it.
-    constexpr size_t samples = 16;
+    // The genetic searches of the support tree draw from NLopt's generator,
+    // which is seeded per search. NLopt keeps that generator per thread, so the
+    // searches of different support points run in parallel and each of them
+    // draws the numbers of its own seed - provided that no other search runs on
+    // the same thread while it is not finished. That can happen: the objective
+    // of a search is a model query, which is a loop under the TBB policy
+    // (pinhead_mesh_hit, beam_mesh_hit), and a thread which waits for such a
+    // loop may be handed a task of the support tree's own loop, which starts a
+    // search (add_pinheads, routing_to_model). optimize() runs a search in an
+    // isolated region so that the waiting thread is only handed the tasks of its
+    // own search.
 
-    // One search of the shape the support tree builds: a loop of `samples` in the
-    // objective, the score read out of what the loop wrote. `owner` is the thread
-    // the search runs on and `elsewhere` is raised by any iteration of the loop
-    // which did not run on it.
-    auto search = [](const std::thread::id &owner, std::atomic<bool> &elsewhere, double x) {
-        opt::StopCriteria criteria;
-        criteria.abs_score_diff(1e-6).rel_score_diff(1e-4).max_iterations(30);
-
-        opt::Optimizer<opt::AlgNLoptGenetic> solver(criteria);
-        solver.seed(0);
-        auto result = solver.to_max().optimize(
-            [&x, owner, &elsewhere, samples](const opt::Input<3> &input) {
-                std::array<double, samples> hits{};
-
-                ex::for_each(ex::ex_tbb, size_t(0), hits.size(), [&](size_t i) {
-                    if (std::this_thread::get_id() != owner)
-                        elsewhere = true;
-                    hits[i] = std::abs(x + double(i) - std::get<0>(input));
-                });
-
-                return *std::min_element(hits.begin(), hits.end());
-            },
-            opt::initvals({0., 0., 0.}),
-            opt::bounds({{0., 1.}, {0., 1.}, {0., 1.}}));
-
-        return result.score;
-    };
-
-    SECTION("the loop of the objective stays on the thread which started the search")
+    SECTION("NLopt keeps a generator per thread")
     {
-        std::atomic<bool> elsewhere{false};
-        const double score = search(std::this_thread::get_id(), elsewhere, 3.);
-
-        REQUIRE(!elsewhere.load());
-        REQUIRE(score <= 4.);
+        // Otherwise every search takes nlopt_rng_lock() and the searches of the
+        // support tree run one at a time: still repeatable, but slow.
+        REQUIRE(opt::detail::nlopt_rng_is_thread_local());
     }
 
-    SECTION("the guard of a search does not outlive it")
+    SECTION("a search in every task of a parallel loop is the search it is alone")
     {
-        REQUIRE(!ex::in_sequential_region());
+        // How many searches the calling thread is inside of, and how often a
+        // search was started on a thread which already was inside one.
+        static thread_local int depth = 0;
+        std::atomic<int> nested{0};
+        std::atomic<int> elsewhere{0};
 
-        std::atomic<bool> elsewhere{false};
-        search(std::this_thread::get_id(), elsewhere, 3.);
+        // A genetic search whose objective runs a loop of two under the TBB
+        // policy. The first iteration waits a moment for the second one to be
+        // taken by another thread, and the second one takes its time, so that
+        // the thread that started the loop is left waiting for a task it cannot
+        // run itself - which is when TBB hands a waiting thread other work.
+        auto search = [&nested, &elsewhere](double shift) {
+            opt::Optimizer<opt::AlgNLoptGenetic> solver(opt::StopCriteria{}.max_iterations(100));
+            solver.seed(0);
+            const std::thread::id owner = std::this_thread::get_id();
 
-        REQUIRE(!ex::in_sequential_region());
-    }
+            return solver.to_min().optimize(
+                [&nested, &elsewhere, shift, owner](const opt::Input<2> &input) {
+                    if (depth++ > 0)
+                        ++nested;
 
-    SECTION("a search of every task of a parallel loop runs to the end")
-    {
-        // The shape that used to throw: the tasks of a parallel loop each start a
-        // search, every search runs a loop of its own, and the lock of the
-        // generator is held while that loop runs.
-        constexpr size_t tasks = 12, rounds = 3;
+                    auto [x, y] = input;
+                    std::atomic<bool> second_started{false};
+                    std::array<double, 2> parts{};
 
-        std::atomic<bool> elsewhere{false};
-        std::atomic<size_t> finished{0};
-        std::vector<double> scores(tasks * rounds, 0.);
+                    ex::for_each(ex::ex_tbb, size_t(0), parts.size(), [&](size_t i) {
+                        if (std::this_thread::get_id() != owner)
+                            ++elsewhere;
 
-        for (size_t round = 0; round < rounds; ++round) {
-            ex::for_each(
-                ex::ex_tbb, size_t(0), tasks,
-                [&](size_t i) {
-                    scores[round * tasks + i] = search(std::this_thread::get_id(), elsewhere, 3.);
-                    finished.fetch_add(1);
+                        if (i == 0) {
+                            const auto until = std::chrono::steady_clock::now() +
+                                               std::chrono::microseconds(500);
+                            while (!second_started && std::chrono::steady_clock::now() < until) {}
+                            parts[0] = std::sin(3. * x + shift);
+                        } else {
+                            second_started = true;
+                            std::this_thread::sleep_for(std::chrono::microseconds(200));
+                            parts[1] = std::cos(5. * y - shift);
+                        }
+                    });
+
+                    --depth;
+                    return parts[0] + parts[1] + 0.1 * (x * x + y * y);
                 },
-                ex::max_concurrency(ex::ex_tbb));
+                opt::initvals({0., 0.}), opt::bounds({{-2., 2.}, {-2., 2.}}));
+        };
+
+        constexpr size_t tasks = 12;
+
+        // Every search alone, one after the other.
+        std::vector<opt::Result<2>> alone(tasks);
+        for (size_t i = 0; i < tasks; ++i)
+            alone[i] = search(0.1 * double(i));
+
+        // The loop of the objective is a parallel loop inside a search, it is
+        // not walked by the thread of the search alone.
+        if (ex::max_concurrency(ex::ex_tbb) > 1)
+            REQUIRE(elsewhere.load() > 0);
+
+        // And every search again, all of them in the tasks of one parallel loop.
+        std::vector<opt::Result<2>> together(tasks);
+        for (size_t round = 0; round < 3; ++round) {
+            ex::for_each(ex::ex_tbb, size_t(0), tasks,
+                         [&](size_t i) { together[i] = search(0.1 * double(i)); });
+
+            REQUIRE(nested.load() == 0);
+
+            for (size_t i = 0; i < tasks; ++i) {
+                INFO("round " << round << ", search " << i);
+                REQUIRE(together[i].score == alone[i].score);
+                REQUIRE(std::get<0>(together[i].optimum) == std::get<0>(alone[i].optimum));
+                REQUIRE(std::get<1>(together[i].optimum) == std::get<1>(alone[i].optimum));
+            }
         }
-
-        REQUIRE(finished.load() == tasks * rounds);
-        REQUIRE(!elsewhere.load());
-
-        // The lock is what makes a search repeatable, and nothing of that may be
-        // given up for it: every search of the same input is the same search.
-        for (size_t i = 0; i < scores.size(); ++i)
-            REQUIRE(scores[i] == scores[0]);
     }
 }
