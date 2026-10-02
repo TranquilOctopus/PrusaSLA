@@ -49,9 +49,13 @@ struct SupportToolModelMesh {
 /// are left out, the same filter the build has always applied.
 SupportToolModelMesh support_tool_model_mesh(const Domain::ModelObject& object);
 
-// `object_to_world` places the model's mesh (use the instance's full matrix). Meshes are
-// returned in that same world frame, object NOT lifted: the tree reaches down to
-// (object min z - elevation); the caller lifts everything by the elevation to draw it.
+// `object_to_world` places the model's mesh (use the instance's full matrix, which is a world
+// matrix: it already carries the offset of the build plate the instance sits on, so nothing else
+// may be applied to the result). Meshes are returned in that same world frame, object NOT lifted:
+// the tree reaches down to (object min z - elevation); the caller lifts everything by the elevation
+// to draw it, and that elevation is the one the model itself is drawn by. Both halves of that
+// rule are one function on the caller's side, sla_support_tree_placement in
+// Slic3r/App/Plater/SlaSupportPreviewService.hpp (M2.34).
 SupportToolTree build_support_tree_for_tool(const SupportToolModelMesh& model_mesh,
     const Domain::Transform3d& object_to_world,
     const Domain::SLA::SupportPoints& points,          // in the object's mesh frame

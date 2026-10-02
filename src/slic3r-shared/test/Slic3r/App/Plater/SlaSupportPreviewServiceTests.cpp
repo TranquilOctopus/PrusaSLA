@@ -1,14 +1,40 @@
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "Slic3r/App/Plater/SlaSupportPointsLift.hpp"
 #include "Slic3r/App/Plater/SlaSupportPreviewService.hpp"
+#include "Slic3r/Biz/Algorithms/AABBMesh.hpp"
+#include "Slic3r/Biz/Algorithms/ModelObject.hpp"
+#include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
+#include "Slic3r/Domain/ConfigBoxesSLA.hpp"
+#include "Slic3r/Domain/ConfigDefsSLA.hpp"
+#include "Slic3r/Domain/ConfigPack.hpp"
+#include "Slic3r/Domain/FullConfigSLA.hpp"
+#include "Slic3r/Domain/Model.hpp"
+#include "Slic3r/Domain/Preset/HwConfig.hpp"
+#include "Slic3r/Domain/PrinterTechnology.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
+#include "Slic3r/Domain/Transformation.hpp"
+#include "Slic3r/Domain/TriangleMesh.hpp"
 #include "Slic3r/Domain/Types.hpp"
+#include "Slic3r/Math.hpp"
+#include "libslic3r/SLASupportTool.hpp"
 
+#include <Eigen/Geometry>
+
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <limits>
+#include <memory>
 #include <unordered_map>
 
+using Slic3r::App::Plater::sla_support_points_drawing_trafo;
+using Slic3r::App::Plater::sla_support_tree_placement;
 using Slic3r::App::Plater::SlaSupportPreviewCandidate;
 using Slic3r::App::Plater::SlaSupportPreviewDiff;
 using Slic3r::App::Plater::SlaSupportPreviewKey;
+using Slic3r::App::Plater::SlaSupportTreePlacement;
 using Slic3r::App::Plater::diff_sla_support_previews;
 using Slic3r::App::Plater::hash_support_points;
 using Slic3r::App::Plater::make_sla_support_preview_key;
@@ -45,6 +71,160 @@ SlaSupportPreviewCandidate candidate(ObjectID id, bool wants, SlaSupportPreviewK
     result.wants_preview = wants;
     result.key           = wants ? key : SlaSupportPreviewKey{};
     return result;
+}
+
+// The SLA configuration the support tool engine takes, the way the preview service resolves it: the
+// print settings of the plate and the (empty) settings of the object. No SLA option declares
+// location == SLAConfigLocation::Object, so every key the tests set has to be set on the print box.
+struct SlaConfig
+{
+    Slic3r::Domain::FullConfigSLAPtr         full;
+    Slic3r::Domain::PartialObjectConfigSLAPtr object_settings;
+};
+
+SlaConfig make_sla_config(double elevation)
+{
+    Slic3r::Domain::ConfigPackSLA pack;
+    pack.sla_print_settings.items.opt("supports_enable").set(true);
+    pack.sla_print_settings.items.opt("support_object_elevation").set(elevation);
+
+    SlaConfig cfg;
+    cfg.full = std::make_shared<const Slic3r::Domain::FullConfigSLA>(
+        pack,
+        Slic3r::Domain::Preset::HwPrinterConfig{.technology = Slic3r::Domain::PrinterTechnology::SLA}
+    );
+    cfg.object_settings = std::make_shared<const Slic3r::Domain::PartialObjectConfigSLA>(
+        Slic3r::Domain::SLAObjectSettings{}, cfg.full->hw_config()
+    );
+    return cfg;
+}
+
+// The same, with the raft hugging the object: zero elevation, the model stands on the plate and the
+// supports grow out of the raft around it. Since M2.14d the raft type decides this.
+SlaConfig make_sla_config_zero_elevation()
+{
+    Slic3r::Domain::ConfigPackSLA pack;
+    pack.sla_print_settings.items.opt("supports_enable").set(true);
+    pack.sla_print_settings.items.opt("raft_type").set(Slic3r::Domain::sla::RaftType::AroundObject);
+    pack.sla_print_settings.items.opt("pad_around_object_everywhere").set(true);
+    pack.sla_print_settings.items.opt("support_object_elevation").set(5.);
+
+    SlaConfig cfg;
+    cfg.full = std::make_shared<const Slic3r::Domain::FullConfigSLA>(
+        pack,
+        Slic3r::Domain::Preset::HwPrinterConfig{.technology = Slic3r::Domain::PrinterTechnology::SLA}
+    );
+    cfg.object_settings = std::make_shared<const Slic3r::Domain::PartialObjectConfigSLA>(
+        Slic3r::Domain::SLAObjectSettings{}, cfg.full->hw_config()
+    );
+    return cfg;
+}
+
+// The model of the contact case: a plate overhanging a base on every side, so the support points sit
+// on a downward facing surface above the base and their pillars reach the plate beside it. The
+// instance is moved and turned about Z and about X, the way Auto orient leaves one, and dropped
+// onto the plate the way the app drops a model after a rotation.
+//
+// The instance matrix is a world matrix and it carries the offset of the build plate with it, which
+// is what the app's own matrices do: BedPlacement::layout shifts every instance by the transform of
+// the plate it sits on, and the bed of an SLA printer does not start at the origin (the bed_shape of
+// the SL1 begins at 1.48x1.02). That offset is the whole of what M2.34 was about: the tree was
+// built from this matrix and then shifted by the plate a second time.
+struct OverhangingModel
+{
+    Slic3r::Domain::Model             model;
+    Slic3r::Domain::ModelObject*      object{nullptr};
+    Transform3d                       instance{Transform3d::Identity()};
+    SupportPoints                     points;
+    Slic3r::sla::SupportToolModelMesh snapshot;
+
+    OverhangingModel()
+    {
+        object = model.add_object();
+        Slic3r::Domain::ModelVolume* base =
+            Slic3r::Biz::Algorithms::ModelObject::add_volume(
+                object, Slic3r::Biz::Algorithms::TriangleMesh::make_cube(10., 10., 10.)
+            );
+        base->set_offset(Slic3r::Domain::Vec3d(5., 5., 0.));
+        Slic3r::Domain::ModelVolume* plate =
+            Slic3r::Biz::Algorithms::ModelObject::add_volume(
+                object, Slic3r::Biz::Algorithms::TriangleMesh::make_cube(20., 20., 4.)
+            );
+        plate->set_offset(Slic3r::Domain::Vec3d(0., 0., 10.));
+
+        // On the underside of the plate, beside the base: a ray straight down from a head here finds
+        // no model, so every point of them gets a pillar of its own down to the plate.
+        points.push_back(SupportPoint{Vec3f{2.5f, 10.f, 10.f}, 0.4f, SupportPointType::slope});
+        points.push_back(SupportPoint{Vec3f{17.5f, 10.f, 10.f}, 0.4f, SupportPointType::slope});
+        points.push_back(SupportPoint{Vec3f{10.f, 2.5f, 10.f}, 0.4f, SupportPointType::slope});
+        points.push_back(SupportPoint{Vec3f{10.f, 17.5f, 10.f}, 0.4f, SupportPointType::slope});
+
+        instance = placed_instance();
+
+        // What the preview service snapshots on the main thread and the worker builds from (M2.21c).
+        snapshot = Slic3r::sla::support_tool_model_mesh(*object);
+    }
+
+private:
+    Transform3d placed_instance() const
+    {
+        Transform3d trafo = Transform3d::Identity();
+        trafo.rotate(Eigen::AngleAxisd(Slic3r::deg2rad(35.), Slic3r::Domain::Vec3d::UnitZ()));
+        trafo.rotate(Eigen::AngleAxisd(Slic3r::deg2rad(-14.), Slic3r::Domain::Vec3d::UnitX()));
+        // The offset of the build plate, then where the model stands on it.
+        trafo.pretranslate(Slic3r::Domain::Vec3d{60., 40., 0.});
+        trafo.pretranslate(Slic3r::Domain::Vec3d{1.48, 1.02, 0.});
+
+        double min_z = std::numeric_limits<double>::max();
+        for (const Slic3r::Domain::ModelVolume* vol : object->volumes) {
+            for (const Slic3r::Domain::Vec3f& v : vol->mesh().its.vertices) {
+                min_z = std::min(min_z, (trafo * vol->get_matrix() * v.cast<double>()).z());
+            }
+        }
+        trafo.pretranslate(Slic3r::Domain::Vec3d{0., 0., -min_z});
+        return trafo;
+    }
+};
+
+// How far the drawn tree is from the drawn support points, and in which direction.
+struct Contact
+{
+    double      distance{0.};
+    Slic3r::Domain::Vec3d to_tree{Slic3r::Domain::Vec3d::Zero()};
+    std::size_t point{0};
+};
+
+// The largest distance from a support point to the tree, both of them placed the way the app places
+// them: the point as the model and its markers are drawn (the instance matrix raised by the lift the
+// scene applies), the tree as the support preview draws it (the node transform of the placement on
+// the mesh the engine placed with the instance matrix).
+Contact measure_contact(
+    const Slic3r::Domain::TriangleMesh& tree,
+    const Transform3d&                  tree_node_trafo,
+    const Transform3d&                  model_trafo,
+    const SupportPoints&                points
+)
+{
+    // The tree as the scene draws it.
+    Slic3r::Domain::TriangleMesh drawn{tree};
+    drawn.transform(tree_node_trafo);
+    // An AABBMesh is a view on the mesh it was given and not a copy of it, so the mesh has to
+    // outlive it: drawn is declared first and lives until the end of the function.
+    const Slic3r::AABBMesh tree_aabb{drawn};
+
+    Contact worst;
+    for (std::size_t i = 0; i < points.size(); ++i) {
+        const Slic3r::Domain::Vec3d at       = model_trafo * points[i].pos.cast<double>();
+        int                          face     = 0;
+        Slic3r::Domain::Vec3d        closest;
+        const double                 distance = std::sqrt(tree_aabb.squared_distance(at, face, closest));
+        if (distance > worst.distance) {
+            worst.distance = distance;
+            worst.to_tree  = closest - at;
+            worst.point    = i;
+        }
+    }
+    return worst;
 }
 
 } // namespace
@@ -251,5 +431,128 @@ TEST_CASE("SlaSupportPreviewService - diff_sla_support_previews", "[SlaSupportPr
         REQUIRE(diff.to_recompute.empty());
         REQUIRE(diff.to_remove == std::vector<ObjectID>{ObjectID{7}});
         REQUIRE(current.empty());
+    }
+}
+
+// M2.34: "The supports are also not contacting neither the model nor the support points." The tree
+// of the Prepare view is drawn under a node of its own and the model is drawn by the lift of the
+// scene, so the two transforms have to be one. The case below plays both parts: it runs the engine
+// call the worker runs with the placement the service hands it, draws the tree with the node
+// transform of that placement and the support points the way the model and the point markers of the
+// tool are drawn, and asks how far the tree is from the points. The pinhead of a point is built at
+// the point, so the answer has to be about nothing.
+TEST_CASE(
+    "SlaSupportPreviewService - the drawn tree touches the model at every support point",
+    "[SlaSupportPreviewService][contact]"
+)
+{
+    // What a pinhead is allowed to be off by: the head is built at the support point and the head
+    // is a float mesh, so the two can only be as close as the rounding of a vertex at plate
+    // coordinates. Anything more is a tree that is not on its own model.
+    constexpr double tolerance = 0.05;
+
+    const OverhangingModel fixture;
+    REQUIRE(fixture.snapshot.parts.size() == 2u);
+
+    SECTION("A model raised by its supports touches the model at every support point")
+    {
+        const SlaConfig config = make_sla_config(6.);
+        const double    elevation = Slic3r::sla::support_tool_elevation(config.full, config.object_settings);
+        REQUIRE(elevation > 0.);
+
+        // The service: build the tree from the placement of the object, draw it under a node.
+        const SlaSupportTreePlacement placement = sla_support_tree_placement(fixture.instance, elevation);
+        const Slic3r::sla::SupportToolTree tree = Slic3r::sla::build_support_tree_for_tool(
+            fixture.snapshot,
+            placement.object_to_world,
+            fixture.points,
+            config.full,
+            config.object_settings,
+            [] { return false; }
+        );
+
+        REQUIRE(tree.tree != nullptr);
+        REQUIRE_FALSE(tree.tree->empty());
+
+        // The model and its support point markers are drawn with the instance matrix raised by the
+        // lift (PlaterScenePresenter::instance_transform, sla_support_points_drawing_trafo).
+        const Transform3d model_trafo = sla_support_points_drawing_trafo(fixture.instance, elevation);
+        const Contact     contact = measure_contact(*tree.tree, placement.node_trafo, model_trafo, fixture.points);
+
+        INFO("support point " << contact.point << " of " << fixture.points.size() << " is "
+                              << contact.distance << " mm off the tree, at " << contact.to_tree);
+        CHECK(contact.distance <= tolerance);
+    }
+
+    SECTION("A raft around the object (zero elevation) touches the model the same way")
+    {
+        const SlaConfig config = make_sla_config_zero_elevation();
+        const double    elevation = Slic3r::sla::support_tool_elevation(config.full, config.object_settings);
+        REQUIRE(elevation == 0.);
+
+        const SlaSupportTreePlacement placement = sla_support_tree_placement(fixture.instance, elevation);
+        const Slic3r::sla::SupportToolTree tree = Slic3r::sla::build_support_tree_for_tool(
+            fixture.snapshot,
+            placement.object_to_world,
+            fixture.points,
+            config.full,
+            config.object_settings,
+            [] { return false; }
+        );
+
+        REQUIRE(tree.tree != nullptr);
+        REQUIRE_FALSE(tree.tree->empty());
+
+        // Nothing to lift: the model stands on the plate and the node stands still.
+        CHECK(placement.node_trafo.isApprox(Transform3d::Identity()));
+
+        const Transform3d model_trafo = sla_support_points_drawing_trafo(fixture.instance, elevation);
+        const Contact     contact = measure_contact(*tree.tree, placement.node_trafo, model_trafo, fixture.points);
+
+        INFO("support point " << contact.point << " of " << fixture.points.size() << " is "
+                              << contact.distance << " mm off the tree, at " << contact.to_tree);
+        CHECK(contact.distance <= tolerance);
+    }
+
+    SECTION("The offset of the build plate is not a transform of the tree any more")
+    {
+        // What M2.34 fixed: the node transform multiplied the transform of the build plate, while
+        // the instance matrix the tree was built from carries that very offset. The heads of the
+        // tree ended up that far from the points and from the model they belong to.
+        const SlaConfig config = make_sla_config(6.);
+        const double    elevation = Slic3r::sla::support_tool_elevation(config.full, config.object_settings);
+
+        const SlaSupportTreePlacement placement = sla_support_tree_placement(fixture.instance, elevation);
+        const Slic3r::sla::SupportToolTree tree = Slic3r::sla::build_support_tree_for_tool(
+            fixture.snapshot,
+            placement.object_to_world,
+            fixture.points,
+            config.full,
+            config.object_settings,
+            [] { return false; }
+        );
+        REQUIRE(tree.tree != nullptr);
+
+        // The offset the SL1's bed_shape (which begins at 1.48x1.02) puts into every instance
+        // matrix, applied to the tree a second time.
+        const Transform3d bed_trafo =
+            Slic3r::Domain::translation_transform(Slic3r::Domain::Vec3d(1.48, 1.02, 0.));
+        const Contact     missed = measure_contact(
+            *tree.tree,
+            bed_trafo * placement.node_trafo,
+            sla_support_points_drawing_trafo(fixture.instance, elevation),
+            fixture.points
+        );
+
+        // The tree drawn with the plate offset is as far from the points of the model as that offset
+        // is long, which is the whole of the user report, and the placement of the service leaves
+        // the plate transform out.
+        const double offset = bed_trafo.translation().norm();
+        INFO("the tree of the plate offset is " << missed.distance << " mm off the points, at "
+                                               << missed.to_tree << ", the offset is " << offset);
+        CHECK(missed.distance > tolerance);
+        CHECK(missed.distance == Catch::Approx(offset).margin(0.1));
+        CHECK(placement.node_trafo.isApprox(
+            Slic3r::Domain::translation_transform(Slic3r::Domain::Vec3d(0., 0., elevation))));
     }
 }
