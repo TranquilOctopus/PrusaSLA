@@ -100,6 +100,22 @@ SlaSupportPreviewKey make_sla_support_preview_key(
     return key;
 }
 
+SlaSupportTreePlacement sla_support_tree_placement(const Domain::Transform3d& instance_matrix, double lift)
+{
+    // One convention, on both sides (M2.34): the engine puts the object where object_to_world says
+    // and returns the tree in that same world frame with the object NOT lifted
+    // (libslic3r/SLASupportTool.hpp), and the scene draws the model by translation(0, 0, lift) *
+    // instance_matrix (PlaterScenePresenter::instance_transform). The object is placed with the
+    // instance matrix already, so the node the tree hangs from has to add the lift and nothing
+    // else: the instance matrix is a world matrix and it already carries the offset of the build
+    // plate, so a plate transform here would move the tree that far away from its own model.
+    SlaSupportTreePlacement placement;
+    placement.object_to_world = instance_matrix;
+    placement.node_trafo      = lift == 0. ? Domain::Transform3d::Identity()
+                                          : Domain::translation_transform(Domain::Vec3d(0., 0., lift));
+    return placement;
+}
+
 SlaSupportPreviewDiff diff_sla_support_previews(
     const std::vector<SlaSupportPreviewCandidate>&          candidates,
     std::unordered_map<std::size_t, SlaSupportPreviewKey>& current_keys
@@ -278,7 +294,6 @@ void SlaSupportPreviewService::refresh()
     const Domain::BedInstance* bed   = slicing_id.project_id == project_id
         ? project.find_bed_instance_by_id(slicing_id.bed_instance_id)
         : nullptr;
-    const Transform3d bed_trafo = bed != nullptr ? bed->transformation.get_matrix() : Transform3d::Identity();
 
     struct Candidate
     {
@@ -358,9 +373,10 @@ void SlaSupportPreviewService::refresh()
         if (!candidate.public_part.wants_preview) {
             continue;
         }
-        ObjectPreview& preview         = m_previews[candidate.public_part.object_id.id];
-        preview.key                    = candidate.public_part.key;
-        preview.elevation              = candidate.elevation;
+        ObjectPreview& preview = m_previews[candidate.public_part.object_id.id];
+        preview.key            = candidate.public_part.key;
+        // The model is drawn by this lift, and the tree of it is built and drawn by the very same
+        // one (sla_support_tree_placement), so the two can never drift apart (M2.34).
         m_scene_presenter.set_sla_lift(candidate.public_part.object_id, candidate.elevation);
     }
 
@@ -377,12 +393,10 @@ void SlaSupportPreviewService::refresh()
         // Everything below it is cheap enough to take on every edit.
         Pending pending;
         pending.object_id       = object_id;
-        pending.instance_matrix = it->instance->get_matrix();
+        pending.placement       = sla_support_tree_placement(it->instance->get_matrix(), it->elevation);
         pending.points          = it->model_object->sla_support_points;
         pending.full_config     = it->config.full;
         pending.object_config   = it->config.object;
-        pending.bed_trafo       = bed_trafo;
-        pending.elevation       = it->elevation;
 
         m_pending[object_id.id] = std::move(pending);
         m_schedule.request({object_id, ++m_signatures[object_id.id]});
@@ -526,7 +540,7 @@ void SlaSupportPreviewService::start_next_job()
 
             Slic3r::sla::SupportToolTree tree = Slic3r::sla::build_support_tree_for_tool(
                 worker_job.model_mesh,
-                worker_job.pending.instance_matrix,
+                worker_job.pending.placement.object_to_world,
                 worker_job.pending.points,
                 worker_job.pending.full_config,
                 worker_job.pending.object_config,
@@ -536,13 +550,12 @@ void SlaSupportPreviewService::start_next_job()
 
             const SlaSupportPreviewSchedule::Request request = worker_job.request;
             const ObjectID object_id                        = worker_job.request.object_id;
-            const double elevation                          = worker_job.pending.elevation;
-            const Transform3d bed_trafo                     = worker_job.pending.bed_trafo;
+            const Transform3d node_trafo                    = worker_job.pending.placement.node_trafo;
             const std::shared_ptr<std::atomic<bool>> alive   = m_alive;
 
             const bool dispatched = Biz::Platform::PlatformServices::instance()
                                        .main_thread_dispatcher()
-                                       .dispatch_on_main_thread([this, alive, request, object_id, elevation, bed_trafo, tree = std::move(tree), cancelled]() mutable {
+                                       .dispatch_on_main_thread([this, alive, request, object_id, node_trafo, tree = std::move(tree), cancelled]() mutable {
                     if (!alive->load()) {
                         return; // the service is gone, its destructor joined the worker already
                     }
@@ -556,7 +569,7 @@ void SlaSupportPreviewService::start_next_job()
 
                     // A result of a key an edit has replaced since is thrown away, never shown.
                     if (!cancelled && m_schedule.is_current(request)) {
-                        build_nodes(object_id, bed_trafo, elevation, tree);
+                        build_nodes(object_id, node_trafo, tree);
                     }
                     m_schedule.finish_build();
                     start_next_job();
@@ -573,9 +586,8 @@ void SlaSupportPreviewService::start_next_job()
 }
 
 void SlaSupportPreviewService::build_nodes(
-    ObjectID                           object_id,
-    const Transform3d&                 bed_trafo,
-    double                             elevation,
+    ObjectID                   object_id,
+    const Transform3d&         node_trafo,
     const Slic3r::sla::SupportToolTree& tree
 )
 {
@@ -624,10 +636,14 @@ void SlaSupportPreviewService::build_nodes(
             .set_transparent(mesh_color.is_transparent());
     };
 
-    // The meshes come back in the world placement of the object, not lifted: the bed transform and
-    // the support elevation belong to the node, so the tree stands on the plate and the model sits
-    // on top of it. No AABB, the preview is not clickable and never steals a pick from the model.
-    const Transform3d final_trafo = bed_trafo * Domain::translation_transform(Vec3d(0., 0., elevation));
+    // The meshes come back in the world placement of the object and not lifted (M2.34, see
+    // sla_support_tree_placement and libslic3r/SLASupportTool.hpp), so the node raises them by the
+    // support elevation and by nothing else: the tree stands on the plate and the model sits on top
+    // of it, and a pinhead is at the support point it belongs to. The transform of the build plate
+    // is not applied here any more: the instance matrix the meshes were placed with is a world
+    // matrix and already carries that offset. No AABB, the preview is not clickable and never
+    // steals a pick from the model.
+    const Transform3d final_trafo = node_trafo;
 
     Scene::NodeBuilder object_builder{scene};
     object_builder.set_debug_name(fmt::format("SlaSupportPreviewService - obj {}", object_id.id));

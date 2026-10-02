@@ -93,6 +93,35 @@ struct SlaSupportPreviewDiff
     std::vector<Domain::ObjectID> to_remove;
 };
 
+/**
+ * @brief Where the support tree and the raft of one object are built and drawn, which is the one
+ * convention of this service (M2.34).
+ *
+ * The tree is built from the world placement of the object as the scene draws it, so a support
+ * point ends up on the tree the model is drawn against: the pinhead of a point is built at the
+ * point, and the head of the tree is at the model. node_trafo * object_to_world is the transform
+ * PlaterScenePresenter puts on the instance node of the model, the lift of
+ * PlaterScenePresenter::set_sla_lift() and the instance matrix, which is also the transform the
+ * support point markers of the tool are placed with (sla_support_points_drawing_trafo).
+ *
+ * The transform of the build plate is deliberately not a part of this: the instance matrix is a
+ * world matrix and it already carries the offset of the plate (BedPlacement::layout shifts every
+ * instance by the transform of the plate it sits on), which is why the tree used to be drawn that
+ * far away from the model it belongs to. The bed of an SLA printer does not start at the origin
+ * either: the bed_shape of the SL1 begins at 1.48x1.02, so the offset was never a zero vector.
+ */
+struct SlaSupportTreePlacement
+{
+    /// Handed to sla::build_support_tree_for_tool(): the world placement of the object, NOT lifted.
+    Domain::Transform3d object_to_world{Domain::Transform3d::Identity()};
+    /// Put on the scene node the tree and the raft hang from, raising both by the lift.
+    Domain::Transform3d node_trafo{Domain::Transform3d::Identity()};
+};
+
+/// @brief The placement of the tree of an object: @p instance_matrix, the world matrix of its
+/// instance, and the lift the scene draws the model by.
+SlaSupportTreePlacement sla_support_tree_placement(const Domain::Transform3d& instance_matrix, double lift);
+
 /// @brief Compares the objects that should have a preview now against the keys of the ones that
 /// have (or are about to get) one. Objects that are gone or no longer want a preview are erased
 /// from @p current_keys and reported in the result.
@@ -175,12 +204,10 @@ private:
     struct Pending
     {
         Domain::ObjectID                  object_id;
-        Domain::Transform3d               instance_matrix{Domain::Transform3d::Identity()};
+        SlaSupportTreePlacement           placement;
         Domain::SLA::SupportPoints        points;
         Domain::FullConfigSLAPtr          full_config;
         Domain::PartialObjectConfigSLAPtr object_config;
-        Domain::Transform3d               bed_trafo{Domain::Transform3d::Identity()};
-        double                            elevation{0.};
     };
 
     struct Job
@@ -197,7 +224,6 @@ private:
     {
         SlaSupportPreviewKey key;
         Scene::Node*         node{nullptr};
-        double               elevation{0.};
     };
 
     void refresh();
@@ -207,12 +233,8 @@ private:
     void drop_main_node();
     void start_due_build(const SlaSupportPreviewSchedule::Request& request);
     void start_next_job();
-    void build_nodes(
-        Domain::ObjectID                  object_id,
-        const Domain::Transform3d&        bed_trafo,
-        double                            elevation,
-        const Slic3r::sla::SupportToolTree& tree
-    );
+    void build_nodes(Domain::ObjectID object_id, const Domain::Transform3d& node_trafo,
+                     const Slic3r::sla::SupportToolTree& tree);
 
     Biz::ProjectInteractor& m_project_interactor;
     PlaterScenePresenter&   m_scene_presenter;
