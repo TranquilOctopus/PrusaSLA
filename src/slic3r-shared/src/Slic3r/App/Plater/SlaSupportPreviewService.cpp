@@ -204,6 +204,14 @@ std::optional<SlaSupportPreviewService::ObjectSlaConfig> SlaSupportPreviewServic
     return config;
 }
 
+bool SlaSupportPreviewService::has_preview(Domain::ObjectID object_id) const
+{
+    // An entry without a node is an object whose tree is about to be built (or was just dropped), so
+    // nothing of it is drawn to be picked (M2.35).
+    const auto it = m_previews.find(object_id.id);
+    return it != m_previews.end() && it->second.node != nullptr;
+}
+
 void SlaSupportPreviewService::on_slicing_input_changed(const Domain::BedRef& /*bed_instance*/)
 {
     refresh();

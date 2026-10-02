@@ -1,4 +1,5 @@
 #include "Slic3r/App/Plater/SlaSupportPointsGizmo.hpp"
+#include "Slic3r/App/Plater/SlaSupportPointPick.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsClear.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsEditing.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsLeaving.hpp"
@@ -10,9 +11,11 @@
 #include "Slic3r/App/Plater/PlaterScenePresenter.hpp"
 #include "Slic3r/App/AppServices.hpp"
 #include "Slic3r/App/IDialogManager.hpp"
+#include "Slic3r/App/IsSlaActive.hpp"
 #include "Slic3r/App/DisplayStrings.hpp"
 #include "Slic3r/App/Scene/Scene.hpp"
 #include "Slic3r/App/Scene/NodeBuilder.hpp"
+#include "Slic3r/App/Scene/Camera.hpp"
 #include "Slic3r/App/Scene/GeometryDataFactory.hpp"
 #include "Slic3r/App/Scene/Ray.hpp"
 #include "Slic3r/App/Render/Device.hpp"
@@ -27,6 +30,7 @@
 #include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
 #include "jthread/JThread.hpp"
 #include "Slic3r/Biz/Platform/PlatformServices.hpp"
+#include "Slic3r/Domain/BedInstance.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
 #include "Slic3r/Domain/SelectionId.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
@@ -70,6 +74,19 @@ using Slic3r::sla::support_tool_elevation;
 using Slic3r::sla::SupportToolStop;
 
 namespace Slic3r::App::Plater {
+
+namespace {
+
+// How large the glyph of a support point is drawn, in mm. The head radius of the point, and never
+// less than a fifth of a millimeter, so a point the generator gave a tiny head is still visible and
+// still clickable (the same value the glyphs are drawn with, and the size the picking measures on
+// the screen).
+double point_glyph_radius_mm(const SupportPoint& point)
+{
+    return std::max(static_cast<double>(point.head_front_radius), 0.2);
+}
+
+} // namespace
 
 SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     PlaterScenePresenter& scene_presenter,
@@ -213,6 +230,10 @@ void SlaSupportPointsGizmo::on_activated()
     const Biz::Scene::ObjectSelection& selection =
         m_project_interactor.scene_interactor().object_selection();
     this->on_scene_selection_changed(m_project_interactor.selected_project_id(), selection);
+
+    // A double click on a drawn support opened the tool on that model with that support selected, so
+    // its "Selected supports" group shows what it carries right away (M2.35).
+    this->open_on_picked_point();
 }
 
 void SlaSupportPointsGizmo::on_project_activated(size_t new_project_id)
@@ -269,6 +290,9 @@ void SlaSupportPointsGizmo::on_deactivated()
     // Clear point visuals
     clear_point_visuals();
     m_hovered_point_idx.reset();
+    // A support a double click found while the tool was closed, which the tool was never opened on,
+    // is not a support to select now (M2.35).
+    m_pending_open_pick.reset();
 
     DialogSyncGuard guard(*this);
     m_dialog->set_generate_enabled(false);
@@ -1142,15 +1166,6 @@ Domain::Vec3d SlaSupportPointsGizmo::hit_to_object_pos(const VolumeHitPoint& hit
                                            hit.volume_hit_position);
 }
 
-std::optional<size_t> SlaSupportPointsGizmo::find_nearest_point(const Domain::Vec3d& mesh_pos, double max_distance_mm) const
-{
-    if (!m_edit_state.has_value()) {
-        return std::nullopt;
-    }
-
-    return m_edit_state->editing.find_nearest_point(mesh_pos, max_distance_mm);
-}
-
 void SlaSupportPointsGizmo::add_point_at_mesh_pos(const Domain::Vec3d& mesh_pos)
 {
     DialogSyncGuard guard(*this);
@@ -1251,6 +1266,161 @@ std::optional<SlaSupportPointsGizmo::VolumeHitPoint> SlaSupportPointsGizmo::rayc
     return hit;
 }
 
+// The transform every part of the tool works with: the instance transform with the lift the scene
+// draws the object by. The glyphs, the raycast and the picking of the points and of their drawn
+// tree all go through this one value, or they would test three different places (M2.33, M2.35).
+Domain::Transform3d SlaSupportPointsGizmo::object_drawing_trafo() const
+{
+    const Domain::Project& project = m_project_interactor.selected_project();
+    const Domain::ModelInstance* instance =
+        project.find_instance_by_id(m_selected_object_id.id, m_selected_instance_id);
+    if (!instance) {
+        return Transform3d::Identity();
+    }
+    return sla_support_points_drawing_trafo(instance->get_matrix(), applied_lift());
+}
+
+// The markers of the points of the edit session as they are on the screen. A click picks these
+// first, so a support under an overhang is reachable without looking at it from below and a click
+// on a glyph that stands in front of the model hits that point (M2.35).
+void SlaSupportPointsGizmo::collect_point_markers(std::vector<SlaSupportPointMarker>& out_markers) const
+{
+    out_markers.clear();
+    if (!m_edit_state.has_value()) {
+        return;
+    }
+
+    const Scene::Camera& camera = m_scene_presenter.scene().camera();
+    const Vec3d          eye    = camera.position();
+    const Transform3d    trafo  = this->object_drawing_trafo();
+
+    out_markers.reserve(m_edit_state->editing.points.size());
+    for (const SupportPoint& point : m_edit_state->editing.points) {
+        const Vec3d   world_pos    = trafo * point.pos.cast<double>();
+        const double drawn_radius =
+            sla_support_point_screen_radius(camera, world_pos, point_glyph_radius_mm(point));
+
+        SlaSupportPointMarker marker;
+        marker.screen_pos      = camera.project_to_screen_space(world_pos);
+        marker.drawn_radius_px = drawn_radius;
+        marker.depth_mm        = (world_pos - eye).norm();
+        out_markers.push_back(marker);
+    }
+}
+
+// The drawn pieces of the support tree, one per support point that has one. The M2.21 support
+// preview draws a tree as one merged mesh without an AABB, on purpose: the tree never steals a pick
+// from the model and one click keeps selecting the object. A click that means to take a support
+// still has to find the piece of the tree under the cursor, so every point contributes the segment
+// its pillar runs along, from the head of the point down to the plate where the pillar stands
+// (M2.35).
+void SlaSupportPointsGizmo::collect_tree_parts(std::vector<SlaSupportTreePart>& out_parts, bool whole_plate) const
+{
+    out_parts.clear();
+
+    const Scene::Camera& camera = m_scene_presenter.scene().camera();
+    const Vec3d          eye    = camera.position();
+
+    const auto add_object = [&camera, &eye, &out_parts](const Domain::ModelObject&     object,
+                                                       const Domain::ModelInstance&  instance,
+                                                       const SupportPoints&          points,
+                                                       const Domain::Transform3d&    object_to_world)
+    {
+        for (size_t i = 0; i < points.size(); ++i) {
+            const Vec3d head_pos = object_to_world * points[i].pos.cast<double>();
+
+            SlaSupportTreePart part;
+            part.object.object_id   = object.id().id;
+            part.object.instance_id = instance.id().id;
+            part.point_index        = i;
+            part.screen_start       = camera.project_to_screen_space(head_pos);
+            // A pillar stands on the plate, so the drawn piece of a point runs from its head down to
+            // the ground under it. A support that ends on the model is covered by the same segment.
+            part.screen_end = camera.project_to_screen_space(Vec3d{head_pos.x(), head_pos.y(), 0.});
+            part.drawn_radius_px =
+                sla_support_point_screen_radius(camera, head_pos, point_glyph_radius_mm(points[i]));
+            part.depth_mm = (head_pos - eye).norm();
+            out_parts.push_back(part);
+        }
+    };
+
+    if (!whole_plate) {
+        if (!m_selected_object_id.valid()) {
+            return;
+        }
+        const Domain::Project& project = m_project_interactor.selected_project();
+        const Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
+        const Domain::ModelInstance* model_instance =
+            project.find_instance_by_id(m_selected_object_id.id, m_selected_instance_id);
+        if (!model_object || !model_instance) {
+            return;
+        }
+        // While the tool is open the points it shows are the edited ones, not the ones the model
+        // carried when the session began.
+        const SupportPoints& points = m_edit_state.has_value() ? m_edit_state->editing.points
+                                                              : model_object->sla_support_points;
+        add_object(*model_object, *model_instance, points, this->object_drawing_trafo());
+        return;
+    }
+
+    // The double click out of the tool: any model on the plate may have the tree under the cursor,
+    // so all of them that have support points are asked (M2.35).
+    const Domain::SelectionId project_id = m_project_interactor.selected_project_id();
+    const SlicingId           slicing_id = m_project_interactor.selected_bed_slicing_id();
+    if (slicing_id.project_id != project_id) {
+        return;
+    }
+    const Domain::Project&     project = m_project_interactor.project(project_id);
+    const Domain::BedInstance* bed     = project.find_bed_instance_by_id(slicing_id.bed_instance_id);
+    if (!bed) {
+        return;
+    }
+
+    const Transform3d            bed_trafo = bed->matrix();
+    std::unordered_set<size_t> seen;
+    for (const Domain::ModelInstance* instance : bed->model_instances) {
+        if (instance == nullptr || !instance->is_printable()) {
+            continue;
+        }
+        const Domain::ModelObject* model_object = instance->get_object();
+        if (model_object == nullptr || model_object->sla_support_points.empty()) {
+            continue;
+        }
+        if (!seen.insert(model_object->id().id).second) {
+            continue;
+        }
+        // Only a support that is drawn on the plate can be double clicked (M2.35), and the tree of an
+        // object is drawn while the support preview has one for it.
+        if (!m_support_preview_service.has_preview(model_object->id())) {
+            continue;
+        }
+        // The tree is drawn with the transform of the bed and the lift the M2.21 support preview
+        // applies to that model, exactly as that service builds its nodes.
+        const Domain::Transform3d drawing = sla_support_points_drawing_trafo(
+            instance->get_matrix(),
+            m_scene_presenter.sla_lift(model_object->id()));
+        add_object(*model_object, *instance, model_object->sla_support_points, bed_trafo * drawing);
+    }
+}
+
+// What the pointer is on: a marker of a point first, the drawn tree of a point next, and nothing
+// when the pointer is on neither, which is what tells on_mouse to fall back to the surface of the
+// model (M2.35).
+std::optional<SlaSupportPointTarget> SlaSupportPointsGizmo::point_at(const Domain::Vec2d& cursor) const
+{
+    if (!m_edit_state.has_value()) {
+        return std::nullopt;
+    }
+
+    std::vector<SlaSupportPointMarker> markers;
+    this->collect_point_markers(markers);
+
+    std::vector<SlaSupportTreePart> parts;
+    this->collect_tree_parts(parts, /* whole_plate */ false);
+
+    return sla_support_point_click_target(markers, parts, cursor);
+}
+
 Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventContext& ctx, bool only_active)
 {
     using namespace Slic3r::App::Platform;
@@ -1283,13 +1453,18 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
     const std::optional<VolumeHitPoint> hit_opt = raycast_mouse(mouse_position);
     const bool has_hit = hit_opt.has_value();
 
+    // What the pointer is on: a marker of a point, the drawn tree of a point, or nothing (M2.35).
+    // This is what the hover, the Shift toggle, the Ctrl and right button removal and the start of a
+    // drag all use, so every one of them picks the same point of the same click. Nothing while a
+    // point is being dragged or a rectangle is being drawn: those are the pointer's own states.
+    const bool picking = !m_edit_state->dragged_point_idx.has_value() && !m_edit_state->rect_select_active;
+    const std::optional<SlaSupportPointTarget> point_under_cursor =
+        picking ? this->point_at(mouse_position) : std::nullopt;
+
     // Track hovered point (when not dragging or rectangle selecting)
-    if (!m_edit_state->dragged_point_idx.has_value() && !m_edit_state->rect_select_active && has_hit) {
-        const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
-        const double hover_radius = m_edit_state->editing.support_geometry.tip_diameter_mm * 2.0;
-        m_hovered_point_idx = find_nearest_point(mesh_pos, hover_radius);
-    } else if (!has_hit || m_edit_state->dragged_point_idx.has_value() || m_edit_state->rect_select_active) {
-        m_hovered_point_idx.reset();
+    m_hovered_point_idx.reset();
+    if (point_under_cursor.has_value()) {
+        m_hovered_point_idx = point_under_cursor->index;
     }
 
     // Handle mouse wheel for clipping plane (Ctrl + wheel)
@@ -1313,55 +1488,56 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
     if (is_left_button_event && mouse_event.type() == MouseEvent::Type::ButtonDown) {
         // Ctrl+click: remove point
         if (ctrl_down) {
-            if (has_hit) {
-                const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
-                const double removal_radius = m_edit_state->editing.support_geometry.tip_diameter_mm * 2.0;
-                if (auto idx = find_nearest_point(mesh_pos, removal_radius); idx.has_value()) {
-                    if (!m_edit_state->editing.lock_island_supports || !m_edit_state->editing.points[*idx].is_island()) {
-                        remove_point_at_index(*idx);
-                    }
-                    return Scene::GizmoActivationState::Active;
+            if (point_under_cursor.has_value()) {
+                const size_t idx = point_under_cursor->index;
+                if (!m_edit_state->editing.lock_island_supports || !m_edit_state->editing.points[idx].is_island()) {
+                    remove_point_at_index(idx);
                 }
+                return Scene::GizmoActivationState::Active;
             }
             return Scene::GizmoActivationState::Inactive;
         }
 
         // Shift+click on empty space: start rectangle selection
-        if (shift_down && !has_hit) {
+        if (shift_down && !point_under_cursor.has_value()) {
             start_rectangle_selection(mouse_position, true);
             return Scene::GizmoActivationState::Probing;
         }
 
         // Shift+click on point: toggle selection
-        if (shift_down && has_hit) {
-            const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
-            const double selection_radius = m_edit_state->editing.support_geometry.tip_diameter_mm * 2.0;
-            if (auto idx = find_nearest_point(mesh_pos, selection_radius); idx.has_value()) {
-                m_edit_state->editing.toggle_point(*idx);
-                update_point_visuals();
-                return Scene::GizmoActivationState::Active;
-            }
+        if (shift_down && point_under_cursor.has_value()) {
+            m_edit_state->editing.toggle_point(point_under_cursor->index);
+            update_point_visuals();
+            return Scene::GizmoActivationState::Active;
         }
 
-        // Regular click on point: select and start drag
-        if (has_hit) {
-            const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
-            const double selection_radius = m_edit_state->editing.support_geometry.tip_diameter_mm * 2.0;
-            if (auto idx = find_nearest_point(mesh_pos, selection_radius); idx.has_value()) {
-                if (!m_edit_state->editing.lock_island_supports || !m_edit_state->editing.points[*idx].is_island()) {
-                    clear_selection();
-                    select_point(*idx);
-                    m_edit_state->dragged_point_idx = idx;
-                    m_edit_state->drag_start_world_pos = m_paintable_volumes[hit_opt->volume_idx].world_trafo * hit_opt->volume_hit_position;
-                    m_edit_state->drag_start_mesh_pos = mesh_pos;
-                }
-                return Scene::GizmoActivationState::Active;
-            } else {
-                // Click on empty model surface: add point
+        // Regular click on point: select it. A click on the drawn tree of a point selects it and
+        // nothing more, since a drag starts from the marker of the point (M2.35).
+        if (point_under_cursor.has_value()) {
+            const size_t idx = point_under_cursor->index;
+            if (!m_edit_state->editing.lock_island_supports || !m_edit_state->editing.points[idx].is_island()) {
                 clear_selection();
-                add_point_at_mesh_pos(mesh_pos);
-                return Scene::GizmoActivationState::Active;
+                select_point(idx);
+                if (point_under_cursor->from_marker) {
+                    m_edit_state->dragged_point_idx = idx;
+                    // The drag starts on the surface under the cursor when the ray hit one, and on the
+                    // point itself when it did not: a support under an overhang is picked by its
+                    // marker with the ray never reaching the model at all.
+                    m_edit_state->drag_start_world_pos =
+                        has_hit ? m_paintable_volumes[hit_opt->volume_idx].world_trafo * hit_opt->volume_hit_position
+                                : this->object_drawing_trafo() * m_edit_state->editing.points[idx].pos.cast<double>();
+                    m_edit_state->drag_start_mesh_pos = m_edit_state->editing.points[idx].pos.cast<double>();
+                }
             }
+            return Scene::GizmoActivationState::Active;
+        }
+
+        // A click on no point at all falls back to the model surface, where a new support point goes
+        // (M2.35 keeps M2.33 for this, the marker and the tree only come first).
+        if (has_hit) {
+            clear_selection();
+            add_point_at_mesh_pos(hit_to_object_pos(*hit_opt));
+            return Scene::GizmoActivationState::Active;
         }
 
         // Click on empty space: clear selection
@@ -1372,15 +1548,12 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
 
     // Right button down: remove point (or deselect if locked)
     if (is_right_button_event && mouse_event.type() == MouseEvent::Type::ButtonDown) {
-        if (has_hit) {
-            const Domain::Vec3d mesh_pos = hit_to_object_pos(*hit_opt);
-            const double removal_radius = m_edit_state->editing.support_geometry.tip_diameter_mm * 2.0;
-            if (auto idx = find_nearest_point(mesh_pos, removal_radius); idx.has_value()) {
-                if (!m_edit_state->editing.lock_island_supports || !m_edit_state->editing.points[*idx].is_island()) {
-                    remove_point_at_index(*idx);
-                }
-                return Scene::GizmoActivationState::Active;
+        if (point_under_cursor.has_value()) {
+            const size_t idx = point_under_cursor->index;
+            if (!m_edit_state->editing.lock_island_supports || !m_edit_state->editing.points[idx].is_island()) {
+                remove_point_at_index(idx);
             }
+            return Scene::GizmoActivationState::Active;
         }
         return Scene::GizmoActivationState::Inactive;
     }
@@ -1420,6 +1593,73 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
     return Scene::GizmoActivationState::Inactive;
 }
 
+// A double click on a drawn support opens the tool on the model of that support, with that support
+// selected (M2.35). Outside the tool only: a tree is not pickable (the M2.21 support preview draws
+// it without an AABB on purpose), so a single click on it still selects the object as it always did,
+// while a double click is the one gesture that means "this support, please".
+bool SlaSupportPointsGizmo::allows_activation_by_double_click(const Scene::GizmoEventContext& ctx)
+{
+    // While the tool is open the click belongs to the tool, which picks the point of the drawn tree
+    // on its own (on_mouse), and a re-activation would not call on_activated anyway.
+    if (m_gizmo_active || !App::is_sla_active(m_project_interactor)) {
+        return false;
+    }
+
+    const Platform::MouseEvent& mouse_event = ctx.mouse_event();
+    if (mouse_event.type() != Platform::MouseEvent::Type::DoubleClick) {
+        return false;
+    }
+
+    const Domain::Vec2d cursor = Domain::Vec2f(ctx.screen_mouse_x(), ctx.screen_mouse_y()).cast<double>();
+
+    std::vector<SlaSupportTreePart> parts;
+    this->collect_tree_parts(parts, /* whole_plate */ true);
+
+    const std::optional<SlaSupportTreePart> picked = sla_support_tree_part_at(parts, cursor);
+    if (!picked.has_value()) {
+        return false;
+    }
+
+    // The object is selected first, since the tool works on the selected object, and the point is
+    // remembered until the tool is open, where it is selected (open_on_picked_point).
+    m_project_interactor.scene_interactor().set_object_selection({
+        Biz::Scene::SelectionMode::Instance,
+        {Domain::ElementRef{picked->object.object_id, picked->object.instance_id}}
+    });
+    m_pending_open_pick = *picked;
+
+    return true;
+}
+
+// The "Selected supports" group (M2.33) shows the tip, stem and foot values of the support the user
+// double clicked, so the tool opens with that support selected. A click that found a point of a
+// model that is no longer the selected one (the tree moved on, or the model lost its points in
+// between) opens the tool on it without selecting anything.
+void SlaSupportPointsGizmo::open_on_picked_point()
+{
+    if (!m_pending_open_pick.has_value()) {
+        return;
+    }
+    const SlaSupportTreePart picked = *m_pending_open_pick;
+    m_pending_open_pick.reset();
+
+    if (!m_selected_object_id.valid() || picked.object.object_id != m_selected_object_id.id
+        || picked.object.instance_id != m_selected_instance_id) {
+        return;
+    }
+
+    if (!m_edit_state.has_value()) {
+        begin_editing();
+    }
+    if (!m_edit_state.has_value() || picked.point_index >= m_edit_state->editing.points.size()) {
+        return;
+    }
+
+    clear_selection();
+    select_point(picked.point_index);
+    update_point_visuals();
+}
+
 std::unique_ptr<GizmoWindow> SlaSupportPointsGizmo::release_ui_window()
 {
     return m_dialog.release();
@@ -1448,8 +1688,7 @@ void SlaSupportPointsGizmo::update_point_visuals()
     if (!instance) {
         return;
     }
-    const Domain::Transform3d instance_trafo =
-        sla_support_points_drawing_trafo(instance->get_matrix(), applied_lift());
+    const Domain::Transform3d instance_trafo = this->object_drawing_trafo();
 
     // Sphere geometry (shared for all points)
     static constexpr double SPHERE_RESOLUTION_ANGLE = Slic3r::deg2rad(360.0 / 32.0);
@@ -1491,7 +1730,7 @@ void SlaSupportPointsGizmo::update_point_visuals()
         Domain::Vec3d world_pos = instance_trafo * point.pos.cast<double>();
 
         // Radius = head_front_radius (minimum 0.2 mm)
-        double radius = std::max(static_cast<double>(point.head_front_radius), 0.2);
+        double radius = point_glyph_radius_mm(point);
 
         // Color based on point type and state
         const PointGlyphState glyph_state = highlighted   ? PointGlyphState::Hovered
@@ -1924,8 +2163,7 @@ void SlaSupportPointsGizmo::project_points_to_screen(std::vector<Domain::Vec2d>&
     if (!instance) {
         return;
     }
-    const Domain::Transform3d instance_trafo =
-        sla_support_points_drawing_trafo(instance->get_matrix(), applied_lift());
+    const Domain::Transform3d instance_trafo = this->object_drawing_trafo();
 
     out_screen_positions.resize(m_edit_state->editing.points.size());
 

@@ -151,6 +151,11 @@ public:
         const Domain::ModelInstance* instance
     ) const;
 
+    /// @brief Whether the support tree (or the raft) of this object is drawn on the plate right now.
+    /// The tree is built on a worker, so an object whose points were written a moment ago may have
+    /// none yet; a caller that wants to know whether a support of it can be picked asks here (M2.35).
+    [[nodiscard]] bool has_preview(Domain::ObjectID object_id) const;
+
     void on_slicing_input_changed(const Domain::BedRef& bed_instance) override;
     void on_slicing_input_removed(const Domain::BedRef& bed_instance) override;
     void on_scene_selection_changed(

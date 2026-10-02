@@ -619,6 +619,63 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
   - [x] **M2.33-BuildFix9** M2.33 does not compile: the routing of the settings reads a `stem_diameter_mm` off the editing state that names it `pillar_diameter_mm`, four functions of the gizmo are declared and called but no longer defined, and a test built its AABBMesh out of a mesh that the statement freed. · S · needs M2.33
     Result: the settings of M2.33 named a member that does not exist. `SlaSupportPointsEditing` has called the stem diameter `pillar_diameter_mm` since the tool was written, while `SlaSupportPointsSettings.cpp` wrote it on `editing.stem_diameter_mm` in three places, so MSVC stopped the build with C2039 on the stem diameter of `sla_new_support_values()`, of the `StemDiameter` case of `sla_new_support_setting_changed()` and of `sla_new_support_preset_changed()`. All three use the member that is there, and no duplicate field was added; the eight places of `SlaSupportPointsSettingsTests.cpp` that read the same value back are on it as well. Three more functions lost their bodies in the M2.33 rewrite of the settings block, all of them still declared in `SlaSupportPointsGizmo.hpp`: `apply_preset_light/medium/heavy()`, which `on_keyboard()` calls for the number keys, are back and each one picks the preset of the "New supports" group (`apply_new_support_preset(1)`, `2`, `3`), which is what M2.28 and M2.33 say those keys do, and `support_geometry_defaults()` is back with the body it had, because `on_generation_completed()`, `on_auto_support_completed()` and `begin_editing()` all fill the per-point geometry of a point out of it (the three would not have linked without it). `CubeOnThePlate` of `SlaSupportPointsGizmoTests.cpp` built its `AABBMesh` straight from `its_make_cube(...)`, and an AABBMesh is a view on the mesh it was given and not a copy of it (the trap `sla_branching_determinism_tests.cpp` writes down on `sphere_mesh()`), so the cube was freed with the statement and every ray of the click case ran on released memory: the cube is a member of the struct now and the acceleration structure is built from it in the constructor, which is the only change that is not a name or a signature. Everything else the M2.33 files use was read against its declaration and left as it was: `sla_lift()` / `set_sla_lift()` of `PlaterScenePresenter`, `sla_support_points_lift()` and the two trafo helpers of `SlaSupportPointsLift`, the `ComboBox`, `SliderWithInput`, `ToggleButton` and `CollapsibleWindow` calls of the dialog (every control is built through `add_row_with_*`, which names it after the row title, and the `Text` rows are given their text), the `fmt::format` of the point count and of the "Selected supports (N)" title, whose format strings are literals and not translated ones, and the `CHECK`/`REQUIRE` of the two test files, none of which puts a `&&`, a `||` or a ternary inside one. No expectation of a test changed. NOT BUILT (a human builds and runs the tests in this session); NOT CHECKED in a running app.
 
+- [x] **M2.35** A support can be clicked to change it, the way it is clicked in Chitubox. Inside the
+  support points tool a click picks the support under the cursor by its marker and by its drawn tree,
+  and outside the tool a double click on a drawn support opens the tool on that support, so its
+  "Selected supports" group (M2.33) shows the values to change (user: "It's not possible to click
+  the SLA supports anywhere to change their thickness or similar."). · M · needs M2.33
+    Result: by OpenCode, NOT BUILT (a human builds and runs the tests in this session); NOT CHECKED
+    in a running app. What a click is on is one pure question now, asked in the new
+    `App/Plater/SlaSupportPointPick.{hpp,cpp}` (listed in CMake once), with no camera, no scene and no
+    gizmo in it: `SlaSupportPointMarker` is a glyph as it is on the screen (where, how large it is
+    drawn, how far it is from the camera), `SlaSupportTreePart` is one drawn piece of a support tree
+    (the object it belongs to, the support point index, the two ends of the piece on the screen, its
+    thickness, its depth), and `SlaSupportPointTarget` is what a click found (the index, and whether
+    it was the marker or the tree, since a drag starts from the marker and the tree only selects).
+    `sla_support_point_click_radius_px()` is the size of the click target: the drawn radius times 1.5,
+    never under 6 px (a point far away is a pixel or two and still has to be clickable) and never over
+    24 px (a click has to take the point the user aimed at). `sla_support_point_marker_at()` takes
+    the marker nearest the cursor and, of two markers at the same place, the one nearer the camera,
+    which is the one drawn in front. `sla_support_tree_part_at()` is the same over the pieces, testing
+    the distance to the segment, so the head, the pillar and the foot of a support are all on it, with
+    `sla_support_tree_pick_slack_px` (3 px) so a pillar thinner than a pixel is still clickable.
+    `sla_support_point_click_target()` puts the two together the way a click reads: the marker first,
+    the drawn tree next, and nothing at all when the cursor is on neither, which is what tells the
+    tool to fall back to the surface of the model. The one function that needs the camera,
+    `sla_support_point_screen_radius()`, measures how large a sphere is drawn at a position, so the
+    radius a click follows is the size of the glyph on the screen and not the tip diameter in mm as
+    before. **In the tool** `SlaSupportPointsGizmo` collects the markers and the pieces of the object
+    it works on (`collect_point_markers()`, `collect_tree_parts()`, `point_at()`) and asks that one
+    question per mouse event: the hover highlight, the Shift toggle, the Ctrl and the right button
+    removal and the start of a drag all go through the same pick, so they cannot disagree about which
+    support a click is on. The raycast of the model is what it was (M2.33), and it is still the
+    fallback: a click on no marker and no piece of the tree lands on the drawn surface and adds a
+    point there, and a click on nothing at all clears the selection. A click on a piece of the tree
+    selects that support and starts no drag, so a click on a pillar can never move a point by
+    accident; a click on the marker of a point selects and drags it as before, and the drag starts on
+    the point itself when the ray never reached the model (a support under an overhang is now picked
+    without looking at the model from below). `object_drawing_trafo()` is the one transform the glyphs,
+    the raycast, the markers and the tree pieces go through, which is what keeps them on the surface
+    the lift of M2.33 draws. **Outside the tool** `allows_activation_by_double_click()` picks a piece
+    of a drawn tree over every model on the plate that has support points (the same walk the M2.21
+    preview service makes: the printable instances of the selected bed, with the transform of the bed
+    and the lift that service applies to each model), selects the model of the support and lets the
+    gizmo manager open the tool; `open_on_picked_point()` then selects that support, so the "Selected
+    supports" group of M2.33 shows its tip, stem and foot values at once. Only a support that is
+    really drawn counts: `SlaSupportPreviewService::has_preview()` is the new question the service
+    answers for one object (an entry that has a node), so a model whose tree is not built yet, or
+    whose supports are off, is not picked. The tree itself is still drawn without an AABB (M2.21 on
+    purpose), so a single click on a support still selects the object as it always did, and only the
+    double click means "this support". Tests: the new
+    `test/Slic3r/App/Plater/SlaSupportPointPickTests.cpp` (the marker nearest the cursor, of two
+    markers at the same place the one nearer the camera, the click radius from the drawn size at both
+    ends, a click on the head, the pillar or the foot of a piece of the tree mapping back to the index
+    of its support, of two models whose supports are on the same spot the nearer one, the marker
+    winning over the tree of another point, and a click that hits neither, which is the fallback to
+    the surface); the tests of M2.31, M2.32 and M2.33 are untouched and still describe what they did.
+    Nothing here slices: the clicks only edit the points of the model. No new string, no new colour
+    and no hotspot file touched.
+
 ## M3: Resin profile import (Chitubox, Lychee and others)
 
 **Goal:** people coming from Chitubox or Lychee can bring their resin profiles with them. They drop in the profile file, check a mapping report, and save it as a PrusaSLA material preset.

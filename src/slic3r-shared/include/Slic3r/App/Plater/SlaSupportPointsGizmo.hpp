@@ -2,6 +2,7 @@
 
 #include "Slic3r/App/Scene/IGizmo.hpp"
 #include "Slic3r/App/Plater/GizmoWindow.hpp"
+#include "Slic3r/App/Plater/SlaSupportPointPick.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsEditing.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsSettings.hpp"
 #include "Slic3r/App/Plater/SlaUndoAction.hpp"
@@ -110,6 +111,12 @@ public:
 
     Scene::GizmoActivationState on_mouse(Scene::GizmoEventContext& ctx, bool only_active) override;
 
+    // A double click on a drawn support tree opens this tool on the model of that support, with the
+    // clicked support selected, so its "Selected supports" group (M2.33) shows the values to change
+    // (M2.35). Outside the tool only: while the tool is open the click is a click of the tool
+    // (on_mouse), which picks the point of the drawn tree as well.
+    bool allows_activation_by_double_click(const Scene::GizmoEventContext& ctx) override;
+
     std::unique_ptr<GizmoWindow> release_ui_window() override;
 
     void provide_clipper(Scene::Clipper& clipper);
@@ -161,7 +168,6 @@ private:
     void apply_edited_points();
     void discard_edited_points();
     void commit_edited_points_live();
-    std::optional<size_t> find_nearest_point(const Domain::Vec3d& mesh_pos, double max_distance_mm) const;
     void add_point_at_mesh_pos(const Domain::Vec3d& mesh_pos);
     void remove_point_at_index(size_t idx);
     void move_point_to_mesh_pos(size_t idx, const Domain::Vec3d& mesh_pos);
@@ -189,6 +195,20 @@ private:
 
     std::optional<VolumeHitPoint> raycast_mouse(const Domain::Vec2d& mouse_position) const;
     void collect_paintable_volumes(const Domain::SelectionId project_id, const Domain::ElementRef& element);
+
+    // What the pointer is on (M2.35). A click used to be tested against the surface of the model
+    // alone, which left a support point under an overhang reachable only by looking at it from below
+    // the model, and made a click on a marker that stands in front of that surface miss. The drawn
+    // markers are picked on the screen first, the drawn tree of a point next, and only a click that
+    // hits neither falls back to the surface of the model.
+    void collect_point_markers(std::vector<SlaSupportPointMarker>& out_markers) const;
+    // The drawn pieces of the support tree, one per support point. With @p whole_plate they are
+    // collected for every model on the plate that has support points (the double click that opens the
+    // tool on a support), otherwise for the object the tool works on.
+    void collect_tree_parts(std::vector<SlaSupportTreePart>& out_parts, bool whole_plate) const;
+    std::optional<SlaSupportPointTarget> point_at(const Domain::Vec2d& cursor) const;
+    // Selects the point a double click on a drawn support opened the tool on (M2.35).
+    void open_on_picked_point();
 
     // Clipping plane
     void update_clipping_plane();
@@ -247,6 +267,10 @@ private:
     /// Rebuilds the paintable volumes when the lift the scene applies changed, so every raycast
     /// tests the model as it is drawn.
     void sync_paintable_lift();
+    // The transform the tool draws the object of with: the instance transform with the lift the
+    // scene applies to it (M2.33). One value for the point glyphs, the raycast and the picking of the
+    // points and of their drawn tree (M2.35), so all three of them test what is on the screen.
+    Domain::Transform3d object_drawing_trafo() const;
 
     // Worker helpers
     enum class WorkerJobType { Points };
@@ -332,6 +356,10 @@ private:
 
     // Hovered point index (for highlight)
     std::optional<size_t> m_hovered_point_idx;
+
+    // The piece of a drawn tree a double click found while the tool was closed, and the support the
+    // tool is opened on with (M2.35). Set while the tool is still closed, taken in on_activated.
+    std::optional<SlaSupportTreePart> m_pending_open_pick;
 
     // Auto support all queue
     std::deque<Domain::ObjectID> m_auto_support_queue;
