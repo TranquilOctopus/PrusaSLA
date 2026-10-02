@@ -1,6 +1,7 @@
 # Support Research Tools
 
-Offline analysis scripts for M7.3 (contact extraction). Not part of the application build.
+Offline analysis scripts for M7.3 (contact extraction) and M7.4c (calibration against
+the expert supports). Not part of the application build.
 
 ## Setup
 
@@ -25,8 +26,37 @@ pip install -r requirements.txt
 
 - `synth.py` — synthetic asymmetric test shape with procedurally placed supports
 - `register.py` — rigid registration (coarse PCA alignment + trimmed point-to-plane ICP)
-- `test_m73a.py` — end-to-end registration tests on synthetic data
-- `test_geometry.py` — unit tests for the exact closest-point query
+- `separate.py` — support vs model faces, with a scaled variant for big meshes
+- `contacts.py` — one record per support contact
+- `calibrate.py` — M7.4c: expert support count, orientation and model size per pair
+- `calibration_report.py` — M7.4c: aggregate tables by category from the two sources
+- `test_m73a.py`, `test_m73b.py`, `test_m73c.py`, `test_geometry.py` — synthetic tests
+- `test_m74c.py` — synthetic tests of the calibration measurements (numpy only)
+
+## The M7.4c calibration
+
+Three steps, all local, all writing into the gitignored
+`local-samples/supports/out/`:
+
+```bash
+# 1. What the expert did: tip count, structures, orientation, model size.
+#    Also writes out/oriented/<id>.stl, the plain model in the expert orientation.
+python tools/support-research/calibrate.py [--ids cal001,cal002] [--category head]
+
+# 2. What we do with the same models, as loaded and in the expert orientation.
+set SLA_CALIB_MANIFEST=local-samples\supports\manifest_calib.yaml
+build-default\tests\sla_print\Release\sla_print_tests.exe "[.local]" > calibration.log
+
+# 3. The tables that get committed, by category only.
+python tools/support-research/calibration_report.py --log calibration.log > calibration.md
+```
+
+`calibrate.py --clean` removes the oriented STLs. Exit codes: 0 everything measured,
+1 at least one pair failed, 2 the manifest is unusable.
+
+The research-only rules of ROADMAP M7 apply to all three: the meshes stay where they
+are, no mesh is ever opened by an agent, the console gets ids and counts only, and
+only the aggregate tables of step 3 are ever committed.
 
 ## Constraints
 
