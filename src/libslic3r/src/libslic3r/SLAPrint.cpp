@@ -39,6 +39,8 @@
 
 #include "libslic3r/I18N_private.hpp"
 #include "Slic3r/Domain/SLA/RaftPreset.hpp"
+#include "Slic3r/Domain/SlaLayerHeight.hpp"
+#include "libslic3r/SLA/RaftAuto.hpp"
 
 namespace Slic3r {
 
@@ -106,13 +108,21 @@ double raft_knob_mm(const SLAPrintObjectConfigView &c, const char *key)
 // The pad values raft_type stands for, or nullopt for a config that has no raft_type
 // (or one this build does not know), where the pad_enable / pad_around_object
 // checkboxes are the only source of truth.
-std::optional<Domain::SLA::RaftPadValues> raft_values(const SLAPrintObjectConfigView &c)
+std::optional<Domain::SLA::RaftPadValues> raft_values(
+    const SLAPrintObjectConfigView         &c,
+    const std::optional<ObjectRaft>        &raft = std::nullopt)
 {
     if (c.values().count("raft_type") == 0)
         return std::nullopt;
 
-    const Domain::sla::RaftType raft_type = c.get<Domain::sla::RaftType>("raft_type");
+    Domain::sla::RaftType raft_type = c.get<Domain::sla::RaftType>("raft_type");
     switch (raft_type) {
+    case Domain::sla::RaftType::Auto:
+        // Auto is a decision about one object (rulebook R6, M7.8.4). Nothing resolved it here, so
+        // it is the no raft half of the rule, which is also what the mapping of an unresolved Auto
+        // builds.
+        raft_type = raft ? raft->type : Domain::sla::RaftType::None;
+        break;
     case Domain::sla::RaftType::None:
     case Domain::sla::RaftType::Full:
     case Domain::sla::RaftType::AroundObject:
@@ -140,6 +150,33 @@ std::optional<Domain::SLA::RaftPadValues> raft_values(const SLAPrintObjectConfig
 
 } // namespace
 
+// Is raft_type Auto in this config? An Auto nobody resolved is the no raft of R6.1, so the raft
+// helpers below can answer with it and the caller can look for the decision.
+bool is_raft_auto(const SLAPrintObjectConfigView &c)
+{
+    return c.values().count("raft_type") > 0 && c.get<Domain::sla::RaftType>("raft_type") ==
+                                                  Domain::sla::RaftType::Auto;
+}
+
+// raft_type as it is stored, with Auto resolved for this object from its underside (M7.8.4).
+std::optional<ObjectRaft> resolve_object_raft(const SLAPrintObjectConfigView &c,
+                                              const indexed_triangle_set      &mesh_in_print_pose,
+                                              double                           object_elevation_mm)
+{
+    if (!is_raft_auto(c))
+        return std::nullopt;
+
+    const sla::RaftAutoDecision decision =
+        sla::auto_raft_decision(mesh_in_print_pose, Domain::sla_effective_layer_height(c),
+                                object_elevation_mm);
+
+    SPDLOG_INFO("Object raft: type {} ({})",
+                int(decision.raft_type),
+                decision.suction ? "suction cup under the object" : "no suction cup");
+
+    return ObjectRaft{decision.raft_type, decision.suction};
+}
+
 // The lattice left standing inside the cavity of a hollow print, as the hollowing infill keys ask
 // for it. A print saved before the keys existed has no lattice, which is the plain cavity.
 sla::HollowingInfillConfig make_hollowing_infill_cfg(const SLAPrintObjectConfigView &c)
@@ -166,9 +203,9 @@ sla::HollowingInfillConfig make_hollowing_infill_cfg(const SLAPrintObjectConfigV
 }
 
 // Is a raft (pad) printed? raft_type decides, pad_enable is the legacy fallback.
-bool is_pad_enabled(const SLAPrintObjectConfigView &c)
+bool is_pad_enabled(const SLAPrintObjectConfigView &c, const std::optional<ObjectRaft> &raft)
 {
-    if (const auto vals = raft_values(c); vals)
+    if (const auto vals = raft_values(c, raft); vals)
         return vals->pad_enable;
 
     return c.get<bool>("pad_enable");
@@ -176,21 +213,21 @@ bool is_pad_enabled(const SLAPrintObjectConfigView &c)
 
 // Does the raft hug the object (zero elevation)? raft_type decides, pad_around_object
 // is the legacy fallback.
-bool is_pad_around_object(const SLAPrintObjectConfigView &c)
+bool is_pad_around_object(const SLAPrintObjectConfigView &c, const std::optional<ObjectRaft> &raft)
 {
-    if (const auto vals = raft_values(c); vals)
+    if (const auto vals = raft_values(c, raft); vals)
         return vals->pad_around_object;
 
     return c.get<bool>("pad_around_object");
 }
 
-bool is_zero_elevation(const SLAPrintObjectConfigView &c)
+bool is_zero_elevation(const SLAPrintObjectConfigView &c, const std::optional<ObjectRaft> &raft)
 {
-    return is_pad_enabled(c) && is_pad_around_object(c);
+    return is_pad_enabled(c, raft) && is_pad_around_object(c, raft);
 }
 
 // Compile the argument for support creation from the static print config.
-sla::SupportTreeConfig make_support_cfg(const SLAPrintObjectConfigView& c)
+sla::SupportTreeConfig make_support_cfg(const SLAPrintObjectConfigView& c, const std::optional<ObjectRaft> &raft)
 {
     sla::SupportTreeConfig scfg;
 

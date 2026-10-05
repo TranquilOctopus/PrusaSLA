@@ -57,6 +57,15 @@ RaftPadValues raft_preset_to_pad_values(
         vals.pad_brim_size_mm = expansion_mm * SKATE_BRIM_FACTOR;
         vals.pad_wall_slope_deg = SKATE_SLOPE_DEG;
         break;
+
+    case sla::RaftType::Auto:
+        // Auto is a decision, not a shape: it is resolved per object (rulebook R6, M7.8.4,
+        // libslic3r/SLA/RaftAuto.hpp), and what it resolves to is one of the types above. Reaching
+        // this mapping with Auto means nothing has resolved it, and an unresolved Auto builds no
+        // raft, which is the safe half of the rule (R6.1).
+        vals.pad_enable = false;
+        vals.pad_around_object = false;
+        break;
     }
 
     return vals;
@@ -113,6 +122,14 @@ std::vector<std::string> visible_settings_for(sla::RaftType type)
     // the infill, not the three knobs that shape the infill pattern.
     if (type == sla::RaftType::None)
         return ret;
+
+    // Auto builds either nothing or a raft around the object (R6.2, M7.8.4), and the outcome is
+    // decided per object at slice time, so the knobs of both outcomes are shown: the user shapes
+    // the raft that may appear.
+    if (type == sla::RaftType::Auto) {
+        ret.insert(ret.end(), object_embed_settings().begin(), object_embed_settings().end());
+        return ret;
+    }
 
     // Skate brings its own expansion and wall slope, so the user's values for those two would
     // be ignored.
@@ -195,6 +212,7 @@ const std::vector<std::string>& raft_type_visible_settings(sla::RaftType type)
         visible_settings_for(sla::RaftType::AroundObject)
     };
     static const std::vector<std::string> skate{visible_settings_for(sla::RaftType::Skate)};
+    static const std::vector<std::string> auto_type{visible_settings_for(sla::RaftType::Auto)};
 
     switch (type) {
     case sla::RaftType::None:
@@ -205,6 +223,8 @@ const std::vector<std::string>& raft_type_visible_settings(sla::RaftType type)
         return around_object;
     case sla::RaftType::Skate:
         return skate;
+    case sla::RaftType::Auto:
+        return auto_type;
     }
 
     return none;
@@ -262,6 +282,12 @@ raft_visible_settings(sla::RaftType type, sla::RaftInfillType infill)
          visible_settings_for(sla::RaftType::Skate, sla::RaftInfillType::Grid)},
         {Key{sla::RaftType::Skate, sla::RaftInfillType::Honeycomb},
          visible_settings_for(sla::RaftType::Skate, sla::RaftInfillType::Honeycomb)},
+        {Key{sla::RaftType::Auto, sla::RaftInfillType::None},
+         visible_settings_for(sla::RaftType::Auto, sla::RaftInfillType::None)},
+        {Key{sla::RaftType::Auto, sla::RaftInfillType::Grid},
+         visible_settings_for(sla::RaftType::Auto, sla::RaftInfillType::Grid)},
+        {Key{sla::RaftType::Auto, sla::RaftInfillType::Honeycomb},
+         visible_settings_for(sla::RaftType::Auto, sla::RaftInfillType::Honeycomb)},
     };
 
     static const std::vector<std::string> fallback{

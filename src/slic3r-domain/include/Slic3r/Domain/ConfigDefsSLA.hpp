@@ -14,7 +14,10 @@ enum SLAMaterialSpeed { slamsSlow, slamsFast, slamsHighViscosity };
 namespace sla {
     enum class SupportTreeType { Default, Branching, Organic };
     enum class PillarConnectionMode { zigzag, cross, dynamic };
-    enum class RaftType { None, Full, AroundObject, Skate };
+    // The values of the raft from before M7.8.4 keep their numbers, so a project or a preset that
+    // names one of them still reads what it always read. Auto was appended, and it is the default
+    // of a new config.
+    enum class RaftType { None, Full, AroundObject, Skate, Auto };
     // What the inside of the raft is filled with between the top skin and the build plate.
     enum class RaftInfillType { None, Grid, Honeycomb };
     // The structure left standing inside the cavity of a hollow print, as hollowing_infill stores
