@@ -86,6 +86,37 @@ struct SupportPoint
     enum class OnModel : uint8_t { Inherit, Allow, Forbid };
     OnModel on_model = OnModel::Inherit;
 
+    // Whether the pillar of this point may be braced to its neighbours (M2.38). Inherit leaves the
+    // decision to the object's support_brace_enable, which is what every point did before the
+    // switch existed; On asks for a brace even where the object has bracing off, Off keeps this one
+    // pillar out of every brace even where the object has bracing on. The branching tree has no
+    // braces, so it ignores this.
+    enum class Brace : uint8_t { Inherit, On, Off };
+    Brace brace = Brace::Inherit;
+
+    // What this point carries, which is what the tip class of its support is
+    // picked from (M7.8.2, the support rulebook R4.1 and R4.3 - R4.6 of
+    // doc/sla-fork/supports/rulebook.md): the anchor of the lowest island, an
+    // island, a small island, an overhang, or a fragile thin feature. Unknown is
+    // what a point placed by hand carries, and what a project written before the
+    // roles existed reads back as, so an older file keeps the point it had.
+    //
+    // AnchorLarge is the anchor of a very large object (M7.8.3, the size table of
+    // rulebook section 3), which takes the largest tip (T0.6) instead of the heavy
+    // one. It is appended at the end and the values before it are never renumbered,
+    // so a project written before it reads back as it was.
+    enum class Role : uint8_t
+    {
+        Unknown,
+        Anchor,
+        Island,
+        SmallIsland,
+        Overhang,
+        Fragile,
+        AnchorLarge
+    };
+    Role role = Role::Unknown;
+
     bool is_island() const { return type == SupportPointType::island; }
 
     // unsaved changes + cache invalidation

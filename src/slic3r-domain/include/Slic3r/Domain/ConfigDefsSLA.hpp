@@ -36,6 +36,11 @@ namespace sla {
     // flat disc under a pillar that runs straight into it. The same three values live on the point
     // itself (SLA::SupportPoint::BaseShape), whose Default means the value configured here.
     enum class SupportBaseShape { Cone, Cylinder, Flat };
+    // The preset the automatic support placement gives the supports of the detail, as
+    // support_auto_detail_preset stores it: the Mini, Light or Medium preset of the support tool,
+    // which since M7.8.1 are the T0.1, T0.2 and T0.3 mm classes of the support rulebook (R3). Heavy
+    // is not one of them, the T0.4 class is what the base of the model gets (support_auto_heavy_base).
+    enum class SupportAutoDetailPreset { Mini, Light, Medium };
     // The material of the film at the bottom of the vat. It is the hardest pull a layer puts on
     // the film, so it picks the coefficients of the peel force estimate, see the vat_film_type
     // key and doc/sla-fork/profiling/peel-force.md.

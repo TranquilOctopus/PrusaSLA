@@ -172,7 +172,7 @@ RotationDialog::RotationDialog(
 
     m_auto_orient_goal_row = rotation_section->emplace_back<Yoga::Item>();
     m_auto_orient_goal_row->set_orientation(Orientation::Horizontal);
-    // The four goals do not always fit on one line.
+    // The goals do not always fit on one line.
     m_auto_orient_goal_row->set_flex_wrap(YGWrapWrap);
     m_auto_orient_goal_row->set_gap(10_fpx);
     m_lowest_height_button =
@@ -186,6 +186,9 @@ RotationDialog::RotationDialog(
     m_auto_orient_goal_buttons.insert_button(m_least_peel_button);
     m_no_cups_button = m_auto_orient_goal_row->emplace_back<Yoga::RadioButton>(_u8L("No cups"));
     m_auto_orient_goal_buttons.insert_button(m_no_cups_button);
+    m_miniature_button =
+        m_auto_orient_goal_row->emplace_back<Yoga::RadioButton>(_u8L("Miniature / bust"));
+    m_auto_orient_goal_buttons.insert_button(m_miniature_button);
     reload_auto_orient_goal();
     m_auto_orient_goal_buttons.callbacks().checked_changed = [this](Yoga::AbstractButton*, Yoga::AbstractButton*)
     {
@@ -197,6 +200,8 @@ RotationDialog::RotationDialog(
             auto_orient_goal() = Slic3r::sla::AutoOrientGoal::LeastPeel;
         } else if (m_no_cups_button->checked()) {
             auto_orient_goal() = Slic3r::sla::AutoOrientGoal::NoCups;
+        } else if (m_miniature_button->checked()) {
+            auto_orient_goal() = Slic3r::sla::AutoOrientGoal::Miniature;
         }
     };
 
@@ -309,6 +314,9 @@ void RotationDialog::reload_auto_orient_goal()
         break;
     case Slic3r::sla::AutoOrientGoal::LeastSupports:
         m_fewest_supports_button->set_checked(true);
+        break;
+    case Slic3r::sla::AutoOrientGoal::Miniature:
+        m_miniature_button->set_checked(true);
         break;
     }
 }

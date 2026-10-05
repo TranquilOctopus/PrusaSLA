@@ -684,6 +684,39 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->max = 90;
     def->init_fn = init_with(90.);
 
+    def = defs.add("support_auto_heavy_base", typeid(bool));
+    def->location = Print;
+    def->label = L("Heavy supports on the base of the model");
+    def->row_group = L("Support points");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Supports_Generation;
+    def->category = ConfigItemDef::Category::Print_Supports;
+    def->gui_type = ConfigItemDef::GUIType::checkbox;
+    def->tooltip = L("The automatic placement gives the supports of the lowest island of the model "
+        "the 0.4 mm preset. That island is the first part of the model that prints, so on a head or "
+        "a bust that is glued into its base it is where the supports are hidden and where a thin one "
+        "would show. Off gives that island the preset below like every other support.");
+    def->init_fn = init_with(true);
+
+    def = defs.add("support_auto_detail_preset", typeid(EnumWrapper));
+    def->location = Print;
+    def->label = L("Auto support preset for the detail");
+    def->row_group = L("Support points");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Supports_Generation;
+    def->category = ConfigItemDef::Category::Print_Supports;
+    def->gui_type = ConfigItemDef::GUIType::combobox;
+    def->tooltip = L("The preset the automatic placement gives every generated support that is not "
+        "on the base of the model, so the detail of the model gets the small supports it needs. The "
+        "choices are named by the diameter of their contact, as the presets of the page above are.");
+    // The values keep the ids they have had since M2.37, so a project or a print preset that stores
+    // one of them keeps meaning the same preset; only what the dropdown shows is the tip size, since
+    // a support is named by its contact since M7.8.1.
+    def->init_fn = init_with(
+        sla::SupportAutoDetailPreset::Light,
+        {{int(sla::SupportAutoDetailPreset::Mini), "mini", L("0.1")},
+         {int(sla::SupportAutoDetailPreset::Light), "light", L("0.2")},
+         {int(sla::SupportAutoDetailPreset::Medium), "medium", L("0.3")}}
+    );
+
     def = defs.add("pad_enable", typeid(bool));
     def->location = Print;
     def->overrides_in = Locations{ Object };
@@ -1651,7 +1684,9 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->tooltip = L("Diameter of the pointing side of the head");
         def->units = {L("mm")};
         def->min = 0;
-        def->init_fn = init_with(0.4);
+        // The default tip is the T0.2 class of the support rulebook (M7.8.1, R3): what a fresh
+        // profile and a support point placed by hand get.
+        def->init_fn = init_with(0.2);
 
         def = defs.add(prefix.first + "support_head_penetration", typeid(double));
         def->label = prefix.second;
@@ -1664,7 +1699,9 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->tooltip = L("How much the pinhead has to penetrate the model surface");
         def->units = {L("mm")};
         def->min = 0;
-        def->init_fn = init_with(0.2);
+        // Half the default tip, which is what the rulebook sinks a contact into the model (M7.8.1,
+        // R3.1).
+        def->init_fn = init_with(0.1);
 
         def = defs.add(prefix.first + "support_head_width", typeid(double));
         def->label = prefix.second;
@@ -1862,7 +1899,8 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->units = {L("mm")};
         def->min = 0;
         def->max = 30;
-        def->init_fn = init_with(4.);
+        // One base for every support (M7.8.1, R3.4): 6 mm across, never changed per object.
+        def->init_fn = init_with(6.);
 
         def = defs.add(prefix.first + "support_base_height", typeid(double));
         def->label = prefix.second;
@@ -1875,7 +1913,8 @@ void sla_config_init_fn(ConfigDefinitions& defs)
         def->tooltip = L("The height of the pillar base cone");
         def->units = {L("mm")};
         def->min = 0;
-        def->init_fn = init_with(1.);
+        // 0.3 mm, the thickness of the one base of the rulebook (M7.8.1, R3.4).
+        def->init_fn = init_with(0.3);
 
         def = defs.add(prefix.first + "support_base_shape", typeid(EnumWrapper));
         def->label = prefix.second;
@@ -1889,7 +1928,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
             "A cone flares gradually, a cylinder is a straight foot of the base diameter and height, "
             "and a flat disc is a thin foot of at most 0.5 mm under a pillar that runs straight down.");
         def->init_fn = init_with(
-            sla::SupportBaseShape::Cone,
+            sla::SupportBaseShape::Cylinder,
             {{int(sla::SupportBaseShape::Cone), "cone", L("Cone")},
              {int(sla::SupportBaseShape::Cylinder), "cylinder", L("Cylinder")},
              {int(sla::SupportBaseShape::Flat), "flat", L("Flat disc")}}
@@ -1974,9 +2013,9 @@ def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : 
 
     // Per-point support geometry, and the defaults a new support point takes (M2.16c). Each value
     // is stored on the point itself (SLA::SupportPoint) and edited per point in the support tool;
-    // these four keys are what a point placed by hand or generated starts from. Default, zero and
-    // zero are the geometry the support tree has always built, so a print preset that never sets
-    // them keeps today's supports.
+    // these keys are what a point placed by hand or generated starts from. Since M7.8.1 they are the
+    // geometry of the support rulebook (R3): a ball contact (R3.1), the cone under it (R3.2), a
+    // hexagonal stem (R3.3) and a prism foot (R3.4).
     def = defs.add("support_tip_shape", typeid(EnumWrapper));
     def->location = Print;
     def->overrides_in = Locations{ Object };
@@ -1987,7 +2026,7 @@ def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : 
     def->gui_type = ConfigItemDef::GUIType::combobox;
     def->tooltip = L("Shape of the tip where a support touches the model. Default keeps the standard pinhead, Cone a pointed tip and Ball a rounded one.");
     def->init_fn = init_with(
-        sla::SupportTipShape::Default,
+        sla::SupportTipShape::Ball,
         {{int(sla::SupportTipShape::Default), "default", L("Default")},
          {int(sla::SupportTipShape::Cone), "cone", L("Cone")},
          {int(sla::SupportTipShape::Ball), "ball", L("Ball")}}
@@ -2018,7 +2057,8 @@ def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : 
     def->tooltip = L("Number of sides of the stem (pillar) cross-section. Zero prints round stems, 4 a square, 6 a hexagon, and any larger number a polygon.");
     def->min = 0;
     def->max = 64;
-    def->init_fn = init_with(0);
+    // Six sides: the rulebook asks for a prism stem (M7.8.1, R3.3).
+    def->init_fn = init_with(6);
 
     def = defs.add("support_stem_taper", typeid(double));
     def->location = Print;
@@ -2037,6 +2077,8 @@ def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : 
     // support point carries its own tip_length (M2.13) and the tree builds it; this is the default a
     // point that carries none falls back to. Zero derives the length from support_head_width, which
     // is what the tree has always built, so a print preset that never sets it keeps today's mesh.
+    // The default is 0.5 mm since M7.8.1: the short cone under the contact that widens towards the
+    // stem, so that a support breaks right under its contact and leaves the least mark (R3.2).
     def = defs.add("support_tip_length", typeid(double));
     def->location = Print;
     def->overrides_in = Locations{ Object };
@@ -2049,10 +2091,16 @@ def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : 
     def->units = {L("mm")};
     def->min = 0;
     def->max = 20;
-    def->init_fn = init_with(0.);
+    def->init_fn = init_with(0.5);
 
-    // Support presets for the SLA Support Points tool (Mini, Light, Medium, Heavy)
-    // Each preset has 4 dimensions: head_diameter, pillar_diameter, base_diameter, base_height
+    // Support presets for the SLA Support Points tool, one set per tip class of the support rulebook
+    // (M7.8.1, R3): a support is named by the size of its contact, so the presets are T0.1 to T0.6
+    // mm. Each preset has 4 dimensions: head_diameter, pillar_diameter, base_diameter, base_height.
+    // The four ids are the ones the presets have had since M2.18, so a profile that carries their
+    // keys keeps the values it stored; "xheavy" is the 0.6 mm class the rulebook adds. Only these
+    // four sizes are settings: the ball contact sunk half its own diameter (R3.1), the cone under
+    // it (R3.2), the hexagonal stem (R3.3) and the prism base (R3.4) that every class has are the
+    // geometry of SlaSupportPreset, not a setting of their own.
     struct SupportPreset {
         std::string name;
         std::string label;
@@ -2061,11 +2109,14 @@ def->category = prefix.first == "branching" ? ConfigItemDef::Category::Hidden : 
         double base_diameter;
         double base_height;
     };
-    for (const SupportPreset preset : {
-             SupportPreset{"mini", L("Mini"), 0.2, 0.5, 1.4, 0.4},
-             SupportPreset{"light", L("Light"), 0.30, 0.8, 2.0, 0.5},
-             SupportPreset{"medium", L("Medium"), 0.45, 1.2, 3.0, 0.7},
-             SupportPreset{"heavy", L("Heavy"), 0.60, 1.8, 4.0, 1.0}}) {
+
+    for (const SupportPreset preset :
+         {SupportPreset{"mini", L("0.1"), 0.1, 1.0, 6.0, 0.3},
+          SupportPreset{"light", L("0.2"), 0.2, 1.0, 6.0, 0.3},
+          SupportPreset{"medium", L("0.3"), 0.3, 1.0, 6.0, 0.3},
+          SupportPreset{"heavy", L("0.4"), 0.4, 1.0, 6.0, 0.3},
+          SupportPreset{"xheavy", L("0.6"), 0.6, 1.0, 6.0, 0.3}})
+    {
         def = defs.add("support_preset_" + preset.name + "_head_diameter", typeid(double));
         def->label = preset.label;
         def->location = Print;

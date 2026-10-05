@@ -2,6 +2,7 @@
 
 #include "Slic3r/App/Scene/IGizmo.hpp"
 #include "Slic3r/App/Plater/GizmoWindow.hpp"
+#include "Slic3r/App/Plater/SlaSupportAutoPresets.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointPick.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsEditing.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsSettings.hpp"
@@ -61,6 +62,12 @@ struct SupportPointEditState
 
 struct SupportPointPaintableVolume
 {
+    // Every one of these is a view on something the model owns: the volumes hold references to the
+    // model object, the instance and the volume, and the AABBMesh is a view on the mesh of the
+    // volume rather than a copy of it. An undo replaces the whole model (SceneInteractor::set_state
+    // moves a new one in), which destroys every object named above, and the manager may release the
+    // scene mesh of a volume that is gone. The tool therefore rebuilds this list whenever the model
+    // is reloaded, so nothing here outlives what it names. (M0.15)
     const Domain::ModelObject& model_object;
     const Domain::ModelInstance& model_instance;
     Domain::ModelVolume& model_volume;
@@ -75,6 +82,7 @@ using SupportPointPaintableVolumes = std::vector<SupportPointPaintableVolume>;
 class SlaSupportPointsGizmo :
     public Scene::IToolGizmo,
     public Biz::Scene::ISceneSelectionChangedListener,
+    public Biz::Scene::ISceneChangedListener,
     public Biz::ISLAObjectCacheChangedListener
 {
 public:
@@ -106,6 +114,10 @@ public:
     ) override;
 
     void on_sla_object_cache_changed(const Domain::SlicingId& id, Domain::ObjectID object_id) override;
+
+    // An undo rebuilds the model, so the volumes the tool raycasts on are rebuilt from the new one
+    // here (M0.15). Without it the tool would keep the volumes of the model the undo replaced.
+    void on_model_reloaded(Domain::SelectionId project_id) override;
 
     void provide_gizmo_controller(Scene::IGizmoController& controller) override;
 
@@ -230,14 +242,25 @@ private:
     void apply_selected_support_preset(int preset_index);
     void refresh_new_support_values();
     void update_selected_support_values();
-    void apply_preset_mini();
-    void apply_preset_light();
-    void apply_preset_medium();
-    void apply_preset_heavy();
     // The tip diameter, tip shape, tip length, knot, stem cross-section and stem taper a new point
     // takes, from the Supports & raft settings of @p model_object.
     SlaSupportGeometry support_geometry_defaults(const Domain::ModelObject* model_object) const;
     SlaSupportPreset get_support_preset_values(const std::string& preset_name) const;
+
+    // What every point of a generation takes: the tip shape, tip length, knot, stem cross-section,
+    // stem taper and foot shape of the Supports & raft settings of @p model_object, and then the
+    // sizes the automatic placement picks for the point (M2.37). Both generation paths (Generate and
+    // Auto support) call this and nothing else, so a generated point is the same support whichever
+    // of the two made it.
+    void fill_generated_point_geometry(
+        Domain::SLA::SupportPoints& points,
+        const Domain::ModelObject* model_object,
+        const Domain::ModelInstance* instance
+    );
+    // The two settings of "Supports & raft" that say what the automatic placement puts where
+    // (support_auto_heavy_base and support_auto_detail_preset), read off the selected print preset,
+    // the same place the preset dimensions come from.
+    SlaAutoSupportChoice auto_support_preset_choice() const;
 
     // Rectangle selection
     void start_rectangle_selection(const Domain::Vec2d& mouse_pos, bool is_add);

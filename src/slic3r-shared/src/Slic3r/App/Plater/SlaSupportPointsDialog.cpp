@@ -199,7 +199,10 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
 
 // One group of support settings: the preset row a user of Chitubox or Lychee starts with (M2.18,
 // M2.22), then the four sizes with their "follow the global setting" switches, then the per-point
-// tip shape, tip length, knot, stem cross-section, stem taper, foot shape and "support on model".
+// tip shape, tip length, knot, stem cross-section, stem taper, foot shape, "support on model" and
+// bracing. The "Selected supports" group ends with the button that removes what is selected.
+// The presets are the tip classes of the support rulebook (M7.8.1, R3) since: a support is named by
+// the size of its contact, so the buttons are the tip sizes in mm and one button is one class.
 void SlaSupportPointsDialog::add_support_value_group(
     Yoga::Item*            parent,
     SlaSupportSettingsGroup group,
@@ -215,25 +218,33 @@ void SlaSupportPointsDialog::add_support_value_group(
     preset_row->set_justify_content(YGJustifySpaceBetween);
     preset_row->set_gap(gap_size());
 
-    controls.preset_mini_button = preset_row->emplace_back<LayoutButton>(_u8L("Mini"));
-    controls.preset_mini_button->set_checkable(true);
-    controls.preset_mini_button->callbacks().action = [preset_selected]()
+    // The buttons say what a class is: the diameter of its contact, in mm (M7.8.1).
+    preset_row->emplace_back<Text>(_u8L("Tip (mm)"));
+
+    controls.preset_t01_button = preset_row->emplace_back<LayoutButton>(_u8L("0.1"));
+    controls.preset_t01_button->set_checkable(true);
+    controls.preset_t01_button->callbacks().action = [preset_selected]()
     { preset_selected(0); };
 
-    controls.preset_light_button = preset_row->emplace_back<LayoutButton>(_u8L("Light"));
-    controls.preset_light_button->set_checkable(true);
-    controls.preset_light_button->callbacks().action = [preset_selected]()
+    controls.preset_t02_button = preset_row->emplace_back<LayoutButton>(_u8L("0.2"));
+    controls.preset_t02_button->set_checkable(true);
+    controls.preset_t02_button->callbacks().action = [preset_selected]()
     { preset_selected(1); };
 
-    controls.preset_medium_button = preset_row->emplace_back<LayoutButton>(_u8L("Medium"));
-    controls.preset_medium_button->set_checkable(true);
-    controls.preset_medium_button->callbacks().action = [preset_selected]()
+    controls.preset_t03_button = preset_row->emplace_back<LayoutButton>(_u8L("0.3"));
+    controls.preset_t03_button->set_checkable(true);
+    controls.preset_t03_button->callbacks().action = [preset_selected]()
     { preset_selected(2); };
 
-    controls.preset_heavy_button = preset_row->emplace_back<LayoutButton>(_u8L("Heavy"));
-    controls.preset_heavy_button->set_checkable(true);
-    controls.preset_heavy_button->callbacks().action = [preset_selected]()
+    controls.preset_t04_button = preset_row->emplace_back<LayoutButton>(_u8L("0.4"));
+    controls.preset_t04_button->set_checkable(true);
+    controls.preset_t04_button->callbacks().action = [preset_selected]()
     { preset_selected(3); };
+
+    controls.preset_t06_button = preset_row->emplace_back<LayoutButton>(_u8L("0.6"));
+    controls.preset_t06_button->set_checkable(true);
+    controls.preset_t06_button->callbacks().action = [preset_selected]()
+    { preset_selected(4); };
 
     // The four sizes. The tip diameter is the head diameter control of the tool (M2.24) and the other
     // three are the stem and the base of the support, the values a point carries or leaves to the
@@ -430,6 +441,44 @@ void SlaSupportPointsDialog::add_support_value_group(
         }
         setting_changed(SlaSupportPointField::SupportOnModel, sla_support_point_field_value(on_model));
     };
+
+    // The per-point bracing switch (M2.38), the second of the two values that are not dimensions of
+    // the support but what its pillar does in the tree. Inherit is what a point without a switch of
+    // its own gets, i.e. the object's own support_brace_enable decides.
+    add_row_with_combo_box(_u8L("Bracing"), parent, &controls.brace_combo);
+    controls.brace_combo->set_items({_u8L("Inherit"), _u8L("On"), _u8L("Off")});
+    controls.brace_combo->tooltip().set_text(
+        _u8L("Whether the pillar of this support is braced to its neighbours. Inherit follows the "
+             "Bracing setting of Supports & raft. The branching tree has no braces and ignores this.")
+    );
+    controls.brace_combo->callbacks().selection_changed = [setting_changed](int index)
+    {
+        SupportBrace brace = SupportBrace::Inherit;
+        switch (index) {
+        case 1:
+            brace = SupportBrace::On;
+            break;
+        case 2:
+            brace = SupportBrace::Off;
+            break;
+        default:
+            break;
+        }
+        setting_changed(SlaSupportPointField::Bracing, sla_support_point_field_value(brace));
+    };
+
+    // Removing what is selected belongs to the group that shows what is selected, so the button sits
+    // there and nowhere else (M2.38). The Delete key and Ctrl+click take the same action.
+    if (group == SlaSupportSettingsGroup::SelectedSupports) {
+        controls.delete_button = parent->emplace_back<LayoutButton>(_u8L("Delete"));
+        controls.delete_button->set_tooltip(
+            _u8L("Remove the selected support points from this model. One undo brings them back.")
+        );
+        controls.delete_button->callbacks().action = [this]()
+        { m_callbacks.delete_selected_points(); };
+        // There is nothing to remove while no point is selected.
+        controls.delete_button->set_enabled(false);
+    }
 }
 
 void SlaSupportPointsDialog::show_size(SliderWithInput* slider, bool has_value, double value_mm)
@@ -507,6 +556,20 @@ void SlaSupportPointsDialog::show_new_support_values(
     case SupportOnModel::Inherit:
     default:
         controls.on_model_combo->set_current_index(0);
+        break;
+    }
+
+    controls.brace_combo->set_override_label(std::string());
+    switch (values.brace) {
+    case SupportBrace::On:
+        controls.brace_combo->set_current_index(1);
+        break;
+    case SupportBrace::Off:
+        controls.brace_combo->set_current_index(2);
+        break;
+    case SupportBrace::Inherit:
+    default:
+        controls.brace_combo->set_current_index(0);
         break;
     }
 }
@@ -591,6 +654,26 @@ void SlaSupportPointsDialog::show_selected_support_values(
         controls.on_model_combo->set_current_index(0);
         break;
     }
+
+    const std::optional<SupportBrace> brace = view.brace;
+    controls.brace_combo->set_override_label(brace.has_value() ? std::string() : _u8L("Mixed"));
+    switch (brace.value_or(SupportBrace::Inherit)) {
+    case SupportBrace::On:
+        controls.brace_combo->set_current_index(1);
+        break;
+    case SupportBrace::Off:
+        controls.brace_combo->set_current_index(2);
+        break;
+    case SupportBrace::Inherit:
+    default:
+        controls.brace_combo->set_current_index(0);
+        break;
+    }
+
+    // Nothing is selected in a hidden group, so there is nothing to remove either (M2.38).
+    if (controls.delete_button != nullptr) {
+        controls.delete_button->set_enabled(view.count > 0);
+    }
 }
 
 void SlaSupportPointsDialog::set_density(int density)
@@ -645,10 +728,11 @@ void SlaSupportPointsDialog::set_active_preset(int index, SlaSupportSettingsGrou
 {
     SupportValueControls& controls = group == SlaSupportSettingsGroup::NewSupports ? m_new_supports
                                                                                    : m_selected_supports;
-    controls.preset_mini_button->set_checked(index == 0);
-    controls.preset_light_button->set_checked(index == 1);
-    controls.preset_medium_button->set_checked(index == 2);
-    controls.preset_heavy_button->set_checked(index == 3);
+    controls.preset_t01_button->set_checked(index == 0);
+    controls.preset_t02_button->set_checked(index == 1);
+    controls.preset_t03_button->set_checked(index == 2);
+    controls.preset_t04_button->set_checked(index == 3);
+    controls.preset_t06_button->set_checked(index == 4);
 }
 
 void SlaSupportPointsDialog::set_clipping_plane_position(double pos)

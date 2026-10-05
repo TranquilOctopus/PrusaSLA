@@ -1172,11 +1172,13 @@ void CutGizmo::update_scene_nodes()
     if (m_solid_meshes.empty()) {
         for (const ModelVolume* volume : context().selected_object->volumes) {
             if (volume->is_model_part()) {
+                // The acceleration structure is built over the mesh of the volume, so the entry
+                // takes a share of that mesh: the gizmo can outlive the volume (an undo, a volume
+                // removal) and the structure would read the mesh it no longer owns. (M0.15)
+                const std::shared_ptr<const Domain::TriangleMesh> mesh = volume->mesh_ptr();
+                std::shared_ptr<AABBMesh> aabb_mesh{std::make_shared<AABBMesh>(mesh->its)};
                 m_solid_meshes.emplace_back(
-                    SolidAABBMesh{
-                        std::make_shared<AABBMesh>(volume->mesh().its),
-                        volume->get_matrix()
-                    }
+                    SolidAABBMesh{mesh, std::move(aabb_mesh), volume->get_matrix()}
                 );
             }
         }

@@ -10,17 +10,18 @@
 
 namespace Slic3r::App::Plater {
 
-/// What a key press asks the support points tool to do (M2.28). The presets on 1 to 4, auto support
+/// What a key press asks the support points tool to do (M2.28). The presets on 1 to 5, auto support
 /// on A, the per-point "Support on model" on G and the selection on Escape are the keys people who
 /// come from Lychee or Chitubox expect; Delete and Ctrl+A, which the tool has answered to since
 /// M2.3b, go through here as well, so that every key of the tool is in one place.
 enum class SupportToolAction
 {
     None, ///< The tool does not act on this key at all.
-    PresetMini, ///< Take the Mini preset.
-    PresetLight, ///< Take the Light preset.
-    PresetMedium, ///< Take the Medium preset.
-    PresetHeavy, ///< Take the Heavy preset.
+    PresetT01, ///< Take the T0.1 preset, the 0.1 mm tip class of the support rulebook (M7.8.1).
+    PresetT02, ///< Take the T0.2 preset.
+    PresetT03, ///< Take the T0.3 preset.
+    PresetT04, ///< Take the T0.4 preset.
+    PresetT06, ///< Take the T0.6 preset.
     AutoSupportSelection, ///< Auto support the model the tool works on.
     AutoSupportAll, ///< Auto support every model of the project.
     ToggleSupportOnModel, ///< Flip the "Support on model" of the selected points.

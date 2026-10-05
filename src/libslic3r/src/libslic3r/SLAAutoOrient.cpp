@@ -64,6 +64,8 @@ Domain::Vec2d auto_orient(const Domain::TriangleMesh& mesh, AutoOrientGoal goal,
         return find_least_peel_rotation(mesh, params);
     case AutoOrientGoal::NoCups:
         return find_no_cups_rotation(mesh, params);
+    case AutoOrientGoal::Miniature:
+        return find_miniature_rotation(mesh, params);
     case AutoOrientGoal::MinHeight:
         return find_min_z_height_rotation(mesh, params);
     }

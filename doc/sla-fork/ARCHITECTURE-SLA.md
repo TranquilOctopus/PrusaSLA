@@ -363,7 +363,13 @@ goes through the whole bed one object at a time, and the result is staged until 
 placement keys, defined in `ConfigDefsSLA.cpp` and read in `SLASupportTool.cpp` and
 `SLAPrintSteps.cpp`, are `support_points_density_relative`, `support_points_minimal_distance`,
 `support_points_overhang_angle` and `support_enforcers_only`. The density slider writes straight to
-the object override `object_settings_sla`. The per-point shape keys (`support_tip_shape`,
+the object override `object_settings_sla`. The support radius curve is scaled by
+the size of the object before the generator runs
+(`sla::support_curve_for_part()` and `sla::support_size_reference()` in
+`SLA/SupportPointGenerator.{hpp,cpp}`, called from `SLASupportTool.cpp` and
+`SLAPrintSteps.cpp`, M7.8.7), so a miniature head a few millimetres across is supported
+as densely as the studio supports such a model and a plate keeps the points it had; the
+density slider still scales on top of that. The per-point shape keys (`support_tip_shape`,
 `support_tip_length`, `support_knot_diameter`, `support_stem_sides`, `support_stem_taper`,
 `support_base_shape`) invalidate nothing: they ride on the point, not on the config.
 

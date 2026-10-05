@@ -3,7 +3,9 @@
 #include "libslic3r/ConfigViews.hpp"
 #include "libslic3r/SLAPrint.hpp"
 #include "libslic3r/SLA/SupportFacetPaint.hpp"
+#include "libslic3r/SLA/SupportAnchors.hpp"
 #include "libslic3r/SLA/SupportPointGenerator.hpp"
+#include "libslic3r/SLA/SupportRoles.hpp"
 #include "libslic3r/SLA/SupportTree.hpp"
 #include "libslic3r/SLA/SupportIslands/SampleConfigFactory.hpp"
 #include "libslic3r/SLA/Pad.hpp"
@@ -133,10 +135,24 @@ SupportToolTree build_support_tree_for_tool(const SupportToolModelMesh& model_me
         Domain::TriangleMeshStats mesh_stats = Biz::Algorithms::TriangleMesh::calculate_stats(its);
         Domain::TriangleMesh       mesh{std::move(its), std::move(mesh_stats)};
 
+        // JobController with stop condition
+        sla::JobController ctl;
+        ctl.stopcondition = stop;
+        ctl.cancelfn = [&stop]() {
+            if (stop && stop()) throw Slic3r::RuntimeError("Support tool canceled");
+        };
+
         // Points are in object's mesh frame; transform to world frame
         Domain::SLA::SupportPoints world_points = points;
-        for (auto& sp : world_points) {
-            sp.pos = (object_to_world * sp.pos.cast<double>()).cast<float>();
+        {
+            // The points of a big model are millions of them, and this walk is one of the steps of
+            // the build, so it asks the stop function on the way (M4.16).
+            size_t id = 0;
+            for (auto& sp : world_points) {
+                if ((id++ % 4096) == 0)
+                    ctl.cancelfn();
+                sp.pos = (object_to_world * sp.pos.cast<double>()).cast<float>();
+            }
         }
 
         // Create SupportableMesh (aggregate: cfg and pad_cfg have no default ctor)
@@ -146,13 +162,6 @@ SupportToolTree build_support_tree_for_tool(const SupportToolModelMesh& model_me
             .cfg      = make_support_cfg(cfg, raft),
             .pad_cfg  = make_pad_cfg(cfg, raft),
             .zoffset  = mesh.bounding_box().min.z(),
-        };
-
-        // JobController with stop condition
-        sla::JobController ctl;
-        ctl.stopcondition = stop;
-        ctl.cancelfn = [&stop]() {
-            if (stop && stop()) throw Slic3r::RuntimeError("Support tool canceled");
         };
 
         // Create support tree
@@ -279,6 +288,12 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const SupportToolMod
         config.island_configuration = sla::SampleConfigFactory::apply_density(
             sla::SampleConfigFactory::create(config.head_diameter), config.density_relative);
 
+        // The radius one point may hold is a size, so it scales with the size of the part (M7.8.7):
+        // a miniature head a few millimetres across gets the density the studio gives such a model
+        // by hand, a plate is big enough to keep the points it had. See support_curve_size_factor
+        // in SupportPointGenerator.hpp.
+        config.support_curve = sla::support_curve_for_part(config.support_curve, gen_data);
+
         // Generate support points
         sla::LayerSupportPoints layer_support_points = sla::generate_support_points(
             gen_data, config, throw_on_cancel, [](int){});
@@ -286,10 +301,31 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const SupportToolMod
         // Move points onto mesh surface
         double allowed_move = (heights.size() > 1 ? heights[1] - heights[0] : layer_height) +
             std::numeric_limits<float>::epsilon();
+        const AABBMesh emesh(its);
         Domain::SLA::SupportPoints support_points = sla::move_on_mesh_surface(
-            layer_support_points, AABBMesh(its), allowed_move, throw_on_cancel);
+            layer_support_points, emesh, allowed_move, throw_on_cancel);
 
-        // Zero-elevation filter
+        // What every point carries, which is what the tip class of its support is picked from
+        // (M7.8.2, the support rulebook R4.1 and R4.3 - R4.6): the anchor of the lowest island, an
+        // island, a small island, a thin fragile feature or an overhang. A point that sits on small
+        // surface detail moves to the plain surface next to it first, and the role it ends up with is
+        // the one of the spot it holds. The head radius of a point stays the one the generator gave
+        // it, as it was before.
+        sla::classify_support_point_roles(
+            support_points, emesh, gen_data.layers, layer_height, {}, throw_on_cancel);
+
+        // The heavy anchors the rulebook asks for on the flat, low-detail areas of the surface that
+        // faces the plate (M7.8.3, R4.2): a few of them, more the bigger the footprint of the object
+        // is, and the largest tip on a very large one. It runs after the roles, so that it can tell
+        // the points of the other rules from the ones it adds itself, and before the zero-elevation
+        // filter below, which takes away the anchors of an object standing on the plate.
+        sla::add_heavy_anchors(support_points, emesh, {}, config.head_diameter / 2.f, throw_on_cancel);
+
+        // Zero-elevation filter, on the raft M7.8.4 resolved at the top of this function: an Auto
+        // that found a suction cup under a part standing on the plate resolved to the raft around
+        // the object, so the points on the bottom of the part are taken away, and one that found no
+        // cup, or a part held above the plate, keeps them. It runs after the anchors of M7.8.3,
+        // which is where it belongs: those anchors are added to the underside and then filtered.
         if (is_zero_elevation(cfg, raft)) {
             float lvl = float(Domain::bounding_box(its).min.z() + Domain::EPSILON);
             std::erase_if(support_points, [lvl](const Domain::SLA::SupportPoint& sp) {
@@ -299,8 +335,14 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const SupportToolMod
 
         // Transform points back to object's mesh frame
         Domain::Transform3d world_to_object = object_to_world.inverse();
-        for (auto& sp : support_points) {
-            sp.pos = (world_to_object * sp.pos.cast<double>()).cast<float>();
+        {
+            // The same walk as above, on the way back (M4.16).
+            size_t id = 0;
+            for (auto& sp : support_points) {
+                if ((id++ % 4096) == 0)
+                    throw_on_cancel();
+                sp.pos = (world_to_object * sp.pos.cast<double>()).cast<float>();
+            }
         }
 
         return support_points;

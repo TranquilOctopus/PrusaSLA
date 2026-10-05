@@ -75,6 +75,9 @@ std::uint64_t hash_support_points(const Domain::SLA::SupportPoints& points)
         // A point that may or may not end on the model (M2.26) gets a pillar to the
         // plate or a model anchor, so it is another tree as well.
         mix(static_cast<std::uint64_t>(point.on_model));
+        // And so does one that may or may not be braced (M2.38): the braces of a pillar are
+        // part of the tree.
+        mix(static_cast<std::uint64_t>(point.brace));
     }
     return seed;
 }

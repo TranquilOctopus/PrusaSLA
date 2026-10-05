@@ -15,11 +15,13 @@
 #include "libslic3r/ConfigViews.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <limits>
 #include <memory>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -86,6 +88,68 @@ SlaConfig make_sla_config_zero_elevation()
     pack.sla_print_settings.items.opt("support_object_elevation").set(10.0);
     return make_sla_config(std::move(pack));
 }
+
+// A box of `count` island support points spread over the bottom face of `size` x `size`. The tree
+// builder runs one search per point, so this is how a case asks for a tree that takes long enough
+// to be worth stopping.
+void add_island_points(Slic3r::Domain::ModelObject *object, double size, int count)
+{
+    using Slic3r::Domain::SLA::SupportPoint;
+    using Slic3r::Domain::SLA::SupportPointType;
+    using Slic3r::Domain::Vec3f;
+
+    const int columns = std::max(1, static_cast<int>(std::lround(std::sqrt(double(count)))));
+    const int rows    = (count + columns - 1) / columns;
+    const double step_x = columns > 1 ? size / (columns + 1) : size / 2.;
+    const double step_y = rows > 1 ? size / (rows + 1) : size / 2.;
+
+    Slic3r::Domain::SLA::SupportPoints points;
+    points.reserve(std::size_t(columns * rows));
+    for (int row = 0; row < rows; ++row)
+        for (int column = 0; column < columns; ++column) {
+            if (int(points.size()) >= count)
+                break;
+            points.push_back(SupportPoint{
+                Vec3f{float(step_x * (column + 1)), float(step_y * (row + 1)), 0.f},
+                0.2f,
+                SupportPointType::island});
+        }
+
+    object->sla_support_points = std::move(points);
+}
+
+// A stop function that says yes once its own delay has passed, and remembers when it first said so,
+// so a case can measure the time the tool took to give up after the request rather than the whole
+// run (M4.16).
+struct StopAfter
+{
+    std::chrono::steady_clock::time_point start{std::chrono::steady_clock::now()};
+    std::chrono::milliseconds delay{std::chrono::milliseconds{150}};
+    std::chrono::steady_clock::time_point asked_at{};
+
+    bool expired() const { return std::chrono::steady_clock::now() - start > delay; }
+
+    Slic3r::sla::SupportToolStop stop()
+    {
+        return [this] {
+            if (expired() && asked_at == std::chrono::steady_clock::time_point{})
+                asked_at = std::chrono::steady_clock::now();
+            return expired();
+        };
+    }
+
+    // How long the tool ran on after the stop function turned true, in milliseconds. Zero if it
+    // never turned true, which is a failure of the case rather than of the tool.
+    std::chrono::milliseconds unwind_time(std::chrono::steady_clock::time_point returned_at) const
+    {
+        if (asked_at == std::chrono::steady_clock::time_point{})
+            return std::chrono::milliseconds{0};
+        return std::chrono::duration_cast<std::chrono::milliseconds>(returned_at - asked_at);
+    }
+};
+
+// The budget of M4.16: the tool has to give up within about two seconds of the stop.
+const std::chrono::seconds stop_budget{2};
 
 } // namespace
 
@@ -313,4 +377,104 @@ TEST_CASE("SLASupportTool: points generated from a snapshot are the points of th
         CHECK(from_snapshot[i].pos.isApprox(from_object[i].pos));
         CHECK(from_snapshot[i].head_front_radius == from_object[i].head_front_radius);
     }
+}
+
+TEST_CASE("SLASupportTool: the support point generator gives up a big model within the budget",
+          "[SLASupportTool]")
+{
+    // A metre wide cube. Every layer of it is a million times the area of a 20 mm one, so the
+    // island sampler alone runs for minutes: this is the case that used not to stop.
+    BoxModel box{1000., 1000., 1000.};
+    box.object->instances.front()->set_offset({0., 0., 10.});
+
+    Slic3r::Domain::Transform3d object_to_world = Slic3r::Domain::Transform3d::Identity();
+    object_to_world.translate(Slic3r::Domain::Vec3d(0., 0., 10.));
+
+    // A coarse layer height, so the layer count is not what is being measured: ten layers of a
+    // metre wide plate are enough to make the sampling endless.
+    Slic3r::Domain::ConfigPackSLA pack;
+    pack.sla_print_settings.items.opt("supports_enable").set(true);
+    pack.sla_print_settings.items.opt("pad_enable").set(true);
+    pack.sla_print_settings.items.opt("support_object_elevation").set(10.0);
+    pack.sla_print_settings.items.opt("layer_height").set(100.);
+    SlaConfig config = make_sla_config(std::move(pack));
+
+    StopAfter stop;
+    const auto points = Slic3r::sla::generate_support_points_for_tool(
+        *box.object, object_to_world, config.full, config.object_settings, stop.stop());
+    const auto returned_at = std::chrono::steady_clock::now();
+
+    INFO("asked to stop after " << stop.delay.count() << " ms, took "
+                                << stop.unwind_time(returned_at).count() << " ms to give up");
+    // The stop function really did come to be asked for, so this is a run that was given up.
+    REQUIRE(stop.expired());
+    CHECK(stop.unwind_time(returned_at) <= stop_budget);
+    // A stopped run answers with what it has, which for the tool is an empty result.
+    CHECK(points.empty());
+}
+
+TEST_CASE("SLASupportTool: the support tree builder gives up a big model within the budget",
+          "[SLASupportTool]")
+{
+    BoxModel box{1000., 1000., 1000.};
+    box.object->instances.front()->set_offset({0., 0., 10.});
+    // Four thousand points is four thousand pinheads and pillars, and the raft below them is cut
+    // out of the mesh of all of them.
+    add_island_points(box.object, 1000., 4000);
+
+    Slic3r::Domain::Transform3d object_to_world = Slic3r::Domain::Transform3d::Identity();
+    object_to_world.translate(Slic3r::Domain::Vec3d(0., 0., 10.));
+
+    SlaConfig config = make_sla_config();
+
+    StopAfter stop;
+    const auto tree = Slic3r::sla::build_support_tree_for_tool(
+        *box.object, object_to_world, box.object->sla_support_points, config.full,
+        config.object_settings, stop.stop());
+    const auto returned_at = std::chrono::steady_clock::now();
+
+    INFO("asked to stop after " << stop.delay.count() << " ms, took "
+                                << stop.unwind_time(returned_at).count() << " ms to give up");
+    REQUIRE(stop.expired());
+    CHECK(stop.unwind_time(returned_at) <= stop_budget);
+    // Stopped, so there is no tree and no raft to draw.
+    CHECK(tree.tree == nullptr);
+    CHECK(tree.pad == nullptr);
+}
+
+TEST_CASE("SLASupportTool: a branching tree gives up between two of its serialised searches",
+          "[SLASupportTool]")
+{
+    // Since M4.5c the searches of the different leaves of a branching tree run one after the other
+    // (the nlopt lock is held from the seeding to the end of nlopt_optimize()), so a stop can only
+    // be seen from inside a search itself: that is what this case is for.
+    BoxModel box{1000., 1000., 1000.};
+    box.object->instances.front()->set_offset({0., 0., 10.});
+    add_island_points(box.object, 1000., 200);
+
+    Slic3r::Domain::Transform3d object_to_world = Slic3r::Domain::Transform3d::Identity();
+    object_to_world.translate(Slic3r::Domain::Vec3d(0., 0., 10.));
+
+    Slic3r::Domain::ConfigPackSLA pack;
+    pack.sla_print_settings.items.opt("supports_enable").set(true);
+    pack.sla_print_settings.items.opt("pad_enable").set(true);
+    pack.sla_print_settings.items.opt("support_object_elevation").set(10.0);
+    pack.sla_print_settings.items.opt("support_tree_type")
+        .set(Slic3r::Domain::sla::SupportTreeType::Branching);
+    SlaConfig config = make_sla_config(std::move(pack));
+
+    StopAfter stop;
+    stop.delay = std::chrono::milliseconds{250};
+
+    const auto tree = Slic3r::sla::build_support_tree_for_tool(
+        *box.object, object_to_world, box.object->sla_support_points, config.full,
+        config.object_settings, stop.stop());
+    const auto returned_at = std::chrono::steady_clock::now();
+
+    INFO("asked to stop after " << stop.delay.count() << " ms, took "
+                                << stop.unwind_time(returned_at).count() << " ms to give up");
+    REQUIRE(stop.expired());
+    CHECK(stop.unwind_time(returned_at) <= stop_budget);
+    CHECK(tree.tree == nullptr);
+    CHECK(tree.pad == nullptr);
 }

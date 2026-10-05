@@ -40,11 +40,12 @@ std::optional<DiffBridge> search_widening_path(Ex                     policy,
                                                const Vec3d           &jp,
                                                const Vec3d           &dir,
                                                double                 radius,
-                                               double new_radius)
+                                               double                 new_radius,
+                                               JobController::StopCond stopcond = &detail::never_stop)
 {
     double w = radius + 2 * sm.cfg.head_back_radius_mm;
     double stopval = w + jp.z() - ground_level(sm);
-    Optimizer<AlgNLoptSubplex> solver(get_criteria(sm.cfg).stop_score(stopval));
+    Optimizer<AlgNLoptSubplex> solver(get_criteria(sm.cfg, stopcond).stop_score(stopval));
 
     auto [polar, azimuth] = dir_to_spheric(dir);
 
@@ -244,7 +245,8 @@ std::pair<bool, long> connect_to_ground(Ex                     policy,
                                         const Junction        &j,
                                         const Vec3d           &dir,
                                         double                 end_r,
-                                        const StemGeometry    &stem = StemGeometry{})
+                                        const StemGeometry    &stem = StemGeometry{},
+                                        JobController::StopCond stopcond = &detail::never_stop)
 {
     auto   hjp = j.pos;
     double r   = j.r;
@@ -255,7 +257,10 @@ std::pair<bool, long> connect_to_ground(Ex                     policy,
     double d   = 0, tdown = 0;
     t          = std::min(t, sm.cfg.max_bridge_length_mm * r / sm.cfg.head_back_radius_mm);
 
-    while (d < t &&
+    // One step is one beam cast, and the walk down to the model can be hundreds of them, so the
+    // stop condition is asked on the way (M4.16). In the condition, so that a run nobody stopped
+    // walks exactly the same steps.
+    while (d < t && !(stopcond && stopcond()) &&
            !std::isinf(tdown = beam_mesh_hit(policy, sm.emesh,
                                              Beam{hjp + d * dir, DOWN, r, r2}, sd)
                                    .distance())) {
@@ -284,11 +289,12 @@ std::pair<bool, long> search_ground_route(Ex                     policy,
                                           const Junction        &j,
                                           double                 end_radius,
                                           const Vec3d           &init_dir  = DOWN,
-                                          const StemGeometry    &stem      = StemGeometry{})
+                                          const StemGeometry    &stem      = StemGeometry{},
+                                          JobController::StopCond stopcond = &detail::never_stop)
 {
     double downdst = j.pos.z() - ground_level(sm);
 
-    auto res = connect_to_ground(policy, builder, sm, j, init_dir, end_radius, stem);
+    auto res = connect_to_ground(policy, builder, sm, j, init_dir, end_radius, stem, stopcond);
     if (res.first)
         return res;
 
@@ -297,7 +303,7 @@ std::pair<bool, long> search_ground_route(Ex                     policy,
          // direction out of the cavity.
     auto [polar, azimuth] = dir_to_spheric(init_dir);
 
-    Optimizer<AlgNLoptGenetic> solver(get_criteria(sm.cfg).stop_score(1e6));
+    Optimizer<AlgNLoptGenetic> solver(get_criteria(sm.cfg, stopcond).stop_score(1e6));
     solver.seed(0); // we want deterministic behavior
 
     auto   sd  = j.r * sm.cfg.safety_distance_mm / sm.cfg.head_back_radius_mm;
@@ -314,7 +320,7 @@ std::pair<bool, long> search_ground_route(Ex                     policy,
 
     Vec3d bridgedir = spheric_to_dir(oresult.optimum).normalized();
 
-    return connect_to_ground(policy, builder, sm, j, bridgedir, end_radius, stem);
+    return connect_to_ground(policy, builder, sm, j, bridgedir, end_radius, stem, stopcond);
 }
 
 }} // namespace Slic3r::sla

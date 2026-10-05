@@ -27,13 +27,15 @@ SupportToolAction support_tool_action_for(const SupportToolKeyEvent& key)
     // reachable with one.
     switch (key.code) {
     case Platform::KeyCode::Num1:
-        return SupportToolAction::PresetMini;
+        return SupportToolAction::PresetT01;
     case Platform::KeyCode::Num2:
-        return SupportToolAction::PresetLight;
+        return SupportToolAction::PresetT02;
     case Platform::KeyCode::Num3:
-        return SupportToolAction::PresetMedium;
+        return SupportToolAction::PresetT03;
     case Platform::KeyCode::Num4:
-        return SupportToolAction::PresetHeavy;
+        return SupportToolAction::PresetT04;
+    case Platform::KeyCode::Num5:
+        return SupportToolAction::PresetT06;
     case Platform::KeyCode::Delete:
     case Platform::KeyCode::Backspace:
         return SupportToolAction::DeleteSelectedPoints;
@@ -72,10 +74,11 @@ std::vector<std::string> support_tool_shortcut_lines()
     // The key is not translated, only what it does is. The order is the order of the section: the
     // presets, then the two auto support keys, then the keys of the selection.
     static const std::vector<std::pair<std::string, std::string>> lines{
-        {Biz::L("1"), Biz::_u8L("Mini preset for new supports")},
-        {Biz::L("2"), Biz::_u8L("Light preset for new supports")},
-        {Biz::L("3"), Biz::_u8L("Medium preset for new supports")},
-        {Biz::L("4"), Biz::_u8L("Heavy preset for new supports")},
+        {Biz::L("1"), Biz::_u8L("0.1 mm tip preset for new supports")},
+        {Biz::L("2"), Biz::_u8L("0.2 mm tip preset for new supports")},
+        {Biz::L("3"), Biz::_u8L("0.3 mm tip preset for new supports")},
+        {Biz::L("4"), Biz::_u8L("0.4 mm tip preset for new supports")},
+        {Biz::L("5"), Biz::_u8L("0.6 mm tip preset for new supports")},
         {Biz::L("A"), Biz::_u8L("Auto support the selected model")},
         {Biz::L("Shift+A"), Biz::_u8L("Auto support all models")},
         {Biz::L("G"), Biz::_u8L("Toggle Support on model of the selection")},

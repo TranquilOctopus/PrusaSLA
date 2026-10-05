@@ -41,9 +41,18 @@ void SlaSupportPointsEditing::add_point(const Domain::Vec3d& mesh_pos)
     // And the tip diameter of the settings, which is the head diameter of the tool: the configured
     // one, or the tip of the preset that was chosen (M2.24).
     apply_support_geometry(new_point, support_geometry, SupportGeometryField::TipDiameter);
+    // How deep the contact sinks into the model. Only a preset of a tip class asks for a depth of
+    // its own (rulebook R3.1, half the tip); without one the point follows the configured
+    // support_head_penetration.
+    if (contact_depth_mm > 0.) {
+        new_point.contact_depth = static_cast<float>(contact_depth_mm);
+    }
     // Where the pillar of this point may end is a value of its own, the one of the "New supports"
     // group (M2.33, M2.26). Inherit is what a point without a switch of its own gets.
     new_point.on_model = new_support_on_model;
+    // And the same for the bracing of the pillar: the value of its own the "New supports" group
+    // writes (M2.38), Inherit being what a point without a switch of its own gets.
+    new_point.brace = new_support_brace;
     new_point.type = Domain::SLA::SupportPointType::manual_add;
     points.push_back(new_point);
 }
@@ -189,6 +198,15 @@ void SlaSupportPointsEditing::apply_support_on_model_to_selected(SupportOnModel 
     for (size_t idx : selected_point_indices) {
         if (idx < points.size()) {
             points[idx].on_model = on_model;
+        }
+    }
+}
+
+void SlaSupportPointsEditing::apply_support_brace_to_selected(SupportBrace brace)
+{
+    for (size_t idx : selected_point_indices) {
+        if (idx < points.size()) {
+            points[idx].brace = brace;
         }
     }
 }

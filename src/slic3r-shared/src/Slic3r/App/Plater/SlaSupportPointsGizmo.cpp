@@ -1,5 +1,7 @@
 #include "Slic3r/App/Plater/SlaSupportPointsGizmo.hpp"
+#include "Slic3r/App/Plater/SlaSupportAutoPresets.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointPick.hpp"
+#include "Slic3r/App/Plater/SlaSupportPointEdits.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsClear.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsEditing.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsLeaving.hpp"
@@ -28,12 +30,14 @@
 #include "Slic3r/Biz/IUndoProvider.hpp"
 #include "Slic3r/Biz/Utils/MeshRaycaster.hpp"
 #include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
+#include "Slic3r/Biz/Algorithms/ModelObject.hpp"
 #include "jthread/JThread.hpp"
 #include "Slic3r/Biz/Platform/PlatformServices.hpp"
 #include "Slic3r/Domain/BedInstance.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
 #include "Slic3r/Domain/SelectionId.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
+#include "Slic3r/Domain/SlaLayerHeight.hpp"
 #include "Slic3r/Domain/ConfigContainer.hpp"
 #include "Slic3r/Domain/ConfigPack.hpp"
 #include "Slic3r/Domain/Config.hpp"
@@ -108,6 +112,9 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     m_dialog->callbacks().discard = [this]() { this->discard_generated_points(); };
     m_dialog->callbacks().auto_support_all = [this]() { this->auto_support(); };
     m_dialog->callbacks().remove_all_points = [this]() { this->remove_all_points(); };
+    // The "Delete" button of the "Selected supports" group: the same action the Delete key, Ctrl and
+    // the right button take, so removing one support is one gesture in the panel as well (M2.38).
+    m_dialog->callbacks().delete_selected_points = [this]() { this->delete_selected_points(); };
     m_dialog->callbacks().value_editing_started = [this]() { this->on_value_editing_started(); };
     m_dialog->callbacks().value_editing_ended = [this]() { this->on_value_editing_ended(); };
     m_dialog->callbacks().density_changed = [this](double value)
@@ -222,6 +229,7 @@ void SlaSupportPointsGizmo::on_activated()
 {
     m_gizmo_active = true;
     m_project_interactor.scene_interactor().add_listener<Biz::Scene::ISceneSelectionChangedListener>(this);
+    m_project_interactor.scene_interactor().add_listener<Biz::Scene::ISceneChangedListener>(this);
     m_project_interactor.sla_object_cache().add_listener<Biz::ISLAObjectCacheChangedListener>(this);
 
     // The tool is where the support settings are changed, so it opens with them open (M2.17d4).
@@ -253,6 +261,7 @@ void SlaSupportPointsGizmo::on_deactivated()
     // (on_worker_job_completed asks for the counter, which cancel_worker_job has moved on).
     cancel_worker_job();
     m_project_interactor.scene_interactor().remove_listener<Biz::Scene::ISceneSelectionChangedListener>(this);
+    m_project_interactor.scene_interactor().remove_listener<Biz::Scene::ISceneChangedListener>(this);
     m_project_interactor.sla_object_cache().remove_listener<Biz::ISLAObjectCacheChangedListener>(this);
 
     // Leaving the tool applies the points a generation produced, so the model keeps them (M2.31).
@@ -516,6 +525,16 @@ void SlaSupportPointsGizmo::on_sla_object_cache_changed(const Domain::SlicingId&
     (void)object_id;
 }
 
+void SlaSupportPointsGizmo::on_model_reloaded(Domain::SelectionId project_id)
+{
+    // An undo replaces the whole model, and with it every volume the tool raycasts on, so the list
+    // of them is rebuilt from the model that is there now. (M0.15)
+    if (project_id != m_project_id) {
+        return;
+    }
+    this->collect_paintable_volumes(m_project_id, m_selected_element);
+}
+
 void SlaSupportPointsGizmo::start_generation()
 {
     if (m_points_job_running || !m_selected_object_id.valid()) {
@@ -587,14 +606,13 @@ void SlaSupportPointsGizmo::on_generation_completed(std::optional<Domain::SLA::S
 
     if (support_points.has_value() && !support_points->empty()) {
         // The generator only fills the position and the head diameter, so a generated point takes
-        // the tip shape, tip length, knot, stem cross-section and stem taper of the settings as well
-        // (M2.16c, M2.24). The head radius it fills is the one of the tree type it generated for.
-        const SlaSupportGeometry geometry = support_geometry_defaults(
-            m_project_interactor.selected_project().find_object_by_id(m_selected_object_id.id)
+        // the geometry and the preset size of its own model (M2.16c, M2.24, M2.37).
+        Domain::Project& project = m_project_interactor.selected_project();
+        this->fill_generated_point_geometry(
+            *support_points,
+            project.find_object_by_id(m_selected_object_id.id),
+            project.find_instance_by_id(m_selected_object_id.id, m_selected_instance_id)
         );
-        for (Domain::SLA::SupportPoint& point : *support_points) {
-            apply_support_geometry(point, geometry);
-        }
         m_generated_support_points = *support_points;
         m_has_generated_points = true;
 
@@ -936,15 +954,9 @@ void SlaSupportPointsGizmo::on_auto_support_completed(Domain::ObjectID obj_id, s
             // The snapshot of the run was already taken in auto_support(), before the first model of
             // the queue was touched, so a run over several models is one undo step.
 
-            // A generated point takes the tip shape, tip length, knot, stem cross-section and stem
-            // taper of the settings of its own model, like a point placed by hand (M2.16c, M2.24).
-            const SlaSupportGeometry geometry = support_geometry_defaults(model_object);
-            for (Domain::SLA::SupportPoint& point : *support_points) {
-                apply_support_geometry(point, geometry);
-            }
-
             // Find a printable instance on a bed for this object to get instance_id
-            Domain::SelectionId instance_id = 0;
+            Domain::SelectionId instance_id     = 0;
+            const Domain::ModelInstance* placed = nullptr;
             for (const Domain::ModelInstance* inst : model_object->instances) {
                 if (!inst || !inst->is_printable()) {
                     continue;
@@ -952,9 +964,14 @@ void SlaSupportPointsGizmo::on_auto_support_completed(Domain::ObjectID obj_id, s
                 const Domain::BedRef bed_ref = inst->get_last_bed();
                 if (project.find_bed_instance_by_id(bed_ref.instance_id) != nullptr) {
                     instance_id = inst->id().id;
+                    placed      = inst;
                     break;
                 }
             }
+
+            // A generated point takes the geometry and the preset size of its own model, like a
+            // point placed by hand (M2.16c, M2.24, M2.37).
+            this->fill_generated_point_geometry(*support_points, model_object, placed);
 
             if (m_selected_object_id == obj_id) {
                 DialogSyncGuard guard(*this);
@@ -1049,6 +1066,11 @@ void SlaSupportPointsGizmo::end_editing()
 {
     clear_point_visuals();
     m_hovered_point_idx.reset();
+    // A value edit that was running when the tool was closed is over: the next value change is an
+    // action of its own again and owes its own undo snapshot (M2.38). Without this a slider drag
+    // that was interrupted would leave the next change of the reopened tool, a dropdown in
+    // particular, without one.
+    m_value_edit_action.end();
     m_edit_state.reset();
 }
 
@@ -1058,17 +1080,11 @@ void SlaSupportPointsGizmo::commit_edited_points_live()
         return;
     }
 
-    Domain::Project& project = m_project_interactor.selected_project();
-    Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
-    if (!model_object) {
-        return;
-    }
-
+    // The one write of the points the session holds, so a support added, removed, moved or changed
+    // is on the ModelObject the moment the user changes it and the preview service rebuilds the
+    // drawn tree for it (M2.38).
     const Domain::ElementRef object_ref{m_selected_object_id.id, m_selected_instance_id};
-    m_project_interactor.scene_interactor().modify_sla_support_points(object_ref, [&](Domain::ModelObject& mo) {
-        mo.sla_support_points = m_edit_state->editing.points;
-        mo.sla_points_status = PointsStatus::UserModified;
-    });
+    commit_sla_support_point_edits(m_project_interactor, object_ref, m_edit_state->editing.points);
 
     // The points are the model's now, so the M2.21 support preview has built its tree for them (or
     // dropped it for a model without points), and the lift the scene draws the model with may have
@@ -1193,6 +1209,9 @@ void SlaSupportPointsGizmo::remove_point_at_index(size_t idx)
     m_dialog->set_point_count(m_edit_state->editing.points.size());
     take_undo_snapshot();
     update_point_visuals();
+    // The removed point may have been the selected one, so the "Selected supports" group has to be
+    // shown with what the selection carries now and not with what it carried before (M2.38).
+    this->update_selected_support_values();
     commit_edited_points_live();
 }
 
@@ -1484,78 +1503,81 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
         }
     }
 
-    // Left button down
-    if (is_left_button_event && mouse_event.type() == MouseEvent::Type::ButtonDown) {
-        // Ctrl+click: remove point
+    // A click: a button going down. What it asks for is one question with no camera, no scene and
+    // no gizmo in it (M2.38): select a support and change it, remove one, or add one on the drawn
+    // model. The pick of M2.35 and the raycast of M2.33 are what it is asked about, and the answer
+    // is acted on here.
+    if ((is_left_button_event || is_right_button_event) && mouse_event.type() == MouseEvent::Type::ButtonDown) {
+        SlaSupportClick click;
+        click.button = is_left_button_event ? SlaSupportClickButton::Left : SlaSupportClickButton::Right;
         if (ctrl_down) {
-            if (point_under_cursor.has_value()) {
-                const size_t idx = point_under_cursor->index;
-                if (!m_edit_state->editing.lock_island_supports || !m_edit_state->editing.points[idx].is_island()) {
-                    remove_point_at_index(idx);
-                }
-                return Scene::GizmoActivationState::Active;
-            }
-            return Scene::GizmoActivationState::Inactive;
+            click.modifier = SlaSupportClickModifier::Ctrl;
+        } else if (shift_down) {
+            click.modifier = SlaSupportClickModifier::Shift;
         }
 
-        // Shift+click on empty space: start rectangle selection
-        if (shift_down && !point_under_cursor.has_value()) {
+        const std::optional<Domain::Vec3d> surface_pos =
+            has_hit ? std::optional<Domain::Vec3d>(hit_to_object_pos(*hit_opt)) : std::nullopt;
+
+        const SlaSupportClickResult result = sla_support_click_action(
+            click,
+            point_under_cursor,
+            m_edit_state->editing.points,
+            m_edit_state->editing.lock_island_supports,
+            surface_pos
+        );
+
+        switch (result.action) {
+        case SlaSupportClickAction::DeletePoint:
+            remove_point_at_index(*result.point_index);
+            return Scene::GizmoActivationState::Active;
+
+        case SlaSupportClickAction::TogglePoint:
+            m_edit_state->editing.toggle_point(*result.point_index);
+            update_point_visuals();
+            // The selection the group shows changed, so its title and its fields follow (M2.38).
+            this->update_selected_support_values();
+            return Scene::GizmoActivationState::Active;
+
+        case SlaSupportClickAction::SelectPoint: {
+            const size_t idx = *result.point_index;
+            clear_selection();
+            select_point(idx);
+            if (result.drag_allowed) {
+                m_edit_state->dragged_point_idx = idx;
+                // The drag starts on the surface under the cursor when the ray hit one, and on the
+                // point itself when it did not: a support under an overhang is picked by its
+                // marker with the ray never reaching the model at all.
+                m_edit_state->drag_start_world_pos =
+                    has_hit ? m_paintable_volumes[hit_opt->volume_idx].world_trafo * hit_opt->volume_hit_position
+                            : this->object_drawing_trafo() * m_edit_state->editing.points[idx].pos.cast<double>();
+                m_edit_state->drag_start_mesh_pos = m_edit_state->editing.points[idx].pos.cast<double>();
+            }
+            return Scene::GizmoActivationState::Active;
+        }
+
+        case SlaSupportClickAction::AddPoint:
+            // A click on no support at all falls back to the model surface, where a new support
+            // point goes (M2.35 keeps M2.33 for this, the marker and the tree only come first).
+            clear_selection();
+            add_point_at_mesh_pos(*result.surface_pos);
+            return Scene::GizmoActivationState::Active;
+
+        case SlaSupportClickAction::RectangleSelect:
             start_rectangle_selection(mouse_position, true);
             return Scene::GizmoActivationState::Probing;
-        }
 
-        // Shift+click on point: toggle selection
-        if (shift_down && point_under_cursor.has_value()) {
-            m_edit_state->editing.toggle_point(point_under_cursor->index);
-            update_point_visuals();
-            return Scene::GizmoActivationState::Active;
-        }
-
-        // Regular click on point: select it. A click on the drawn tree of a point selects it and
-        // nothing more, since a drag starts from the marker of the point (M2.35).
-        if (point_under_cursor.has_value()) {
-            const size_t idx = point_under_cursor->index;
-            if (!m_edit_state->editing.lock_island_supports || !m_edit_state->editing.points[idx].is_island()) {
-                clear_selection();
-                select_point(idx);
-                if (point_under_cursor->from_marker) {
-                    m_edit_state->dragged_point_idx = idx;
-                    // The drag starts on the surface under the cursor when the ray hit one, and on the
-                    // point itself when it did not: a support under an overhang is picked by its
-                    // marker with the ray never reaching the model at all.
-                    m_edit_state->drag_start_world_pos =
-                        has_hit ? m_paintable_volumes[hit_opt->volume_idx].world_trafo * hit_opt->volume_hit_position
-                                : this->object_drawing_trafo() * m_edit_state->editing.points[idx].pos.cast<double>();
-                    m_edit_state->drag_start_mesh_pos = m_edit_state->editing.points[idx].pos.cast<double>();
-                }
-            }
-            return Scene::GizmoActivationState::Active;
-        }
-
-        // A click on no point at all falls back to the model surface, where a new support point goes
-        // (M2.35 keeps M2.33 for this, the marker and the tree only come first).
-        if (has_hit) {
+        case SlaSupportClickAction::ClearSelection:
             clear_selection();
-            add_point_at_mesh_pos(hit_to_object_pos(*hit_opt));
-            return Scene::GizmoActivationState::Active;
-        }
+            update_point_visuals();
+            return Scene::GizmoActivationState::Inactive;
 
-        // Click on empty space: clear selection
-        clear_selection();
-        update_point_visuals();
-        return Scene::GizmoActivationState::Inactive;
-    }
-
-    // Right button down: remove point (or deselect if locked)
-    if (is_right_button_event && mouse_event.type() == MouseEvent::Type::ButtonDown) {
-        if (point_under_cursor.has_value()) {
-            const size_t idx = point_under_cursor->index;
-            if (!m_edit_state->editing.lock_island_supports || !m_edit_state->editing.points[idx].is_island()) {
-                remove_point_at_index(idx);
-            }
+        case SlaSupportClickAction::Ignored:
             return Scene::GizmoActivationState::Active;
+
+        case SlaSupportClickAction::None:
+            return Scene::GizmoActivationState::Inactive;
         }
-        return Scene::GizmoActivationState::Inactive;
     }
 
     // Mouse move during drag
@@ -2008,26 +2030,6 @@ void SlaSupportPointsGizmo::update_selected_support_values()
     m_dialog->set_selected_support_values(selection_support_view(m_edit_state->editing));
 }
 
-void SlaSupportPointsGizmo::apply_preset_mini()
-{
-    this->apply_new_support_preset(0);
-}
-
-void SlaSupportPointsGizmo::apply_preset_light()
-{
-    this->apply_new_support_preset(1);
-}
-
-void SlaSupportPointsGizmo::apply_preset_medium()
-{
-    this->apply_new_support_preset(2);
-}
-
-void SlaSupportPointsGizmo::apply_preset_heavy()
-{
-    this->apply_new_support_preset(3);
-}
-
 // The tip diameter, tip shape, tip length, knot, stem cross-section and stem taper a point takes, read
 // off the object settings of the model the tool works on (M2.16c, M2.24, M2.23b). This is what a
 // clicked point takes and what a generated point is filled with, so both start from the values the
@@ -2070,12 +2072,13 @@ SlaSupportGeometry SlaSupportPointsGizmo::support_geometry_defaults(const Domain
     return geometry;
 }
 
-// The four values of a preset, from the print preset of the printer where it belongs
-// (support_preset_{mini,light,medium,heavy}_*, M2.18, M2.22) and from the values the config
+// The values of a preset: the tip class of the support rulebook (M7.8.1, R3) with the geometry
+// every class has, from the print preset of the printer where it belongs
+// (support_preset_{mini,light,medium,heavy,xheavy}_*, M2.18, M2.22) and from the values the config
 // definitions ship for a preset that does not carry the keys.
 SlaSupportPreset SlaSupportPointsGizmo::get_support_preset_values(const std::string& preset_name) const
 {
-    const SlaSupportPreset defaults = sla_support_preset(preset_name);
+    SlaSupportPreset preset = sla_support_preset(preset_name);
 
     const auto& config_box = m_project_interactor.preset_interactor().selected_printer_preset().print.config_box();
     const std::string prefix = "support_preset_" + preset_name + "_";
@@ -2085,10 +2088,85 @@ SlaSupportPreset SlaSupportPointsGizmo::get_support_preset_values(const std::str
         return item ? item->get<double>() : fallback;
     };
 
-    return {get_value("head_diameter", defaults.tip_diameter_mm),
-            get_value("pillar_diameter", defaults.stem_diameter_mm),
-            get_value("base_diameter", defaults.base_diameter_mm),
-            get_value("base_height", defaults.base_height_mm)};
+    // Only these four sizes are settings, so a print preset of before M7.8.1 keeps the geometry it
+    // stored and the rest of the class is the rulebook's.
+    preset.geometry.tip_diameter_mm = get_value("head_diameter", preset.geometry.tip_diameter_mm);
+    preset.stem_diameter_mm         = get_value("pillar_diameter", preset.stem_diameter_mm);
+    preset.base_diameter_mm         = get_value("base_diameter", preset.base_diameter_mm);
+    preset.base_height_mm           = get_value("base_height", preset.base_height_mm);
+    return preset;
+}
+
+// Which preset the automatic placement gives the base of the model and which one it gives the
+// detail, read off the selected print preset next to the preset dimensions above
+// (support_auto_heavy_base and support_auto_detail_preset, M2.37). A print preset that carries
+// neither key keeps the defaults of the config definitions: the heavy base on, Light for the
+// detail.
+SlaAutoSupportChoice SlaSupportPointsGizmo::auto_support_preset_choice() const
+{
+    const auto& config_box =
+        m_project_interactor.preset_interactor().selected_printer_preset().print.config_box();
+
+    SlaAutoSupportChoice choice;
+    if (const auto* item = config_box.items.find("support_auto_heavy_base")) {
+        choice.heavy_base = item->get<bool>();
+    }
+    if (const auto* item = config_box.items.find("support_auto_detail_preset")) {
+        choice.detail = item->get<Domain::sla::SupportAutoDetailPreset>();
+    }
+    return choice;
+}
+
+// What the generator leaves open on every point it produced: the tip shape, tip length, knot, stem
+// cross-section, stem taper and foot shape of the settings of this model (support_geometry_defaults,
+// M2.16c / M2.24 / M2.23b), and then the sizes the automatic placement picks per point (M2.37): the
+// T0.4 class on the island the model is glued on, the detail class on everything else. Both
+// generation paths come through here, so a generated point is the same support whichever made it.
+void SlaSupportPointsGizmo::fill_generated_point_geometry(
+    Domain::SLA::SupportPoints& points,
+    const Domain::ModelObject* model_object,
+    const Domain::ModelInstance* instance
+)
+{
+    const SlaSupportGeometry geometry = support_geometry_defaults(model_object);
+    for (SupportPoint& point : points) {
+        apply_support_geometry(point, geometry);
+    }
+
+    if (!model_object) {
+        return;
+    }
+
+    // The generator returns its points in the model's own frame, and the mesh of the model part
+    // volumes is what it sampled them on, so the lowest z of that mesh is the bottom of the model
+    // in the very frame the points are in. The lift moves the model and its points together, so
+    // nothing here depends on how high the scene draws the object.
+    const double lowest_z_mm =
+        Biz::Algorithms::ModelObject::raw_mesh_bounding_box(*model_object).min.z();
+
+    // The band of the model the heavy supports cover is two layers, so the layer height the print
+    // will be sliced at is what says which points are in it.
+    double layer_height_mm = 0.05;
+    if (const std::optional<ObjectSlaConfig> config =
+            build_object_sla_config(model_object, instance);
+        config.has_value())
+    {
+        Domain::ConfigView config_view{config->full, {config->object}};
+        config_view.finalize();
+        const double height_mm = Domain::sla_effective_layer_height(config_view);
+        if (height_mm > 0.) {
+            layer_height_mm = height_mm;
+        }
+    }
+
+    const SlaAutoSupportChoice choice = this->auto_support_preset_choice();
+    // Preset button 3 of the five is the "heavy" id, which is the T0.4 mm class since M7.8.1: that is
+    // the one the base of the model gets. The detail takes the class the setting names.
+    const SlaAutoSupportPresets presets{
+        this->get_support_preset_values(sla_support_preset_name(3)),
+        this->get_support_preset_values(sla_auto_detail_preset_name(choice.detail))
+    };
+    sla_apply_auto_support_presets(points, lowest_z_mm, layer_height_mm, presets, choice);
 }
 
 // Rectangle selection
@@ -2217,17 +2295,20 @@ void SlaSupportPointsGizmo::on_keyboard(Scene::GizmoKeyEventContext& ctx)
     switch (support_tool_action_for(key)) {
     case SupportToolAction::None:
         return;
-    case SupportToolAction::PresetMini:
-        apply_preset_mini();
+    case SupportToolAction::PresetT01:
+        apply_new_support_preset(0);
         break;
-    case SupportToolAction::PresetLight:
-        apply_preset_light();
+    case SupportToolAction::PresetT02:
+        apply_new_support_preset(1);
         break;
-    case SupportToolAction::PresetMedium:
-        apply_preset_medium();
+    case SupportToolAction::PresetT03:
+        apply_new_support_preset(2);
         break;
-    case SupportToolAction::PresetHeavy:
-        apply_preset_heavy();
+    case SupportToolAction::PresetT04:
+        apply_new_support_preset(3);
+        break;
+    case SupportToolAction::PresetT06:
+        apply_new_support_preset(4);
         break;
     case SupportToolAction::AutoSupportSelection:
         auto_support({m_selected_object_id});

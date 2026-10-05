@@ -127,18 +127,26 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Plater/SlaSupportPointsEditing.cpp
         include/Slic3r/App/Plater/SlaSupportPointPick.hpp
         src/Slic3r/App/Plater/SlaSupportPointPick.cpp
+        include/Slic3r/App/Plater/SlaSupportPointEdits.hpp
+        src/Slic3r/App/Plater/SlaSupportPointEdits.cpp
         include/Slic3r/App/Plater/SlaSupportPointsLeaving.hpp
         src/Slic3r/App/Plater/SlaSupportPointsLeaving.cpp
         include/Slic3r/App/Plater/SlaSupportPointsLift.hpp
         src/Slic3r/App/Plater/SlaSupportPointsLift.cpp
         include/Slic3r/App/Plater/SlaSupportPointsSettings.hpp
         src/Slic3r/App/Plater/SlaSupportPointsSettings.cpp
+        include/Slic3r/App/Plater/SlaSupportAutoPresets.hpp
+        src/Slic3r/App/Plater/SlaSupportAutoPresets.cpp
         src/Slic3r/App/Plater/SlaSupportPointsClear.hpp
         src/Slic3r/App/Plater/SlaSupportPointsClear.cpp
         include/Slic3r/App/Plater/SlaSupportGeometry.hpp
         src/Slic3r/App/Plater/SlaSupportGeometry.cpp
         include/Slic3r/App/Plater/SlaSupportOnModel.hpp
         src/Slic3r/App/Plater/SlaSupportOnModel.cpp
+include/Slic3r/App/Plater/SlaSupportBrace.hpp
+        src/Slic3r/App/Plater/SlaSupportBrace.cpp
+        include/Slic3r/App/Plater/SlaSupportRoles.hpp
+        src/Slic3r/App/Plater/SlaSupportRoles.cpp
         include/Slic3r/App/Plater/SlaSupportPointsDialog.hpp
         src/Slic3r/App/Plater/SlaSupportPointsDialog.cpp
         include/Slic3r/App/Plater/SlaSupportToolShortcuts.hpp
@@ -1704,6 +1712,10 @@ test/Slic3r/App/SlaObjectUseRowsTests.cpp
 
             test/Slic3r/App/Scene/HeightBandTests.cpp
 
+            test/Slic3r/App/Scene/TriangleMeshManagerTests.cpp
+
+            test/Slic3r/Biz/Scene/BedTrackingTests.cpp
+
             test/Slic3r/App/Preview/SlaSupportsPanelTests.cpp
 
             test/Slic3r/App/Plater/AutoOrientProgressTests.cpp
@@ -1718,15 +1730,21 @@ test/Slic3r/App/SlaObjectUseRowsTests.cpp
 
             test/Slic3r/App/Plater/SlaSupportPointPickTests.cpp
 
+            test/Slic3r/App/Plater/SlaSupportPointEditsTests.cpp
+
             test/Slic3r/App/Plater/SlaSupportPointsClearTests.cpp
 
             test/Slic3r/App/Plater/SlaSupportPointsSettingsTests.cpp
+
+            test/Slic3r/App/Plater/SlaSupportAutoPresetsTests.cpp
 
             test/Slic3r/App/Plater/SlaSupportToolShortcutsTests.cpp
 
             test/Slic3r/App/Plater/SlaSupportGeometryTests.cpp
 
             test/Slic3r/App/Plater/SlaSupportOnModelTests.cpp
+
+            test/Slic3r/App/Plater/SlaSupportRolesTests.cpp
 
             test/Slic3r/App/Plater/SlaUndoActionTests.cpp
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Slic3r/App/Plater/SlaSupportBrace.hpp"
 #include "Slic3r/App/Plater/SlaSupportGeometry.hpp"
 #include "Slic3r/App/Plater/SlaSupportOnModel.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
@@ -31,11 +32,21 @@ struct SlaSupportPointsEditing
     // only home of that number, which a preset button also writes.
     SlaSupportGeometry support_geometry;
 
+    // How deep the contact of a clicked point sinks into the model, 0 for the configured
+    // support_head_penetration. It is a rule of the tip rather than a field of the tool
+    // (support rulebook R3.1: half the tip), so a preset of a tip class is what sets it, to half
+    // the tip of that class.
+    double contact_depth_mm = 0.0;
+
     // The "may this support end on the model" state a clicked point takes (M2.33). It belongs to
     // the "New supports" group, so a point placed by hand is an ordinary support (Inherit, the
     // object's own setting) until the group is changed, and editing the state of points that are
     // already there leaves it alone.
     SupportOnModel new_support_on_model{SupportOnModel::Inherit};
+
+    // The "is the pillar of this point braced" state a clicked point takes (M2.38), the same way:
+    // Inherit is an ordinary support, which is what a point without a switch of its own is.
+    SupportBrace new_support_brace{SupportBrace::Inherit};
 
     // Core editing operations
     std::optional<size_t> find_nearest_point(const Domain::Vec3d& mesh_pos, double max_distance_mm) const;
@@ -60,6 +71,11 @@ struct SlaSupportPointsEditing
     // hand is an ordinary support.
     void apply_support_on_model_to_selected(SupportOnModel on_model);
 
+    // The per-point "may the pillar of this support be braced" switch (M2.38) of the points that are
+    // selected. A new point takes Inherit, i.e. the object's own setting, so a point placed by hand
+    // is an ordinary support.
+    void apply_support_brace_to_selected(SupportBrace brace);
+
     /// The geometry the current selection is shown with, empty when nothing is selected or the
     /// selected points disagree on it.
     std::optional<SlaSupportGeometry> selected_support_geometry() const
@@ -72,6 +88,13 @@ struct SlaSupportPointsEditing
     std::optional<SupportOnModel> selected_support_on_model() const
     {
         return selection_support_on_model(points, selected_point_indices);
+    }
+
+    /// The bracing state the current selection is shown with, empty when nothing is selected or the
+    /// selected points disagree on it.
+    std::optional<SupportBrace> selected_support_brace() const
+    {
+        return selection_support_brace(points, selected_point_indices);
     }
 
     // Rectangle selection (works on pre-projected screen positions)

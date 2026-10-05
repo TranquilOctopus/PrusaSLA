@@ -543,6 +543,13 @@ void SLAPrint::Steps::generate_preview(SLAPrintObject& po, SLAPrintObjectStep st
         SPDLOG_WARN("Some parts of the print will be previewed with approximated meshes. This does not affect the quality of slices or the physical print in any way.");
     }
 
+    // The supportable mesh views po.m_preview->mesh through its AABBMesh, and that AABBMesh keeps
+    // the pointer it was given instead of a copy of the mesh, so it reads freed memory once the
+    // preview object below releases the mesh it shares. Drop it here, where the mesh is replaced,
+    // rather than in each of the callers: the support points step builds a new one from whatever
+    // preview it finds. (M0.15)
+    po.m_supportable_mesh.reset();
+
     // recreate preview instances
     TriangleMeshStats stats = Biz::Algorithms::TriangleMesh::calculate_stats(m);
     po.m_preview = Biz::Slicing::Sla::Object {
@@ -932,6 +939,11 @@ void SLAPrint::Steps::support_points(SLAPrintObject &po)
     const Transform3d& object_trafo = po.trafo();
     const AABBMesh& emesh = po.m_supportable_mesh->emesh;
     prepare_permanent_support_points(permanent_supports, object_supports, object_trafo, emesh);
+
+    // The radius one point may hold is a size, so it scales with the size of the part (M7.8.7), the
+    // same way the support tool of the preview does it. See support_curve_size_factor in
+    // SupportPointGenerator.hpp.
+    config.support_curve = support_curve_for_part(config.support_curve, data);
 
     ThrowOnCancel cancel = [this]() { throw_if_canceled(); };
     StatusFunction status = statuscb;
