@@ -1010,6 +1010,18 @@ SidebarBed& PlaterRenderModule::sidebar_bed()
     return *m_sidebar_bed.get();
 }
 
+SlaSupportPreviewService& PlaterRenderModule::sla_support_preview()
+{
+    ASSERT(m_sla_support_preview);
+    return *m_sla_support_preview;
+}
+
+const SlaSupportPreviewService& PlaterRenderModule::sla_support_preview() const
+{
+    ASSERT(m_sla_support_preview);
+    return *m_sla_support_preview;
+}
+
 void PlaterRenderModule::init_scene()
 {
 #if ENABLED_NODE_LOGGING

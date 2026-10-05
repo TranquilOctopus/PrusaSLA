@@ -2177,6 +2177,8 @@ void SlaSupportPointsGizmo::fill_generated_point_geometry(
     // and the detail takes the class the setting names.
     presets.base = presets.classes[std::size_t(sla_auto_heavy_base_preset_index)];
     presets.detail = presets.class_of(sla_auto_detail_preset_name(choice.detail));
+    // The T0.1 class, preset button 1, is what a point in a detailed region takes (M7.8.5).
+    presets.minimum = presets.classes[0];
 
     sla_apply_auto_support_presets(points, lowest_z_mm, layer_height_mm, presets, choice);
 }

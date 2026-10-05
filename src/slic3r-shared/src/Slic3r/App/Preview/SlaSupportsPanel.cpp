@@ -1,5 +1,11 @@
 #include "Slic3r/App/Preview/SlaSupportsPanel.hpp"
 
+#include "Slic3r/Biz/I18N/I18N.hpp"
+
+#include <fmt/format.h>
+
+#include <string>
+
 namespace Slic3r::App::Preview {
 
 SlaSupportsPanelState sla_supports_panel_state(
@@ -38,6 +44,21 @@ SlaSupportsPanelState sla_supports_panel_state(
     }
 
     return state;
+}
+
+std::string sla_auto_raft_note(std::size_t models_with_auto_raft)
+{
+    // One model is said in the singular, more than one in the plural, which is what the count is
+    // here for. Zero is nothing at all: no part on this plate would form a suction cup, so there is
+    // no raft to report (R6.1).
+    if (models_with_auto_raft == 0) {
+        return {};
+    }
+    if (models_with_auto_raft == 1) {
+        return Biz::_u8L("Auto: 1 model gets a raft, its underside would form a suction cup.");
+    }
+    return fmt::format(fmt::runtime(Biz::_u8L("Auto: {} models get a raft, their undersides would form suction cups.")),
+                       models_with_auto_raft);
 }
 
 } // namespace Slic3r::App::Preview

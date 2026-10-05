@@ -33,6 +33,7 @@
 
 #include "libslic3r/SLA/Hollowing.hpp"
 #include "libslic3r/SLA/HollowingLattice.hpp"
+#include "libslic3r/SLA/ObjectRaft.hpp"
 #include "libslic3r/SLA/Pad.hpp"
 #include "libslic3r/SLAResult.hpp"
 #include "libslic3r/SLA/SupportTree.hpp"
@@ -148,6 +149,11 @@ public:
 
     // Supports are enabled and the object has points, or the support tool is generating them now.
     bool has_supports() const;
+
+    // The raft of this object with raft_type Auto resolved for it (M7.8.4). Empty until the
+    // object slice step has taken the decision, and for every raft type that is not Auto, whose
+    // helpers read raft_type as it is stored.
+    std::optional<ObjectRaft> object_raft() const;
 
     // The public Slice record structure. It corresponds to one printable layer.
     class SliceRecord {
@@ -270,6 +276,19 @@ private:
     sla::InteriorPtr m_hollowing_data;
     bool m_support_points_generated{false};
     bool m_sliced_with_supports{false};
+
+    // The raft Auto resolved to for this object (M7.8.4), taken by resolve_object_raft() before the
+    // first layer is placed, because the elevation of the print follows it. Read through
+    // object_raft(), which only reports it once m_raft_resolved says there is one, and never for a
+    // raft type that is not Auto.
+    bool                   m_raft_resolved = false;
+    Domain::sla::RaftType  m_raft_type     = Domain::sla::RaftType::None;
+    bool                   m_raft_suction  = false;
+
+    // Take the raft decision of this object for raft_type Auto, from the mesh it prints. Only
+    // SLAPrint, and only from the step that slices the model, calls this; it is taken again on every
+    // pass over that step, which is what a new mesh or a new setting asks for.
+    void resolve_object_raft();
 };
 
 Biz::Slicing::Sla::Object::InstanceTrafos get_instance_trafos(const SLAPrintObject& object);
@@ -475,26 +494,53 @@ public:
 
 // Helper functions:
 
+// ObjectRaft (libslic3r/SLA/ObjectRaft.hpp) is what raft_type resolves to for one object (M7.8.4,
+// rulebook R6): raft_type as it is stored, except that Auto is a decision about one object and is
+// resolved for it. The resolution itself is the pure function of libslic3r/SLA/RaftAuto.hpp; this is
+// what the config adds to it (the layer height, the elevation the part would print at without a
+// raft) and what the caller passes on to the raft helpers below.
+
+// Is raft_type Auto in this config, which is what has to be resolved per object before the raft
+// helpers below can answer for it?
+bool is_raft_auto(const SLAPrintObjectConfigView &c);
+
+// raft_type as it is stored, with Auto resolved for this object. Nothing else resolves:
+// @p mesh_in_print_pose is the object as it prints (its transform applied, no lift),
+// @p object_elevation_mm is how high above the plate its lowest point prints without a raft.
+std::optional<ObjectRaft> resolve_object_raft(const SLAPrintObjectConfigView &c,
+                                              const indexed_triangle_set      &mesh_in_print_pose,
+                                              double                           object_elevation_mm);
+
 // raft_type is the single source of truth for the raft (pad); pad_enable and
-// pad_around_object are only read for configs that have no (known) raft_type.
-bool is_pad_enabled(const SLAPrintObjectConfigView &c);
+// pad_around_object are only read for configs that have no (known) raft_type. An Auto that nothing
+// has resolved builds no raft, which is the safe half of the rule (R6.1).
+bool is_pad_enabled(const SLAPrintObjectConfigView &c, const std::optional<ObjectRaft> &raft = std::nullopt);
 
-bool is_pad_around_object(const SLAPrintObjectConfigView &c);
+bool is_pad_around_object(const SLAPrintObjectConfigView &c, const std::optional<ObjectRaft> &raft = std::nullopt);
 
-bool is_zero_elevation(const SLAPrintObjectConfigView &c);
+bool is_zero_elevation(const SLAPrintObjectConfigView &c, const std::optional<ObjectRaft> &raft = std::nullopt);
 
 // The lattice left standing inside the cavity of a hollow print, as hollowing_infill and its two
 // knobs ask for it. None (the default, and what a config without the keys means) is the plain
 // cavity of today.
 sla::HollowingInfillConfig make_hollowing_infill_cfg(const SLAPrintObjectConfigView &c);
 
-sla::SupportTreeConfig make_support_cfg(const SLAPrintObjectConfigView& c);
+sla::SupportTreeConfig make_support_cfg(const SLAPrintObjectConfigView& c, const std::optional<ObjectRaft> &raft = std::nullopt);
 
-sla::PadConfig::EmbedObject builtin_pad_cfg(const  SLAPrintObjectConfigView& c);
+sla::PadConfig::EmbedObject builtin_pad_cfg(const  SLAPrintObjectConfigView& c, const std::optional<ObjectRaft> &raft = std::nullopt);
 
-sla::PadConfig make_pad_cfg(const SLAPrintObjectConfigView& c);
+sla::PadConfig make_pad_cfg(const SLAPrintObjectConfigView& c, const std::optional<ObjectRaft> &raft = std::nullopt);
 
 bool validate_pad(const indexed_triangle_set &pad, const sla::PadConfig &pcfg);
+
+// What the print object read out of its three raft members. A raft type that is not Auto has no
+// decision to report, so it gets none and its helpers read raft_type as it is stored.
+inline std::optional<ObjectRaft> SLAPrintObject::object_raft() const
+{
+    if (!m_raft_resolved)
+        return std::nullopt;
+    return ObjectRaft{m_raft_type, m_raft_suction};
+}
 
 namespace SLASlicingSync {
 using Step = std::variant<SLAPrintStep, SLAPrintObjectStep>;

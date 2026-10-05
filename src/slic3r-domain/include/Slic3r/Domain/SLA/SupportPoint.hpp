@@ -103,8 +103,14 @@ struct SupportPoint
     //
     // AnchorLarge is the anchor of a very large object (M7.8.3, the size table of
     // rulebook section 3), which takes the largest tip (T0.6) instead of the heavy
-    // one. It is appended at the end and the values before it are never renumbered,
-    // so a project written before it reads back as it was.
+    // one. Detail is what a point in a fine, dense or highly curved region carries
+    // whatever else it would (M7.8.5, R4.9); the anchor of the lowest island is the
+    // one role R4.9 does not replace.
+    //
+    // A role is only ever added at the end, since the three tables that hold one per
+    // value are indexed by it, and the value a project wrote is read through the same
+    // order: AnchorLarge therefore keeps the value it had on sla/batch-m15 and Detail
+    // is the one after it.
     enum class Role : uint8_t
     {
         Unknown,
@@ -113,7 +119,8 @@ struct SupportPoint
         SmallIsland,
         Overhang,
         Fragile,
-        AnchorLarge
+        AnchorLarge,
+        Detail
     };
     Role role = Role::Unknown;
 

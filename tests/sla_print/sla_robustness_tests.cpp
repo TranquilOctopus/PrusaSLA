@@ -336,13 +336,16 @@ struct SlaConfig
     Slic3r::Domain::PartialObjectConfigSLAPtr object_settings;
 };
 
-// Supports and raft on (pad_enable defaults to Full), a 0.05 mm layer.
+// Supports on and a raft under the object (a full plate one, so the pillars stand on it; the raft
+// type is named because raft_type is Auto by default since M7.8.4, and Auto would read the underside
+// of every one of these meshes instead), a 0.05 mm layer.
 SlaConfig make_sla_config(double layer_height, bool supports)
 {
     Slic3r::Domain::ConfigPackSLA pack;
     pack.sla_print_settings.items.opt("layer_height").set(layer_height);
     pack.sla_print_settings.items.opt("supports_enable").set(supports);
-    pack.sla_print_settings.items.opt("pad_enable").set(supports);
+    pack.sla_print_settings.items.opt("raft_type")
+        .set(supports ? Slic3r::Domain::sla::RaftType::Full : Slic3r::Domain::sla::RaftType::None);
     pack.sla_print_settings.items.opt("support_object_elevation").set(10.0);
 
     SlaConfig cfg;
@@ -554,7 +557,9 @@ SliceResult run_slice(const TriangleMesh& mesh, const RobustnessCase& test_case,
     config.sla_print_settings.items.opt("layer_height").set(test_case.layer_height);
     config.sla_material_settings.items.opt("initial_layer_height").set(test_case.layer_height);
     config.sla_print_settings.items.opt("supports_enable").set(test_case.supports);
-    config.sla_print_settings.items.opt("pad_enable").set(test_case.supports);
+    config.sla_print_settings.items.opt("raft_type")
+        .set(test_case.supports ? Slic3r::Domain::sla::RaftType::Full
+                                : Slic3r::Domain::sla::RaftType::None);
 
     const auto hw_config =
         Slic3r::Test::create_dummy_hw_config(1, 0, Slic3r::Domain::PrinterTechnology::SLA);

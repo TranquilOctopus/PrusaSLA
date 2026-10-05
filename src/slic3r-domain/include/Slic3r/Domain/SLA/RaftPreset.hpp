@@ -73,14 +73,15 @@ RaftPadValues raft_preset_to_pad_values(
 sla::RaftType raft_type_of_legacy_pad(bool pad_enable, bool pad_around_object);
 
 /// The name raft_type is stored under, the one a preset file carries and a config box reads back
-/// ("none", "full", "around_object", "skate"). It is read from the raft_type definition, so the
-/// name a migration writes into an old preset is the name the option itself parses.
+/// ("none", "full", "around_object", "skate", "auto"). It is read from the raft_type definition, so
+/// the name a migration writes into an old preset is the name the option itself parses.
 std::string raft_type_name(sla::RaftType type);
 
 /// The raft settings the given raft type actually reads, in the order they should be shown:
 /// raft_type itself first, then the knobs that are not already decided by the raft type.
 /// raft_type is always in the list. A knob the raft type ignores (Skate replaces the expansion
-/// and the wall slope, None prints no raft at all) is not, so the settings UI can hide it.
+/// and the wall slope, None prints no raft at all) is not, so the settings UI can hide it. Auto
+/// reads every knob, since it prints either nothing or a raft around the object (M7.8.4).
 /// @param type The selected raft type.
 /// @return Config keys of the settings that apply to this raft type.
 const std::vector<std::string>& raft_type_visible_settings(sla::RaftType type);

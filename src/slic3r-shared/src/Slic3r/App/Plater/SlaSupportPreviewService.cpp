@@ -231,6 +231,16 @@ bool SlaSupportPreviewService::has_preview(Domain::ObjectID object_id) const
     return it != m_previews.end() && it->second.node != nullptr;
 }
 
+std::optional<Domain::sla::RaftType> SlaSupportPreviewService::auto_raft_type(
+    Domain::ObjectID object_id
+) const
+{
+    const auto it = m_previews.find(object_id.id);
+    if (it == m_previews.end())
+        return std::nullopt;
+    return it->second.auto_raft;
+}
+
 void SlaSupportPreviewService::on_slicing_input_changed(const Domain::BedRef& /*bed_instance*/)
 {
     refresh();
@@ -388,7 +398,14 @@ void SlaSupportPreviewService::refresh()
         preview.key            = candidate.public_part.key;
         // The model is drawn by this lift, and the tree of it is built and drawn by the very same
         // one (sla_support_tree_placement), so the two can never drift apart (M2.34).
-        m_scene_presenter.set_sla_lift(candidate.public_part.object_id, candidate.elevation);
+        // Which raft the Auto rule picks decides that lift too (M7.8.4): a part that stands on the
+        // plate is drawn there, one held up by its supports is drawn above them. The lift of a
+        // build that has not come back yet is the one an unresolved Auto gives, which is the no raft
+        // of R6.1, and build_nodes replaces it with the lift the tree was built for.
+        m_scene_presenter.set_sla_lift(
+            candidate.public_part.object_id,
+            preview.elevation_mm.has_value() ? *preview.elevation_mm : candidate.elevation
+        );
     }
 
     for (const ObjectID& object_id : diff.to_recompute) {
@@ -561,12 +578,11 @@ void SlaSupportPreviewService::start_next_job()
 
             const SlaSupportPreviewSchedule::Request request = worker_job.request;
             const ObjectID object_id                        = worker_job.request.object_id;
-            const Transform3d node_trafo                    = worker_job.pending.placement.node_trafo;
             const std::shared_ptr<std::atomic<bool>> alive   = m_alive;
 
             const bool dispatched = Biz::Platform::PlatformServices::instance()
                                        .main_thread_dispatcher()
-                                       .dispatch_on_main_thread([this, alive, request, object_id, node_trafo, tree = std::move(tree), cancelled]() mutable {
+                                       .dispatch_on_main_thread([this, alive, request, object_id, tree = std::move(tree), cancelled]() mutable {
                     if (!alive->load()) {
                         return; // the service is gone, its destructor joined the worker already
                     }
@@ -580,7 +596,7 @@ void SlaSupportPreviewService::start_next_job()
 
                     // A result of a key an edit has replaced since is thrown away, never shown.
                     if (!cancelled && m_schedule.is_current(request)) {
-                        build_nodes(object_id, node_trafo, tree);
+                        build_nodes(object_id, tree);
                     }
                     m_schedule.finish_build();
                     start_next_job();
@@ -597,8 +613,7 @@ void SlaSupportPreviewService::start_next_job()
 }
 
 void SlaSupportPreviewService::build_nodes(
-    ObjectID                   object_id,
-    const Transform3d&         node_trafo,
+    ObjectID                            object_id,
     const Slic3r::sla::SupportToolTree& tree
 )
 {
@@ -606,6 +621,14 @@ void SlaSupportPreviewService::build_nodes(
     if (it == m_previews.end()) {
         return; // the object lost its preview while the tree was being built
     }
+
+    // The raft the Auto rule resolved and the lift that goes with it (M7.8.4). Both are what the
+    // tree below was built for, and the model is drawn by the very same lift, so the object and its
+    // supports meet where the build says they do.
+    it->second.auto_raft    = tree.raft ? std::optional<Domain::sla::RaftType>(tree.raft->type)
+                                        : std::nullopt;
+    it->second.elevation_mm = tree.elevation_mm;
+    m_scene_presenter.set_sla_lift(object_id, tree.elevation_mm);
 
     Scene::Scene& scene = m_scene_presenter.scene();
 
@@ -650,11 +673,16 @@ void SlaSupportPreviewService::build_nodes(
     // The meshes come back in the world placement of the object and not lifted (M2.34, see
     // sla_support_tree_placement and libslic3r/SLASupportTool.hpp), so the node raises them by the
     // support elevation and by nothing else: the tree stands on the plate and the model sits on top
-    // of it, and a pinhead is at the support point it belongs to. The transform of the build plate
-    // is not applied here any more: the instance matrix the meshes were placed with is a world
-    // matrix and already carries that offset. No AABB, the preview is not clickable and never
-    // steals a pick from the model.
-    const Transform3d final_trafo = node_trafo;
+    // of it, and a pinhead is at the support point it belongs to. That elevation is the one the
+    // tree was built for, which is what set_sla_lift above lifted the model by as well, and it is
+    // the same node transform sla_support_tree_placement builds for a lift (M7.8.4). The transform
+    // of the build plate is not applied here any more: the instance matrix the meshes were placed
+    // with is a world matrix and already carries that offset. No AABB, the preview is not clickable
+    // and never steals a pick from the model.
+    const Transform3d final_trafo = tree.elevation_mm == 0. ? Transform3d::Identity()
+                                                            : Domain::translation_transform(
+                                                                  Domain::Vec3d(0., 0., tree.elevation_mm)
+                                                              );
 
     Scene::NodeBuilder object_builder{scene};
     object_builder.set_debug_name(fmt::format("SlaSupportPreviewService - obj {}", object_id.id));

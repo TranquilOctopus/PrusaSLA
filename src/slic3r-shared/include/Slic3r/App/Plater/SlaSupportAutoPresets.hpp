@@ -39,9 +39,10 @@ struct SlaAutoSupportChoice
     Domain::sla::SupportAutoDetailPreset detail{Domain::sla::SupportAutoDetailPreset::Light};
 };
 
-/// The two preset bundles of one automatic placement: a support class each of them (M7.8.1, R3), so
+/// The preset bundles of one automatic placement: a support class each of them (M7.8.1, R3), so
 /// a generated point gets a ball contact sunk half its own tip, the cone under it, a hexagonal
-/// stem and a prism base along with the four sizes the settings carry.
+/// stem and a prism base along with the four sizes the settings carry. All three are read as they
+/// are handed in, so a caller fills every one of them.
 struct SlaAutoSupportPresets
 {
     /// What the base of the model gets, i.e. the T0.4 class of the support tool. It is the class of
@@ -49,6 +50,11 @@ struct SlaAutoSupportPresets
     SlaSupportPreset base;
     /// What every other generated point gets.
     SlaSupportPreset detail;
+    /// What a generated point in a detailed region gets (M7.8.5, R4.9): the T0.1 class, which is
+    /// preset button 1 of the tool. It is a bundle of its own rather than a smaller `detail`, since
+    /// R4.9 asks for the minimum tip whatever the role of the point would have given it and whatever
+    /// support_auto_detail_preset says, and only for a reason of its own.
+    SlaSupportPreset minimum;
     /// All five tip classes of the rulebook as the print preset of the printer carries them, which
     /// is where the class of a role comes from (M7.8.8): index @p i is what
     /// sla_support_preset_name(@p i) names, so 0 is mini (T0.1) and 4 is xheavy (T0.6). They
@@ -67,6 +73,14 @@ struct SlaAutoSupportPresets
     /// have takes the last class, which is what sla_support_preset() does with such a name.
     const SlaSupportPreset& class_of(const std::string& preset_name) const;
 };
+
+/// Whether a generated point takes the minimum class for the reason of its role and not for where it
+/// is (M7.8.5, R4.9): a point in a detailed region does, and that is the only role that does. The
+/// anchor of the lowest island is the one role R4.9 leaves alone, so a point of the base keeps the
+/// heavy class whatever the surface under it is like (R4.1), and a fragile point is not Detail
+/// either - which class a fragile support takes is the mapping of M7.8.2 (rulebook_tip_class), not
+/// this rule.
+bool sla_auto_support_is_detailed(const Domain::SLA::SupportPoint& point);
 
 /// The preset a detail value names, as the support tool names its preset buttons: "mini", "light" or
 /// "medium". Any value that is not one of them is the detail of the default (Light), which is what
@@ -89,10 +103,11 @@ bool is_sla_auto_support_base_point(
 );
 
 /// Sizes @p points the way the automatic placement sizes what it generates: a point the generator
-/// classified takes the tip class of its role (M7.8.8, sla_role_tip_class), and a point it did not
-/// - one of a project written before the roles existed, or one from a path that does not classify -
-/// takes the band rule of M2.37: the base of the model takes @p presets.base while
-/// @p choice.heavy_base is on and every other generated point takes @p presets.detail.
+/// classified takes the tip class of its role (M7.8.8, sla_role_tip_class; a Detail point (R4.9,
+/// M7.8.5) and a Fragile one always take the minimum class), and a point it did not - one of a
+/// project written before the roles existed, or one from a path that does not classify - takes the
+/// band rule of M2.37: the base of the model takes @p presets.base while @p choice.heavy_base is on
+/// and every other generated point takes @p presets.detail.
 ///
 /// Every point gets its whole class, geometry and four sizes, through apply_sla_support_preset() -
 /// the one function a preset button uses as well, so an automatic support and a hand-placed one of

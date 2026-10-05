@@ -42,6 +42,36 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         CHECK(def->tooltip.find("half the expansion and a 70 degree wall slope") != std::string::npos);
         // The type picks the knobs, so it is shown above them.
         CHECK(def->tooltip.find("shows only those") != std::string::npos);
+        // Auto is the rule the rulebook R6 asks for, so it is the one a new config gets, and the
+        // tooltip says what it decides and when.
+        REQUIRE(def->init_fn != nullptr);
+        CHECK(def->init_fn().get<Slic3r::Domain::sla::RaftType>()
+              == Slic3r::Domain::sla::RaftType::Auto);
+        CHECK(def->tooltip.find("would form a suction cup") != std::string::npos);
+        // Auto is the first entry of the combo, so it is the one the drop-down opens on.
+        const Slic3r::Domain::EnumValueDefs& enum_values =
+            def->init_fn().get<Slic3r::Domain::EnumWrapper>().def();
+        REQUIRE(!enum_values.empty());
+        CHECK(enum_values.front().enum_value == int(Slic3r::Domain::sla::RaftType::Auto));
+        CHECK(enum_values.front().str_ui == "Auto (raft only against suction)");
+        // What a preset or a project stores is the name of the type and not its number, so the four
+        // shapes from before Auto keep their names and every project that names one of them reads
+        // what it always read.
+        const std::vector<std::string> stored_names{"auto", "none", "full", "around_object", "skate"};
+        REQUIRE(enum_values.size() == stored_names.size());
+        for (size_t i = 0; i < stored_names.size(); ++i) {
+            INFO("raft type " << i);
+            CHECK(enum_values[i].str_serialized == stored_names[i]);
+        }
+        for (const Slic3r::Domain::sla::RaftType type :
+             {Slic3r::Domain::sla::RaftType::None,
+              Slic3r::Domain::sla::RaftType::Full,
+              Slic3r::Domain::sla::RaftType::AroundObject,
+              Slic3r::Domain::sla::RaftType::Skate,
+              Slic3r::Domain::sla::RaftType::Auto}) {
+            INFO("raft type " << static_cast<int>(type));
+            CHECK(Slic3r::Domain::SLA::raft_type_name(type) != std::string());
+        }
         // raft_type is the first row of the Raft group, the knobs it drives come after it.
         CHECK(def->order == 0);
     }
@@ -300,7 +330,8 @@ TEST_CASE("The raft type decides which raft settings are shown", "[Config][SLA][
 
     SECTION("the type itself is always shown")
     {
-        for (const RaftType type : {RaftType::None,
+        for (const RaftType type : {RaftType::Auto,
+                                    RaftType::None,
                                     RaftType::Full,
                                     RaftType::AroundObject,
                                     RaftType::Skate}) {
@@ -418,6 +449,36 @@ TEST_CASE("The raft type decides which raft settings are shown", "[Config][SLA][
         CHECK_FALSE(raft_type_uses_setting(RaftType::Skate, "pad_wall_slope"));
     }
 
+    SECTION("Auto prints either nothing or a raft around the object, so it reads every knob")
+    {
+        // What the rule (M7.8.4) resolves to is one of the shapes above, never Auto itself, so the
+        // rows shown are the union of theirs: everything Around object reads, which is also what a
+        // full plate raft reads and a part that gets no raft at all ignores.
+        for (const std::string& key : {"pad_wall_height",
+                                       "pad_wall_thickness",
+                                       "raft_floor_thickness",
+                                       "pad_brim_size",
+                                       "pad_wall_slope",
+                                       "raft_edge_taper",
+                                       "raft_infill",
+                                       "raft_infill_spacing",
+                                       "raft_infill_wall",
+                                       "raft_infill_skin",
+                                       "raft_interface_thickness",
+                                       "raft_interface_exposure",
+                                       "pad_max_merge_distance",
+                                       "pad_object_gap",
+                                       "pad_around_object_everywhere",
+                                       "pad_object_connector_stride",
+                                       "pad_object_connector_width",
+                                       "pad_object_connector_penetration"}) {
+            INFO("setting " << key);
+            CHECK(raft_type_uses_setting(RaftType::Auto, key));
+        }
+        CHECK(raft_type_visible_settings(RaftType::Auto)
+              == raft_type_visible_settings(RaftType::AroundObject));
+    }
+
     SECTION("a setting that is not a raft knob is not filtered out")
     {
         CHECK_FALSE(raft_type_uses_setting(RaftType::None, "layer_height"));
@@ -478,7 +539,7 @@ TEST_CASE("The raft type and the raft infill pattern together decide the raft ro
     using Slic3r::Domain::SLA::raft_visible_settings;
 
     const std::vector<RaftType> types{
-        RaftType::None, RaftType::Full, RaftType::AroundObject, RaftType::Skate
+        RaftType::Auto, RaftType::None, RaftType::Full, RaftType::AroundObject, RaftType::Skate
     };
     const std::vector<RaftInfillType> infills{
         RaftInfillType::None, RaftInfillType::Grid, RaftInfillType::Honeycomb
@@ -523,8 +584,10 @@ TEST_CASE("The raft type and the raft infill pattern together decide the raft ro
             CHECK(raft_uses_setting(type, infill, "pad_brim_size") == user_shaped_raft);
             CHECK(raft_uses_setting(type, infill, "pad_wall_slope") == user_shaped_raft);
 
-            // Only a raft around the object reads the object gap and the connectors.
-            const bool around_object = type == RaftType::AroundObject || type == RaftType::Skate;
+            // Only a raft around the object reads the object gap and the connectors. Auto can
+            // resolve to one of those (M7.8.4), so it reads them too.
+            const bool around_object = type == RaftType::AroundObject || type == RaftType::Skate
+                                       || type == RaftType::Auto;
             CHECK(raft_uses_setting(type, infill, "pad_object_gap") == around_object);
             CHECK(raft_uses_setting(type, infill, "pad_around_object_everywhere") == around_object);
             CHECK(raft_uses_setting(type, infill, "pad_object_connector_stride") == around_object);
@@ -588,7 +651,8 @@ TEST_CASE("Every shown raft setting is a real setting in the Raft group", "[Conf
         return nullptr;
     };
 
-    for (const RaftType type : {RaftType::None,
+    for (const RaftType type : {RaftType::Auto,
+                                RaftType::None,
                                 RaftType::Full,
                                 RaftType::AroundObject,
                                 RaftType::Skate}) {

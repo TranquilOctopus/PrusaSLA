@@ -60,6 +60,15 @@ const SlaSupportPreset& SlaAutoSupportPresets::class_of(const std::string& prese
     return classes.back();
 }
 
+bool sla_auto_support_is_detailed(const SupportPoint& point)
+{
+    // The role the generator gave the point is what says it stands in a detailed region: the engine
+    // measured the surface around it, so nothing here has to look at the model again. It is the one
+    // reason R4.9 gives for the minimum tip, and the anchor of the lowest island is not Detail at
+    // all, so the base of the model keeps its heavy class on relief as well as on a plate (R4.1).
+    return point.role == SupportPoint::Role::Detail;
+}
+
 void sla_apply_auto_support_presets(
     SupportPoints& points,
     double lowest_z_mm,
@@ -90,9 +99,18 @@ void sla_apply_auto_support_presets(
         // A point with no role keeps the band rule of M2.37: the lowest island heavy, everything
         // else the detail preset.
         const bool is_base = is_sla_auto_support_base_point(point, lowest_z_mm, layer_height_mm);
-        const SlaSupportPreset& preset =
-            is_base && choice.heavy_base ? presets.base : presets.detail;
-        apply_sla_support_preset(point, preset);
+
+        // R4.9 (M7.8.5): a point in a detailed region takes the minimum class, except where it is
+        // the anchor of the lowest island, which the heavy class of R4.1 stays with.
+        if (!is_base && sla_auto_support_is_detailed(point)) {
+            apply_sla_support_preset(point, presets.minimum);
+            continue;
+        }
+
+        apply_sla_support_preset(
+            point,
+            is_base && choice.heavy_base ? presets.base : presets.detail
+        );
     }
 }
 

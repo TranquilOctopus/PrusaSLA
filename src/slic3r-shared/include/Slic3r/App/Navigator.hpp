@@ -1,10 +1,12 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "Slic3r/Biz/ProjectScoped.hpp"
 #include "Slic3r/Biz/ISelectedProjectChangedListener.hpp"
+#include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/Domain/ObjectID.hpp"
 
 #include "Slic3r/App/IAppConfigChangedListener.hpp"
@@ -103,6 +105,17 @@ public:
     /// Whether a support generation of the Prepare support tool is still going, false when it is
     /// not open at all.
     bool sla_auto_support_running() const;
+
+    /**
+     * @brief What the raft type Auto resolved to for a model, as the support preview decided it.
+     *
+     * The decision is a reading of the underside of the model that only the support preview does
+     * outside the slice (rulebook R6, M7.8.4), so the Prepare module owns it and everything else
+     * asks for it here, the way it asks for the state of the tool above. Empty when there is
+     * nothing to report: no Prepare module yet, no built preview for that model, or a raft type
+     * that is not Auto, which is read as it is stored.
+     */
+    std::optional<Domain::sla::RaftType> sla_auto_raft_type(Domain::ObjectID object_id) const;
 
     void on_selected_project_changed(size_t index) override;
 

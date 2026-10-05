@@ -385,6 +385,9 @@ set(SLIC3R_SOURCES
     src/libslic3r/SLA/ZCorrection.hpp
     src/libslic3r/SLA/CavityDetection.cpp
     src/libslic3r/SLA/CavityDetection.hpp
+    src/libslic3r/SLA/RaftAuto.cpp
+    src/libslic3r/SLA/RaftAuto.hpp
+    include/libslic3r/SLA/ObjectRaft.hpp
     src/libslic3r/SLA/IslandDetection.cpp
     src/libslic3r/SLA/IslandDetection.hpp
     src/libslic3r/SLA/ObjectResinUse.cpp

@@ -2,6 +2,7 @@
 
 #include "Slic3r/App/Plater/PlaterRenderModule.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsGizmo.hpp"
+#include "Slic3r/App/Plater/SlaSupportPreviewService.hpp"
 #include "Slic3r/App/Preview/PreviewRenderModule.hpp"
 #include "Slic3r/App/Platform/AbstractRenderCanvas.hpp"
 #include "Slic3r/App/AppServices.hpp"
@@ -150,6 +151,14 @@ bool Navigator::sla_auto_support_running() const
     }
     Plater::SlaSupportPointsGizmo* gizmo = sla_support_points_gizmo(*m_plater_module, *m_project_interactor);
     return gizmo != nullptr && gizmo->auto_support_running();
+}
+
+std::optional<Domain::sla::RaftType> Navigator::sla_auto_raft_type(Domain::ObjectID object_id) const
+{
+    if (!has_modules()) {
+        return std::nullopt;
+    }
+    return m_plater_module->sla_support_preview().auto_raft_type(object_id);
 }
 
 void Navigator::on_selected_project_changed(size_t index)

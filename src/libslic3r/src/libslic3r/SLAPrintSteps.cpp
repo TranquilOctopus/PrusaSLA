@@ -567,6 +567,9 @@ void SLAPrint::Steps::mesh_assembly(SLAPrintObject &po)
     po.m_supportable_mesh.reset();
     po.m_support_slices.clear();
     po.m_hollowing_data.reset();
+    // The raft Auto resolved is a reading of the mesh that is about to change, so it goes with it
+    // (M7.8.4): nothing is decided until the object slice step reads the new one.
+    po.m_raft_resolved = false;
 
     csg::model_to_csgmesh(*po.model_object(), po.trafo(),
                           csg_inserter{po.m_mesh_to_slice, slaposAssembly},
@@ -709,6 +712,11 @@ void SLAPrint::Steps::slice_model(SLAPrintObject &po)
     // The first mesh in the csg sequence is assumed to be a positive part
     assert(po.m_mesh_to_slice.empty() ||
            csg::get_operation(*po.m_mesh_to_slice.begin()) == csg::CSGType::Union);
+
+    // The raft of a raft_type Auto is a decision about the underside of this object (rulebook R6,
+    // M7.8.4), so it is taken here, before anything below reads the elevation or the pad: the raft
+    // it resolves to is what decides both.
+    po.resolve_object_raft();
 
     // Record whether this object was sliced with supports enabled.
     po.m_sliced_with_supports = po.has_supports();
@@ -989,7 +997,7 @@ void SLAPrint::Steps::support_points(SLAPrintObject &po)
     // If the zero elevation mode is engaged, we have to filter out all the
     // points that are on the bottom of the object
     // TODO: Do not even generate points on the bottom of the object
-    if (is_zero_elevation(po.config())) {
+    if (is_zero_elevation(po.config(), po.object_raft())) {
         float lvl(po.m_supportable_mesh->zoffset + EPSILON);
         std::erase_if(support_points, [lvl](const SupportPoint& sp) { return sp.pos.z() <= lvl; });
     }
@@ -1022,8 +1030,8 @@ void SLAPrint::Steps::support_tree(SLAPrintObject &po)
         return; // support tree is unwanted
     }
 
-    po.m_supportable_mesh->cfg = make_support_cfg(po.m_config);
-    po.m_supportable_mesh->pad_cfg = make_pad_cfg(po.m_config);
+    po.m_supportable_mesh->cfg = make_support_cfg(po.m_config, po.object_raft());
+    po.m_supportable_mesh->pad_cfg = make_pad_cfg(po.m_config, po.object_raft());
 
     // scaling for the sub operations
     double d = objectstep_scale * OBJ_STEP_LEVELS[slaposSupportTree] / 100.0;
@@ -1055,13 +1063,13 @@ void SLAPrint::Steps::generate_pad(SLAPrintObject& po)
     // and before the supports had been sliced. (or the slicing has to be
     // repeated)
     using Slic3r::Biz::Slicing::Sla::Object;
-    if (!is_pad_enabled(po.m_config)) {
+    if (!is_pad_enabled(po.m_config, po.object_raft())) {
         po.m_preview->pad = nullptr;
         return; // pad is unwanted
     }
 
     // An object without supports sits on the plate; only a raft around it (zero elevation) fits.
-    if (!po.has_supports() && !is_zero_elevation(po.config())) {
+    if (!po.has_supports() && !is_zero_elevation(po.config(), po.object_raft())) {
         po.m_preview->pad = nullptr;
         return;
     }
@@ -1070,7 +1078,7 @@ void SLAPrint::Steps::generate_pad(SLAPrintObject& po)
     // (Again, despite it was retrieved in the previous step. Note that
     // on a param change event, the previous step might not be executed
     // depending on the specific parameter that has changed).
-    sla::PadConfig pcfg = make_pad_cfg(po.m_config);
+    sla::PadConfig pcfg = make_pad_cfg(po.m_config, po.object_raft());
     sla::JobController ctl;
     ctl.stopcondition = [this]() { return canceled(); };
     ctl.cancelfn = [this]() { throw_if_canceled(); };
@@ -1097,7 +1105,7 @@ void SLAPrint::Steps::generate_pad(SLAPrintObject& po)
 void SLAPrint::Steps::slice_supports(SLAPrintObject &po) {
     // Don't bother if no supports and no pad is present.
     if (!po.m_config.get<bool>("supports_enable") &&
-        !is_pad_enabled(po.m_config))
+        !is_pad_enabled(po.m_config, po.object_raft()))
         return;
 
     auto heights = reserve_vector<float>(po.m_slice_index.size());

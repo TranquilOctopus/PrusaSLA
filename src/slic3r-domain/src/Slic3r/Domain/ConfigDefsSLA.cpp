@@ -914,10 +914,14 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     // The raft type decides which of the knobs below apply, so it goes first in the group.
     def->order = 0;
     def->gui_type = ConfigItemDef::GUIType::combobox;
-    def->tooltip = L("The shape of the raft under the object. None prints no raft, Full plate prints a raft over the whole build plate, Around object prints a raft that only the object sits on, and Skate is an around object raft with half the expansion and a 70 degree wall slope. The type decides which of the settings below apply, and it shows only those.");
+    def->tooltip = L("The shape of the raft under the object. Auto, the default, prints no raft unless the underside of the object would form a suction cup against the plate, and then prints one; None prints no raft, Full plate prints a raft over the whole build plate, Around object prints a raft that only the object sits on, and Skate is an around object raft with half the expansion and a 70 degree wall slope. The type decides which of the settings below apply, and it shows only those.");
     def->init_fn = init_with(
-        sla::RaftType::Full,
-        {{int(sla::RaftType::None), "none", L("None")},
+        sla::RaftType::Auto,
+        // The rows of a combobox are the entries of this list in this order, and Auto is the default
+        // (M7.8.4, rulebook R6), so it is the first of them. The four shapes from before it keep
+        // their names, which is what a preset or a project stores.
+        {{int(sla::RaftType::Auto), "auto", L("Auto (raft only against suction)")},
+         {int(sla::RaftType::None), "none", L("None")},
          {int(sla::RaftType::Full), "full", L("Full plate")},
          {int(sla::RaftType::AroundObject), "around_object", L("Around object")},
          {int(sla::RaftType::Skate), "skate", L("Skate")}}
