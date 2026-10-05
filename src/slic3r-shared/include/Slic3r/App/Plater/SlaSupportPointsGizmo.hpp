@@ -231,10 +231,6 @@ private:
     void apply_selected_support_preset(int preset_index);
     void refresh_new_support_values();
     void update_selected_support_values();
-    void apply_preset_mini();
-    void apply_preset_light();
-    void apply_preset_medium();
-    void apply_preset_heavy();
     // The tip diameter, tip shape, tip length, knot, stem cross-section and stem taper a new point
     // takes, from the Supports & raft settings of @p model_object.
     SlaSupportGeometry support_geometry_defaults(const Domain::ModelObject* model_object) const;

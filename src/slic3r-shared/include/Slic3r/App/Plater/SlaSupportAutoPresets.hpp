@@ -22,16 +22,22 @@ constexpr double auto_support_base_layers = 2.;
 struct SlaAutoSupportChoice
 {
     /// support_auto_heavy_base: the supports of the lowest island of the model take the heavy
-    /// preset. Off gives that island the detail preset like every other support.
+    /// preset, which is the T0.4 class of the rulebook (the "heavy" id). Off gives that island the
+    /// detail preset like every other support.
     bool heavy_base{true};
-    /// support_auto_detail_preset: the preset of every generated support that is not on the base.
+    /// support_auto_detail_preset: the preset of every generated support that is not on the base,
+    /// named by the size of its contact since M7.8.1: Mini is T0.1, Light is T0.2 and Medium is
+    /// T0.3. The setting keeps the ids the support tool names its presets by, so the key of an old
+    /// project still means what it meant.
     Domain::sla::SupportAutoDetailPreset detail{Domain::sla::SupportAutoDetailPreset::Light};
 };
 
-/// The two preset bundles of one automatic placement, the four sizes each of them configures.
+/// The two preset bundles of one automatic placement: a support class each of them (M7.8.1, R3), so
+/// a generated point gets a ball contact sunk half its own tip, the cone under it, a hexagonal
+/// stem and a prism base along with the four sizes the settings carry.
 struct SlaAutoSupportPresets
 {
-    /// What the base of the model gets, i.e. the Heavy preset of the support tool.
+    /// What the base of the model gets, i.e. the T0.4 class of the support tool.
     SlaSupportPreset base;
     /// What every other generated support gets.
     SlaSupportPreset detail;
@@ -59,9 +65,11 @@ bool is_sla_auto_support_base_point(
 
 /// Sizes @p points the way the automatic placement sizes what it generates: the base of the model
 /// takes @p presets.base when @p choice.heavy_base is on and every other generated point takes
-/// @p presets.detail. The points the user placed or edited are never touched, so a generation never
-/// resizes a support of theirs. @p points is the set the generator produced, which replaces the
-/// points of the model rather than adding to them.
+/// @p presets.detail. Every point gets its whole class, geometry and four sizes, through
+/// apply_sla_support_preset() - the one function a preset button uses as well, so an automatic
+/// support and a hand-placed one of the same class are the same support. The points the user placed
+/// or edited are never touched, so a generation never resizes a support of theirs. @p points is the
+/// set the generator produced, which replaces the points of the model rather than adding to them.
 void sla_apply_auto_support_presets(
     Domain::SLA::SupportPoints& points,
     double lowest_z_mm,

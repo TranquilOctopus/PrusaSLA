@@ -200,6 +200,8 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
 // One group of support settings: the preset row a user of Chitubox or Lychee starts with (M2.18,
 // M2.22), then the four sizes with their "follow the global setting" switches, then the per-point
 // tip shape, tip length, knot, stem cross-section, stem taper, foot shape and "support on model".
+// The presets are the tip classes of the support rulebook (M7.8.1, R3) since: a support is named by
+// the size of its contact, so the buttons are the tip sizes in mm and one button is one class.
 void SlaSupportPointsDialog::add_support_value_group(
     Yoga::Item*            parent,
     SlaSupportSettingsGroup group,
@@ -215,25 +217,33 @@ void SlaSupportPointsDialog::add_support_value_group(
     preset_row->set_justify_content(YGJustifySpaceBetween);
     preset_row->set_gap(gap_size());
 
-    controls.preset_mini_button = preset_row->emplace_back<LayoutButton>(_u8L("Mini"));
-    controls.preset_mini_button->set_checkable(true);
-    controls.preset_mini_button->callbacks().action = [preset_selected]()
+    // The buttons say what a class is: the diameter of its contact, in mm (M7.8.1).
+    preset_row->emplace_back<Text>(_u8L("Tip (mm)"));
+
+    controls.preset_t01_button = preset_row->emplace_back<LayoutButton>(_u8L("0.1"));
+    controls.preset_t01_button->set_checkable(true);
+    controls.preset_t01_button->callbacks().action = [preset_selected]()
     { preset_selected(0); };
 
-    controls.preset_light_button = preset_row->emplace_back<LayoutButton>(_u8L("Light"));
-    controls.preset_light_button->set_checkable(true);
-    controls.preset_light_button->callbacks().action = [preset_selected]()
+    controls.preset_t02_button = preset_row->emplace_back<LayoutButton>(_u8L("0.2"));
+    controls.preset_t02_button->set_checkable(true);
+    controls.preset_t02_button->callbacks().action = [preset_selected]()
     { preset_selected(1); };
 
-    controls.preset_medium_button = preset_row->emplace_back<LayoutButton>(_u8L("Medium"));
-    controls.preset_medium_button->set_checkable(true);
-    controls.preset_medium_button->callbacks().action = [preset_selected]()
+    controls.preset_t03_button = preset_row->emplace_back<LayoutButton>(_u8L("0.3"));
+    controls.preset_t03_button->set_checkable(true);
+    controls.preset_t03_button->callbacks().action = [preset_selected]()
     { preset_selected(2); };
 
-    controls.preset_heavy_button = preset_row->emplace_back<LayoutButton>(_u8L("Heavy"));
-    controls.preset_heavy_button->set_checkable(true);
-    controls.preset_heavy_button->callbacks().action = [preset_selected]()
+    controls.preset_t04_button = preset_row->emplace_back<LayoutButton>(_u8L("0.4"));
+    controls.preset_t04_button->set_checkable(true);
+    controls.preset_t04_button->callbacks().action = [preset_selected]()
     { preset_selected(3); };
+
+    controls.preset_t06_button = preset_row->emplace_back<LayoutButton>(_u8L("0.6"));
+    controls.preset_t06_button->set_checkable(true);
+    controls.preset_t06_button->callbacks().action = [preset_selected]()
+    { preset_selected(4); };
 
     // The four sizes. The tip diameter is the head diameter control of the tool (M2.24) and the other
     // three are the stem and the base of the support, the values a point carries or leaves to the
@@ -645,10 +655,11 @@ void SlaSupportPointsDialog::set_active_preset(int index, SlaSupportSettingsGrou
 {
     SupportValueControls& controls = group == SlaSupportSettingsGroup::NewSupports ? m_new_supports
                                                                                    : m_selected_supports;
-    controls.preset_mini_button->set_checked(index == 0);
-    controls.preset_light_button->set_checked(index == 1);
-    controls.preset_medium_button->set_checked(index == 2);
-    controls.preset_heavy_button->set_checked(index == 3);
+    controls.preset_t01_button->set_checked(index == 0);
+    controls.preset_t02_button->set_checked(index == 1);
+    controls.preset_t03_button->set_checked(index == 2);
+    controls.preset_t04_button->set_checked(index == 3);
+    controls.preset_t06_button->set_checked(index == 4);
 }
 
 void SlaSupportPointsDialog::set_clipping_plane_position(double pos)

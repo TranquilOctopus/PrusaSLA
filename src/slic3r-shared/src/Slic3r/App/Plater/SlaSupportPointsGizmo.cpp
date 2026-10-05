@@ -2009,26 +2009,6 @@ void SlaSupportPointsGizmo::update_selected_support_values()
     m_dialog->set_selected_support_values(selection_support_view(m_edit_state->editing));
 }
 
-void SlaSupportPointsGizmo::apply_preset_mini()
-{
-    this->apply_new_support_preset(0);
-}
-
-void SlaSupportPointsGizmo::apply_preset_light()
-{
-    this->apply_new_support_preset(1);
-}
-
-void SlaSupportPointsGizmo::apply_preset_medium()
-{
-    this->apply_new_support_preset(2);
-}
-
-void SlaSupportPointsGizmo::apply_preset_heavy()
-{
-    this->apply_new_support_preset(3);
-}
-
 // The tip diameter, tip shape, tip length, knot, stem cross-section and stem taper a point takes, read
 // off the object settings of the model the tool works on (M2.16c, M2.24, M2.23b). This is what a
 // clicked point takes and what a generated point is filled with, so both start from the values the
@@ -2071,12 +2051,13 @@ SlaSupportGeometry SlaSupportPointsGizmo::support_geometry_defaults(const Domain
     return geometry;
 }
 
-// The four values of a preset, from the print preset of the printer where it belongs
-// (support_preset_{mini,light,medium,heavy}_*, M2.18, M2.22) and from the values the config
+// The values of a preset: the tip class of the support rulebook (M7.8.1, R3) with the geometry
+// every class has, from the print preset of the printer where it belongs
+// (support_preset_{mini,light,medium,heavy,xheavy}_*, M2.18, M2.22) and from the values the config
 // definitions ship for a preset that does not carry the keys.
 SlaSupportPreset SlaSupportPointsGizmo::get_support_preset_values(const std::string& preset_name) const
 {
-    const SlaSupportPreset defaults = sla_support_preset(preset_name);
+    SlaSupportPreset preset = sla_support_preset(preset_name);
 
     const auto& config_box = m_project_interactor.preset_interactor().selected_printer_preset().print.config_box();
     const std::string prefix = "support_preset_" + preset_name + "_";
@@ -2086,10 +2067,13 @@ SlaSupportPreset SlaSupportPointsGizmo::get_support_preset_values(const std::str
         return item ? item->get<double>() : fallback;
     };
 
-    return {get_value("head_diameter", defaults.tip_diameter_mm),
-            get_value("pillar_diameter", defaults.stem_diameter_mm),
-            get_value("base_diameter", defaults.base_diameter_mm),
-            get_value("base_height", defaults.base_height_mm)};
+    // Only these four sizes are settings, so a print preset of before M7.8.1 keeps the geometry it
+    // stored and the rest of the class is the rulebook's.
+    preset.geometry.tip_diameter_mm = get_value("head_diameter", preset.geometry.tip_diameter_mm);
+    preset.stem_diameter_mm         = get_value("pillar_diameter", preset.stem_diameter_mm);
+    preset.base_diameter_mm         = get_value("base_diameter", preset.base_diameter_mm);
+    preset.base_height_mm           = get_value("base_height", preset.base_height_mm);
+    return preset;
 }
 
 // Which preset the automatic placement gives the base of the model and which one it gives the
@@ -2115,7 +2099,7 @@ SlaAutoSupportChoice SlaSupportPointsGizmo::auto_support_preset_choice() const
 // What the generator leaves open on every point it produced: the tip shape, tip length, knot, stem
 // cross-section, stem taper and foot shape of the settings of this model (support_geometry_defaults,
 // M2.16c / M2.24 / M2.23b), and then the sizes the automatic placement picks per point (M2.37): the
-// Heavy preset on the island the model is glued on, the detail preset on everything else. Both
+// T0.4 class on the island the model is glued on, the detail class on everything else. Both
 // generation paths come through here, so a generated point is the same support whichever made it.
 void SlaSupportPointsGizmo::fill_generated_point_geometry(
     Domain::SLA::SupportPoints& points,
@@ -2155,8 +2139,8 @@ void SlaSupportPointsGizmo::fill_generated_point_geometry(
     }
 
     const SlaAutoSupportChoice choice = this->auto_support_preset_choice();
-    // Preset 3 of the four is Heavy, the one the base of the model gets; the detail takes the
-    // preset the setting names.
+    // Preset button 3 of the five is the "heavy" id, which is the T0.4 mm class since M7.8.1: that is
+    // the one the base of the model gets. The detail takes the class the setting names.
     const SlaAutoSupportPresets presets{
         this->get_support_preset_values(sla_support_preset_name(3)),
         this->get_support_preset_values(sla_auto_detail_preset_name(choice.detail))
@@ -2290,17 +2274,20 @@ void SlaSupportPointsGizmo::on_keyboard(Scene::GizmoKeyEventContext& ctx)
     switch (support_tool_action_for(key)) {
     case SupportToolAction::None:
         return;
-    case SupportToolAction::PresetMini:
-        apply_preset_mini();
+    case SupportToolAction::PresetT01:
+        apply_new_support_preset(0);
         break;
-    case SupportToolAction::PresetLight:
-        apply_preset_light();
+    case SupportToolAction::PresetT02:
+        apply_new_support_preset(1);
         break;
-    case SupportToolAction::PresetMedium:
-        apply_preset_medium();
+    case SupportToolAction::PresetT03:
+        apply_new_support_preset(2);
         break;
-    case SupportToolAction::PresetHeavy:
-        apply_preset_heavy();
+    case SupportToolAction::PresetT04:
+        apply_new_support_preset(3);
+        break;
+    case SupportToolAction::PresetT06:
+        apply_new_support_preset(4);
         break;
     case SupportToolAction::AutoSupportSelection:
         auto_support({m_selected_object_id});

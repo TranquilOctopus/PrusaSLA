@@ -131,27 +131,55 @@ void sla_selected_support_setting_changed(
     double value
 );
 
-/// The four sizes of the Mini / Light / Medium / Heavy presets (M2.18, M2.22), as the config keys
-/// of "Supports & raft" configure them.
+/// How many presets the tool offers: the five tip classes of the support rulebook, on the keys 1
+/// to 5.
+inline constexpr int sla_support_preset_count = 5;
+
+/// How deep the contact of a support sinks into the model: half the tip diameter (support rulebook
+/// R3.1). Every tip shape reaches as deep into the model as the default pinhead does, so the depth
+/// is a rule of the tip and not of its shape: a point of the T0.1 class sinks 0.05 mm and one of
+/// the T0.6 class 0.3 mm, whatever the print preset sets for support_head_penetration.
+double sla_support_contact_depth(double tip_diameter_mm);
+
+/// One of the support presets (M2.18, M2.22), which are the tip classes of the support rulebook
+/// since M7.8.1 (R3): a support is named by the size of its contact, so the presets are T0.1,
+/// T0.2, T0.3, T0.4 and T0.6 mm, on the keys 1 to 5.
+///
+/// Every class carries the whole geometry of R3, not only its tip: a ball contact (R3.1) that
+/// sinks half its own diameter into the model, the cone under it (R3.2), a hexagonal stem of one
+/// diameter (R3.3) and the one prism base every support gets (R3.4).
+///
+/// The four sizes that the "Supports & raft" page shows are settings
+/// (support_preset_{mini,light,medium,heavy,xheavy}_*); a print preset that carries them keeps the
+/// values it stored, which is why an old profile still gets the Mini / Light / Medium / Heavy
+/// geometry it was saved with.
 struct SlaSupportPreset
 {
-    double tip_diameter_mm{0.4};
-    double stem_diameter_mm{0.8};
-    double base_diameter_mm{2.0};
-    double base_height_mm{0.5};
+    /// The geometry of the class, tip_diameter_mm being the class itself (0.1 to 0.6 mm).
+    SlaSupportGeometry geometry{};
+    double stem_diameter_mm{1.0}; // R3.3
+    double base_diameter_mm{6.0}; // R3.4
+    double base_height_mm{0.3}; // R3.4
 };
 
 /// The values of one preset as the config definitions ship them, which is what a print preset that
-/// does not carry the keys falls back to. One of "mini", "light", "medium", "heavy".
+/// does not carry the keys falls back to. One of "mini" (T0.1), "light" (T0.2), "medium" (T0.3),
+/// "heavy" (T0.4) and "xheavy" (T0.6); the first four are the ids the presets have had since M2.18
+/// and an unknown name falls back to the last of them.
 SlaSupportPreset sla_support_preset(const std::string& preset_name);
 
-/// The name of the preset of a preset button of either group: 0 Mini, 1 Light, 2 Medium, 3 Heavy.
+/// The name of the preset of a preset button of either group: 0 T0.1, 1 T0.2, 2 T0.3, 3 T0.4,
+/// 4 T0.6. The name is the config key prefix, which is why the first four are not the tip sizes.
 const std::string& sla_support_preset_name(int preset_index);
 
-/// Writes one preset onto one point: the tip diameter becomes the head radius of the point and the
-/// three sizes stop following the global settings, which is what a preset button does to the next
-/// point and to the points of the selection (M2.18a). Nothing else of the point is touched, so the
-/// position, the type and the tip geometry it carries stay as they are.
+/// Writes one preset onto one point: the whole geometry of the class lands on the point (R3.1 to
+/// R3.4), its tip diameter becomes the head radius of the point and the three sizes stop following
+/// the global settings, which is what a preset button does to the next point and to the points of
+/// the selection (M2.18a, M7.8.1) and what the automatic placement does to the points it generates
+/// (M2.37). The contact of the class sinks half its own tip into the model (R3.1). Nothing else of
+/// the point is touched, so the position, the type and the way it rests on the model stay as they
+/// are. This is the one function that writes a class onto a point, so a preset button and the
+/// automatic placement can never drift apart.
 void apply_sla_support_preset(Domain::SLA::SupportPoint& point, const SlaSupportPreset& preset);
 
 /// A preset button of the "New supports" group: the four values a clicked point takes from now on.
