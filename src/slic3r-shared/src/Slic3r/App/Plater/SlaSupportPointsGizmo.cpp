@@ -2161,10 +2161,13 @@ void SlaSupportPointsGizmo::fill_generated_point_geometry(
 
     const SlaAutoSupportChoice choice = this->auto_support_preset_choice();
     // Preset button 3 of the five is the "heavy" id, which is the T0.4 mm class since M7.8.1: that is
-    // the one the base of the model gets. The detail takes the class the setting names.
+    // the one the base of the model gets. The detail takes the class the setting names, and preset
+    // button 1 is the "mini" id, the T0.1 mm class that a point in a detailed region takes whatever
+    // its role is (M7.8.5, R4.9).
     const SlaAutoSupportPresets presets{
         this->get_support_preset_values(sla_support_preset_name(3)),
-        this->get_support_preset_values(sla_auto_detail_preset_name(choice.detail))
+        this->get_support_preset_values(sla_auto_detail_preset_name(choice.detail)),
+        this->get_support_preset_values(sla_support_preset_name(0))
     };
     sla_apply_auto_support_presets(points, lowest_z_mm, layer_height_mm, presets, choice);
 }

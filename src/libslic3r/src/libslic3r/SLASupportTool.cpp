@@ -307,10 +307,11 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const SupportToolMod
 
         // What every point carries, which is what the tip class of its support is picked from
         // (M7.8.2, the support rulebook R4.1 and R4.3 - R4.6): the anchor of the lowest island, an
-        // island, a small island, a thin fragile feature or an overhang. A point that sits on small
-        // surface detail moves to the plain surface next to it first, and the role it ends up with is
-        // the one of the spot it holds. The head radius of a point stays the one the generator gave
-        // it, as it was before.
+        // island, a small island, a thin fragile feature or an overhang, and the minimum tip of a
+        // detailed region whatever any of those would have been (M7.8.5, R4.9). A point that sits on
+        // small surface detail moves to the plain surface next to it first, and the role it ends up
+        // with is the one of the spot it holds. The head radius of a point stays the one the
+        // generator gave it, as it was before.
         sla::classify_support_point_roles(
             support_points, emesh, gen_data.layers, layer_height, {}, throw_on_cancel);
 
@@ -318,7 +319,10 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const SupportToolMod
         // faces the plate (M7.8.3, R4.2): a few of them, more the bigger the footprint of the object
         // is, and the largest tip on a very large one. It runs after the roles, so that it can tell
         // the points of the other rules from the ones it adds itself, and before the zero-elevation
-        // filter below, which takes away the anchors of an object standing on the plate.
+        // filter below, which takes away the anchors of an object standing on the plate. Running
+        // last is also what keeps an anchor an anchor: R4.9 leaves the anchors alone in the pass
+        // above, and this one only ever adds an anchor or turns an overhang or an island into one,
+        // never back into a Detail.
         sla::add_heavy_anchors(support_points, emesh, {}, config.head_diameter / 2.f, throw_on_cancel);
 
         // Zero-elevation filter, on the raft M7.8.4 resolved at the top of this function: an Auto

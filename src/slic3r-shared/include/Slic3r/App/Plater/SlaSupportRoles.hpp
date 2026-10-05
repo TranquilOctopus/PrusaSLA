@@ -18,7 +18,10 @@ namespace Slic3r::App::Plater {
 /// - Fragile     -> mini (T0.1): a tip, a point or another thin feature takes the minimum tip, so
 /// that removing the support does not snap the feature off (R4.4, R4.5);
 /// - AnchorLarge -> xheavy (T0.6): the anchors of a very large object, one that fills a mid-size
-/// printer's plate, take the largest tip (M7.8.3, the size table of section 3 of the rulebook).
+/// printer's plate, take the largest tip (M7.8.3, the size table of section 3 of the rulebook);
+/// - Detail      -> mini (T0.1): a detailed region, where fine, dense or highly curved surface is,
+/// takes the lightest tip whatever the role of the point would have given it, except the anchors,
+/// which R4.9 leaves alone (M7.8.5, R4.9).
 ///
 /// Unknown is what a point placed by hand carries, and what a project written before the roles
 /// existed reads back as, so it takes the light tip as well: that is what such a support got before

@@ -1211,10 +1211,11 @@ static constexpr std::array<std::string_view, 3> TIP_SHAPE_NAMES = {"default", "
 static constexpr std::array<std::string_view, 3> ON_MODEL_NAMES = {"inherit", "allow", "forbid"};
 // The roles of a generated point (M7.8.2), in the order of Domain::SLA::SupportPoint::Role. A
 // project written before the roles existed has no "role", which reads back as Unknown: a point the
-// file knows nothing about keeps the geometry it carries. The last one is the anchor of a very large
-// object (M7.8.3), appended at the end with the rest.
-static constexpr std::array<std::string_view, 7> ROLE_NAMES = {
-    "unknown", "anchor", "island", "small_island", "overhang", "fragile", "anchor_large"
+// file knows nothing about keeps the geometry it carries. The anchor of a very large object
+// (M7.8.3) and the detailed region (M7.8.5) are appended at the end with the rest, in the order of
+// the enum, so a project written before either of them reads back the role it wrote.
+static constexpr std::array<std::string_view, 8> ROLE_NAMES = {
+    "unknown", "anchor", "island", "small_island", "overhang", "fragile", "anchor_large", "detail"
 };
 
 // The three states of the per point bracing switch (M2.38), in the order of

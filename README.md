@@ -142,7 +142,7 @@ branch, one commit, the box ticked in the same commit.
 
 ## Progress
 
-**333 of 371 todos done (90%)** · updated 2026-10-05 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**335 of 372 todos done (90%)** · updated 2026-10-05 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
@@ -153,7 +153,7 @@ branch, one commit, the box ticked in the same commit.
 | M4: Engine quality (measure first; every PR includes before/after metrics) | 29/38 | `█████████░░░` 76% |
 | M5: Formats and inspection | 38/43 | `███████████░` 88% |
 | M6: Quality gates and release | 17/22 | `█████████░░░` 77% |
-| M7: Excellent auto-supports *(parked)* | 14/26 | `██████░░░░░░` 54% |
+| M7: Excellent auto-supports *(parked)* | 16/27 | `███████░░░░░` 59% |
 
 ### Waiting on you
 
@@ -225,14 +225,13 @@ branch, one commit, the box ticked in the same commit.
 
 </details>
 
-<details><summary>M7: Excellent auto-supports — 12 open (parked)</summary>
+<details><summary>M7: Excellent auto-supports — 11 open (parked)</summary>
 
 - [ ] **M7.3** Contact extraction script.
 - [ ] **M7.4** Rule mining across the dataset. Measure things like:
 - [ ] **M7.6** Support quality scorecard. The benchmark harness writes the generator's support points and tip sizes to JSO…
 - [ ] **M7.7** Baseline scorecard for the current generator (default and branching tree). Commit only the aggregate number…
 - [ ] **M7.8** Implement the rulebook in the generator, one sub-todo per rule (`M7.8.<n>`). Each must raise the scorecard…
-  - [ ] **M7.8.5** Detail gets the lightest tips (R4.9): points in detailed regions (fine, dense or highly curved surface) get…
   - [ ] **M7.8.6** Automatic bracing of close stems (R5.4), modelled on Lychee's auto braces: braces join support stems that s…
 - [ ] **M7.9** Cosmetic surface awareness. Detect likely cosmetic surfaces (faces, fine detail, high-curvature upward regi…
 - [ ] **M7.10** Size tips for each region, following the rulebook: light tips on small detail, heavier tips where the load…

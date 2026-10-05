@@ -661,7 +661,7 @@ TEST_CASE("3MF SLA round trip preserves every per-point support field", "[3mf][s
     point.stem_taper        = 0.4f;
     point.knot_radius       = 0.9f;
     point.on_model          = SupportPoint::OnModel::Forbid;
-point.brace             = SupportPoint::Brace::Off;
+    point.brace              = SupportPoint::Brace::Off;
     point.role              = SupportPoint::Role::Fragile;
 
     SupportPoint other_point      = point;
@@ -679,25 +679,45 @@ point.brace             = SupportPoint::Brace::Off;
     other_point.stem_taper        = 0.75f;
     other_point.knot_radius       = 0.3f;
     other_point.on_model          = SupportPoint::OnModel::Allow;
-other_point.brace             = SupportPoint::Brace::On;
-    other_point.role              = SupportPoint::Role::Anchor;
+    other_point.brace         = SupportPoint::Brace::On;
+    other_point.role        = SupportPoint::Role::Anchor;
 
-    // A third point whose role is the anchor of a very large object (M7.8.3), the role the name table
-    // of the writer gained an entry for last. Every role of the enumeration is written through that
-    // table, so a role without an entry in it is a read past the end of it rather than a name.
+    // A third point whose role is the anchor of a very large object (M7.8.3) and a fourth of the
+    // detailed region (M7.8.5), the two roles the name table of the writer gained entries for after
+    // M7.8.2. Every role of the enumeration is written through that table, so a role without an entry
+    // in it is a read past the end of it rather than a name, and a reader that has never heard of one
+    // of them would come back with a point of another kind.
     SupportPoint large_point = point;
     large_point.pos          = Vec3f{31.5f, 32.5f, 33.5f};
     large_point.role         = SupportPoint::Role::AnchorLarge;
 
-    object->sla_support_points = {point, other_point, large_point};
+    SupportPoint detail_point      = point;
+    detail_point.pos               = Vec3f{21.5f, 22.25f, 23.75f};
+    detail_point.head_front_radius = 0.15f;
+    detail_point.type              = SupportPointType::slope;
+    detail_point.pillar_diameter   = 1.3f;
+    detail_point.base_diameter     = 2.5f;
+    detail_point.base_height       = 0.35f;
+    detail_point.base_shape        = SupportPoint::BaseShape::Cone;
+    detail_point.tip_shape         = SupportPoint::TipShape::Ball;
+    detail_point.tip_length        = 0.45f;
+    detail_point.contact_depth     = 0.05f;
+    detail_point.stem_sides        = 6;
+    detail_point.stem_taper        = 0.2f;
+    detail_point.knot_radius       = 0.6f;
+    detail_point.on_model          = SupportPoint::OnModel::Inherit;
+    detail_point.role              = SupportPoint::Role::Detail;
+
+    object->sla_support_points = {point, other_point, large_point, detail_point};
 
     const Loaded3MF loaded = round_trip(project, "sla_point_fields.3mf");
     REQUIRE(loaded.model.objects.size() == 1);
     const ModelObject* loaded_object = loaded.model.objects[0];
-    REQUIRE(loaded_object->sla_support_points.size() == 3);
+    REQUIRE(loaded_object->sla_support_points.size() == 4);
     check_same_support_point(loaded_object->sla_support_points[0], point);
     check_same_support_point(loaded_object->sla_support_points[1], other_point);
     check_same_support_point(loaded_object->sla_support_points[2], large_point);
+    check_same_support_point(loaded_object->sla_support_points[3], detail_point);
 
     // A whole 3MF of these points loads without one word about the SLA data.
     for (const Read3mfIssueType type : sla_read_issue_types())

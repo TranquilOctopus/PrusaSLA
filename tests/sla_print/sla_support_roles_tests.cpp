@@ -1,8 +1,10 @@
 // M7.8.2: every support point the generator makes gets a role, and a point does not stay on a
 // fragile feature or on small surface detail (the support rulebook R4.1 and R4.3 - R4.6 of
-// doc/sla-fork/supports/rulebook.md). The shapes below are written from scratch so that every
-// measurement the roles are decided by has one known value: how thick the feature under a point is,
-// how wide the part it is on is, and how far the point has to move to get off a stud.
+// doc/sla-fork/supports/rulebook.md). M7.8.5 adds the one rule that overrides another: a point in a
+// detailed region gets the minimum tip whatever its role is, except the anchor of the lowest island
+// (R4.9). The shapes below are written from scratch so that every measurement the roles are decided
+// by has one known value: how thick the feature under a point is, how wide the part it is on is, how
+// far the point has to move to get off a stud, and how fine the surface around it is.
 //
 // What a role means to the tool, i.e. which tip class it takes, is not here: that is the mapping of
 // M7.8.2 in the tool (SlaSupportRolesTests.cpp in slic3r-shared).
@@ -12,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -41,6 +44,7 @@ namespace scaling       = Slic3r::Biz::Algorithms::Scaling;
 
 using Slic3r::indexed_triangle_set;
 using Slic3r::Domain::Point;
+using Slic3r::Domain::Vec3f;
 using Slic3r::Domain::SLA::SupportPoint;
 using Slic3r::Domain::SLA::SupportPoints;
 using Slic3r::Domain::SLA::SupportPointType;
@@ -419,4 +423,301 @@ TEST_CASE("A point that is not on the model is a light overhang", "[SupportRoles
     CHECK(points[0].pos.x() == 100.f);
     CHECK(points[0].pos.y() == 100.f);
     CHECK(points[0].pos.z() == 10.f);
+}
+
+namespace {
+
+using Slic3r::sla::classify_support_point_roles;
+// The three indices of a triangle of a mesh built here by hand: Index3 is a std::array of three
+// ints, so the indices of a triangle go in as ints.
+using Slic3r::Domain::Index3;
+
+// R4.9: the numbers the detail of a region is read by, repeated here so that a test says what it
+// relies on. They are what SupportRoleThresholds carries by default, and the classifier below is
+// given them rather than its own defaults, so that a change of the default shows up as a failing
+// test instead of as a silently different model.
+constexpr double detail_radius_mm = 1.5;
+constexpr double detail_sag_mm    = 0.2;
+constexpr double detail_turns     = 2.0;
+
+// The layer height the shapes below are asked about, as the generator sampled them.
+constexpr double layer_height_mm = 0.05;
+
+// The relief of the shapes below: a field of square pyramids 0.5 mm apart and 0.5 mm tall. That is
+// the fine, dense surface R4.9 is about - the relief of a sculpted face, the mesh of a chain mail,
+// the texture of a miniature - and it is not one raised bump on a plain plane either, so R4.5 has no
+// stud to move a point off, and nothing of it is thin, so R4.4 has no reason to make a point
+// fragile: a point on it is on as sound a surface as a point on a plate, which is what lets the
+// tests below tell R4.9 from the rules around it.
+constexpr double relief_pitch_mm     = 0.5;
+constexpr double relief_height_mm    = 0.5;
+constexpr size_t relief_cells        = 12; // 12 x 12 cells, so 6 x 6 mm of relief
+constexpr double relief_thickness_mm = 2.0;
+
+/// The relief of a plate, so that a test can name the spot it looks at instead of a pair of
+/// millimetres that mean nothing on their own.
+struct Relief
+{
+    double apex_z; // the tip of the pyramids, [in mm]
+    Vec3f apex; // the tip of the pyramid in the middle of the field
+    Vec3f other_apex; // and the tip of the one a few cells away from it
+};
+
+/// A plate 6 x 6 mm and 2 mm thick, standing @p lift above the plate, whose underside is a field of
+/// square pyramids of relief_pitch_mm with their apexes relief_height_mm below the flat face the
+/// plate would have had. With @p relief off it is the same plate with that flat face instead, which
+/// is the control: the two shapes differ in nothing else, so a difference in the roles of their
+/// points is the relief and not the size or the thickness of the plate.
+///
+/// The shape is a roof and not a solid: the field (or the flat face) under it and the flat face on
+/// top, without the four sides. What R4.9 measures is a ray cast up or down through the middle of
+/// the plate, so the sides would only say where the surface ends, and no test here needs them.
+indexed_triangle_set relief_plate(double lift, bool relief)
+{
+    const double side = double(relief_cells) * relief_pitch_mm;
+    const size_t grid = relief_cells + 1;
+
+    const auto at = [=](double i, double j, double z)
+    {
+        return Vec3f{
+            float((i - 0.5 * side) * relief_pitch_mm),
+            float((j - 0.5 * side) * relief_pitch_mm),
+            float(z)
+        };
+    };
+
+    indexed_triangle_set its;
+    its.vertices.reserve(2 * grid * grid + relief_cells * relief_cells);
+    its.indices.reserve(5 * relief_cells * relief_cells);
+
+    // The grid the field stands on, at the height of the flat underside: one vertex per grid point,
+    // shared by the cells around it.
+    for (size_t j = 0; j < grid; ++j)
+        for (size_t i = 0; i < grid; ++i)
+            its.vertices.push_back(at(double(i), double(j), lift));
+
+    // One apex in the middle of every cell, this far below the face it hangs under.
+    const size_t apexes = its.vertices.size();
+    if (relief) {
+        for (size_t j = 0; j < relief_cells; ++j)
+            for (size_t i = 0; i < relief_cells; ++i) {
+                const Vec3f apex = at(double(i) + 0.5, double(j) + 0.5, lift - relief_height_mm);
+                its.vertices.push_back(apex);
+            }
+    }
+
+    // The top of the plate, one vertex per grid point again.
+    const size_t top = its.vertices.size();
+    for (size_t j = 0; j < grid; ++j)
+        for (size_t i = 0; i < grid; ++i)
+            its.vertices.push_back(at(double(i), double(j), lift + relief_thickness_mm));
+
+    for (size_t j = 0; j < relief_cells; ++j) {
+        for (size_t i = 0; i < relief_cells; ++i) {
+            const int v[4]{
+                int(j * grid + i),
+                int(j * grid + i + 1),
+                int((j + 1) * grid + i + 1),
+                int((j + 1) * grid + i)
+            };
+            const int t[4]{
+                int(top + j * grid + i),
+                int(top + j * grid + i + 1),
+                int(top + (j + 1) * grid + i + 1),
+                int(top + (j + 1) * grid + i)
+            };
+
+            if (relief) {
+                // The apex first and the corners the other way round, which points the face down and
+                // out of the material: that is the way the normals and the ray casts of the file
+                // read.
+                const int apex = int(apexes + j * relief_cells + i);
+                for (int k = 0; k < 4; ++k)
+                    its.indices.push_back(Index3{apex, v[(k + 1) % 4], v[k]});
+            } else {
+                // Without the relief the underside is the flat face it would have been: two triangles
+                // per cell, wound the other way round, so that the normals point down.
+                its.indices.push_back(Index3{v[0], v[2], v[1]});
+                its.indices.push_back(Index3{v[0], v[3], v[2]});
+            }
+
+            // The top of the plate, wound so that its normals point up.
+            its.indices.push_back(Index3{t[0], t[1], t[2]});
+            its.indices.push_back(Index3{t[0], t[2], t[3]});
+        }
+    }
+
+    return its;
+}
+
+/// The spots of the relief of the plate standing @p lift above the plate that the tests below put
+/// their points on. The field is centred on the origin, so the tips of its pyramids are 2.75, 2.25,
+/// ... 0.25 mm from it on either axis, and every spot here is well inside the field: a point 1.5 mm
+/// from its rim would see the surface end and would have nothing to measure.
+Relief relief_spots(double lift)
+{
+    const float pitch = float(relief_pitch_mm);
+    return {
+        lift - relief_height_mm,
+        Vec3f{0.5f * pitch, 0.5f * pitch, float(lift - relief_height_mm)},
+        Vec3f{1.5f * pitch, 0.5f * pitch, float(lift - relief_height_mm)}
+    };
+}
+
+/// The point at the middle of the lowest triangle of a mesh. On a sphere that is a spot where the
+/// normal of the surface is the normal of the facet itself, so the plane through the point is
+/// tangent to the sphere instead of tilted by however the sphere happens to be cut up there.
+Vec3f lowest_triangle_middle(const indexed_triangle_set& its)
+{
+    double lowest = std::numeric_limits<double>::max();
+    Vec3f middle{0.f, 0.f, 0.f};
+    for (const auto& triangle : its.indices) {
+        const Vec3f a = its.vertices[triangle[0]];
+        const Vec3f b = its.vertices[triangle[1]];
+        const Vec3f c = its.vertices[triangle[2]];
+        const Vec3f m{
+            (a.x() + b.x() + c.x()) / 3.f,
+            (a.y() + b.y() + c.y()) / 3.f,
+            (a.z() + b.z() + c.z()) / 3.f
+        };
+        if (m.z() < lowest) {
+            lowest = m.z();
+            middle = m;
+        }
+    }
+    return middle;
+}
+
+/// Two slices of a model with one part each: the lowest one, and one just above @p upper_z, which is
+/// where R4.3 asks the area of for the points standing on the upper plate of a two level model.
+void fill_layers(Slic3r::sla::Layers& layers, const Slic3r::Domain::ExPolygon& part, double upper_z)
+{
+    layers[0].print_z = float(0.5 * layer_height_mm);
+    layers[0].parts   = {layer_part(&part)};
+    layers[1].print_z = float(upper_z);
+    layers[1].parts   = {layer_part(&part)};
+}
+
+} // namespace
+
+TEST_CASE("A plain surface is not a detailed region", "[SupportRoles]")
+{
+    // R4.9 is about a surface that is fine, dense or highly curved, and the underside of a plate is
+    // none of the three: however the plate is cut up into triangles, its surface leaves the plane
+    // through a point on it nowhere at all. The two points are the roles R4.9 would take away, the
+    // anchor of the lowest island and an overhang, and neither is taken.
+    const indexed_triangle_set plate = relief_plate(0., false);
+    const Slic3r::AABBMesh mesh{plate};
+    const Slic3r::Domain::ExPolygon footprint = rectangle(-3., -3., 3., 3.);
+
+    // The flat underside of the plate is at z = 0 and both points are well inside it: a point
+    // 1.5 mm from its rim would see the surface end and would have nothing to measure.
+    SupportPoints points(2);
+    points[0].type = SupportPointType::island;
+    points[0].pos  = Vec3f{0.f, 0.f, 0.f};
+    points[1].type = SupportPointType::slope;
+    points[1].pos  = Vec3f{2.f, 1.f, 0.f};
+
+    Slic3r::sla::SupportRoleThresholds thresholds;
+    CHECK(thresholds.detail_radius_mm == Approx(detail_radius_mm));
+    CHECK(thresholds.detail_sag_mm == Approx(detail_sag_mm));
+    CHECK(thresholds.detail_turns == Approx(detail_turns));
+
+    Slic3r::sla::Layers layers(2);
+    fill_layers(layers, footprint, relief_thickness_mm + 0.5 * layer_height_mm);
+    classify_support_point_roles(points, mesh, layers, layer_height_mm, thresholds);
+
+    CHECK(points[0].role == Role::Anchor);
+    CHECK(points[1].role == Role::Overhang);
+    for (const SupportPoint& point : points) {
+        INFO("point at " << point.pos.x() << ", " << point.pos.y() << ", " << point.pos.z());
+        CHECK(point.role != Role::Detail);
+    }
+}
+
+TEST_CASE("The relief of a fine, dense surface is a detailed region", "[SupportRoles]")
+{
+    // Two plates of the same relief, the upper one 4 mm above the lower one, so that the points of
+    // the lower one are the anchors of the lowest island (R4.1) and the points of the upper one are
+    // an island of their own (R4.3). The relief stands half a millimetre out of the face it hangs
+    // under every 0.5 mm, which is where a miniature loses its detail to a support of its own: the
+    // most common auto-support failure the maintainer sees (R4.9).
+    indexed_triangle_set shape       = relief_plate(0., true);
+    const indexed_triangle_set upper = relief_plate(4., true);
+    Slic3r::Domain::its_merge(shape, upper);
+
+    const Slic3r::AABBMesh mesh{shape};
+    const Relief low                          = relief_spots(0.);
+    const Relief high                         = relief_spots(4.);
+    const Slic3r::Domain::ExPolygon footprint = rectangle(-3., -3., 3., 3.);
+
+    SupportPoints points(3);
+    points[0].type = SupportPointType::island; // the lowest point of the object
+    points[0].pos  = low.apex;
+    points[1].type = SupportPointType::island; // an island of its own, 4 mm above it
+    points[1].pos  = high.apex;
+    points[2].type = SupportPointType::slope; // the extra support of the relief of the lowest plate
+    points[2].pos  = low.other_apex;
+
+    Slic3r::sla::SupportRoleThresholds thresholds;
+    Slic3r::sla::Layers layers(2);
+    fill_layers(layers, footprint, high.apex_z + 0.5 * layer_height_mm);
+    classify_support_point_roles(points, mesh, layers, layer_height_mm, thresholds);
+
+    // R4.1 wins over R4.9: the anchor of the lowest island is the one role the rule of the detail
+    // does not replace, whatever the surface under it is like. The whole part hangs on those points
+    // in the first layers of the print, and a minimum tip under them would not hold it.
+    CHECK(points[0].role == Role::Anchor);
+
+    // The same relief of an island that is not the lowest, so R4.3 would have given the point the
+    // medium class: R4.9 takes it away and the support in the relief is the lightest one.
+    CHECK(points[1].role == Role::Detail);
+
+    // And the same relief as an overhang, which is what most of the points on a relief are.
+    CHECK(points[2].role == Role::Detail);
+
+    // Nothing here was thin and nothing was moved: the relief is under the plate rather than on it,
+    // so R4.4 has no reason to call a point fragile and R4.5 has no stud to move it off.
+    for (const SupportPoint& point : points) {
+        INFO("point at " << point.pos.x() << ", " << point.pos.y() << ", " << point.pos.z());
+        CHECK(point.role != Role::Fragile);
+    }
+    CHECK(points[0].pos.x() == Approx(low.apex.x()));
+    CHECK(points[0].pos.z() == Approx(low.apex.z()));
+    CHECK(points[2].pos.x() == Approx(low.other_apex.x()));
+    CHECK(points[2].pos.z() == Approx(low.other_apex.z()));
+}
+
+TEST_CASE("A smooth curve is detail where it curves hard and nowhere else", "[SupportRoles]")
+{
+    // The "highly curved" half of R4.9 is read off how far the surface leaves the plane through the
+    // point: a sphere of radius R has r2 / 2R of that 1.5 mm out, which is 0.056 mm on a 20 mm
+    // sphere and 0.375 mm on a 3 mm one, i.e. a bead or a finger against the side of a barrel. Both
+    // shapes are spheres and both points are the same kind of point, so whatever the two answers
+    // are, the radius is what made them.
+    const indexed_triangle_set barrel = triangle_mesh::its_make_sphere(20., 0.1);
+    const indexed_triangle_set bead   = triangle_mesh::its_make_sphere(3., 0.1);
+    const Slic3r::AABBMesh barrel_mesh{barrel};
+    const Slic3r::AABBMesh bead_mesh{bead};
+
+    SupportPoints barrel_pts(1);
+    barrel_pts[0].type = SupportPointType::slope;
+    barrel_pts[0].pos  = lowest_triangle_middle(barrel);
+
+    SupportPoints bead_pts(1);
+    bead_pts[0].type = SupportPointType::slope;
+    bead_pts[0].pos  = lowest_triangle_middle(bead);
+
+    // No part of any layer to stand on: a point under a sphere is on no layer part of a real slice
+    // either, and this is about the surface around the point, not about the island it may be part
+    // of.
+    Slic3r::sla::Layers layers(1);
+    layers[0].print_z = float(100.);
+
+    Slic3r::sla::SupportRoleThresholds thresholds;
+    classify_support_point_roles(barrel_pts, barrel_mesh, layers, layer_height_mm, thresholds);
+    classify_support_point_roles(bead_pts, bead_mesh, layers, layer_height_mm, thresholds);
+
+    CHECK(barrel_pts[0].role == Role::Overhang);
+    CHECK(bead_pts[0].role == Role::Detail);
 }

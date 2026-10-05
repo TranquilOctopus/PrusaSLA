@@ -25,6 +25,7 @@ using Slic3r::App::Plater::auto_support_base_layers;
 using Slic3r::App::Plater::is_sla_auto_support_base_point;
 using Slic3r::App::Plater::sla_apply_auto_support_presets;
 using Slic3r::App::Plater::sla_auto_detail_preset_name;
+using Slic3r::App::Plater::sla_auto_support_is_detailed;
 using Slic3r::App::Plater::sla_support_preset;
 using Slic3r::App::Plater::SlaAutoSupportChoice;
 using Slic3r::App::Plater::SlaAutoSupportPresets;
@@ -96,11 +97,16 @@ SupportPoints a_generated_set()
     };
 }
 
-/// The two presets of the settings at their config definition values, which is what a print preset
-/// that does not carry the keys gets: the T0.4 class on the base and the T0.2 one on the detail.
+/// The three preset bundles of the settings at their config definition values, which is what a
+/// print preset that does not carry the keys gets: the T0.4 class on the base, the T0.2 one on the
+/// detail and the T0.1 one of a detailed region (R4.9), which is preset button 1 of the tool.
 SlaAutoSupportPresets the_presets()
 {
-    return SlaAutoSupportPresets{sla_support_preset("heavy"), sla_support_preset("light")};
+    return SlaAutoSupportPresets{
+        sla_support_preset("heavy"),
+        sla_support_preset("light"),
+        sla_support_preset("mini")
+    };
 }
 
 /// Everything a class puts on a point, not only its four sizes: the tip is the class itself, the
@@ -225,8 +231,9 @@ TEST_CASE(
     {
         SupportPoints points = a_generated_set();
         SlaAutoSupportChoice mini;
-        mini.detail = SupportAutoDetailPreset::Mini;
-        const SlaAutoSupportPresets presets{the_presets().base, sla_support_preset("mini")};
+        mini.detail                   = SupportAutoDetailPreset::Mini;
+        SlaAutoSupportPresets presets = the_presets();
+        presets.detail                = sla_support_preset("mini");
 
         sla_apply_auto_support_presets(points, lowest_z_mm, layer_height_mm, presets, mini);
 
@@ -291,6 +298,66 @@ TEST_CASE(
 
     // Without a layer height there is no band and no base, rather than every point of the model.
     CHECK_FALSE(is_sla_auto_support_base_point(island_point(0.), lowest_z_mm, 0.));
+}
+
+TEST_CASE(
+    "A generated point in a detailed region takes the minimum class",
+    "[SlaSupportAutoPresets]"
+)
+{
+    // R4.9 (M7.8.5): a point the generator put in a fine, dense or highly curved surface takes the
+    // minimum tip whatever its role would have been, since a heavy support in detail is the most
+    // common auto-support failure there is. The whole class lands on the point, so the contact is
+    // the ball of R3.1 sunk half of the 0.1 mm tip, and the role of the point is the one thing that
+    // decides it: the setting of the detail says nothing about a detailed region.
+    const SlaAutoSupportChoice choice;
+    const SlaSupportPreset mini = sla_support_preset("mini");
+
+    SupportPoints points       = a_generated_set();
+    points[detail_first].role  = SupportPoint::Role::Detail;
+    points[detail_second].role = SupportPoint::Role::Detail;
+
+    sla_apply_auto_support_presets(points, lowest_z_mm, layer_height_mm, the_presets(), choice);
+
+    check_class_of(points[detail_first], mini);
+    check_class_of(points[detail_second], mini);
+
+    // The class is the T0.1 one of the size table, with the contact sunk half of that tip (R3.1) and
+    // the rest of R3 with it: what a fragile feature takes, which is what keeps the detail printable.
+    CHECK(mini.geometry.tip_diameter_mm == Approx(0.1));
+    CHECK(points[detail_first].head_front_radius == Approx(0.05));
+    CHECK(points[detail_first].contact_depth == Approx(0.05));
+    CHECK(points[detail_first].tip_shape == SupportPoint::TipShape::Ball);
+    CHECK(points[detail_first].stem_sides == 6);
+
+    // The other generated points are where they were before: a support in detail is no reason to
+    // make the rest of the supports smaller, and a generation still sizes nothing the user placed.
+    check_class_of(points[base_first], sla_support_preset("heavy"));
+    check_class_of(points[base_second], sla_support_preset("heavy"));
+    check_class_of(points[base_slope], sla_support_preset("light"));
+}
+
+TEST_CASE("The anchor of the lowest point is not a detailed region", "[SlaSupportAutoPresets]")
+{
+    // R4.9 leaves the anchor of the lowest island alone, and R4.1 is why: that support carries the
+    // whole part in the first layers of the print. The generator gives the points of the base the
+    // Anchor role and no other, so a fill that reads the role alone cannot override them either, and
+    // the base keeps its heavy class even where the surface under it is the finest relief there is.
+    SupportPoint anchor;
+    CHECK_FALSE(sla_auto_support_is_detailed(anchor));
+
+    SupportPoints points    = a_generated_set();
+    points[base_first].role = SupportPoint::Role::Detail;
+
+    sla_apply_auto_support_presets(
+        points,
+        lowest_z_mm,
+        layer_height_mm,
+        the_presets(),
+        SlaAutoSupportChoice{}
+    );
+
+    check_class_of(points[base_first], sla_support_preset("heavy"));
 }
 
 TEST_CASE(
