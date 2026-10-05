@@ -72,6 +72,25 @@ constexpr double height_step_mm     = 1.; // [in mm]
 // small numbers.
 using Cell2 = std::pair<std::int32_t, std::int32_t>;
 
+/// The hash of a cell of the grid, for the maps keyed by one. The standard library has no
+/// std::hash for a pair of coordinates, so an unordered container of them asks for one: without it
+/// MSVC stops on "term does not evaluate to a function taking 1 arguments" and no other standard
+/// library gives a diagnostic at all. The two indices are mixed into one bucket index the way
+/// Boost's hash_combine does, by two large odd primes, which spreads a whole row or column of cells
+/// over the buckets; both indices are small non-negative numbers here (see cell_index), so nothing
+/// of the address of a cell takes part.
+struct Cell2Hash
+{
+    size_t operator()(const Cell2& cell) const noexcept
+    {
+        return (size_t(std::get<0>(cell)) * 73856093u) ^ (size_t(std::get<1>(cell)) * 19349663u);
+    }
+};
+
+/// The map the cells of the grid are looked up in. Every container of this pass keyed by a cell
+/// goes through this alias, so that none of them can be written without the hasher above.
+using CellMap = std::unordered_map<Cell2, std::vector<int>, Cell2Hash>;
+
 std::int32_t cell_index(double value, double origin, double spacing)
 {
     const double index = std::floor((value - origin) / spacing);
@@ -368,7 +387,7 @@ std::vector<Spot> make_spots(
     const ThrowOnCancel& throw_on_cancel
 )
 {
-    std::unordered_map<Cell2, std::vector<int>> cells;
+    CellMap cells;
     for (size_t i = 0; i < facets.size(); ++i) {
         ask_cancel(i, throw_on_cancel);
         if (!facets[i].faces_the_plate)
@@ -426,10 +445,9 @@ std::vector<Spot> make_spots(
 
 /// The spots by the cell of the grid they stand in, which is how the flat area around a spot and the
 /// spots beside a new anchor are found.
-std::unordered_map<Cell2, std::vector<int>>
-index_spots(const std::vector<Spot>& spots, const SpotGrid& grid)
+CellMap index_spots(const std::vector<Spot>& spots, const SpotGrid& grid)
 {
-    std::unordered_map<Cell2, std::vector<int>> cells;
+    CellMap cells;
     for (size_t i = 0; i < spots.size(); ++i)
         cells[grid.cell_of(spots[i].pos.x(), spots[i].pos.y())].push_back(int(i));
     return cells;
@@ -442,7 +460,7 @@ index_spots(const std::vector<Spot>& spots, const SpotGrid& grid)
 void measure_flat_areas(
     std::vector<Spot>& spots,
     const SpotGrid& grid,
-    const std::unordered_map<Cell2, std::vector<int>>& cells,
+    const CellMap& cells,
     double radius,
     const ThrowOnCancel& throw_on_cancel
 )
@@ -509,7 +527,7 @@ public:
 private:
     const SupportPoints* m_points = nullptr;
     SpotGrid m_grid;
-    std::unordered_map<Cell2, std::vector<int>> m_cells;
+    CellMap m_cells;
 };
 
 /// The spots around an anchor that has just been placed are not tried before the ones further away
@@ -518,7 +536,7 @@ private:
 void demote_around(
     std::vector<Spot>& spots,
     const SpotGrid& grid,
-    const std::unordered_map<Cell2, std::vector<int>>& cells,
+    const CellMap& cells,
     const Vec3d& p,
     double radius
 )
@@ -662,13 +680,13 @@ AnchorPlacement add_heavy_anchors(
         if (area_per_spot > spacing * spacing)
             spacing = std::sqrt(area_per_spot);
     }
-    const SpotGrid grid{{lowest_x, lowest_y}, spacing};
+    const SpotGrid grid{Vec2d{lowest_x, lowest_y}, spacing};
     std::vector<Spot> spots = make_spots(mesh, facets, grid, measures, thresholds, throw_on_cancel);
     result.candidates       = spots.size();
     if (spots.empty() || result.wanted == 0)
         return result;
 
-    const std::unordered_map<Cell2, std::vector<int>> cells = index_spots(spots, grid);
+    const CellMap cells = index_spots(spots, grid);
     measure_flat_areas(spots, grid, cells, thresholds.spot_area_radius_mm, throw_on_cancel);
     const AnchorIndex anchors(points, grid);
     for (Spot& spot : spots)
