@@ -421,6 +421,7 @@ void support_island(const LayerPart &part, NearPoints& near_points, float part_z
             /* radius_curve_index */ 0,
             /* current_radius */ static_cast<coord_t>(scale_(cfg.support_curve.front().x()))
         });
+    }
 }
 
 /// <summary>
@@ -559,7 +560,8 @@ void support_peninsulas(const Peninsulas& peninsulas, NearPoints& near_points, f
                 /* radius_curve_index */ 0,
                 /* current_radius */ static_cast<coord_t>(scale_(cfg.support_curve.front().x()))
             });
-    }   
+        }
+    }
 }
 
 /// <summary>

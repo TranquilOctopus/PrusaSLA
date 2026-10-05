@@ -121,6 +121,13 @@ SupportToolTree build_support_tree_for_tool(const SupportToolModelMesh& model_me
         Domain::TriangleMesh mesh = build_object_mesh(model_mesh, object_to_world);
         if (mesh.empty()) return empty_tree();
 
+        // JobController with stop condition
+        sla::JobController ctl;
+        ctl.stopcondition = stop;
+        ctl.cancelfn = [&stop]() {
+            if (stop && stop()) throw Slic3r::RuntimeError("Support tool canceled");
+        };
+
         // Points are in object's mesh frame; transform to world frame
         Domain::SLA::SupportPoints world_points = points;
         {
@@ -141,13 +148,6 @@ SupportToolTree build_support_tree_for_tool(const SupportToolModelMesh& model_me
             .cfg      = make_support_cfg(cfg),
             .pad_cfg  = make_pad_cfg(cfg),
             .zoffset  = mesh.bounding_box().min.z(),
-        };
-
-        // JobController with stop condition
-        sla::JobController ctl;
-        ctl.stopcondition = stop;
-        ctl.cancelfn = [&stop]() {
-            if (stop && stop()) throw Slic3r::RuntimeError("Support tool canceled");
         };
 
         // Create support tree
