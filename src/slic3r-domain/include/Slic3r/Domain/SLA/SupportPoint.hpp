@@ -89,10 +89,14 @@ struct SupportPoint
     // What this point carries, which is what the tip class of its support is
     // picked from (M7.8.2, the support rulebook R4.1 and R4.3 - R4.6 of
     // doc/sla-fork/supports/rulebook.md): the anchor of the lowest island, an
-    // island, a small island, an overhang, or a fragile thin feature. Unknown is
-    // what a point placed by hand carries, and what a project written before the
-    // roles existed reads back as, so an older file keeps the point it had.
-    enum class Role : uint8_t { Unknown, Anchor, Island, SmallIsland, Overhang, Fragile };
+    // island, a small island, an overhang, or a fragile thin feature. Detail is
+    // what a point in a fine, dense or highly curved region carries whatever else
+    // it would (M7.8.5, R4.9); the anchor of the lowest island is the one role
+    // R4.9 does not replace. Unknown is what a point placed by hand carries, and
+    // what a project written before the roles existed reads back as, so an older
+    // file keeps the point it had. A role is only ever added at the end, since
+    // the three tables that hold one per value are indexed by it.
+    enum class Role : uint8_t { Unknown, Anchor, Island, SmallIsland, Overhang, Fragile, Detail };
     Role role = Role::Unknown;
 
     bool is_island() const { return type == SupportPointType::island; }

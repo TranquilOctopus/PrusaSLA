@@ -1208,8 +1208,8 @@ static constexpr std::array<std::string_view, 3> ON_MODEL_NAMES = {"inherit", "a
 // The roles of a generated point (M7.8.2), in the order of Domain::SLA::SupportPoint::Role. A
 // project written before the roles existed has no "role", which reads back as Unknown: a point the
 // file knows nothing about keeps the geometry it carries.
-static constexpr std::array<std::string_view, 6> ROLE_NAMES = {
-    "unknown", "anchor", "island", "small_island", "overhang", "fragile"
+static constexpr std::array<std::string_view, 7> ROLE_NAMES = {
+    "unknown", "anchor", "island", "small_island", "overhang", "fragile", "detail"
 };
 
 // Indexed by SupportPoint::BaseShape. The Default value is never written, it only keeps the

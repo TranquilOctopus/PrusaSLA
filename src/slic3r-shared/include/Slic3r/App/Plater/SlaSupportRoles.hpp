@@ -16,7 +16,10 @@ namespace Slic3r::App::Plater {
 /// - SmallIsland -> light (T0.2): a very small island gets the light tip (R4.3);
 /// - Overhang    -> light (T0.2): overhangs and the rest are light by default (R4.6);
 /// - Fragile     -> mini (T0.1): a tip, a point or another thin feature takes the minimum tip, so
-/// that removing the support does not snap the feature off (R4.4, R4.5).
+/// that removing the support does not snap the feature off (R4.4, R4.5);
+/// - Detail      -> mini (T0.1): a detailed region, where fine, dense or highly curved surface is,
+/// takes the lightest tip whatever the role of the point would have given it, except the Anchor of
+/// the lowest island, which R4.9 leaves alone (M7.8.5, R4.9).
 ///
 /// Unknown is what a point placed by hand carries, and what a project written before the roles
 /// existed reads back as, so it takes the light tip as well: that is what such a support got before

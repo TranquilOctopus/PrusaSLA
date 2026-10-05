@@ -142,18 +142,18 @@ branch, one commit, the box ticked in the same commit.
 
 ## Progress
 
-**321 of 360 todos done (89%)** · updated 2026-10-05 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**326 of 365 todos done (89%)** · updated 2026-10-05 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
 | M0: Foundation | 69/70 | `████████████` 99% |
 | M1: Look, feel and SLA-first shell | 44/45 | `████████████` 98% |
-| M2: SLA editing tools (porting the legacy gizmos) | 93/94 | `████████████` 99% |
+| M2: SLA editing tools (porting the legacy gizmos) | 95/96 | `████████████` 99% |
 | M3: Resin profile import (Chitubox, Lychee and others) | 24/28 | `██████████░░` 86% |
-| M4: Engine quality (measure first; every PR includes before/after metrics) | 27/36 | `█████████░░░` 75% |
+| M4: Engine quality (measure first; every PR includes before/after metrics) | 28/37 | `█████████░░░` 76% |
 | M5: Formats and inspection | 38/43 | `███████████░` 88% |
 | M6: Quality gates and release | 17/22 | `█████████░░░` 77% |
-| M7: Excellent auto-supports *(parked)* | 9/22 | `█████░░░░░░░` 41% |
+| M7: Excellent auto-supports *(parked)* | 11/24 | `██████░░░░░░` 46% |
 
 ### Waiting on you
 
@@ -232,9 +232,9 @@ branch, one commit, the box ticked in the same commit.
 - [ ] **M7.6** Support quality scorecard. The benchmark harness writes the generator's support points and tip sizes to JSO…
 - [ ] **M7.7** Baseline scorecard for the current generator (default and branching tree). Commit only the aggregate number…
 - [ ] **M7.8** Implement the rulebook in the generator, one sub-todo per rule (`M7.8.<n>`). Each must raise the scorecard…
-  - [ ] **M7.8.2** Size by role and keep off detail (R4.1, R4.3-R4.6): every generated point gets a role (anchor, island, smal…
   - [ ] **M7.8.3** Heavy anchors (R4.2): a few T0.4 anchors on flat, low-detail areas facing the plate, scaled with the model'…
   - [ ] **M7.8.4** Raft against suction (R6): a raft type Auto, the default, that builds no raft unless the part's underside w…
+  - [ ] **M7.8.6** Automatic bracing of close stems (R5.4), modelled on Lychee's auto braces: braces join support stems that s…
 - [ ] **M7.9** Cosmetic surface awareness. Detect likely cosmetic surfaces (faces, fine detail, high-curvature upward regi…
 - [ ] **M7.10** Size tips for each region, following the rulebook: light tips on small detail, heavier tips where the load…
 - [ ] **M7.11** Automated tuning. Search the generator parameters against the dataset scorecard, and promote the best setti…

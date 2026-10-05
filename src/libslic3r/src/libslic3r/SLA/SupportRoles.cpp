@@ -55,6 +55,23 @@ constexpr double FAR_RING_RADIUS    = 2.6; // [in mm]
 // looked for at, in mm, nearest first.
 constexpr std::array<double, 4> MOVE_OFFSETS{0.4, 0.6, 0.8, 1.0}; // [in mm]
 
+// How many directions the surface around a point is looked at in when it is asked whether it is
+// detailed (R4.9), and how many steps the walk out to the detail radius takes. The steps are what
+// tell how fine a texture can be and still be read: one step is a tenth of the radius, so a
+// surface that comes and goes twice inside the radius is seen to do so.
+constexpr int DETAIL_RING_SAMPLES = 8;
+constexpr int DETAIL_WALK_STEPS   = 10;
+
+// How far off the plane through the point a sample may be and still count as above or below it
+// (R4.9), in mm. It is only there to keep the ray hits of a plain surface, which are exact to about
+// a nanometre, from counting as a rise and a fall.
+constexpr double DETAIL_SIGN_BAND = 0.02; // [in mm]
+
+// The fewest spots of the ring that have to be looked at before the surface around a point may be
+// called detailed. Fewer than that and the rays were mostly kept off the surface - at the rim of a
+// silhouette or on the open side of a hollow - which is no evidence of anything.
+constexpr size_t DETAIL_MIN_SAMPLES = 3;
+
 /// Two directions in the plane of the surface around a point, so that the rings around it can be
 /// told apart in that plane. Fixed for a given normal, so the answer does not depend on the order
 /// the points are visited in.
@@ -152,9 +169,9 @@ double thickness_at(const AABBMesh& mesh, const Vec3d& p, const Vec3d& n)
 }
 
 /// Where in the plane around a point a probe looks.
-Vec3d ring_offset(const TangentPlane& plane, double radius, int index)
+Vec3d ring_offset(const TangentPlane& plane, double radius, int index, int samples = RING_SAMPLES)
 {
-    const double angle = 2. * std::numbers::pi * double(index) / double(RING_SAMPLES);
+    const double angle = 2. * std::numbers::pi * double(index) / double(samples);
     return radius * (std::cos(angle) * plane.first + std::sin(angle) * plane.second);
 }
 
@@ -467,6 +484,116 @@ bool is_fragile(
     return at.part->prev_parts.empty() && narrow_above(*at.part, thresholds);
 }
 
+/// What the surface around a point does within the detail radius (R4.9), measured by the samples of
+/// `probe_detail_neighbourhood()`.
+struct DetailNeighbourhood
+{
+    /// How far the surface is from the plane through the point, perpendicular to its own normal,
+    /// on the ring at the radius, averaged over the spots that were valid. It is the mean absolute
+    /// curvature of the neighbourhood: a plate and a slope have none of it whatever their mesh is
+    /// made of, and a curve has as much of it as its radius says.
+    double sag_mm = 0.;
+    /// How many highs and lows of its own the surface goes over on the way out from the point to
+    /// the ring, averaged over the directions of the walk. A plain surface and a smooth curve only
+    /// fall away from the plane, so they go over none; relief goes over one per feature, whichever
+    /// side of the plane the feature is on.
+    double turns = 0.;
+    /// The spots of the ring that were looked at, which is what says whether there was a surface to
+    /// measure at all.
+    size_t samples = 0;
+};
+
+/// The surface around a point, sampled on the rays of `probe_surface()`: every direction is walked
+/// out from the point to the detail radius in DETAIL_WALK_STEPS steps, and the height of every hit
+/// (how far it is from the plane through the point) is what the detail of the region is read from.
+/// Walking out rather than looking at a ring alone is what says how often the surface comes and
+/// goes, and the last step of every walk is the same ring, which is what the sag is taken on.
+DetailNeighbourhood probe_detail_neighbourhood(
+    const AABBMesh& mesh,
+    const Vec3d& p,
+    const Vec3d& n,
+    const SupportRoleThresholds& thresholds
+)
+{
+    const TangentPlane plane = tangent_plane(n);
+    const double radius      = thresholds.detail_radius_mm;
+    const double step        = radius / double(DETAIL_WALK_STEPS);
+
+    DetailNeighbourhood detail;
+    double sag_sum = 0.;
+    double turns   = 0.;
+    for (int i = 0; i < DETAIL_RING_SAMPLES; ++i) {
+        // The last two heights of the walk, which is what a high or a low is read against. A spot
+        // the rays did not reach says nothing about the walk, so it breaks the pair rather than
+        // counting as a high: the surface may well have gone up and down where nothing was found.
+        double h_back       = 0.;
+        double h_back_back  = 0.;
+        bool have_back      = false;
+        bool have_back_back = false;
+
+        for (int s = 1; s <= DETAIL_WALK_STEPS; ++s) {
+            const double r = step * double(s);
+            const SurfaceSample sample =
+                probe_surface(mesh, p, n, plane, ring_offset(plane, r, i, DETAIL_RING_SAMPLES));
+            if (!sample.valid) {
+                have_back      = false;
+                have_back_back = false;
+                continue;
+            }
+
+            if (s == DETAIL_WALK_STEPS) {
+                sag_sum += std::abs(sample.h);
+                ++detail.samples;
+            }
+
+            // A sample that stands out of both of the ones before it is one high or one low the
+            // surface went over. Both sides have to clear the band, so that a plain surface, whose
+            // hits are exact to about a nanometre, does not turn into a row of them.
+            if (have_back_back) {
+                const double into   = h_back - h_back_back;
+                const double out_of = sample.h - h_back;
+                if (into > DETAIL_SIGN_BAND && out_of > DETAIL_SIGN_BAND)
+                    turns += 1.;
+                if (into < -DETAIL_SIGN_BAND && out_of < -DETAIL_SIGN_BAND)
+                    turns += 1.;
+            }
+
+            h_back_back    = h_back;
+            have_back_back = have_back;
+            h_back         = sample.h;
+            have_back      = true;
+        }
+    }
+
+    if (detail.samples > 0)
+        detail.sag_mm = sag_sum / double(detail.samples);
+    detail.turns = turns / double(DETAIL_RING_SAMPLES);
+    return detail;
+}
+
+/// Whether the point is in a detailed region, i.e. on a surface that is fine, dense or highly curved
+/// (R4.9). The maintainer's most common auto-support failure is a heavy support in such a place,
+/// where only the minimum tip keeps the detail printable, so this is what most points of a
+/// miniature are asked, and it is the last of the rules to have its say.
+///
+/// Too few spots looked at is no evidence of detail: where the rays cannot see the surface - the rim
+/// of a silhouette, the open side of a hollow, a spot over a gap - the other rules have already said
+/// what the point is, and calling it detailed on no evidence would put the minimum tip under the
+/// edge of a plate.
+bool is_detailed_region(
+    const AABBMesh& mesh,
+    const Vec3d& p,
+    const Vec3d& n,
+    const SupportRoleThresholds& thresholds
+)
+{
+    const DetailNeighbourhood detail = probe_detail_neighbourhood(mesh, p, n, thresholds);
+    if (detail.samples < DETAIL_MIN_SAMPLES)
+        return false;
+
+    return detail.sag_mm >= thresholds.detail_sag_mm || detail.turns >= thresholds.detail_turns;
+}
+
 } // namespace
 
 void classify_support_point_roles(
@@ -531,27 +658,34 @@ void classify_support_point_roles(
         }
 
         // R4.4 and R4.5 both land here: a thin feature, and a point on detail that cannot move.
+        // A fragile point stays Fragile below whatever R4.9 finds around it: it takes the minimum
+        // tip either way (R4.4), and the fragile reason is the one that says what it is.
         if (is_fragile(p, thickness, layers, layer_height, thresholds)) {
             point.role = Role::Fragile;
             continue;
         }
 
+        // R4.6: an overhang is what the rules say nothing about, and it is the last role left.
+        Role role = Role::Overhang;
         if (point.is_island()) {
             // R4.3, and with R4.1 the size of the island the point starts: the lowest island of the
             // object is carried by its heavy anchors, every other island by its own size.
             if (p.z() <= anchor_top) {
-                point.role = Role::Anchor;
-                continue;
+                role = Role::Anchor;
+            } else {
+                const LayerAtPoint at = layer_part_at(layers, p, layer_height);
+                const double area     = at.found() ? part_area_mm2(*at.part) : 0.;
+                role = area < thresholds.small_island_area_mm2 ? Role::SmallIsland : Role::Island;
             }
-
-            const LayerAtPoint at = layer_part_at(layers, p, layer_height);
-            const double area     = at.found() ? part_area_mm2(*at.part) : 0.;
-            point.role = area < thresholds.small_island_area_mm2 ? Role::SmallIsland : Role::Island;
-            continue;
         }
 
-        // R4.6: an overhang and everything else the rules say nothing about is a light support.
-        point.role = Role::Overhang;
+        // R4.9 comes last, because it is the one rule of the four that overrides another: a point in
+        // a detailed region takes the minimum tip whatever its role is, except the anchor of the
+        // lowest island, which carries the whole part early in the print and stays heavy (R4.1).
+        if (role != Role::Anchor && is_detailed_region(mesh, p, n, thresholds))
+            role = Role::Detail;
+
+        point.role = role;
     }
 }
 
