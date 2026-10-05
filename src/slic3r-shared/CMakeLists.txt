@@ -139,6 +139,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Plater/SlaSupportGeometry.cpp
         include/Slic3r/App/Plater/SlaSupportOnModel.hpp
         src/Slic3r/App/Plater/SlaSupportOnModel.cpp
+        include/Slic3r/App/Plater/SlaSupportRoles.hpp
+        src/Slic3r/App/Plater/SlaSupportRoles.cpp
         include/Slic3r/App/Plater/SlaSupportPointsDialog.hpp
         src/Slic3r/App/Plater/SlaSupportPointsDialog.cpp
         include/Slic3r/App/Plater/SlaSupportToolShortcuts.hpp
@@ -1727,6 +1729,8 @@ test/Slic3r/App/SlaObjectUseRowsTests.cpp
             test/Slic3r/App/Plater/SlaSupportGeometryTests.cpp
 
             test/Slic3r/App/Plater/SlaSupportOnModelTests.cpp
+
+            test/Slic3r/App/Plater/SlaSupportRolesTests.cpp
 
             test/Slic3r/App/Plater/SlaUndoActionTests.cpp
 
