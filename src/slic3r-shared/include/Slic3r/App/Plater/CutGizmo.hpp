@@ -234,6 +234,11 @@ private:
 
     struct SolidAABBMesh
     {
+        // The mesh the AABBMesh below is a view on. AABBMesh keeps the pointer it was built from
+        // and reads that mesh on every query, so the mesh has to be held here as well: the gizmo
+        // outlives the model volume the mesh came from (an undo or a volume removal destroys it),
+        // and the acceleration structure outlives the volume either way. (M0.15)
+        std::shared_ptr<const Domain::TriangleMesh> mesh;
         std::shared_ptr<AABBMesh> aabb_mesh;
         // Mesh transformation including tarnsformation of volume and instance
         Domain::Transform3d trafo;

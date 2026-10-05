@@ -46,6 +46,9 @@ struct DrainHoleEditState
 
 struct DrainHolePaintableVolume
 {
+    // The same views the support points tool holds: references into the model and an AABBMesh that
+    // is a view on the mesh of a volume rather than a copy of it, so the list is rebuilt whenever
+    // the model is (an undo replaces all of it). (M0.15)
     const Domain::ModelObject& model_object;
     const Domain::ModelInstance& model_instance;
     Domain::ModelVolume& model_volume;
@@ -60,6 +63,7 @@ using DrainHolePaintableVolumes = std::vector<DrainHolePaintableVolume>;
 class SlaHollowGizmo :
     public Scene::IToolGizmo,
     public Biz::Scene::ISceneSelectionChangedListener,
+    public Biz::Scene::ISceneChangedListener,
     public Biz::ISLAObjectCacheChangedListener
 {
 public:
@@ -84,6 +88,10 @@ public:
     ) override;
 
     void on_sla_object_cache_changed(const Domain::SlicingId& id, Domain::ObjectID object_id) override;
+
+    // An undo replaces the whole model, and with it every volume the tool raycasts on, so the list
+    // of them is rebuilt from the model that is there now. (M0.15)
+    void on_model_reloaded(Domain::SelectionId project_id) override;
 
     void provide_gizmo_controller(Scene::IGizmoController& controller) override;
 

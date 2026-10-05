@@ -12,7 +12,14 @@ class TriangleMesh
 public:
 
     TriangleMesh() = default;
-    TriangleMesh(TriangleMesh&&) = default;
+    // No copy and no move: the AABBMesh this object holds keeps the address of the indexed_triangle_set
+    // it was built from, and both a copy and a move would leave it pointing into the source object (the
+    // copy at the source, which the copy does not keep alive, the move at the source's vectors, which
+    // the move leaves behind). The manager holds its meshes in place, so neither is needed. (M0.15)
+    TriangleMesh(const TriangleMesh&) = delete;
+    TriangleMesh& operator=(const TriangleMesh&) = delete;
+    TriangleMesh(TriangleMesh&&) = delete;
+    TriangleMesh& operator=(TriangleMesh&&) = delete;
 
     explicit TriangleMesh(indexed_triangle_set&& triangles)
         : m_triangles(std::move(triangles)), m_aabb_mesh(std::make_unique<AABBMesh>(this->m_triangles))

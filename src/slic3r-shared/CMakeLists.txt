@@ -1704,6 +1704,10 @@ test/Slic3r/App/SlaObjectUseRowsTests.cpp
 
             test/Slic3r/App/Scene/HeightBandTests.cpp
 
+            test/Slic3r/App/Scene/TriangleMeshManagerTests.cpp
+
+            test/Slic3r/Biz/Scene/BedTrackingTests.cpp
+
             test/Slic3r/App/Preview/SlaSupportsPanelTests.cpp
 
             test/Slic3r/App/Plater/AutoOrientProgressTests.cpp

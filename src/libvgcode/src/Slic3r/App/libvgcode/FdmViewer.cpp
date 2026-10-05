@@ -404,7 +404,6 @@ std::pair<Render::TexturePtr, size_t> FdmViewer::TextureData::enabled_options_te
 #endif //!USE_TEXTURE_BUFFER
 
 FdmViewer::FdmViewer()
-    : m_aabb(Domain::TriangleMesh(), AABBMesh(Domain::TriangleMesh()))
 {
     reset_default_extrusion_roles_colors();
     reset_default_options_colors();
@@ -679,9 +678,9 @@ void FdmViewer::load(FdmViewerInputData&& gcode_data, const Scene::Transform& tr
 
     BoundingBox3d bbox = bounding_box();
     Vec3d bbox_size = Algorithms::BoundingBox::sizes(bbox);
-    m_aabb.first = Biz::Algorithms::TriangleMesh::make_cube(bbox_size.x(), bbox_size.y(), bbox_size.z());
-    m_aabb.first.translate(bbox.min.cast<float>());
-    m_aabb.second = AABBMesh(m_aabb.first);
+    m_aabb.mesh = Biz::Algorithms::TriangleMesh::make_cube(bbox_size.x(), bbox_size.y(), bbox_size.z());
+    m_aabb.mesh.translate(bbox.min.cast<float>());
+    m_aabb.aabb = AABBMesh(m_aabb.mesh);
 
     Scene::Node* toolpaths_node = m_scene->root().query_first([](const Scene::Node* n)->bool {
         const GCodeNodeTag* tag = n->tag_of_type<GCodeNodeTag>();
@@ -690,7 +689,7 @@ void FdmViewer::load(FdmViewerInputData&& gcode_data, const Scene::Transform& tr
 
     ASSERT(toolpaths_node != nullptr);
 
-    toolpaths_node->set_raycast_component(new Scene::AabbRaycastNodeComponent(&m_aabb.second));
+    toolpaths_node->set_raycast_component(new Scene::AabbRaycastNodeComponent(&m_aabb.aabb));
 
     Scene::Node::NodeList nodes;
     m_scene->root().query([](const Scene::Node* n)->bool {
