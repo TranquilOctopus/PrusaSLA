@@ -193,6 +193,7 @@ enum class Read3mfIssueType: unsigned short {
     project_sla_support_point_stem_taper_issue,
     project_sla_support_point_knot_radius_issue,
     project_sla_support_point_on_model_issue,
+    project_sla_support_point_role_issue,
 
     project_sla_drain_holes_must_be_array,
     project_sla_drain_hole_unknown_property,
