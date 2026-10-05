@@ -199,7 +199,8 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
 
 // One group of support settings: the preset row a user of Chitubox or Lychee starts with (M2.18,
 // M2.22), then the four sizes with their "follow the global setting" switches, then the per-point
-// tip shape, tip length, knot, stem cross-section, stem taper, foot shape and "support on model".
+// tip shape, tip length, knot, stem cross-section, stem taper, foot shape, "support on model" and
+// bracing. The "Selected supports" group ends with the button that removes what is selected.
 void SlaSupportPointsDialog::add_support_value_group(
     Yoga::Item*            parent,
     SlaSupportSettingsGroup group,
@@ -430,6 +431,44 @@ void SlaSupportPointsDialog::add_support_value_group(
         }
         setting_changed(SlaSupportPointField::SupportOnModel, sla_support_point_field_value(on_model));
     };
+
+    // The per-point bracing switch (M2.38), the second of the two values that are not dimensions of
+    // the support but what its pillar does in the tree. Inherit is what a point without a switch of
+    // its own gets, i.e. the object's own support_brace_enable decides.
+    add_row_with_combo_box(_u8L("Bracing"), parent, &controls.brace_combo);
+    controls.brace_combo->set_items({_u8L("Inherit"), _u8L("On"), _u8L("Off")});
+    controls.brace_combo->tooltip().set_text(
+        _u8L("Whether the pillar of this support is braced to its neighbours. Inherit follows the "
+             "Bracing setting of Supports & raft. The branching tree has no braces and ignores this.")
+    );
+    controls.brace_combo->callbacks().selection_changed = [setting_changed](int index)
+    {
+        SupportBrace brace = SupportBrace::Inherit;
+        switch (index) {
+        case 1:
+            brace = SupportBrace::On;
+            break;
+        case 2:
+            brace = SupportBrace::Off;
+            break;
+        default:
+            break;
+        }
+        setting_changed(SlaSupportPointField::Bracing, sla_support_point_field_value(brace));
+    };
+
+    // Removing what is selected belongs to the group that shows what is selected, so the button sits
+    // there and nowhere else (M2.38). The Delete key and Ctrl+click take the same action.
+    if (group == SlaSupportSettingsGroup::SelectedSupports) {
+        controls.delete_button = parent->emplace_back<LayoutButton>(_u8L("Delete"));
+        controls.delete_button->set_tooltip(
+            _u8L("Remove the selected support points from this model. One undo brings them back.")
+        );
+        controls.delete_button->callbacks().action = [this]()
+        { m_callbacks.delete_selected_points(); };
+        // There is nothing to remove while no point is selected.
+        controls.delete_button->set_enabled(false);
+    }
 }
 
 void SlaSupportPointsDialog::show_size(SliderWithInput* slider, bool has_value, double value_mm)
@@ -507,6 +546,20 @@ void SlaSupportPointsDialog::show_new_support_values(
     case SupportOnModel::Inherit:
     default:
         controls.on_model_combo->set_current_index(0);
+        break;
+    }
+
+    controls.brace_combo->set_override_label(std::string());
+    switch (values.brace) {
+    case SupportBrace::On:
+        controls.brace_combo->set_current_index(1);
+        break;
+    case SupportBrace::Off:
+        controls.brace_combo->set_current_index(2);
+        break;
+    case SupportBrace::Inherit:
+    default:
+        controls.brace_combo->set_current_index(0);
         break;
     }
 }
@@ -590,6 +643,26 @@ void SlaSupportPointsDialog::show_selected_support_values(
     default:
         controls.on_model_combo->set_current_index(0);
         break;
+    }
+
+    const std::optional<SupportBrace> brace = view.brace;
+    controls.brace_combo->set_override_label(brace.has_value() ? std::string() : _u8L("Mixed"));
+    switch (brace.value_or(SupportBrace::Inherit)) {
+    case SupportBrace::On:
+        controls.brace_combo->set_current_index(1);
+        break;
+    case SupportBrace::Off:
+        controls.brace_combo->set_current_index(2);
+        break;
+    case SupportBrace::Inherit:
+    default:
+        controls.brace_combo->set_current_index(0);
+        break;
+    }
+
+    // Nothing is selected in a hidden group, so there is nothing to remove either (M2.38).
+    if (controls.delete_button != nullptr) {
+        controls.delete_button->set_enabled(view.count > 0);
     }
 }
 

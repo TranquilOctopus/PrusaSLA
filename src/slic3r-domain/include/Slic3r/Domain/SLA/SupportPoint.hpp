@@ -86,6 +86,14 @@ struct SupportPoint
     enum class OnModel : uint8_t { Inherit, Allow, Forbid };
     OnModel on_model = OnModel::Inherit;
 
+    // Whether the pillar of this point may be braced to its neighbours (M2.38). Inherit leaves the
+    // decision to the object's support_brace_enable, which is what every point did before the
+    // switch existed; On asks for a brace even where the object has bracing off, Off keeps this one
+    // pillar out of every brace even where the object has bracing on. The branching tree has no
+    // braces, so it ignores this.
+    enum class Brace : uint8_t { Inherit, On, Off };
+    Brace brace = Brace::Inherit;
+
     bool is_island() const { return type == SupportPointType::island; }
 
     // unsaved changes + cache invalidation

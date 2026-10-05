@@ -49,6 +49,18 @@ SupportPoints braceable_points()
     return pts;
 }
 
+// The same two points, with a bracing switch of its own on one of them (M2.38). The cube, the gap
+// and the elevation are the ones above, so the only braces the tree can build are the ones between
+// these two pillars.
+SupportPoints braceable_points_with(Slic3r::Domain::SLA::SupportPoint::Brace first,
+                                    Slic3r::Domain::SLA::SupportPoint::Brace second)
+{
+    SupportPoints pts = braceable_points();
+    pts[0].brace       = first;
+    pts[1].brace       = second;
+    return pts;
+}
+
 // The cube, as a mesh that outlives every tree built from it. The AABBMesh of a
 // SupportableMesh is a view on a triangle mesh and not a copy of it: it keeps the
 // pointer, builds its AABB tree on it and reads its vertices and its indices for
@@ -62,16 +74,22 @@ const indexed_triangle_set &cube_mesh()
     return cube;
 }
 
-Slic3r::sla::SupportableMesh make_supportable_mesh()
+Slic3r::sla::SupportableMesh make_supportable_mesh_with(
+    const Slic3r::Domain::SLA::SupportPoints& points)
 {
     Slic3r::sla::SupportTreeConfig cfg;
     cfg.object_elevation_mm = elevation;
 
     return Slic3r::sla::SupportableMesh{
         .emesh = Slic3r::AABBMesh(cube_mesh()),
-        .pts   = std::make_shared<const SupportPoints>(braceable_points()),
+        .pts   = std::make_shared<const SupportPoints>(points),
         .cfg   = cfg
     };
+}
+
+Slic3r::sla::SupportableMesh make_supportable_mesh()
+{
+    return make_supportable_mesh_with(braceable_points());
 }
 
 // What the default tree made of the two pillars.
@@ -172,6 +190,89 @@ TEST_CASE("DefaultSupportTree::brace diameter is independent of the pillar", "[s
 
     // ... and the pillars kept the radius of the configured pillar diameter.
     CHECK(bracing.pillar_radius == Approx(sm.cfg.head_back_radius_mm));
+}
+
+// M2.38: the per-point bracing switch of the support tool. A support point carries Inherit (follow
+// the object), On (braced even where the object has bracing off) and Off (out of every brace).
+// These are the two points of the fixture above, so every brace the tree could build is one between
+// the pillar of the first point and the pillar of the second one.
+TEST_CASE("A support point that says Off is left out of every brace", "[suptreetree]")
+{
+    using Brace = Slic3r::Domain::SLA::SupportPoint::Brace;
+
+    // Without a switch of its own the points follow the object, which has bracing on, so there are
+    // braces to take away.
+    const size_t braces_by_default =
+        build_bracing(make_supportable_mesh_with(
+                          braceable_points_with(Brace::Inherit, Brace::Inherit)))
+            .braces;
+    REQUIRE_FALSE(braces_by_default == 0);
+
+    SECTION("the first point says Off and the second inherits")
+    {
+        const Bracing bracing =
+            build_bracing(make_supportable_mesh_with(braceable_points_with(Brace::Off, Brace::Inherit)));
+
+        // The pillar of the first point is left out of the only brace there is, so the tree has
+        // none left: a brace needs two ends that both asked for one.
+        CHECK(bracing.braces == 0);
+        // The pillars themselves are untouched, they only do not lean on each other.
+        CHECK(bracing.pillars == 2);
+        CHECK(bracing.links == 0);
+    }
+
+    SECTION("the second point says Off and the first inherits")
+    {
+        const Bracing bracing =
+            build_bracing(make_supportable_mesh_with(braceable_points_with(Brace::Inherit, Brace::Off)));
+
+        CHECK(bracing.braces == 0);
+        CHECK(bracing.pillars == 2);
+    }
+
+    SECTION("both points say Off")
+    {
+        const Bracing bracing =
+            build_bracing(make_supportable_mesh_with(braceable_points_with(Brace::Off, Brace::Off)));
+
+        CHECK(bracing.braces == 0);
+        CHECK(bracing.stubs == 0);
+        CHECK(bracing.pillars == 2);
+    }
+
+    SECTION("a brace needs two ends that both asked for one")
+    {
+        const Bracing bracing =
+            build_bracing(make_supportable_mesh_with(braceable_points_with(Brace::Off, Brace::On)));
+
+        // On is a request of its own, but it is a request for a brace, and a brace hangs between two
+        // pillars. One of the two says Off, so there is no brace at all here.
+        CHECK(bracing.braces == 0);
+        CHECK(bracing.pillars == 2);
+    }
+}
+
+TEST_CASE("A support point that says On is braced even where the object has bracing off",
+          "[suptreetree]")
+{
+    using Brace = Slic3r::Domain::SLA::SupportPoint::Brace;
+
+    Slic3r::sla::SupportableMesh braced_off = make_supportable_mesh_with(
+        braceable_points_with(Brace::Inherit, Brace::Inherit));
+    braced_off.cfg.brace_enable               = false;
+    CHECK(build_bracing(braced_off).braces == 0);
+
+    Slic3r::sla::SupportableMesh braced_on =
+        make_supportable_mesh_with(braceable_points_with(Brace::On, Brace::On));
+    braced_on.cfg.brace_enable = false;
+
+    const Bracing bracing = build_bracing(braced_on);
+
+    // One of the points asking for a brace is enough to get one, even with support_brace_enable off
+    // for the object.
+    CHECK_FALSE(bracing.braces == 0);
+    // The pillars are still built the same way.
+    CHECK(bracing.pillars == 2);
 }
 
 TEST_CASE("The brace settings are shown with the pillar connection mode", "[suptreetree]")

@@ -38,6 +38,12 @@ public:
         // the same action of the Preview sidebar and of the object context menu do.
         std::function<void()> remove_all_points = []() {};
 
+        /// Take the selected support points away (M2.38). This is the "Delete" button of the
+        /// "Selected supports" group, so a support can be gone the way a user of Chitubox removes it:
+        /// by picking it and pressing the button of the group its values are in, without reaching
+        /// for the Delete key. It is the same action the Delete key and Ctrl+click take.
+        std::function<void()> delete_selected_points = []() {};
+
         /// One value of the support settings changed (M2.33). The group says what it changes: the
         /// "New supports" one what a clicked point takes, the "Selected supports" one what the
         /// selected points carry. @p value is the number of a slider and the value of the
@@ -118,6 +124,10 @@ private:
         Yoga::SliderWithInput* stem_taper_slider = nullptr;
         Yoga::ComboBox* foot_shape_combo = nullptr;
         Yoga::ComboBox* on_model_combo = nullptr;
+        Yoga::ComboBox* brace_combo = nullptr;
+        // Only the "Selected supports" group has it (M2.38): the other group is about what a
+        // clicked point takes, and a point that is not there yet cannot be removed.
+        Yoga::LayoutButton* delete_button = nullptr;
     };
 
     /// Builds one group of support settings: the preset row, the four sizes with their "follow the

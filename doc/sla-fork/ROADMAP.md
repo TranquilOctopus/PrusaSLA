@@ -679,6 +679,75 @@ Milestones are ordered by value but can overlap. Anything whose `needs` are met 
     and no hotspot file touched.
 - [x] **M2.34** The support tree drawn in Prepare touches the model at every support point (user: "The supports are also not contacting neither the model nor the support points"). The pinhead of a support point is built at the point, so the tree the preview draws has to be drawn with the same transform the model is, and neither side may add a transform of its own. · S · needs M2.21, M2.33
   Result: the tree was drawn `bed_trafo * translation(0, 0, elevation)` over a mesh the engine had already placed with the instance matrix. That matrix is a world matrix and it already carries the offset of the build plate: `BedPlacement::layout()` (called by `layout_after_project_load()` on every project load) shifts every instance by the transform of the plate it sits on, and `get_bed_trafo()` derives that transform from `bed.contour_aabb().min`, which for an SLA printer is never zero (the `bed_shape` of the SL1 begins at 1.48x1.02, the community ones at 0.5x0.5). So every tree in Prepare was drawn that far from its own model and from its own point markers: the pillar tops ended beside the points instead of on them, which is the report. The plate transform is gone. The whole placement is now one pure function of the service, `sla_support_tree_placement(instance_matrix, lift)` in `SlaSupportPreviewService.{hpp,cpp}`, which returns both halves of the one convention and is what `refresh()` hands the worker and `build_nodes()`: `object_to_world` (the instance matrix, the world placement of the object, NOT lifted, which is the contract `build_support_tree_for_tool()` documents) and `node_trafo` (the support elevation, the lift `PlaterScenePresenter::set_sla_lift()` gives the model, so `node_trafo * object_to_world` is exactly the transform on the model's own instance node and the one the tool's point markers are placed with). `build_nodes()` lost its `bed_trafo` and `elevation` parameters and the dead `ObjectPreview::elevation`, and `refresh()` no longer reads the transform of the plate at all, so there is nothing left to multiply in by mistake. The rule is written on both sides: at `sla_support_tree_placement` and at the comment of `build_support_tree_for_tool()` in `libslic3r/SLASupportTool.hpp`, which now says that the instance matrix is a world matrix that carries the plate offset and that the caller lifts by the elevation the model itself is drawn by. Nothing else of the service moved: the debounce, the cancellation, the snapshot of the model meshes, the theme colours and the render layer are as they were, and the drawn result is the tree of the slicer (the engine has always built it from the unlifted object, the caller lifts it by the elevation). Tests: a new case in `SlaSupportPreviewServiceTests.cpp` builds a model written from scratch (a plate overhanging a base on every side) with one instance that is moved and turned about Z and about X the way Auto orient leaves one, dropped onto the plate, with the offset of the build plate in its matrix, gives it four points on the underside of the overhang, then plays both parts of the preview: `build_support_tree_for_tool()` with the placement of the service, the tree drawn with the node transform of the placement and the points drawn the way the model and its markers are drawn (`sla_support_points_drawing_trafo`), and the largest distance from a point to the tree over an `AABBMesh` of the drawn tree, reported by INFO with the vector that decided it. A model raised by its supports and a model with a raft around it (zero elevation, the node transform is then the identity) both have to stay within 0.05 mm, and a third section pins the offset itself: a tree drawn with the plate transform of the SL1 applied a second time misses the points by exactly the length of that offset, so the case fails on any node transform that brings the plate back. NOT BUILT (a human builds and runs the tests in this session); NOT CHECKED in a running app.
+- [x] **M2.38** The support points tool has a working flow from end to end, driven the way a user
+  drives it (user: "Make sure the support settings now have a working flow to: select a previous
+  support & change settings for tip, stem, bracing; delete a specific support; add a new support.").
+  Flow tests play the three steps against a real project, the "Selected supports" group gets a
+  "Delete" button beside its fields, and a support point carries a per-point "Bracing" switch
+  (Inherit / On / Off) that the default support tree honours. · M · needs M2.35
+  Result: by OpenCode, NOT BUILT (a human builds and runs the tests in this session); NOT CHECKED
+  in a running app. **What a click asks for** is one pure question now, asked in the new
+  `App/Plater/SlaSupportPointEdits.{hpp,cpp}` (listed in CMake once) with no camera, no scene and no
+  gizmo in it: `sla_support_click_action(button, modifier, point_under_cursor, points,
+  island_supports_locked, surface_pos)` answers `SelectPoint` / `TogglePoint` / `DeletePoint` /
+  `AddPoint` / `ClearSelection` / `RectangleSelect` / `Ignored` / `None`, and `on_mouse` acts on that
+  one answer instead of an if-chain of its own, so the left button, Ctrl, Shift and the right button
+  cannot drift apart. The same file carries **the one write** of an edit session,
+  `commit_sla_support_point_edits()`, which is what `commit_edited_points_live()` now calls: a
+  support added, removed, moved or changed is on the ModelObject the moment the user changes it, with
+  no Apply, and the M2.21 preview service is notified through the same `modify_sla_support_points`.
+  **Two defects the tests showed.** Shift+click (the selection toggle) and the Ctrl or right button
+  removal both changed the selection of the session without refreshing the "Selected supports" group,
+  so its title count and its fields showed a support that was no longer there or missed the one that
+  was: both paths call `update_selected_support_values()` now. And `end_editing()` did not close the
+  `SlaUndoAction` of the tool, so a slider drag interrupted by closing the tool left the action open
+  and the NEXT value change of the reopened tool - a dropdown, which reports no editing start - took
+  no undo snapshot at all; `end_editing()` closes it, which is what a value edit of a closed tool is.
+  **Removing one support** is one action of the tool with three ways into it, and the group now has
+  the third: a "Delete" button at the end of the "Selected supports" group, on while the group has a
+  selection (`view.count > 0`, the same count its title shows) and off with none, wired to the same
+  `delete_selected_points()` the Delete key and Ctrl or right click take. **Per-point bracing.** The
+  support point carries `SupportPoint::Brace brace` (Inherit / On / Off, next to `on_model`): the
+  undo archive (`ModelSerialize.cpp`), the project file (`"br"` with `inherit` / `on` / `off`, plus
+  the new `project_sla_support_point_brace_issue`), `SupportPoint::operator==` and the preview key
+  (`hash_support_points`, the braces are part of the tree) all know it, so a change of it survives an
+  undo, a save, and rebuilds the drawn tree. `SlaSupportBrace.{hpp,cpp}` is the `SupportBrace` alias
+  and the "what the selection shows, empty where it disagrees" function, next to the ones of
+  `SlaSupportOnModel`, and the "Bracing" combo is in BOTH groups: the "New supports" one is what the
+  next clicked point takes, the "Selected supports" one is written on the selected points one field at
+  a time, next to "Support on model". Its tooltip says that the branching tree has no braces and
+  ignores it, which is true: `BranchingTreeSLA` is not touched. In the engine the default tree asks
+  the new `sla::may_brace(sm, point)` (next to `may_rest_on_model` in `SupportTreeUtils.hpp`) from
+  `interconnect()` and from `connect_to_nearpillar()`, and it asks it BEFORE the object-wide
+  `support_brace_enable`, because "On" is exactly a per-point request that overrides it: a pillar
+  whose head's point says Off is left out of every brace, one that says On is braced even on an object
+  with bracing off, and Inherit (and a pillar the tree added on its own, which hangs from no head and
+  so has no point) follow the object. **Tests.** The new
+  `test/Slic3r/App/Plater/SlaSupportPointEditsTests.cpp` is a real ProjectInteractor with a real
+  SceneInteractor, a real undo provider and a model on the plate with three points, raised by the
+  lift the tool holds for it (`sla_support_points_lift`), which is the fixture M2.32's clear tests
+  use: a click on the marker of a support selects exactly that one and the group shows its values,
+  changing the tip diameter, the stem diameter and the bracing in the group changes only that point on
+  the ModelObject under one `SlaSupportPointsEdit` snapshot each and changes the preview key, one
+  undo brings it back; the three ways of removing a support converge on the same removal of exactly
+  one point and one undo brings it back in place; and a click on the drawn model with no support under
+  the cursor adds one point at the surface position with the "New supports" values (tip diameter,
+  stem diameter, Support on model, Bracing), which is on the ModelObject without an Apply. Plus the
+  rules of the click itself with no project at all (a click on the drawn tree selects and starts no
+  drag, Ctrl and the right button remove, Shift toggles and starts a rectangle on empty space, a
+  locked island support is Ignored and the click is still the tool's). In `tests/sla_print`,
+  `sla_support_brace_tests.cpp` gets the two engine cases on the two pillars of its fixture: a point
+  that says Off leaves the only brace there is out and On gets a brace with `brace_enable` off. The
+  undo tests, the 3MF round trip and the settings tests were extended for the new field.
+  **What is not covered, and why:** the camera, the raycast against the drawn model, the marker
+  glyphs and the two Yoga groups themselves cannot be driven from a test - they need a Scene and a
+  Render::Device, i.e. an OpenGL context, which is why the gizmo tests of M2.33 to M2.35 play the
+  picking, the lift and the raycast on their own instead of building the gizmo. The flow tests
+  therefore ask the click question with what the pick of M2.35 returns and where the raycast lands,
+  which is everything the gizmo itself adds. **Nothing here slices**, `on_generation_completed` and
+  `on_auto_support_completed` are untouched (M2.37 changes those), no FFF code is touched, no new
+  config key, no hotspot file beyond the dialog and the gizmo of the tool, no new colour and every
+  new string ASCII in `_u8L`.
 
 ## M3: Resin profile import (Chitubox, Lychee and others)
 

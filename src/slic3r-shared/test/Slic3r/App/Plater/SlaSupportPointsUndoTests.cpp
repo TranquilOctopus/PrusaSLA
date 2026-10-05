@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <vector>
 
+#include "Slic3r/App/Plater/SlaSupportBrace.hpp"
 #include "Slic3r/App/Plater/SlaSupportGeometry.hpp"
 #include "Slic3r/App/Plater/SlaSupportOnModel.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsEditing.hpp"
@@ -25,6 +26,7 @@
 
 using Slic3r::App::Plater::SlaSupportGeometry;
 using Slic3r::App::Plater::SlaSupportPointsEditing;
+using Slic3r::App::Plater::SupportBrace;
 using Slic3r::App::Plater::SupportGeometryField;
 using Slic3r::App::Plater::SupportOnModel;
 using Slic3r::App::Plater::apply_generated_points_on_leaving;
@@ -44,8 +46,8 @@ using Slic3r::Domain::SLA::SupportPointType;
 
 namespace {
 
-/// One support point carrying every value the per-point controls of M2.16c, M2.23b, M2.24 and
-/// M2.26 write, so a round trip that loses one of them shows up here.
+/// One support point carrying every value the per-point controls of M2.16c, M2.23b, M2.24, M2.26 and
+/// M2.38 write, so a round trip that loses one of them shows up here.
 SupportPoint make_point()
 {
     SupportPoint point;
@@ -63,6 +65,7 @@ SupportPoint make_point()
     point.stem_taper        = 0.35f;
     point.knot_radius       = 0.45f;
     point.on_model          = SupportPoint::OnModel::Forbid;
+    point.brace             = SupportPoint::Brace::On;
     return point;
 }
 
@@ -111,6 +114,7 @@ void check_same_point(const SupportPoint& lhs, const SupportPoint& rhs)
     CHECK(lhs.stem_taper == rhs.stem_taper);
     CHECK(lhs.knot_radius == rhs.knot_radius);
     CHECK(lhs.on_model == rhs.on_model);
+    CHECK(lhs.brace == rhs.brace);
 }
 
 /// The undo stack as the tool uses it: a snapshot of the state before a change, then a snapshot of
@@ -259,6 +263,21 @@ TEST_CASE("Undo and redo cover the per-point support on model switch", "[SlaUndo
 
     CHECK(point_of(stack.load(1)).on_model == SupportOnModel::Allow);
     CHECK(point_of(stack.load(0)).on_model == SupportOnModel::Forbid);
+}
+
+TEST_CASE("Undo and redo cover the per-point bracing switch", "[SlaUndo][SLA][undo]")
+{
+    Model model = make_model({make_point()});
+    UndoStack stack;
+    stack.push(model);
+
+    SlaSupportPointsEditing editing = editing_session(model);
+    editing.apply_support_brace_to_selected(SupportBrace::Off);
+    commit(model, editing);
+    stack.push(model);
+
+    CHECK(point_of(stack.load(1)).brace == SupportBrace::Off);
+    CHECK(point_of(stack.load(0)).brace == SupportBrace::On);
 }
 
 TEST_CASE("Undo and redo cover a point added on the canvas", "[SlaUndo][SLA][undo]")

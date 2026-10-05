@@ -1197,13 +1197,19 @@ constexpr std::string_view STEM_SIDES        = "ss";        // stem sides
 constexpr std::string_view STEM_TAPER        = "st";        // stem taper
 constexpr std::string_view KNOT_RADIUS       = "kr";        // knot radius
 constexpr std::string_view ON_MODEL          = "om";        // may the pillar end on the model
-NamesType NAMES{{POSITION, HEAD_FRONT_RADIUS, IS_NEW_ISLAND, PILLAR_DIAMETER, BASE_DIAMETER, BASE_HEIGHT, BASE_SHAPE, TYPE, TIP_LENGTH, CONTACT_DEPTH, TIP_SHAPE, STEM_SIDES, STEM_TAPER, KNOT_RADIUS, ON_MODEL}};
+constexpr std::string_view BRACE             = "br";        // may the pillar be braced
+NamesType NAMES{{POSITION, HEAD_FRONT_RADIUS, IS_NEW_ISLAND, PILLAR_DIAMETER, BASE_DIAMETER, BASE_HEIGHT, BASE_SHAPE, TYPE, TIP_LENGTH, CONTACT_DEPTH, TIP_SHAPE, STEM_SIDES, STEM_TAPER, KNOT_RADIUS, ON_MODEL, BRACE}};
 
 static constexpr std::array<std::string_view, 3> TIP_SHAPE_NAMES = {"default", "cone", "ball"};
 // The three states of the per point "may rest on the model" switch (M2.26), in the order of
 // Domain::SLA::SupportPoint::OnModel. A project written before the switch has no "om", which
 // reads back as Inherit, i.e. what such a point did anyway.
 static constexpr std::array<std::string_view, 3> ON_MODEL_NAMES = {"inherit", "allow", "forbid"};
+
+// The three states of the per point bracing switch (M2.38), in the order of
+// Domain::SLA::SupportPoint::Brace. A project written before the switch has no "br", which reads
+// back as Inherit, i.e. what such a point did anyway.
+static constexpr std::array<std::string_view, 3> BRACE_NAMES = {"inherit", "on", "off"};
 
 // Indexed by SupportPoint::BaseShape. The Default value is never written, it only keeps the
 // names of the three real shapes at the indices the point uses.
@@ -1212,7 +1218,7 @@ static constexpr std::array<std::string_view, 4> BASE_SHAPE_NAMES = {"default", 
 // Whether the point type of a file is one this build knows. A build of the future may write a
 // type this one has no name for, and that must not become a point of a kind it cannot build: the
 // point keeps manual_add then, which is what the island flag would have given it anyway. The
-// fields read as a name ("bs", "ts", "om") fall back to their default the same way, silently.
+// fields read as a name ("bs", "ts", "om", "br") fall back to their default the same way, silently.
 bool is_known_type(json::number_integer_t type_int) {
     return type_int > static_cast<json::number_integer_t>(Domain::SLA::SupportPointType::manual_add)
         && type_int <= static_cast<json::number_integer_t>(Domain::SLA::SupportPointType::slope);
@@ -1250,6 +1256,8 @@ json to_json(const Domain::SLA::SupportPoints &points) {
             p_json[KNOT_RADIUS] = p.knot_radius;
         if (p.on_model != Domain::SLA::SupportPoint::OnModel::Inherit)
             p_json[ON_MODEL] = ON_MODEL_NAMES[static_cast<size_t>(p.on_model)];
+        if (p.brace != Domain::SLA::SupportPoint::Brace::Inherit)
+            p_json[BRACE] = BRACE_NAMES[static_cast<size_t>(p.brace)];
         r.push_back(std::move(p_json));
     }
     return r;
@@ -1303,6 +1311,15 @@ void load(const json &pts_json, Domain::SLA::SupportPoints &pts, Read3mfIssues& 
             for (size_t i = 0; i < ON_MODEL_NAMES.size(); ++i) {
                 if (on_model_str == ON_MODEL_NAMES[i]) {
                     pt.on_model = static_cast<Domain::SLA::SupportPoint::OnModel>(i);
+                    break;
+                }
+            }
+        }
+        std::string brace_str;
+        if (from_json(pt_json, BRACE, brace_str, collected_issues, RT::project_sla_support_point_brace_issue)) {
+            for (size_t i = 0; i < BRACE_NAMES.size(); ++i) {
+                if (brace_str == BRACE_NAMES[i]) {
+                    pt.brace = static_cast<Domain::SLA::SupportPoint::Brace>(i);
                     break;
                 }
             }

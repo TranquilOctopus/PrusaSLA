@@ -44,6 +44,9 @@ void SlaSupportPointsEditing::add_point(const Domain::Vec3d& mesh_pos)
     // Where the pillar of this point may end is a value of its own, the one of the "New supports"
     // group (M2.33, M2.26). Inherit is what a point without a switch of its own gets.
     new_point.on_model = new_support_on_model;
+    // And the same for the bracing of the pillar: the value of its own the "New supports" group
+    // writes (M2.38), Inherit being what a point without a switch of its own gets.
+    new_point.brace = new_support_brace;
     new_point.type = Domain::SLA::SupportPointType::manual_add;
     points.push_back(new_point);
 }
@@ -189,6 +192,15 @@ void SlaSupportPointsEditing::apply_support_on_model_to_selected(SupportOnModel 
     for (size_t idx : selected_point_indices) {
         if (idx < points.size()) {
             points[idx].on_model = on_model;
+        }
+    }
+}
+
+void SlaSupportPointsEditing::apply_support_brace_to_selected(SupportBrace brace)
+{
+    for (size_t idx : selected_point_indices) {
+        if (idx < points.size()) {
+            points[idx].brace = brace;
         }
     }
 }

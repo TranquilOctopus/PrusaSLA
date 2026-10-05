@@ -173,15 +173,17 @@ template <class Archive>
 void serialize(Archive& ar, Slic3r::Domain::SLA::SupportPoint& point)
 {
     // Every field of a point, not only the sizes: the per-point geometry the support tool edits
-    // (M2.16c, M2.23b, M2.24, M2.26) has to survive an undo, or undoing one of those edits would
-    // silently put the tip shape, the tip length, the knot, the cross-section, the taper, the
-    // contact depth, the foot shape or the "may end on the model" switch back to their defaults.
-    // The three shapes are the byte they are made of, the way the stem cross-section is written, so
+    // (M2.16c, M2.23b, M2.24, M2.26, M2.38) has to survive an undo, or undoing one of those edits
+    // would silently put the tip shape, the tip length, the knot, the cross-section, the taper, the
+    // contact depth, the foot shape, the "may end on the model" switch or the bracing switch back
+    // to their defaults.
+    // The four states are the byte they are made of, the way the stem cross-section is written, so
     // the archive holds exactly what the point holds and does not depend on how an enumeration is
     // written out.
     std::uint8_t base_shape = static_cast<std::uint8_t>(point.base_shape);
     std::uint8_t tip_shape  = static_cast<std::uint8_t>(point.tip_shape);
     std::uint8_t on_model   = static_cast<std::uint8_t>(point.on_model);
+    std::uint8_t brace      = static_cast<std::uint8_t>(point.brace);
 
     ar(point.pos,
        point.head_front_radius,
@@ -196,12 +198,14 @@ void serialize(Archive& ar, Slic3r::Domain::SLA::SupportPoint& point)
        point.stem_sides,
        point.stem_taper,
        point.knot_radius,
-       on_model);
+       on_model,
+       brace);
 
     if constexpr (Archive::is_loading::value) {
         point.base_shape = static_cast<Slic3r::Domain::SLA::SupportPoint::BaseShape>(base_shape);
         point.tip_shape  = static_cast<Slic3r::Domain::SLA::SupportPoint::TipShape>(tip_shape);
         point.on_model   = static_cast<Slic3r::Domain::SLA::SupportPoint::OnModel>(on_model);
+        point.brace      = static_cast<Slic3r::Domain::SLA::SupportPoint::Brace>(brace);
     }
 }
 

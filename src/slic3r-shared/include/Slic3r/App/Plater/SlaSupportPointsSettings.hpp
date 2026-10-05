@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Slic3r/App/Plater/SlaSupportBrace.hpp"
 #include "Slic3r/App/Plater/SlaSupportGeometry.hpp"
 #include "Slic3r/App/Plater/SlaSupportOnModel.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsEditing.hpp"
@@ -35,6 +36,7 @@ enum class SlaSupportPointField
     StemTaper,
     FootShape,
     SupportOnModel,
+    Bracing,
     FollowGlobalTipDiameter,
     FollowGlobalStemDiameter,
     FollowGlobalBaseDiameter,
@@ -45,6 +47,7 @@ enum class SlaSupportPointField
 double sla_support_point_field_value(Domain::SLA::SupportPoint::TipShape shape);
 double sla_support_point_field_value(Domain::SLA::SupportPoint::BaseShape shape);
 double sla_support_point_field_value(SupportOnModel on_model);
+double sla_support_point_field_value(SupportBrace brace);
 
 /// The four sizes of a support, in the units the tool shows them. A size of zero on a point means
 /// the point follows the global setting, which is why a selection can disagree on one of them
@@ -85,6 +88,8 @@ struct SlaSupportSelectionView
     /// The "may rest on the model" state of the selection, which is a value of its own (M2.26), so
     /// it is shown for a selection that agrees on it even when there is no geometry to show.
     std::optional<SupportOnModel> on_model;
+    /// The same for the bracing of the pillars of the selection (M2.38).
+    std::optional<SupportBrace> brace;
     size_t count{0};
 };
 
@@ -96,6 +101,7 @@ struct SlaSupportNewValues
     SlaSupportSizes sizes;
     SlaSupportGlobalSizes follow_global;
     SupportOnModel on_model{SupportOnModel::Inherit};
+    SupportBrace brace{SupportBrace::Inherit};
 };
 
 /// The values a clicked point takes, read off the editing state of the tool.
