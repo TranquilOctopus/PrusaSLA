@@ -48,10 +48,41 @@ Status: in progress (first answers 2026-10-05). Sections without a rule are stil
 
 (to be asked)
 
+## Rules from the references (paraphrased)
+
+From VogMan's beginner guide (first reference below), read from its transcript 2026-10-05. These
+are the reference's practices, kept apart from the maintainer's own rules above; where they differ,
+the maintainer's rule wins.
+
+- **V1. Every island's lowest point is supported.** A region that starts in mid-air prints onto
+  nothing and fails; islands are the main cause of failed prints and are worth hunting from several
+  camera angles.
+- **V2. No large flat face parallel to the plate.** Unless a flat face is meant to sit on the plate,
+  lift the model (about 5 mm) and tilt it so a flat face does not sag between supports.
+- **V3. About 45 degrees self-supports.** Faces up to roughly 45 degrees from vertical print on the
+  layer below without support; steeper overhangs are weak and sag. (The guide says the limit depends
+  on printer and resin; the maintainer does not change methodology for either, rule 7.)
+- **V4. Orient on two axes to remove islands and reduce supports.** There are many good poses; pick
+  one that also keeps supports off important detail such as the head (agrees with rule 1).
+- **V5. Light supports by default; heavier over distance and for weight.** Light tips mark the
+  surface least, but long light supports bend while printing, so medium or heavy ones carry long
+  spans; a heavier model needs more or heavier supports.
+- **V6. The lowest point gets at least one heavy support, on an unimportant spot.** Early in the
+  print most of the load hangs on the first support (agrees with rule 6).
+- **V7. A few heavy anchors on flat, low-detail areas.** They hold the print firm on the plate; the
+  number scales with the model's size (a couple on a small model).
+- **V8. Order of work: lowest point, then islands, then the slicer's overhang warnings.**
+- **V9. Keep a gap between the model and the support bodies,** so they do not fuse.
+- **V10. Join several light tips into one thick trunk:** strong over distance, small marks on the
+  model (the branching tree's idea).
+- **V11. Over-supporting beats a failed print;** brace or support tall supports on large prints.
+- **V12. Always use a raft, enlarged to about 150 %.** Differs from the maintainer: a part printed
+  flat on the plate generally needs no raft, and the raft stays a user setting (M4.6b).
+
 ## References the maintainer follows
 
 - VogMan, "3D resin print supports [EASY GUIDE]", https://www.youtube.com/watch?v=MU0Cq_bjhy4
-  (summary from its description: orient to avoid islands and overhangs, then raft, anchor, support
-  and print). Content review pending.
+  (beginner guide: orient to avoid islands and overhangs, then raft, anchor, support and print).
+  Reviewed from its transcript 2026-10-05, rules V1-V12 above.
 - "Masterclass Resin Support (MRP) 1", https://www.youtube.com/watch?v=Qgv_hGNzGOI. Content review
   pending.
