@@ -197,6 +197,12 @@ public:
     /// review dialog. The navigator reaches them through here.
     SidebarBed& sidebar_bed();
 
+    /// The SLA support preview, which builds the trees and the rafts of the models on the plate on
+    /// a worker. It owns the raft decision of a raft_type Auto (rulebook R6, M7.8.4), which is the
+    /// only reading of a model underside outside the slice, so the navigator reaches it through here.
+    SlaSupportPreviewService&       sla_support_preview();
+    const SlaSupportPreviewService& sla_support_preview() const;
+
     /**
      * @name Implementation of Scene::ISharedModelGeometryProvider public interface
      * @{

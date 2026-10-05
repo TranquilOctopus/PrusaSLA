@@ -523,8 +523,10 @@ ModelMetrics run_model(const ModelSpec& spec, Slic3r::Domain::TriangleMesh mesh)
     metrics.support_points = points.size();
 
     const auto tree_start = std::chrono::steady_clock::now();
-    // The tool builds the support tree and, with the default raft, the pad in one call, so the
-    // two are timed together.
+    // The tool builds the support tree and, with the raft the preset asks for, the pad in one
+    // call, so the two are timed together. raft_type is Auto in a preset that does not name one
+    // (M7.8.4), which reads the underside of the model and gives it a raft only where that would
+    // seal a pocket against the film, so the raft of a benchmark run follows the rule.
     const SupportToolTree tool_tree = Slic3r::sla::build_support_tree_for_tool(
         *object, object_to_world, points, full_config, object_config, {});
     metrics.t_tree_pad_ms = ms_since(tree_start);

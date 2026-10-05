@@ -20,9 +20,15 @@ using Domain::indexed_triangle_set;
 // concerned.
 constexpr double elevation_epsilon_mm = 1e-3;
 
-// The layers of the underside: from the first one above the bottom of the part up to the scan
-// height, plus one layer above that, because a pocket is only a cup once a layer closes it and that
-// layer may well be the first one past the scan.
+// The layers of the underside: one below the bottom of the part, then one per layer height up to the
+// scan height, plus one layer above that, because a pocket is only a cup once a layer closes it and
+// that layer may well be the first one past the scan.
+//
+// The layer below the bottom is the part's own first printed layer when the part is held above the
+// plate (R6.2: a pocket seals against "the raft-less first layers" as well as against the plate). A
+// part that stands on the plate prints nothing there, so that layer comes back empty and says
+// nothing; it is what gives a pocket of a lifted part the solid under it that a pocket of a standing
+// part gets from the film.
 void scan_layers(const indexed_triangle_set& mesh,
                  double                       layer_height_mm,
                  double                       lift_mm,
@@ -36,6 +42,8 @@ void scan_layers(const indexed_triangle_set& mesh,
 
     zs.clear();
     thicknesses_mm.clear();
+    zs.push_back(float(bottom - layer_height_mm * 0.5));
+    thicknesses_mm.push_back(float(layer_height_mm));
     for (double z = bottom + layer_height_mm * 0.5; z < scan_top; z += layer_height_mm) {
         zs.push_back(float(z));
         thicknesses_mm.push_back(float(layer_height_mm));

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <string>
 
 namespace Slic3r::App::Preview {
 
@@ -46,5 +47,19 @@ SlaSupportsPanelState sla_supports_panel_state(
     std::size_t selected_models_with_supports,
     bool generating
 );
+
+/**
+ * @brief The one line that says the raft type Auto put a raft under the models, empty when it did
+ * not (rulebook R6, M7.8.4).
+ *
+ * R6.1 is that a raft is not built unless the underside of a part would form a suction cup, so
+ * nothing is said on a plate where no part has one: the section would only say what the raft type
+ * in "Supports & raft" already says. A model that does have one is a decision the user cannot see
+ * in any other panel, because the rule reads the underside of the part and nothing else does until
+ * the print is sliced, so it gets one line here, under the status of the section.
+ *
+ * @param models_with_auto_raft How many of the listed models the rule gave a raft.
+ */
+std::string sla_auto_raft_note(std::size_t models_with_auto_raft);
 
 } // namespace Slic3r::App::Preview

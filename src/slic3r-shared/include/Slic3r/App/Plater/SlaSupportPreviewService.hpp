@@ -12,6 +12,7 @@
 #include "Slic3r/Biz/Preset/PresetInteractor.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/Biz/Scene/SceneInteractor.hpp"
+#include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/Domain/FullConfigSLA.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
 #include "Slic3r/Domain/ObjectID.hpp"
@@ -115,6 +116,11 @@ struct SlaSupportTreePlacement
     /// Handed to sla::build_support_tree_for_tool(): the world placement of the object, NOT lifted.
     Domain::Transform3d object_to_world{Domain::Transform3d::Identity()};
     /// Put on the scene node the tree and the raft hang from, raising both by the lift.
+    ///
+    /// The node is placed by the lift the build reports (M7.8.4) rather than by this one, because
+    /// the lift of a raft_type Auto is only known once the underside of the object has been read on
+    /// the worker: a part whose rule resolves to a raft around it is drawn on the plate instead of
+    /// above its supports. Both are the same transform for a lift the config alone decides.
     Domain::Transform3d node_trafo{Domain::Transform3d::Identity()};
 };
 
@@ -185,6 +191,15 @@ public:
     /// none yet; a caller that wants to know whether a support of it can be picked asks here (M2.35).
     [[nodiscard]] bool has_preview(Domain::ObjectID object_id) const;
 
+    /// @brief What the raft of this object came to when raft_type is Auto (rulebook R6, M7.8.4),
+    /// as the build that drew it last decided it.
+    ///
+    /// Empty for an object with no built preview, for a build that is still on its way and for every
+    /// raft type that is not Auto, whose raft_type is read as it is stored. The support preview is
+    /// the only thing that reads the underside of the model outside the slice, so this is what the
+    /// Preview can say about a raft the rule put under a model without slicing anything.
+    [[nodiscard]] std::optional<Domain::sla::RaftType> auto_raft_type(Domain::ObjectID object_id) const;
+
     void on_slicing_input_changed(const Domain::BedRef& bed_instance) override;
     void on_slicing_input_removed(const Domain::BedRef& bed_instance) override;
     void on_scene_selection_changed(
@@ -229,6 +244,12 @@ private:
     {
         SlaSupportPreviewKey key;
         Scene::Node*         node{nullptr};
+        /// What raft_type Auto resolved to in the build that drew the node above (M7.8.4), and the
+        /// elevation that raft lifts the model by. It was a guess until the build came back: which
+        /// raft the rule picks decides whether the object stands on the plate, so the lift is only
+        /// known once the underside of the object has been read on the worker.
+        std::optional<Domain::sla::RaftType> auto_raft;
+        std::optional<double>                 elevation_mm;
     };
 
     void refresh();
@@ -238,8 +259,7 @@ private:
     void drop_main_node();
     void start_due_build(const SlaSupportPreviewSchedule::Request& request);
     void start_next_job();
-    void build_nodes(Domain::ObjectID object_id, const Domain::Transform3d& node_trafo,
-                     const Slic3r::sla::SupportToolTree& tree);
+    void build_nodes(Domain::ObjectID object_id, const Slic3r::sla::SupportToolTree& tree);
 
     Biz::ProjectInteractor& m_project_interactor;
     PlaterScenePresenter&   m_scene_presenter;

@@ -33,6 +33,7 @@
 
 #include "libslic3r/SLA/Hollowing.hpp"
 #include "libslic3r/SLA/HollowingLattice.hpp"
+#include "libslic3r/SLA/ObjectRaft.hpp"
 #include "libslic3r/SLA/Pad.hpp"
 #include "libslic3r/SLAResult.hpp"
 #include "libslic3r/SLA/SupportTree.hpp"
@@ -89,10 +90,6 @@ namespace csg {
 Biz::CGAL::Algorithms::MeshBoolean::cgal::CGALMeshPtr get_cgalmesh(const CSGPartForStep &part);
 
 } // namespace csg
-
-// What raft_type resolves to for one object (M7.8.4, rulebook R6). Defined before the print
-// object, which keeps the raft it resolved for it.
-struct ObjectRaft;
 
 class SLAPrintObject : public _SLAPrintObjectBase
 {
@@ -284,12 +281,13 @@ private:
     // first layer is placed, because the elevation of the print follows it. Read through
     // object_raft(), which only reports it once m_raft_resolved says there is one, and never for a
     // raft type that is not Auto.
-    bool              m_raft_resolved = false;
-    Domain::sla::RaftType m_raft_type    = Domain::sla::RaftType::None;
-    bool              m_raft_suction   = false;
+    bool                   m_raft_resolved = false;
+    Domain::sla::RaftType  m_raft_type     = Domain::sla::RaftType::None;
+    bool                   m_raft_suction  = false;
 
     // Take the raft decision of this object for raft_type Auto, from the mesh it prints. Only
-    // SLAPrint, and only from the step that slices the model, calls this.
+    // SLAPrint, and only from the step that slices the model, calls this; it is taken again on every
+    // pass over that step, which is what a new mesh or a new setting asks for.
     void resolve_object_raft();
 };
 
@@ -496,17 +494,11 @@ public:
 
 // Helper functions:
 
-// The raft of one object (M7.8.4, rulebook R6): raft_type as it is stored, except that Auto is a
-// decision about one object and is resolved for it. The resolution itself is the pure function of
-// libslic3r/SLA/RaftAuto.hpp; this is what the config adds to it (the layer height, the elevation
-// the part would print at without a raft) and what the caller passes on to the raft helpers below.
-struct ObjectRaft
-{
-    // The raft type to build. Never Auto, which is a decision and not a shape.
-    Domain::sla::RaftType type = Domain::sla::RaftType::None;
-    // Auto found a suction cup under the object, so a raft goes in (R6.2). Only ever true for Auto.
-    bool suction = false;
-};
+// ObjectRaft (libslic3r/SLA/ObjectRaft.hpp) is what raft_type resolves to for one object (M7.8.4,
+// rulebook R6): raft_type as it is stored, except that Auto is a decision about one object and is
+// resolved for it. The resolution itself is the pure function of libslic3r/SLA/RaftAuto.hpp; this is
+// what the config adds to it (the layer height, the elevation the part would print at without a
+// raft) and what the caller passes on to the raft helpers below.
 
 // Is raft_type Auto in this config, which is what has to be resolved per object before the raft
 // helpers below can answer for it?

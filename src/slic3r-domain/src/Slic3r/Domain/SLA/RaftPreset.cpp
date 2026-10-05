@@ -123,13 +123,11 @@ std::vector<std::string> visible_settings_for(sla::RaftType type)
     if (type == sla::RaftType::None)
         return ret;
 
-    // Auto builds either nothing or a raft around the object (R6.2, M7.8.4), and the outcome is
-    // decided per object at slice time, so the knobs of both outcomes are shown: the user shapes
-    // the raft that may appear.
-    if (type == sla::RaftType::Auto) {
-        ret.insert(ret.end(), object_embed_settings().begin(), object_embed_settings().end());
-        return ret;
-    }
+    // Auto prints either nothing or a raft around the object (R6.2, M7.8.4), and which of the two
+    // is decided per object at slice time from the underside of the part. Both outcomes read the
+    // shape knobs, and one of them reads the object gap and the connectors, so Auto shows them all:
+    // the user shapes the raft that may appear. It is the list of Around object, which is the union
+    // of the two outcomes, so it falls through to the code below.
 
     // Skate brings its own expansion and wall slope, so the user's values for those two would
     // be ignored.
@@ -140,7 +138,8 @@ std::vector<std::string> visible_settings_for(sla::RaftType type)
         ret.push_back(key);
     }
 
-    if (type == sla::RaftType::AroundObject || type == sla::RaftType::Skate)
+    if (type == sla::RaftType::AroundObject || type == sla::RaftType::Skate
+        || type == sla::RaftType::Auto)
         ret.insert(ret.end(), object_embed_settings().begin(), object_embed_settings().end());
 
     return ret;

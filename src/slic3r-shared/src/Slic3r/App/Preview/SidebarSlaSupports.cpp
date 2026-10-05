@@ -1,6 +1,8 @@
 #include "Slic3r/App/Preview/SidebarSlaSupports.hpp"
 
 #include <algorithm>
+#include <optional>
+#include <string>
 
 #include "Slic3r/App/Yoga/LayoutButton.hpp"
 #include "Slic3r/App/Yoga/Text.hpp"
@@ -51,10 +53,16 @@ SidebarSlaSupports::SidebarSlaSupports(ProjectInteractor& project_interactor, Ap
     m_rows_container->set_orientation(Orientation::Vertical);
     m_rows_container->set_gap(3_fpx);
 
-    // The one line telling where the workflow stands, the Slice call to action is one of its texts.
+// The one line telling where the workflow stands, the Slice call to action is one of its texts.
     m_status_text = emplace_back<Text>(_u8L(""));
     m_status_text->set_font_type(Render::ImguiFontType::Regular);
     m_status_text->set_margin({ 0.f, 0.f, 0.f, 5.f });
+
+    // What the Auto raft type decided for the models on this plate (M7.8.4). It carries no text of
+    // its own until there is something to say, and it is hidden again when there is not.
+    m_auto_raft_text = emplace_back<Text>(_u8L(""));
+    m_auto_raft_text->set_font_type(Render::ImguiFontType::Regular);
+    m_auto_raft_text->set_visible(false);
 
     // The Auto support actions of the support tool (M2.17b), on the same row.
     Item* auto_support_row = emplace_back<Item>();
@@ -152,6 +160,18 @@ void SidebarSlaSupports::render_body(const Domain::Vec2f& pos, const Domain::Vec
     if (running != m_auto_support_running) {
         m_auto_support_running = running;
         update_controls();
+    }
+
+    // The raft type Auto is resolved by the support preview on its worker, so its answer lands
+    // after the last refresh of this section and nothing else would ever show it. It is asked for
+    // while the section is on screen and written only when it changed (M7.8.4).
+    if (is_visible()) {
+        const std::string note = sla_auto_raft_note(models_with_auto_raft());
+        if (note != m_auto_raft_text->text()) {
+            m_auto_raft_text->set_text(note);
+            m_auto_raft_text->set_visible(!note.empty());
+            m_auto_raft_text->set_text_color(m_theme->color_imgui(Platform::Color::Text));
+        }
     }
 
     Yoga::Window::render_body(pos, size);
@@ -466,6 +486,27 @@ bool SidebarSlaSupports::auto_support_running() const
     // The generation belongs to the support tool of the Prepare view, which only the navigator
     // reaches from here, and an unopened tool runs nothing.
     return m_navigator != nullptr && m_navigator->sla_auto_support_running();
+}
+
+std::size_t SidebarSlaSupports::models_with_auto_raft() const
+{
+    // The decision was taken by the support preview, which read the undersides of the models on its
+    // own worker, so nothing is read or sliced here: a model without a built preview (no points, or
+    // a build that has not come back yet) has nothing to report either.
+    if (m_navigator == nullptr) {
+        return 0;
+    }
+
+    std::size_t count = 0;
+    for (const ModelObject* object : listed_printable_objects()) {
+        const std::optional<Domain::sla::RaftType> raft = m_navigator->sla_auto_raft_type(object->id());
+        // A raft type that is not Auto reports nothing at all, and an Auto that resolved to no raft
+        // resolves to None, which is the same answer: this model prints without one.
+        if (raft.has_value() && *raft != Domain::sla::RaftType::None) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 void SidebarSlaSupports::update_visibility()

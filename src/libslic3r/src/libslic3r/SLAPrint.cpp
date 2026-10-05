@@ -246,7 +246,7 @@ sla::SupportTreeConfig make_support_cfg(const SLAPrintObjectConfigView& c, const
         // The tip length a support point that carries no tip length of its own is built with
         // (M2.24). Zero keeps the pinhead width, which is what the tree has always built.
         scfg.tip_length_mm = c.get<double>("support_tip_length");
-        scfg.object_elevation_mm = is_zero_elevation(c) ?
+        scfg.object_elevation_mm = is_zero_elevation(c, raft) ?
                                        0. : c.get<double>("support_object_elevation");
         scfg.bridge_slope = c.get<double>("support_critical_angle") * PI / 180.0 ;
         scfg.max_bridge_length_mm = c.get<double>("support_max_bridge_length");
@@ -278,7 +278,7 @@ sla::SupportTreeConfig make_support_cfg(const SLAPrintObjectConfigView& c, const
             0.01 * c.get<double>("branchingsupport_small_pillar_diameter_percent") * pillar_r;
         scfg.head_penetration_mm = c.get<double>("branchingsupport_head_penetration");
         scfg.head_width_mm = c.get<double>("branchingsupport_head_width");
-        scfg.object_elevation_mm = is_zero_elevation(c) ?
+        scfg.object_elevation_mm = is_zero_elevation(c, raft) ?
                                        0. : c.get<double>("branchingsupport_object_elevation");
         scfg.bridge_slope = c.get<double>("branchingsupport_critical_angle") * PI / 180.0 ;
         scfg.max_bridge_length_mm = c.get<double>("branchingsupport_max_bridge_length");
@@ -305,11 +305,11 @@ sla::SupportTreeConfig make_support_cfg(const SLAPrintObjectConfigView& c, const
     return scfg;
 }
 
-sla::PadConfig::EmbedObject builtin_pad_cfg(const SLAPrintObjectConfigView& c)
+sla::PadConfig::EmbedObject builtin_pad_cfg(const SLAPrintObjectConfigView& c, const std::optional<ObjectRaft> &raft)
 {
     sla::PadConfig::EmbedObject ret;
 
-    ret.enabled = is_zero_elevation(c);
+    ret.enabled = is_zero_elevation(c, raft);
 
     if (ret.enabled) {
         ret.everywhere           = c.get<bool>("pad_around_object_everywhere");
@@ -322,10 +322,10 @@ sla::PadConfig::EmbedObject builtin_pad_cfg(const SLAPrintObjectConfigView& c)
     return ret;
 }
 
-sla::PadConfig make_pad_cfg(const SLAPrintObjectConfigView& c)
+sla::PadConfig make_pad_cfg(const SLAPrintObjectConfigView& c, const std::optional<ObjectRaft> &raft)
 {
     sla::PadConfig pcfg;
-    const std::optional<Domain::SLA::RaftPadValues> vals = raft_values(c);
+    const std::optional<Domain::SLA::RaftPadValues> vals = raft_values(c, raft);
 
     if (vals) {
         pcfg.wall_thickness_mm = vals->pad_wall_thickness_mm;
@@ -356,7 +356,7 @@ sla::PadConfig make_pad_cfg(const SLAPrintObjectConfigView& c)
     pcfg.infill.skin_mm    = infill.skin_mm;
 
     // set builtin pad implicitly ON
-    pcfg.embed_object = builtin_pad_cfg(c);
+    pcfg.embed_object = builtin_pad_cfg(c, raft);
 
     return pcfg;
 }
@@ -1634,19 +1634,52 @@ bool SLAPrintObject::invalidate_all_steps()
     return Inherited::invalidate_all_steps() || m_print->invalidate_all_steps();
 }
 
+// Which raft Auto resolves to for this object (rulebook R6, M7.8.4), read off the mesh it prints.
+// Only the step that slices the model calls this, and only after the mesh steps have rebuilt the
+// mesh, so what is decided here is the underside of the mesh of this slice. A raft type that is not
+// Auto leaves no decision at all, and its helpers read raft_type as it is stored.
+void SLAPrintObject::resolve_object_raft()
+{
+    m_raft_resolved = false;
+    m_raft_type     = Domain::sla::RaftType::None;
+    m_raft_suction  = false;
+
+    if (!is_raft_auto(m_config))
+        return;
+
+    // The mesh of the print so far: the model parts with the object transform applied and nothing
+    // else, which is the pose the underside is read in. The elevation the rule is decided at is the
+    // one the part prints at when no raft is built (R6.2), and m_raft_resolved is still false here,
+    // so get_elevation() answers exactly that: an unresolved Auto builds no raft.
+    const indexed_triangle_set its          = csg::csgmesh_merge_positive_parts(m_mesh_to_slice);
+    const double                elevation_mm = this->get_elevation();
+
+    const std::optional<ObjectRaft> raft = ::Slic3r::resolve_object_raft(m_config, its, elevation_mm);
+    if (!raft)
+        return;
+
+    m_raft_resolved = true;
+    m_raft_type     = raft->type;
+    m_raft_suction  = raft->suction;
+}
+
 double SLAPrintObject::get_elevation() const {
-    if (is_zero_elevation(m_config)) return 0.;
+    // The raft Auto resolved decides whether the object stands on the plate, so it is read before
+    // anything else here (M7.8.4). An Auto nothing has resolved yet is the no raft of R6.1, which is
+    // what the resolution itself was taken at.
+    const std::optional<ObjectRaft> raft = object_raft();
+    if (is_zero_elevation(m_config, raft)) return 0.;
 
     bool en = has_supports();
 
     double ret = en ? m_config.get<double>("support_object_elevation") : 0.;
 
-    if (en && is_pad_enabled(m_config)) {
+    if (en && is_pad_enabled(m_config, raft)) {
         // Normally the elevation for the pad itself would be the thickness of
         // its walls but currently it is half of its thickness. Whatever it
         // will be in the future, we provide the config to the get_pad_elevation
         // method and we will have the correct value
-        sla::PadConfig pcfg = make_pad_cfg(m_config);
+        sla::PadConfig pcfg = make_pad_cfg(m_config, raft);
         if (!pcfg.embed_object) ret += pcfg.required_elevation();
     }
 
@@ -1662,7 +1695,7 @@ bool SLAPrintObject::has_supports() const {
 
 double SLAPrintObject::get_current_elevation() const
 {
-    if (is_zero_elevation(m_config)) return 0.;
+    if (is_zero_elevation(m_config, object_raft())) return 0.;
 
     bool has_supports = is_step_done(slaposSupportTree);
     bool has_pad      = is_step_done(slaposPad);
@@ -1735,7 +1768,7 @@ const TriangleMesh& SLAPrintObject::support_mesh() const
 
 const TriangleMesh& SLAPrintObject::pad_mesh() const
 {
-    if (is_pad_enabled(m_config) && is_step_done(slaposPad) && 
+    if (is_pad_enabled(m_config, object_raft()) && is_step_done(slaposPad) && 
         m_preview.has_value() && m_preview->pad)
         return *m_preview->pad;
     return EMPTY_MESH;

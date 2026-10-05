@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <vector>
 
 #include "Slic3r/App/Yoga/Window.hpp"
@@ -92,6 +93,11 @@ private:
     /// Whether the support tool of the Prepare view is generating support points.
     bool auto_support_running() const;
 
+    /// How many of the listed models the raft type Auto put a raft under because their underside
+    /// would form a suction cup (M7.8.4). It is the support preview that read the undersides, on its
+    /// worker, and the navigator is how this asks for what it decided.
+    std::size_t models_with_auto_raft() const;
+
     /// Selects the first printable instance of every one of @p objects and opens the support tool on
     /// them, which is where the generation of Auto support lives.
     void open_support_tool(const std::vector<const Domain::ModelObject*>& objects);
@@ -111,6 +117,9 @@ private:
     Yoga::LayoutButton* m_clear_selected_button{nullptr};
     Yoga::LayoutButton* m_clear_all_button{nullptr};
     Yoga::Text* m_status_text{nullptr};
+    /// The one line the Auto raft rule gets under the status (M7.8.4), hidden whenever no model on
+    /// this plate is given a raft by it.
+    Yoga::Text* m_auto_raft_text{nullptr};
     /// Set when a generation was started from here and cleared as soon as the support tool reports
     /// it is not running any more, which is also how the section recovers from a cancelled run.
     bool m_auto_support_running{false};

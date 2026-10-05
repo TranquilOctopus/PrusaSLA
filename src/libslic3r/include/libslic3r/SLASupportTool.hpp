@@ -5,10 +5,12 @@
 #include "Slic3r/Domain/FullConfigSLA.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
 #include "Slic3r/Domain/TriangleSelector.hpp"
+#include "libslic3r/SLA/ObjectRaft.hpp"
 #include "libslic3r/SLAResult.hpp"
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace Slic3r::sla {
@@ -18,6 +20,14 @@ using SupportToolStop = std::function<bool()>; // returns true to cancel
 struct SupportToolTree {
     std::shared_ptr<const Domain::TriangleMesh> tree; // null if none
     std::shared_ptr<const Domain::TriangleMesh> pad;  // null if pad disabled or impossible
+    /// What raft_type resolved to for the object this tree is of (M7.8.4), empty for a raft type
+    /// that is not Auto. The support preview reads it to say on its own line that the rule put a
+    /// raft under this model (R6.2).
+    std::optional<Slic3r::ObjectRaft> raft;
+    /// The elevation the tree and the raft were built for, in mm: what the scene has to lift the
+    /// model by, so the model and its supports meet where the tree says they do. A raft around the
+    /// object (zero elevation) answers 0, and so does an object that prints on the plate.
+    double elevation_mm{0.};
 };
 
 /**
@@ -89,7 +99,12 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const Domain::ModelO
 // Elevation the tree uses (support_object_elevation, plus the pad's required elevation when
 // the pad is enabled and not embedded; same rule as SLAPrintObject::get_elevation, and 0 in
 // zero-elevation mode).
+// @p raft is what raft_type resolved to for the object (M7.8.4). Empty is an Auto nobody resolved,
+// which is the no raft of R6.1, and every raft type that is not Auto, whose raft_type is read as it
+// is stored. Calling it without one is how the resolution itself gets the elevation to read the
+// underside at: that is the elevation of the part when no raft is built.
 double support_tool_elevation(const Domain::FullConfigSLAPtr& full_config,
-                             const Domain::PartialObjectConfigSLAPtr& object_settings);
+                             const Domain::PartialObjectConfigSLAPtr& object_settings,
+                             const std::optional<Slic3r::ObjectRaft>& raft = std::nullopt);
 
 } // namespace Slic3r::sla

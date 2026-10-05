@@ -1,7 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers.hpp>
 
 #include "Slic3r/App/Preview/SlaSupportsPanel.hpp"
 
+using Catch::Matchers::ContainsSubstring;
+using Slic3r::App::Preview::sla_auto_raft_note;
 using Slic3r::App::Preview::sla_supports_panel_state;
 using Slic3r::App::Preview::SlaSupportsStatus;
 
@@ -136,5 +139,33 @@ TEST_CASE("sla_supports_panel_state - a running generation", "[sla_supports_pane
 
         CHECK(state.status == SlaSupportsStatus::Generating);
         CHECK_FALSE(state.slice_call_to_action);
+    }
+}
+
+// M7.8.4, rulebook R6: the Auto raft type reads the underside of a part and puts a raft under it
+// where that would seal a pocket against the film. Nothing else shows that decision before the
+// print is sliced, so the section gets one line for it, and only where there is something to say.
+TEST_CASE("sla_auto_raft_note - the one line about the raft Auto put under the models", "[sla_supports_panel]")
+{
+    SECTION("no part with a suction cup, nothing to say")
+    {
+        CHECK(sla_auto_raft_note(0).empty());
+    }
+
+    SECTION("one model gets a raft")
+    {
+        const std::string note = sla_auto_raft_note(1);
+        CHECK_FALSE(note.empty());
+        CHECK_THAT(note, ContainsSubstring("1 model"));
+CHECK_THAT(note, ContainsSubstring("suction cup"));
+        // No plural over one model.
+        CHECK(note.find("models") == std::string::npos);
+    }
+
+    SECTION("several models get a raft, and the count is in the line")
+    {
+        const std::string note = sla_auto_raft_note(3);
+        CHECK_THAT(note, ContainsSubstring("3 models"));
+        CHECK_THAT(note, ContainsSubstring("suction"));
     }
 }
