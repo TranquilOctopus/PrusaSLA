@@ -106,7 +106,9 @@ outside and 5° in the middle.
 **Auto orient** turns the model so that it sits as low as possible on the build plate, which means
 the fewest layers. It only appears for a resin printer and only acts on exactly one selected model.
 It rotates the model about its own centre — it does not move the model down, so follow it with
-**Place on build plate** if the model ends up floating.
+**Place on build plate** if the model ends up floating. While the search runs, the **Rotate** panel
+carries a progress bar and a line like *Auto orient 55/100*, and the notification of the search
+counts the same way, so a run that is halfway reads as 50 and not as 5000.
 
 Shift+click adds a model to the selection, `Ctrl+A` selects everything, right-click on empty space
 in the viewport clears it.
@@ -122,32 +124,58 @@ stands down while a tool has the view.
 **SLA Support Points** (`P`) in the tool bar. It is only offered for a resin printer, and only when
 one whole model is selected.
 
+While the tool is open the model is raised by the elevation its supports need — **Object
+elevation**, plus the height of a raft the object is not embedded in — the way Chitubox raises the
+model while the supports are edited, and it falls back onto the build plate when you close the tool
+and the model has no points. A click is on the model as it is drawn there, so a point you add lands
+on the surface you clicked.
+
 The panel, top to bottom. The first block is a **Support point settings** section, open when the tool
 opens, and everything below it comes after that section:
 
-- **Support points density** (%) and the four shape sliders — **Head diameter**, **Stem
-  diameter**, **Base diameter**, **Base height** — each with a *Use global …* toggle. A toggle on
-  means the selected points take the value from the *Supports & raft* preset; a toggle off means
-  the slider value is written onto the points you have selected.
-- **Tip shape**, a dropdown of Default, Cone and Ball, then **Knot diameter**, **Stem sides** and
-  **Stem taper**. These four are per point too, but they have no *Use global* toggle: they are the
-  values a newly placed or generated point starts from, set in *Supports & raft*. One field at a
-  time is written, so changing the tip shape keeps the knot, the cross-section and the taper the
-  selected points already had. They show what the selection holds; when the selected points
-  disagree, or nothing is selected, the numbers are blank and the dropdown reads *Mixed*.
-- **Mini** / **Light** / **Medium** / **Heavy** set all four shape values at once, and clear the
-  four *Use global* toggles. Like the sliders they apply to the selected points only. Their four
-  dimensions each live in *Supports & raft*, so the buttons follow that preset.
+- **Support points density** (%) is how many points **Generate** and **Auto support** place.
+- **New supports** and **Selected supports (N)** are the two settings groups, split the way
+  Chitubox splits them: a value in **New supports** is what the next point you place takes and
+  changes no point that is already there, and a value in **Selected supports** is written on the
+  points you have selected and on nothing else. The second group is only there while something is
+  selected, and its title counts the selection. Both have the same rows:
+  - **Mini** / **Light** / **Medium** / **Heavy** set the four sizes at once, and clear the four
+    *Use global* toggles. In **New supports** they are what the next point takes, and the keys `1`
+    to `4` pick them there; in **Selected supports** they land on the selection in one undo step.
+    Their four dimensions each live in *Supports & raft*, so the buttons follow that preset.
+  - The four size sliders — **Head diameter**, **Stem diameter**, **Base diameter**, **Base
+    height** — each with a *Use global …* toggle. A toggle on means the point takes the value from
+    the *Supports & raft* preset; a toggle off means the slider value is carried by the point.
+  - **Tip shape**, a dropdown of Default, Cone and Ball, then **Tip length**, **Knot diameter**,
+    **Stem sides** and **Stem taper**, and **Foot shape**, a dropdown of Default, Cone, Cylinder and
+    Flat disc. These are per point and have no *Use global* toggle, so in **New supports** they are
+    the values a newly placed or generated point starts from, set in *Supports & raft*. One field
+    at a time is written, so changing the tip shape keeps the knot, the cross-section and the taper
+    the points already had.
+  - **Support on model** says whether the pillar of that support may end on the model:
+    **Inherit**, the decision the object makes, **Allow** or **Forbid**. A clicked point is
+    *Inherit* until this group says otherwise, and `G` flips it on the selected points.
+  - In **Selected supports** the rows show what the selection carries: where the selected points
+    disagree, or nothing is selected, the numbers are blank and a dropdown reads *Mixed*; a size
+    the points leave to the global setting shows as its *Use global …* toggle on, the way the
+    engine reads it.
 - **Generate** computes points for the selected model and shows them. They are written to the
-  model when you leave the tool, so nothing is lost by closing it; **Apply** is there for the
-  times you want them on the model straight away, and **Discard** throws the pending points away
-  and closes the tool. **Auto support all** does the whole build plate one model at a time and
-  writes each result as it finishes; if some models already have supports it asks whether to keep
-  them and add around them.
+  model when you leave the tool, so nothing is lost by closing it; **Apply** is optional, for the
+  times you want them on the model and the tree right away, and **Discard** throws the pending
+  points away and closes the tool. One `Ctrl+Z` takes points written that way off again.
+- **Remove all points** takes every point of the model away. It asks first, and it is on while the
+  model has points.
+- **Auto support all** does the whole build plate one model at a time and writes each result as it
+  finishes; if some models already have supports it asks whether to keep them and add around them.
+  `A` is the same run on the selected model and `Shift+A` on all of them.
 - **Lock island supports** protects the points that were placed to catch small floating islands, so
   you cannot move or delete them by accident.
 - **Clipping of view** (%) just limits how far into the model you can see, and **Reset** restores
   it.
+
+Under the panel the point count reads *No support points generated yet.* until the model has points
+and *N support points generated* from then on, and the collapsed **Shortcuts** section of the
+settings lists every key of the tool.
 
 Two settings in *Supports & raft* decide where **Generate** and **Auto support** put points:
 **Minimal distance between support points** (mm, 0 by default) refuses an overhang point that would
@@ -156,23 +184,42 @@ so every overhang is kept) drops the overhang samples of a surface steeper than 
 horizontal. A point placed to catch an island is never filtered by either, and both default to what
 the generator did before they existed.
 
-Not yet: a tip diameter as a value of its own, a tip length as a value of its own, and a per-point
-*start on model* instead of on the raft or the plate. The **Head diameter** slider is the only way to
-give one point its own tip diameter, because neither *Supports & raft* nor a preset has a key for it;
-the other two have no control at all, so a point takes the global tip width and the tree decides where
-a stem starts.
+The tip of a support is its **Head diameter**; there is no row of its own called *Tip diameter*,
+because neither *Supports & raft* nor a preset has a key for it. Not yet: a per-point choice of what
+a support stands on — it starts from the raft or the build plate, and **Support on model** only
+says whether its pillar may end on the model.
 
-Editing points in the 3D view: click empty model surface to add a point, click a point to select
-and drag it, Shift+click to add to the selection, Shift+drag on empty space to rubber-band select,
-right-click or Ctrl+click a point to delete it, and `Ctrl+A` then `Delete` to clear the
-selection. Edits are kept as you make them, so closing the tool does not lose them. Auto-generated
-points and island points are drawn in different colours from points you placed yourself.
+Editing points in the 3D view: click the drawn model to add a point there, click a point to select
+it, Shift+click to add to the selection, Shift+drag on empty space to rubber-band select,
+right-click or Ctrl+click a point to delete it, `Ctrl+A` to select every point of the model,
+`Delete` to remove the selection, and `Esc` to drop the selection — or to close the tool, when there
+is no selection left to drop. A support is picked by its marker or by any piece of its drawn tree —
+head, pillar or foot — so a pillar under a canopy is as easy to hit as the point on top of it. A
+click on the tree only selects: a support is moved by a drag that starts on its marker.
+
+Outside the tool, a double click on a drawn support in **Prepare** opens the support tool on that
+model with that support already selected, so you can change what it is made of from the tree
+itself; a single click there still selects the model as it always did. That gesture only works on a
+model whose supports are on and whose tree is drawn, since there is nothing else to pick.
+
+Edits are kept as you make them, so closing the tool does not lose them. Auto-generated points and
+island points are drawn in different colours from points you placed yourself.
 
 The tool works on a worker thread and never runs a full slice. **Generate** slices the selected
 model internally, but only to work out where the support points belong; the support tree and the
-raft are then built from those points and drawn. The layer images and the export file still come
-from **Slice** in step 4. Before you slice, set **Raft type** and **Object elevation** in the
-**Print settings** dialog (section 1).
+raft are then built from those points and drawn, and the tree stands on the model at every point —
+the top of a pillar ends on the point marker — which is what to look for when a tree appears to
+hang in the air. The layer images and the export file still come from **Slice** in step 4. Before
+you slice, set **Raft type** and **Object elevation** in the **Print settings** dialog (section 1).
+
+### Take the supports away again
+
+Removing support points does not need the support tool, so a run you did not want is undone without
+opening it. In the **Supports** block of the Preview sidebar (section 5) **Clear selected** takes
+the points of the models selected in the 3D view and **Clear all** those of every model on the
+build plate; right-clicking a model gives **Clear support points** for what you clicked. In the tool
+the same action is **Remove all points**, for the model it is open on. All four ask how many points
+of how many models are about to go, and one `Ctrl+Z` brings them all back.
 
 ### Paint where the automatic supports go
 
@@ -196,7 +243,8 @@ The panel rows, top to bottom:
 - **Split triangles** subdivides the facets under the brush, so a painted edge can follow the
   triangle boundaries more closely.
 - **Automatic painting** is not offered for a resin printer. It paints the spots of the FFF support
-  spot search, which is a slice of the bed, and only the **Slice** button slices a resin print.
+  spot search, which is a slice of the build plate, and only the **Slice** button slices a resin
+  print.
 
 ![TODO screenshot: the Paint supports panel on a resin printer, the two brushes named and the block hint under them]()
 
@@ -283,9 +331,11 @@ The app switches to **Preview** after a successful slice. From here:
   support tool on it, so a missing support can be added from where the warning came from.
   **Auto support selected** does the models selected in the 3D view, **Auto support all** every
   printable model on the build plate; both are off while a run is going and both open the support
-  tool, which takes over the work. Under them a one-line status says whether every printable model
-  has its points, and ends in *Every model has support points. Press Slice.* The block itself never
-  slices: **Slice** stays the only thing that does.
+  tool, which takes over the work. **Clear selected** and **Clear all** take the points away again
+  without opening the tool, from the selected models or from every model on the build plate, and
+  both are off while a run is going too. Under them a one-line status says whether every printable
+  model has its points, and ends in *Every model has support points. Press Slice.* The block itself
+  never slices: **Slice** stays the only thing that does.
 
 The **Issues** list sits just under those three figures, still in **Prepare**, and is filled from the
 same slice the layer view reads. One row per island and per cup, `Island on vase, layer 218  4.2 mm²`,
