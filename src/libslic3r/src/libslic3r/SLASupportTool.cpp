@@ -4,6 +4,7 @@
 #include "libslic3r/SLAPrint.hpp"
 #include "libslic3r/SLA/SupportFacetPaint.hpp"
 #include "libslic3r/SLA/SupportPointGenerator.hpp"
+#include "libslic3r/SLA/SupportRoles.hpp"
 #include "libslic3r/SLA/SupportTree.hpp"
 #include "libslic3r/SLA/SupportIslands/SampleConfigFactory.hpp"
 #include "libslic3r/SLA/Pad.hpp"
@@ -270,8 +271,18 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const SupportToolMod
         // Move points onto mesh surface
         double allowed_move = (heights.size() > 1 ? heights[1] - heights[0] : layer_height) +
             std::numeric_limits<float>::epsilon();
+        const AABBMesh emesh(mesh.its);
         Domain::SLA::SupportPoints support_points = sla::move_on_mesh_surface(
-            layer_support_points, AABBMesh(mesh.its), allowed_move, throw_on_cancel);
+            layer_support_points, emesh, allowed_move, throw_on_cancel);
+
+        // What every point carries, which is what the tip class of its support is picked from
+        // (M7.8.2, the support rulebook R4.1 and R4.3 - R4.6): the anchor of the lowest island, an
+        // island, a small island, a thin fragile feature or an overhang. A point that sits on small
+        // surface detail moves to the plain surface next to it first, and the role it ends up with is
+        // the one of the spot it holds. The head radius of a point stays the one the generator gave
+        // it, as it was before.
+        sla::classify_support_point_roles(
+            support_points, emesh, gen_data.layers, layer_height, {}, throw_on_cancel);
 
         // Zero-elevation filter
         if (is_zero_elevation(cfg)) {

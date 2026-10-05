@@ -63,6 +63,10 @@ SupportPoint make_point()
     point.stem_taper        = 0.35f;
     point.knot_radius       = 0.45f;
     point.on_model          = SupportPoint::OnModel::Forbid;
+    // The role the generator gave the point (M7.8.2), which is what the tip class of its support
+    // is picked from: an undo that loses it turns a classified point into one the tool knows
+    // nothing about.
+    point.role              = SupportPoint::Role::Fragile;
     return point;
 }
 
@@ -111,6 +115,7 @@ void check_same_point(const SupportPoint& lhs, const SupportPoint& rhs)
     CHECK(lhs.stem_taper == rhs.stem_taper);
     CHECK(lhs.knot_radius == rhs.knot_radius);
     CHECK(lhs.on_model == rhs.on_model);
+    CHECK(lhs.role == rhs.role);
 }
 
 /// The undo stack as the tool uses it: a snapshot of the state before a change, then a snapshot of
