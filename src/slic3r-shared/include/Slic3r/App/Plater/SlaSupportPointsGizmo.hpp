@@ -62,6 +62,12 @@ struct SupportPointEditState
 
 struct SupportPointPaintableVolume
 {
+    // Every one of these is a view on something the model owns: the volumes hold references to the
+    // model object, the instance and the volume, and the AABBMesh is a view on the mesh of the
+    // volume rather than a copy of it. An undo replaces the whole model (SceneInteractor::set_state
+    // moves a new one in), which destroys every object named above, and the manager may release the
+    // scene mesh of a volume that is gone. The tool therefore rebuilds this list whenever the model
+    // is reloaded, so nothing here outlives what it names. (M0.15)
     const Domain::ModelObject& model_object;
     const Domain::ModelInstance& model_instance;
     Domain::ModelVolume& model_volume;
@@ -76,6 +82,7 @@ using SupportPointPaintableVolumes = std::vector<SupportPointPaintableVolume>;
 class SlaSupportPointsGizmo :
     public Scene::IToolGizmo,
     public Biz::Scene::ISceneSelectionChangedListener,
+    public Biz::Scene::ISceneChangedListener,
     public Biz::ISLAObjectCacheChangedListener
 {
 public:
@@ -107,6 +114,10 @@ public:
     ) override;
 
     void on_sla_object_cache_changed(const Domain::SlicingId& id, Domain::ObjectID object_id) override;
+
+    // An undo rebuilds the model, so the volumes the tool raycasts on are rebuilt from the new one
+    // here (M0.15). Without it the tool would keep the volumes of the model the undo replaced.
+    void on_model_reloaded(Domain::SelectionId project_id) override;
 
     void provide_gizmo_controller(Scene::IGizmoController& controller) override;
 

@@ -132,6 +132,13 @@ public:
 private:
     struct BedCacheEntry
     {
+        // The bed the acceleration structure below was built from. The AABBMesh is a view on the
+        // contour mesh of the bed, not a copy of it, so it is only usable while that very bed is
+        // alive; the cache is keyed by bed id, and an id alone does not prove that (a bed is freed
+        // when its project is closed and a copy of a project keeps the ids of the beds it was
+        // copied from). The entry therefore names the bed it belongs to and is rebuilt whenever
+        // the id maps to a different one. (M0.15)
+        const Domain::Bed* bed = nullptr;
         AABBMesh aabb_mesh;
         Domain::Polygon scaled_contour;
     };

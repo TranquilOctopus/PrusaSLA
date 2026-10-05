@@ -526,6 +526,7 @@ void check_same_support_point(const SupportPoint& point, const SupportPoint& exp
     CHECK(Domain::is_approx(point.knot_radius, expected.knot_radius));
     CHECK(point.on_model == expected.on_model);
     CHECK(point.brace == expected.brace);
+    CHECK(point.role == expected.role);
     // The struct compares the whole point, which is what the support tree reads, so a difference
     // the field-by-field walk above cannot see (a field added later) still fails here.
     CHECK(point == expected);
@@ -575,7 +576,8 @@ const std::vector<Read3mfIssueType>& sla_read_issue_types()
         Read3mfIssueType::project_sla_support_point_stem_taper_issue,
         Read3mfIssueType::project_sla_support_point_knot_radius_issue,
         Read3mfIssueType::project_sla_support_point_on_model_issue,
-        Read3mfIssueType::project_sla_support_point_brace_issue,
+Read3mfIssueType::project_sla_support_point_brace_issue,
+        Read3mfIssueType::project_sla_support_point_role_issue,
         Read3mfIssueType::project_sla_drain_holes_must_be_array,
         Read3mfIssueType::project_sla_drain_hole_unknown_property,
         Read3mfIssueType::project_sla_drain_hole_position_issue,
@@ -658,7 +660,8 @@ TEST_CASE("3MF SLA round trip preserves every per-point support field", "[3mf][s
     point.stem_taper        = 0.4f;
     point.knot_radius       = 0.9f;
     point.on_model          = SupportPoint::OnModel::Forbid;
-    point.brace             = SupportPoint::Brace::Off;
+point.brace             = SupportPoint::Brace::Off;
+    point.role              = SupportPoint::Role::Fragile;
 
     SupportPoint other_point      = point;
     other_point.pos               = Vec3f{1.5f, 2.5f, 3.5f};
@@ -675,7 +678,8 @@ TEST_CASE("3MF SLA round trip preserves every per-point support field", "[3mf][s
     other_point.stem_taper        = 0.75f;
     other_point.knot_radius       = 0.3f;
     other_point.on_model          = SupportPoint::OnModel::Allow;
-    other_point.brace             = SupportPoint::Brace::On;
+other_point.brace             = SupportPoint::Brace::On;
+    other_point.role              = SupportPoint::Role::Anchor;
 
     object->sla_support_points = {point, other_point};
 
@@ -943,6 +947,8 @@ TEST_CASE(
     point.stem_taper           = 0.55f;
     point.knot_radius          = 0.65f;
     point.on_model             = SupportPoint::OnModel::Allow;
+    point.brace                = SupportPoint::Brace::Off;
+    point.role                 = SupportPoint::Role::Island;
     object->sla_support_points = {point};
 
     object->sla_points_status = PointsStatus::UserModified;
@@ -958,12 +964,14 @@ TEST_CASE(
     REQUIRE(obj_json != nullptr);
     REQUIRE((*obj_json)["slaSupportPoints"].size() == 1);
 
-    // Take out the keys of the per-point fields batch m15 added. The keys of the fields that were
+    // Take out the keys of the per-point fields batch m15 added, and with them the two that came
+    // after it: "br" for the per-point bracing switch of M2.38 and "role" for the role of M7.8.2.
+    // Those are the only keys of a support point that came later. The keys of the fields that were
     // already in the file (the position, the head radius, the island flag, the pillar and base
     // sizes and the type) stay, that is the whole point of the exercise.
     const json& written_point = (*obj_json)["slaSupportPoints"][0];
     INFO("written point: " << written_point.dump());
-    for (const char* key : {"bs", "ts", "tl", "cd", "ss", "st", "kr", "om"}) {
+    for (const char* key : {"bs", "ts", "tl", "cd", "ss", "st", "kr", "om", "br", "role"}) {
         INFO("per point key " << key);
         CHECK(written_point.contains(key));
         (*obj_json)["slaSupportPoints"][0].erase(key);
@@ -999,6 +1007,12 @@ TEST_CASE(
     CHECK(Domain::is_approx(loaded_point.stem_taper, 0.f));
     CHECK(Domain::is_approx(loaded_point.knot_radius, 0.f));
     CHECK(loaded_point.on_model == SupportPoint::OnModel::Inherit);
+    // A project written before the bracing switch existed has no "br", so the point reads back as
+    // Inherit, i.e. what such a point did anyway.
+    CHECK(loaded_point.brace == SupportPoint::Brace::Inherit);
+    // A project written before the roles existed has no "role", so the point reads back as the
+    // Unknown one, which is the support it was built as anyway.
+    CHECK(loaded_point.role == SupportPoint::Role::Unknown);
 
     // The rest of the object data of the file is untouched by the missing keys.
     CHECK(loaded_object->sla_points_status == PointsStatus::UserModified);
@@ -1053,6 +1067,9 @@ TEST_CASE("3MF SLA round trip of a file with a key and a value it does not know"
     (*obj_json)["slaSupportPoints"][0]["tip_hollow"]       = 3.5;
     (*obj_json)["slaSupportPoints"][0]["zzFromTheFuture"]  = "what";
     (*obj_json)["slaSupportPoints"][0]["t"]                = 7;
+    // A role of a build from the future, which is one this one has no name for: the point keeps
+    // the support it had, i.e. the Unknown role, rather than a role nothing else agrees on.
+    (*obj_json)["slaSupportPoints"][0]["role"]             = "rib_of_the_future";
     (*obj_json)["slaDrainHoles"][0]["zzFromTheFuture"]     = true;
     (*obj_json)["objectSettingsSla"]["zz_from_the_future"] = 7.;
 
@@ -1070,6 +1087,7 @@ TEST_CASE("3MF SLA round trip of a file with a key and a value it does not know"
     REQUIRE(loaded_object->sla_support_points.size() == 1);
     check_same_support_point(loaded_object->sla_support_points[0], point);
     CHECK(loaded_object->sla_support_points[0].type == SupportPointType::manual_add);
+    CHECK(loaded_object->sla_support_points[0].role == SupportPoint::Role::Unknown);
 
     // The hole as well.
     REQUIRE(loaded_object->sla_drain_holes.size() == 1);

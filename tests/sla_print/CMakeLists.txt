@@ -37,6 +37,7 @@ add_executable(${_TEST_NAME}_tests ${_TEST_NAME}_tests_main.cpp
     sla_support_facet_paint_tests.cpp
     sla_support_point_geometry_tests.cpp
     sla_support_on_model_tests.cpp
+    sla_support_roles_tests.cpp
     sla_benchmark_tests.cpp
     sla_layer_hash_tests.cpp
     sla_support_brace_tests.cpp

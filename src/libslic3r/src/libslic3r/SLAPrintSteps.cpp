@@ -543,6 +543,13 @@ void SLAPrint::Steps::generate_preview(SLAPrintObject& po, SLAPrintObjectStep st
         SPDLOG_WARN("Some parts of the print will be previewed with approximated meshes. This does not affect the quality of slices or the physical print in any way.");
     }
 
+    // The supportable mesh views po.m_preview->mesh through its AABBMesh, and that AABBMesh keeps
+    // the pointer it was given instead of a copy of the mesh, so it reads freed memory once the
+    // preview object below releases the mesh it shares. Drop it here, where the mesh is replaced,
+    // rather than in each of the callers: the support points step builds a new one from whatever
+    // preview it finds. (M0.15)
+    po.m_supportable_mesh.reset();
+
     // recreate preview instances
     TriangleMeshStats stats = Biz::Algorithms::TriangleMesh::calculate_stats(m);
     po.m_preview = Biz::Slicing::Sla::Object {

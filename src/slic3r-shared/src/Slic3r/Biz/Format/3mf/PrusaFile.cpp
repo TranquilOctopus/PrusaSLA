@@ -1197,14 +1197,24 @@ constexpr std::string_view STEM_SIDES        = "ss";        // stem sides
 constexpr std::string_view STEM_TAPER        = "st";        // stem taper
 constexpr std::string_view KNOT_RADIUS       = "kr";        // knot radius
 constexpr std::string_view ON_MODEL          = "om";        // may the pillar end on the model
-constexpr std::string_view BRACE             = "br";        // may the pillar be braced
-NamesType NAMES{{POSITION, HEAD_FRONT_RADIUS, IS_NEW_ISLAND, PILLAR_DIAMETER, BASE_DIAMETER, BASE_HEIGHT, BASE_SHAPE, TYPE, TIP_LENGTH, CONTACT_DEPTH, TIP_SHAPE, STEM_SIDES, STEM_TAPER, KNOT_RADIUS, ON_MODEL, BRACE}};
+constexpr std::string_view BRACE             = "br";        // may the pillar be braced (M2.38)
+constexpr std::string_view ROLE              = "role";      // what the point carries (M7.8.2)
+// Both new keys travel: "br" for the per point bracing switch of M2.38 and "role" for the role of
+// M7.8.2, in that order, which is the order of the members of the point. Neither one was written by
+// the other, and a file that has only one of them still loads, because each is read on its own.
+NamesType NAMES{{POSITION, HEAD_FRONT_RADIUS, IS_NEW_ISLAND, PILLAR_DIAMETER, BASE_DIAMETER, BASE_HEIGHT, BASE_SHAPE, TYPE, TIP_LENGTH, CONTACT_DEPTH, TIP_SHAPE, STEM_SIDES, STEM_TAPER, KNOT_RADIUS, ON_MODEL, BRACE, ROLE}};
 
 static constexpr std::array<std::string_view, 3> TIP_SHAPE_NAMES = {"default", "cone", "ball"};
 // The three states of the per point "may rest on the model" switch (M2.26), in the order of
 // Domain::SLA::SupportPoint::OnModel. A project written before the switch has no "om", which
 // reads back as Inherit, i.e. what such a point did anyway.
 static constexpr std::array<std::string_view, 3> ON_MODEL_NAMES = {"inherit", "allow", "forbid"};
+// The roles of a generated point (M7.8.2), in the order of Domain::SLA::SupportPoint::Role. A
+// project written before the roles existed has no "role", which reads back as Unknown: a point the
+// file knows nothing about keeps the geometry it carries.
+static constexpr std::array<std::string_view, 6> ROLE_NAMES = {
+    "unknown", "anchor", "island", "small_island", "overhang", "fragile"
+};
 
 // The three states of the per point bracing switch (M2.38), in the order of
 // Domain::SLA::SupportPoint::Brace. A project written before the switch has no "br", which reads
@@ -1256,8 +1266,10 @@ json to_json(const Domain::SLA::SupportPoints &points) {
             p_json[KNOT_RADIUS] = p.knot_radius;
         if (p.on_model != Domain::SLA::SupportPoint::OnModel::Inherit)
             p_json[ON_MODEL] = ON_MODEL_NAMES[static_cast<size_t>(p.on_model)];
-        if (p.brace != Domain::SLA::SupportPoint::Brace::Inherit)
+if (p.brace != Domain::SLA::SupportPoint::Brace::Inherit)
             p_json[BRACE] = BRACE_NAMES[static_cast<size_t>(p.brace)];
+        if (p.role != Domain::SLA::SupportPoint::Role::Unknown)
+            p_json[ROLE] = ROLE_NAMES[static_cast<size_t>(p.role)];
         r.push_back(std::move(p_json));
     }
     return r;
@@ -1315,11 +1327,23 @@ void load(const json &pts_json, Domain::SLA::SupportPoints &pts, Read3mfIssues& 
                 }
             }
         }
-        std::string brace_str;
+std::string brace_str;
         if (from_json(pt_json, BRACE, brace_str, collected_issues, RT::project_sla_support_point_brace_issue)) {
             for (size_t i = 0; i < BRACE_NAMES.size(); ++i) {
                 if (brace_str == BRACE_NAMES[i]) {
                     pt.brace = static_cast<Domain::SLA::SupportPoint::Brace>(i);
+                    break;
+                }
+            }
+        }
+        // A point of a build of the future may carry a role this one has no name for; it stays
+        // Unknown then, the way a project written before the roles existed reads back. The same is
+        // true of the bracing switch of M2.38 above: an unknown state leaves it Inherit.
+        std::string role_str;
+        if (from_json(pt_json, ROLE, role_str, collected_issues, RT::project_sla_support_point_role_issue)) {
+            for (size_t i = 0; i < ROLE_NAMES.size(); ++i) {
+                if (role_str == ROLE_NAMES[i]) {
+                    pt.role = static_cast<Domain::SLA::SupportPoint::Role>(i);
                     break;
                 }
             }

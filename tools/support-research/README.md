@@ -27,11 +27,34 @@ pip install -r requirements.txt
 - `synth.py` — synthetic asymmetric test shape with procedurally placed supports
 - `register.py` — rigid registration (coarse PCA alignment + trimmed point-to-plane ICP)
 - `separate.py` — support vs model faces, with a scaled variant for big meshes
+- `shells.py` — M7.3e: the shell split of a supported file, and the contacts on the support shells
 - `contacts.py` — one record per support contact
 - `calibrate.py` — M7.4c: expert support count, orientation and model size per pair
 - `calibration_report.py` — M7.4c: aggregate tables by category from the two sources
 - `test_m73a.py`, `test_m73b.py`, `test_m73c.py`, `test_geometry.py` — synthetic tests
 - `test_m74c.py` — synthetic tests of the calibration measurements (numpy only)
+- `test_m73e.py` — synthetic tests of the shell split and the contacts on it
+
+## The M7.3e shell split
+
+A supported file is a triangle soup of disjoint bodies: the model, and every support,
+tree or raft of its own. `shells.py` welds the vertices and labels the faces by
+adjacency, so the scene comes apart into shells with no registration and no epsilon;
+the model is the shell with the most faces. With `tools/support-research` on the path:
+
+```python
+from calibrate import load_mesh
+from shells import measure_shells, split_supported_scene
+
+scene = load_mesh(path)                      # a supported file
+model_shell, support_shells = split_supported_scene(scene)
+print(measure_shells(model_shell, support_shells, np.random.default_rng(7)))
+```
+
+`calibrate.py` does this itself: the plain model is registered against the model shell
+alone (registering it against the whole scene fails, the supports dominate the scene),
+and the contacts come off the support shells in place, so no registration error is left
+in a tip diameter. Its `--epsilon` option is gone with the distance method.
 
 ## The M7.4c calibration
 

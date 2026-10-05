@@ -397,6 +397,7 @@ void SlaHollowGizmo::provide_gizmo_controller(Scene::IGizmoController& controlle
 void SlaHollowGizmo::on_activated()
 {
     m_project_interactor.scene_interactor().add_listener<Biz::Scene::ISceneSelectionChangedListener>(this);
+    m_project_interactor.scene_interactor().add_listener<Biz::Scene::ISceneChangedListener>(this);
     m_project_interactor.sla_object_cache().add_listener<Biz::ISLAObjectCacheChangedListener>(this);
 
     const Biz::Scene::ObjectSelection& selection =
@@ -407,6 +408,7 @@ void SlaHollowGizmo::on_activated()
 void SlaHollowGizmo::on_deactivated()
 {
     m_project_interactor.scene_interactor().remove_listener<Biz::Scene::ISceneSelectionChangedListener>(this);
+    m_project_interactor.scene_interactor().remove_listener<Biz::Scene::ISceneChangedListener>(this);
     m_project_interactor.sla_object_cache().remove_listener<Biz::ISLAObjectCacheChangedListener>(this);
 
     if (m_preview_slicing_id.has_value()) {
@@ -419,6 +421,16 @@ void SlaHollowGizmo::on_deactivated()
 
     m_dialog->set_preview_enabled(false);
     m_dialog->set_status(_u8L("No preview generated yet."));
+}
+
+void SlaHollowGizmo::on_model_reloaded(Domain::SelectionId project_id)
+{
+    // An undo replaces the whole model, and with it every volume this list names, so it is emptied
+    // here. (M0.15)
+    if (project_id != m_project_interactor.selected_project_id()) {
+        return;
+    }
+    m_paintable_volumes.clear();
 }
 
 void SlaHollowGizmo::on_scene_selection_changed(

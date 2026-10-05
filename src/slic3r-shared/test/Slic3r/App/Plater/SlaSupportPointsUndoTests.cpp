@@ -66,6 +66,10 @@ SupportPoint make_point()
     point.knot_radius       = 0.45f;
     point.on_model          = SupportPoint::OnModel::Forbid;
     point.brace             = SupportPoint::Brace::On;
+    // The role the generator gave the point (M7.8.2), which is what the tip class of its support
+    // is picked from: an undo that loses it turns a classified point into one the tool knows
+    // nothing about.
+    point.role              = SupportPoint::Role::Fragile;
     return point;
 }
 
@@ -115,6 +119,7 @@ void check_same_point(const SupportPoint& lhs, const SupportPoint& rhs)
     CHECK(lhs.knot_radius == rhs.knot_radius);
     CHECK(lhs.on_model == rhs.on_model);
     CHECK(lhs.brace == rhs.brace);
+    CHECK(lhs.role == rhs.role);
 }
 
 /// The undo stack as the tool uses it: a snapshot of the state before a change, then a snapshot of

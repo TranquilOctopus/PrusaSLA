@@ -1,15 +1,16 @@
 """Measure the expert supports of the research dataset against our generator (M7.4c).
 
-Reads the gitignored calibration manifest of the research dataset, registers every
-pair of a plain model and the same model with the expert's supports, and records
-per pair only numbers:
+Reads the gitignored calibration manifest of the research dataset, splits every
+supported file into its shells, registers every pair of a plain model and the model
+shell of the same model with the expert's supports, and records per pair only numbers:
 
   * the model size in the expert print orientation,
   * the registration residual (RMS, p95, inlier fraction),
   * how far the modelling-up axis (+Z of the plain STL) had to be tipped over to
     reach the print orientation, and which way it points,
   * whether the model's largest flat area faces the plate,
-  * the expert's support tips, structures and bases.
+  * the expert's support tips, structures, bases and tip diameters, counted off the
+    support shells (M7.3e).
 
 It also writes the plain model rotated into the expert print orientation, so the
 generator can be measured in the same orientation (tests/sla_print/
@@ -24,10 +25,10 @@ Research rules (ROADMAP M7): the meshes stay where they are, no mesh is ever
 opened by an agent, no file name or path is printed or put into the JSON, and the
 console gets counts only.
 
-The measurement functions - the manifest reader, the tip counting, the up-axis tilt
-and the largest flat area - need numpy only, so test_m74c.py covers them without
-trimesh and scipy. Everything that reads a mesh or registers a pair imports them
-inside the function that needs them.
+The measurement functions of this module - the manifest reader, the tip counting, the
+up-axis tilt and the largest flat area - need numpy only, so test_m74c.py covers them
+without trimesh and scipy. Everything that reads a mesh, splits a scene or registers a
+pair imports them inside the function that needs them.
 
 Usage:
     python tools/support-research/calibrate.py [--ids cal001,cal002] [--category head]
@@ -65,7 +66,8 @@ TIP_GAP_MM = 1.5
 CLUSTER_RADIUS_MM = 1.5
 
 # Faces of the supported mesh farther than this from the transformed model are
-# support, the epsilon of M7.3b.
+# support, the epsilon of M7.3b. The shell split of M7.3e replaced it: a supported file
+# already says which faces are support by holding them in shells of their own.
 SEPARATION_EPSILON_MM = 0.3
 
 # Vertices are welded within this distance before components are counted. Far below
@@ -75,6 +77,23 @@ WELD_TOLERANCE_MM = 1e-4
 # A support structure this flat and this wide is a raft or a base pad, not a tree:
 # it reaches the plate without carrying the model.
 SLAB_HEIGHT_MM = 2.0
+
+# How far above the ground a structure still counts as standing on the plate.
+PLATE_GAP_MM = 0.05
+
+# The shell split of a supported file (M7.3e). The weld tolerance is how close two
+# vertices have to be to be one corner: 1 um is a fiftieth of the resolution the meshes
+# are exported at and a hundred times the rounding of a written STL, so a body's own
+# corners always merge and two bodies never do. The gap and the cluster radius are how
+# near a support shell has to come to the model shell, and how near two of its touching
+# vertices have to be, to be one contact tip. Both are tight on purpose, unlike
+# TIP_GAP_MM above: the two shells are in one file and one frame, so there is no
+# registration error left to cover. The classes are the tip diameters a printer offers,
+# so a measured tip is counted as the size that was picked.
+SHELL_WELD_TOLERANCE_MM = 1e-3
+SHELL_CONTACT_GAP_MM = 0.5
+SHELL_CLUSTER_RADIUS_MM = 0.5
+SHELL_DIAMETER_CLASSES_MM = (0.1, 0.2, 0.3, 0.4, 0.6)
 
 # Up-axis tilts below this count as "printed the way it was modelled" (face up), and
 # the band above it as "tipped over on purpose". Reported to the caller as shares.
@@ -327,12 +346,15 @@ def vertex_labels(vertices: np.ndarray, faces: np.ndarray) -> np.ndarray:
     return labels[welded]
 
 
-def cluster_count(points: np.ndarray, radius: float) -> int:
-    """How many clusters the points form, two of them one when within `radius`.
+def cluster_groups(points: np.ndarray, radius: float) -> list[np.ndarray]:
+    """The clusters the points form, two of them one when within `radius`.
 
     A uniform grid of cells of the radius, so only the 27 cells around a point are
     looked at. Plain dicts and a union-find, because the near-surface vertices of a
     support mesh are a handful of tens of thousands, not millions.
+
+    Every cluster comes back with its own points, so a caller that counts them and a
+    caller that also measures one are the same walk over the same data.
     """
     if radius <= 0:
         raise ValueError("The cluster radius must be positive")
@@ -341,7 +363,7 @@ def cluster_count(points: np.ndarray, radius: float) -> int:
     if spots.ndim != 2 or spots.shape[1] != 3:
         raise ValueError("Points must be an n by 3 array")
     if not len(spots):
-        return 0
+        return []
 
     cells = np.floor(spots / radius).astype(np.int64)
     buckets: dict[tuple[int, int, int], list[int]] = {}
@@ -378,7 +400,15 @@ def cluster_count(points: np.ndarray, radius: float) -> int:
             if left != right:
                 parent[max(left, right)] = min(left, right)
 
-    return len({find(node) for node in range(len(spots))})
+    groups: dict[int, list[int]] = {}
+    for node in range(len(spots)):
+        groups.setdefault(find(node), []).append(node)
+    return [spots[np.asarray(members, dtype=np.int64)] for members in groups.values()]
+
+
+def cluster_count(points: np.ndarray, radius: float) -> int:
+    """How many clusters the points form, two of them one when within `radius`."""
+    return len(cluster_groups(points, radius))
 
 
 @dataclass
@@ -398,10 +428,16 @@ def count_support_tips(
     surface_gap: float = TIP_GAP_MM,
     cluster_radius: float = CLUSTER_RADIUS_MM,
     plate_z: float = 0.0,
-    plate_gap: float = 0.05,
+    plate_gap: float = PLATE_GAP_MM,
     slab_height: float = SLAB_HEIGHT_MM,
 ) -> SupportCounts:
     """Count the tips, the structures and the bases of a support mesh.
+
+    This is the method of M7.4c, on support faces found by distance from the registered
+    model. calibrate.py no longer calls it: the shell split of M7.3e counts its contacts
+    without a registration error to cover, so the generous `surface_gap` of the old
+    method and the components of a distance mask are not needed. It stays for the tests
+    that cover it.
 
     A tip is a cluster of support vertices that come within `surface_gap` of the
     model surface, so a branching tree with three tips under the model counts three,
@@ -702,48 +738,39 @@ def measure_pair(
     folder: Path,
     out_dir: Path,
     rng: np.random.Generator,
-    epsilon: float = SEPARATION_EPSILON_MM,
     final_threshold: float = 0.3,
     write_oriented: bool = True,
 ) -> dict:
-    """Every number one pair contributes to the calibration."""
+    """Every number one pair contributes to the calibration.
+
+    The supported file is split into its shells first (M7.3e), the plain model is
+    registered against the model shell alone, and the supports are read off the other
+    shells. Registering against the whole scene is what M7.4c did, and it failed: the
+    supports dominate the scene, so the model was 2-42% of the inliers, and the
+    registration was 0.5-0.9 mm off, which is why the contacts had to be counted with a
+    1.5 mm gap. Splitting first makes the registration model against model and the
+    contacts exact, so both are now measured instead of guessed.
+    """
     import trimesh
 
     from register import register
-    from separate import separate_supports_scaled
+    from shells import measure_shells, split_supported_scene
 
     pair_id = pair["id"].strip()
     model = load_mesh(resolve_path(folder, pair["unsupported_stl"]))
     scene = load_mesh(resolve_path(folder, pair["supported_stl"]))
 
-    registration = register(model, scene, rng, final_threshold=final_threshold)
+    model_shell, support_shells = split_supported_scene(scene)
+    registration = register(model, model_shell, rng, final_threshold=final_threshold)
     transform = np.asarray(registration.transform, dtype=np.float64)
-
-    separation = separate_supports_scaled(model, scene, transform, epsilon=epsilon)
-    support_faces = np.flatnonzero(separation.support_mask)
 
     tilt, axis = up_axis(transform)
     moved = trimesh.transform_points(np.asarray(model.vertices, dtype=np.float64), transform)
     size = (moved.max(axis=0) - moved.min(axis=0)).tolist()
     flat = largest_flat_area(moved, np.asarray(model.faces, dtype=np.int64))
 
-    counts = SupportCounts()
     plate_z = float(np.asarray(scene.vertices, dtype=np.float64)[:, 2].min())
-    if len(support_faces):
-        supports = scene.submesh([support_faces], append=True, repair=False)
-        support_vertices = np.asarray(supports.vertices, dtype=np.float64)
-        labels = vertex_labels(support_vertices, np.asarray(supports.faces, dtype=np.int64))
-        # Only the vertices a support face uses: a stale one would look like a
-        # structure of its own.
-        used = np.unique(np.asarray(supports.faces, dtype=np.int64))
-        distance = distances_to_model(support_vertices[used], model, transform, TIP_GAP_MM, rng)
-        counts = count_support_tips(
-            support_vertices[used],
-            labels[used],
-            distance,
-            surface_gap=TIP_GAP_MM,
-            plate_z=plate_z,
-        )
+    shells = measure_shells(model_shell, support_shells, rng, plate_z=plate_z)
 
     oriented = None
     if write_oriented:
@@ -769,23 +796,37 @@ def measure_pair(
         "flat_area_fraction": float(flat.fraction),
         "flat_area_mm2": float(flat.area_mm2),
         "flat_area_faces_plate": bool(flat.faces_plate),
-        "expert_support_count": int(counts.tips),
-        "support_structures": int(counts.structures),
-        "support_structures_on_plate": int(counts.structures_on_plate),
-        "support_base_structures": int(counts.base_structures),
-        "support_faces": int(len(support_faces)),
+        # The counts of M7.4c, now read off the shells. calibration_report.py reads
+        # these keys and needs no change.
+        "expert_support_count": int(shells.tips),
+        "support_structures": int(shells.structures),
+        "support_structures_on_plate": int(shells.structures_on_plate),
+        "support_base_structures": int(shells.rafts),
+        "support_faces": int(shells.support_faces),
+        "supports_separate": bool(support_shells),
+        **shells.as_record(),
         "oriented_stl": oriented,
     }
 
 
-def summarise(records: list[dict]) -> dict[str, int]:
+def summarise(records: list[dict]) -> dict[str, object]:
     """The counts the summary line is made of."""
+    classes: dict[str, int] = {}
+    for record in records:
+        for size, count in record.get("shell_tips_by_diameter_mm", {}).items():
+            classes[size] = classes.get(size, 0) + int(count)
     return {
         "tips": sum(record["expert_support_count"] for record in records),
         "structures": sum(record["support_structures"] for record in records),
         "structures_on_plate": sum(record["support_structures_on_plate"] for record in records),
         "bases": sum(record["support_base_structures"] for record in records),
+        # How many of the pairs were split into shells at all: a file whose supports are
+        # welded to the model measures zero tips, and the summary has to say so.
+        "separate": sum(1 for record in records if record.get("supports_separate")),
         "oriented": sum(1 for record in records if record["oriented_stl"]),
+        "tip_classes": ",".join(
+            f"{size}x{classes[size]}" for size in sorted(classes, key=float)
+        ) or "-",
     }
 
 
@@ -807,8 +848,6 @@ def main(argv: list[str] | None = None) -> int:
                         help="where calibration.json and the oriented STLs go (gitignored)")
     parser.add_argument("--ids", default=None, help="comma separated manifest ids to measure")
     parser.add_argument("--category", default=None, help="one category to measure")
-    parser.add_argument("--epsilon", type=float, default=SEPARATION_EPSILON_MM,
-                        help="face distance from the model above which a face is support (mm)")
     parser.add_argument("--threshold", type=float, default=0.3,
                         help="inlier distance registration converges to (mm)")
     parser.add_argument("--seed", type=int, default=7, help="seed of the surface sampling")
@@ -850,7 +889,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             record = measure_pair(
                 pair, folder, args.out, rng,
-                epsilon=args.epsilon, final_threshold=args.threshold,
+                final_threshold=args.threshold,
                 write_oriented=not args.no_oriented,
             )
         except Exception as error:
@@ -866,10 +905,13 @@ def main(argv: list[str] | None = None) -> int:
     totals = summarise(records)
     args.out.mkdir(parents=True, exist_ok=True)
     payload = {
-        "schema": 1,
+        "schema": 2,
         "tip_gap_mm": TIP_GAP_MM,
         "cluster_radius_mm": CLUSTER_RADIUS_MM,
-        "separation_epsilon_mm": args.epsilon,
+        "shell_weld_tolerance_mm": SHELL_WELD_TOLERANCE_MM,
+        "shell_contact_gap_mm": SHELL_CONTACT_GAP_MM,
+        "shell_cluster_radius_mm": SHELL_CLUSTER_RADIUS_MM,
+        "shell_diameter_classes_mm": list(SHELL_DIAMETER_CLASSES_MM),
         "face_up_tilt_deg": FACE_UP_TILT_DEG,
         "tipped_band_deg": list(TIPPED_BAND_DEG),
         "pairs": records,
@@ -878,9 +920,11 @@ def main(argv: list[str] | None = None) -> int:
     (args.out / "calibration.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     print(
-        "calibrate: pairs={pairs}, measured={measured}, failed={failed}, tips={tips}, "
-        "structures={structures}, structures_on_plate={structures_on_plate}, bases={bases}, "
-        "oriented={oriented}".format(pairs=len(pairs), measured=len(records), failed=failed, **totals)
+        "calibrate: pairs={pairs}, measured={measured}, failed={failed}, split={separate}, "
+        "tips={tips}, structures={structures}, structures_on_plate={structures_on_plate}, "
+        "bases={bases}, tip_classes={tip_classes}, oriented={oriented}".format(
+            pairs=len(pairs), measured=len(records), failed=failed, **totals
+        )
     )
     return EXIT_FAILED_PAIRS if failed else EXIT_OK
 

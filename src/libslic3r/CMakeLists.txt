@@ -360,6 +360,8 @@ set(SLIC3R_SOURCES
     src/libslic3r/SLA/SupportIslands/UniformSupportIsland.hpp
     src/libslic3r/SLA/SupportFacetPaint.cpp
     src/libslic3r/SLA/SupportPointGenerator.cpp
+    src/libslic3r/SLA/SupportRoles.cpp
+    src/libslic3r/SLA/SupportRoles.hpp
     src/libslic3r/SLA/Rotfinder.cpp
     src/libslic3r/SLA/Rotfinder.hpp
     src/libslic3r/SLAAutoOrient.cpp
