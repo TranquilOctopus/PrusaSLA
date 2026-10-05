@@ -86,6 +86,14 @@ Implemented by: M7.8.1 (rulebook sizes as the presets and defaults).
   each get their own size (W). The review in R1.1 adjusts them; the tool selects and changes one or
   many at once (M2.33, M2.35, M2.38).
 - **R4.8 Order of work: lowest point, then islands, then the overhang warnings.** (V)
+- **R4.9 Detailed areas get the lightest tips.** The most common auto-support failure is heavy
+  supports in detailed areas, where only very light tips (T0.1) keep the detail printable and
+  undamaged. A point in a detailed region (fine, dense or highly curved surface) gets T0.1 whatever
+  its role, except the lowest-point anchor of R4.1. (M)
+  Implemented by: M7.8.5.
+- **R4.10 No surface is off limits.** Any surface whose normal has a downward component may need
+  support; the front is protected by orientation (R2.1) and by light tips (R4.4, R4.5, R4.9), not by
+  excluding surfaces from support. (M)
 
 ## 5. Structure
 
@@ -94,6 +102,10 @@ Implemented by: M7.8.1 (rulebook sizes as the presets and defaults).
   tree). (V)
 - **R5.3 Brace tall supports; over-supporting beats a failed print.** (V)
   Per-support bracing: M2.38.
+- **R5.4 Brace close stems automatically.** Where several support stems stand close together, braces
+  join them so they do not droop or drift out of line while printing. Bracing is automatic for the
+  most part; the user only overrides it per support (M2.38). (M)
+  Implemented by: M7.8.6, modelled on Lychee's automatic bracing.
 
 ## 6. Raft
 
@@ -109,17 +121,13 @@ maintainer's earlier "the raft stays a user setting" (M4.6b) and V's "always an 
 
 ## 7. Density
 
-- **R7.1 Spacing does not depend on resin, printer or layer height** (R1.2). The generator's support
-  radius curve sets it today; a calibrated spacing waits for the M7.4c measurements of the reference
-  library.
+- **R7.1 Spacing does not depend on resin, printer or layer height** (R1.2). It is hard to give as a
+  number (M), so the generator's support radius curve keeps setting it; the M7.4c measurements of the
+  reference library may calibrate it later.
 
 ## Open questions for the maintainer
 
-- Typical spacing under an overhang (mm).
-- Surfaces never to support, beyond the front and small surface detail (eyes, armour edges, the top
-  of a base?).
-- Lift height and when to brace.
-- What auto supports most often get wrong.
+- Lift height (the generator default is 5 mm, V's rule of thumb).
 
 ## Shortcuts in W's Chitubox workflow (for comparison with M2.28)
 
