@@ -12,6 +12,8 @@
 #include <array>
 #include <cmath>
 #include <iterator>
+#include <numeric>
+#include <unordered_map>
 #include <vector>
 #include <cinttypes>
 #include <cstdlib>
@@ -372,9 +374,15 @@ Vec2d find_least_peel_rotation(const Domain::ModelObject &mo,
 }
 
 Vec2d find_no_cups_rotation(const Domain::ModelObject &mo,
-                            const RotOptimizeParams   &params)
+                             const RotOptimizeParams   &params)
 {
     return find_no_cups_rotation(mesh_to_rotate(mo), params);
+}
+
+Vec2d find_miniature_rotation(const Domain::ModelObject &mo,
+                              const RotOptimizeParams   &params)
+{
+    return find_miniature_rotation(mesh_to_rotate(mo), params);
 }
 
 Vec2d find_best_misalignment_rotation(const TriangleMesh &mesh,
@@ -547,6 +555,484 @@ Vec2d find_no_cups_rotation(const TriangleMesh &mesh,
     // that have no cup at all the one that peels easiest is still the one that is picked.
     return find_cross_section_rotation(
         mesh, params, CrossSectionWeights{.peak_area = 0.05, .cup_opening = 1.});
+}
+
+// ------------------------------------------------------------------------------------------------
+// The miniature goal.
+//
+// A pre-supported head, a helmet or a bust is not one of the shapes the goals above are for. It
+// comes with a flat face where a support is not seen - the cut of a neck the bust is glued to the
+// body by, the underside of a head, the flat back of a bust - and the way it is printed is decided
+// by the person who sculpted it: the detail side up, so the layers cut across the face and not
+// along it, a fat support in the neck that the body hides and small ones where the detail needs
+// them.
+//
+// So this pose is not searched for, it is built:
+//
+//  1. the glue face is found in the mesh (find_glue_face) and its normal is pointed at the plate,
+//  2. the model is leaned over by miniature_tilt_degrees about a horizontal axis, which is what
+//     makes the cross sections of the print ramp in gradually from the narrow cut up to the widest
+//     part of the piece instead of standing up as a full width disc (less peel, no flat layers that
+//     would need a raft worth of area),
+//  3. the azimuth of that lean is the one thing searched. Among the miniature_tilt_directions
+//     azimuths, the one that keeps the most detail facing up wins, detail being the surface on the
+//     side away from the glue face weighted by how finely it is tessellated (a sculpted face is
+//     many small facets, so the small ones carry the score), and the least area facing the plate
+//     wins first among those: that area is what has to be supported and what a layer of it holds
+//     against the film.
+//
+// The rotation about Z is not part of the search and the model is not turned on the plate. The
+// engine's convention has no Z of its own (R = Ry(y) * Rx(x)) and dropping the Z out of the
+// decomposition of a pose keeps the pose: a spin about the vertical axis does not move the
+// direction the glue face points in - it points at the plate, which the spin fixes - so the pose
+// that is scored and the pose that is handed out lean by the same angle and show the same detail,
+// whatever the leftover Z of the decomposition is.
+namespace {
+
+/// Facets count as coplanar when their normals are within this many degrees of each other. A cut is
+/// tessellated, and the facets of it differ by the noise of that tessellation rather than by
+/// nothing at all.
+constexpr double glue_face_coplanar_deg = 2.;
+
+/// ... and the facets have to lie in the same plane to within this many mm, so that two parallel
+/// facets on different sides of a piece are not one region.
+constexpr double glue_face_plane_tolerance_mm = 0.02;
+
+/// A cut is small against the piece it is cut into: the neck a bust is glued by and the flat back
+/// of one are both a fraction of its surface. A face that is a quarter of the surface is a side of
+/// the piece, not somewhere to glue a support in.
+constexpr double glue_face_max_area_fraction = 0.25;
+
+/// A region below this many mm² is the noise of a tessellation and not a face.
+constexpr double glue_face_min_area_mm2 = 0.1;
+
+/// How far off the extreme of the piece along its own normal a cut may sit and still be at that
+/// extreme, as a fraction of its diagonal and with a floor of its own so that a small piece still
+/// has a tolerance to speak of.
+constexpr double glue_face_extremity_fraction = 0.005;
+constexpr double glue_face_extremity_min_mm = 0.05;
+
+/// A piece with no cut in it is leaned over on the smallest flat region of its lowest tenth
+/// instead, which is where the flat face a support can hide in is most likely to be.
+constexpr double glue_face_lowest_fraction = 0.1;
+
+/// How far a miniature is leaned over, in degrees, and the range the rule allows. A miniature
+/// leans: the glue face flat on the plate makes its first layers as wide as the widest part of the
+/// piece, which is a big peel and a cup waiting to happen, while leaning it lets the cross sections
+/// ramp in. Past about 30 degrees the lean starts to put a nose or an ear into an overhang that
+/// needs a support of its own, and 45 is where the ramp has already done its work.
+constexpr double miniature_tilt_min_degrees = 30.;
+constexpr double miniature_tilt_degrees      = 35.;
+constexpr double miniature_tilt_max_degrees = 45.;
+
+/// The lean in radians, clamped into the range above, so that changing the number above cannot
+/// take the rule out of what it says it does.
+constexpr double miniature_tilt_rad =
+    std::clamp(miniature_tilt_degrees, miniature_tilt_min_degrees, miniature_tilt_max_degrees)
+    * PI / 180.;
+
+/// A facet leaning below this much down (-0.5 is 60 degrees off the horizontal) faces the plate:
+/// it is an overhang the print cannot get to, and an area of it that is not there is an area of
+/// support that is not needed.
+constexpr double miniature_facing_down_z = -0.5;
+
+/// How many azimuths the lean is tried at. The lean is one number and the piece is not round, so
+/// this is the whole search.
+constexpr size_t miniature_tilt_directions = 24;
+
+/// Poses whose facing down area is within this fraction of the least of them count as equal for
+/// that term, so that the detail decides between them instead of a corner of a jaw doing it.
+constexpr double miniature_down_area_relaxation = 0.02;
+
+/// One facet of the mesh, measured once. Everything below walks the mesh over and over and needs
+/// the same four numbers of every facet, so they are measured in a single walk up front.
+struct FacetMeasure
+{
+    /// Unit, pointing out of the piece. The zero vector for a facet with no area.
+    Vec3d normal{Vec3d::Zero()};
+    /// The middle of the facet.
+    Vec3d centroid{Vec3d::Zero()};
+    /// The area of the facet, in mm². A facet with no area (the ring of a sphere at its pole, a
+    /// triangle a boolean left behind) measures zero and joins no region.
+    double area_mm2{0.};
+    /// Where the plane of the facet sits along its own normal.
+    double plane_mm{0.};
+};
+
+std::vector<FacetMeasure> measure_facets(const TriangleMesh &mesh)
+{
+    std::vector<FacetMeasure> facets;
+    facets.reserve(mesh.its.indices.size());
+
+    for (size_t fi = 0; fi < mesh.its.indices.size(); ++fi) {
+        const auto &face = mesh.its.indices[fi];
+        const Vec3d p0{mesh.its.vertices[face[0]].cast<double>()};
+        const Vec3d p1{mesh.its.vertices[face[1]].cast<double>()};
+        const Vec3d p2{mesh.its.vertices[face[2]].cast<double>()};
+        const Vec3d cross = (p1 - p0).cross(p2 - p0);
+        const double twice_area = cross.norm();
+
+        FacetMeasure facet;
+        // The facet keeps the index of the mesh triangle it came from: the groups below join the
+        // facets on the edges they share and have to look the mesh up by it.
+        facet.centroid = (p0 + p1 + p2) / 3.;
+        if (twice_area > 0.) {
+            facet.normal   = cross / twice_area;
+            facet.area_mm2 = 0.5 * twice_area;
+            facet.plane_mm = facet.normal.dot(facet.centroid);
+        }
+        facets.push_back(facet);
+    }
+
+    return facets;
+}
+
+/// The sets of facets that are one region each, kept as a parent per facet with the path walked
+/// into the root, which is all a union of a few thousand facets needs.
+struct DisjointSet
+{
+    std::vector<size_t> parent;
+
+    explicit DisjointSet(size_t count) : parent(count)
+    {
+        std::iota(parent.begin(), parent.end(), size_t(0));
+    }
+
+    size_t find(size_t x)
+    {
+        while (parent[x] != x) {
+            parent[x] = parent[parent[x]];
+            x = parent[x];
+        }
+        return x;
+    }
+
+    void merge(size_t a, size_t b)
+    {
+        const size_t root_a = find(a), root_b = find(b);
+        if (root_a != root_b) parent[root_b] = root_a;
+    }
+};
+
+/// One flat region of the mesh: the area weighted mean of the facets that are coplanar with each
+/// other and joined to each other.
+struct PlanarRegion
+{
+    Vec3d normal{Vec3d::Zero()};
+    Vec3d centroid{Vec3d::Zero()};
+    double area_mm2{0.};
+    /// How many facets it is made of. A region of one facet is a triangle, not a face: nothing a
+    /// support can be hidden in, and on a curved surface every facet is one of them.
+    size_t facets{0};
+};
+
+inline uint64_t edge_key(size_t a, size_t b)
+{
+    return (uint64_t(std::min(a, b)) << 32) | uint64_t(std::max(a, b));
+}
+
+/// The flat regions of the mesh: maximal sets of facets whose normals are within
+/// glue_face_coplanar_deg of each other, that lie in the same plane, and that are joined by an edge
+/// they share. The joining matters: two facets in the same plane that touch nowhere are two faces,
+/// and a cut is one of them only where it is connected.
+std::vector<PlanarRegion> planar_regions(const TriangleMesh            &mesh,
+                                        const std::vector<FacetMeasure> &facets)
+{
+    DisjointSet sets{facets.size()};
+
+    // The facet each edge was seen on, so that two facets sharing one can be joined.
+    std::unordered_map<uint64_t, size_t> facet_of_edge;
+    facet_of_edge.reserve(facets.size() * 3);
+
+    const double cos_coplanar = std::cos(glue_face_coplanar_deg * PI / 180.);
+
+    for (size_t fi = 0; fi < facets.size(); ++fi) {
+        const FacetMeasure &facet = facets[fi];
+        const auto &face        = mesh.its.indices[fi];
+
+        for (int e = 0; e < 3; ++e) {
+            const uint64_t key = edge_key(face[e], face[(e + 1) % 3]);
+            const auto it       = facet_of_edge.find(key);
+            if (it == facet_of_edge.end()) {
+                facet_of_edge.emplace(key, fi);
+                continue;
+            }
+
+            const FacetMeasure &other = facets[it->second];
+            // A facet with no area has no normal, so it is never coplanar with anything and joins
+            // no region (a dot product of zero against a cosine of nearly one fails on its own).
+            if (facet.normal.dot(other.normal) >= cos_coplanar
+                && std::abs(facet.plane_mm - other.plane_mm) <= glue_face_plane_tolerance_mm)
+                sets.merge(fi, it->second);
+        }
+    }
+
+    std::vector<PlanarRegion> regions;
+    std::vector<Vec3d> normal_sum, centroid_sum;
+    std::vector<double> area_sum;
+    std::unordered_map<size_t, size_t> region_of_root;
+
+    for (size_t fi = 0; fi < facets.size(); ++fi) {
+        const FacetMeasure &facet = facets[fi];
+        if (!(facet.area_mm2 > 0.))
+            continue;
+
+        const size_t root = sets.find(fi);
+        const auto it     = region_of_root.find(root);
+        size_t region     = 0;
+        if (it == region_of_root.end()) {
+            region = regions.size();
+            region_of_root.emplace(root, region);
+            regions.emplace_back();
+            normal_sum.emplace_back(Vec3d::Zero());
+            centroid_sum.emplace_back(Vec3d::Zero());
+            area_sum.emplace_back(0.);
+        } else {
+            region = it->second;
+        }
+
+        normal_sum[region]   += facet.normal * facet.area_mm2;
+        centroid_sum[region] += facet.centroid * facet.area_mm2;
+        area_sum[region] += facet.area_mm2;
+        ++regions[region].facets;
+    }
+
+    for (size_t region = 0; region < regions.size(); ++region) {
+        regions[region].area_mm2 = area_sum[region];
+        if (area_sum[region] > 0.) {
+            regions[region].normal   = normal_sum[region] / area_sum[region];
+            regions[region].centroid = centroid_sum[region] / area_sum[region];
+            // The mean of normals of one plane has the length 1 up to the noise of the
+            // tessellation; the copy is what makes the extremity test below a plain comparison.
+            regions[region].normal.normalize();
+        }
+    }
+
+    return regions;
+}
+
+/// Is this flat region at one of the extremes of the piece along its own normal, with the rest of
+/// the piece on the other side of it? A cut is (the neck is at the bottom, the flat back of a bust
+/// is at the back); the front of a face is not, and neither is a shoulder, because both have piece
+/// on the far side of them along their normal as well.
+bool is_at_extremity(const TriangleMesh &mesh, const PlanarRegion &region, double tolerance_mm)
+{
+    if (region.area_mm2 <= 0.)
+        return false;
+
+    double lowest  = std::numeric_limits<double>::max();
+    double highest = std::numeric_limits<double>::lowest();
+    for (const Vec3f &vertex : mesh.its.vertices) {
+        const double along = region.normal.dot(vertex.cast<double>());
+        lowest             = std::min(lowest, along);
+        highest            = std::max(highest, along);
+    }
+
+    const double here = region.normal.dot(region.centroid);
+    return highest - here <= tolerance_mm && here - lowest > tolerance_mm;
+}
+
+/// The face of a miniature that a support can be hidden in: the cut it is glued to a body by.
+struct GlueFace
+{
+    /// Whether one was found at all. A piece with no flat face has none and is only leaned over.
+    bool found{false};
+    /// Unit, pointing out of the piece at the face.
+    Vec3d normal{Vec3d::Zero()};
+    double area_mm2{0.};
+    /// Where the plane of the face sits along its own normal, which is how the facets of the cut
+    /// are told apart from the rest of the piece.
+    double plane_mm{0.};
+};
+
+GlueFace find_glue_face(const TriangleMesh              &mesh,
+                        const std::vector<FacetMeasure> &facets,
+                        const std::vector<PlanarRegion> &regions)
+{
+    double surface_area_mm2 = 0.;
+    for (const FacetMeasure &facet : facets)
+        surface_area_mm2 += facet.area_mm2;
+
+    const BoundingBoxf3 bounds = bounding_box_with_tr(mesh.its, Transform3f::Identity());
+    const Vec3d sizes{ BB::sizes(bounds).cast<double>() };
+    const double extremity_mm = std::max(glue_face_extremity_min_mm,
+                                         glue_face_extremity_fraction * sizes.norm());
+
+    // The regions that could be a cut at all: flat enough against the surface of the piece to be a
+    // cut rather than a side of it, big enough to be a face, and made of more than one facet.
+    // Biggest first, so that the first one of them that really is at an extreme of the piece is the
+    // glue face.
+    std::vector<const PlanarRegion *> candidates;
+    candidates.reserve(regions.size());
+    for (const PlanarRegion &region : regions) {
+        if (region.facets < 2)
+            continue;
+        if (region.area_mm2 < glue_face_min_area_mm2)
+            continue;
+        if (region.area_mm2 > glue_face_max_area_fraction * surface_area_mm2)
+            continue;
+        candidates.push_back(&region);
+    }
+    std::sort(candidates.begin(), candidates.end(),
+              [](const PlanarRegion *lhs, const PlanarRegion *rhs) {
+                  return lhs->area_mm2 > rhs->area_mm2;
+              });
+
+    for (const PlanarRegion *region : candidates) {
+        if (is_at_extremity(mesh, *region, extremity_mm)) {
+            return GlueFace{true,
+                            region->normal,
+                            region->area_mm2,
+                            region->normal.dot(region->centroid)};
+        }
+    }
+
+    // Nothing flat at an extreme of the piece: either it has no extreme that is flat (a head that
+    // is cut off at an angle, a bust whose neck was modelled round) or nothing flat at all. Take
+    // the smallest flat region of the lowest tenth of the piece instead, which is the closest thing
+    // to a neck cut it has.
+    const double lowest_z = double(bounds.min.z());
+    const PlanarRegion *fallback{nullptr};
+    for (const PlanarRegion &region : regions) {
+        if (region.facets < 2)
+            continue;
+        if (region.area_mm2 < glue_face_min_area_mm2)
+            continue;
+        // Only a face that is not looking up: a cut is used from the side the piece is on, and a
+        // face that looks up would have to be turned over to be a glue face.
+        if (region.normal.z() > 0.)
+            continue;
+        if (region.centroid.z() > lowest_z + glue_face_lowest_fraction * sizes.z())
+            continue;
+        if (!fallback || region.area_mm2 < fallback->area_mm2)
+            fallback = &region;
+    }
+
+    if (fallback) {
+        return GlueFace{true,
+                        fallback->normal,
+                        fallback->area_mm2,
+                        fallback->normal.dot(fallback->centroid)};
+    }
+
+    // A piece with no flat face at all (a skull, a scanned bust nobody has cut) has no cut to
+    // find. It keeps the pose it is loaded in and is only leaned over, which is still a pose that
+    // can be printed and no worse than the one it came in.
+    return GlueFace{};
+}
+
+/// One pose of the miniature goal and the two numbers it is picked by.
+struct MiniaturePose
+{
+    XYRotation rot{0., 0.};
+    /// The area of the facets facing the plate, in mm²: what has to be supported.
+    double facing_down_mm2{0.};
+    /// The detail of the piece still facing up, weighted by how finely it is tessellated.
+    double detail_up{0.};
+};
+
+/// Score one candidate lean of the miniature goal. The lean is about a horizontal axis of the pose
+/// the glue face is already flat in, so it leaves that face on the plate and only ramps the cross
+/// sections in.
+void score_miniature_pose(
+    const std::vector<FacetMeasure> &facets,
+    const GlueFace                 &glue,
+    const Eigen::Quaternionf        &pose,
+    MiniaturePose                   &out
+)
+{
+    const Eigen::Quaterniond pose_double = pose.cast<double>();
+    // The glue normal the facets are read against: the side the cut is on, which is not the detail
+    // side. A piece with no cut is read against the -Z of the pose it was loaded in.
+    const Vec3d glue_normal = glue.found ? glue.normal : Vec3d(0., 0., -1.);
+
+    out.rot = from_transform3f(Transform3f::Identity() * pose);
+    for (const FacetMeasure &facet : facets) {
+        if (!(facet.area_mm2 > 0.))
+            continue;
+
+        const Vec3d normal = pose_double * facet.normal;
+        // The cut itself is on the plate and is the one part of the piece that never needs a
+        // support of its own, so it is not counted as facing down: it would be the biggest area of
+        // the pose facing the plate and it would be the same for every lean.
+        const bool on_the_cut = glue.found
+                                && std::abs(facet.plane_mm - glue.plane_mm)
+                                       <= glue_face_plane_tolerance_mm;
+        if (!on_the_cut && normal.z() < miniature_facing_down_z)
+            out.facing_down_mm2 += facet.area_mm2;
+
+        // The detail is the surface on the side away from the glue face: everything the piece
+        // shows the world instead of the plate. Its score is the area of it that still faces up,
+        // weighted by the square root of the area of the facet, which is the same weight the
+        // supportedness score of the least supports goal uses and for the same reason: a sculpted
+        // face is a lot of small facets, so the small ones are where the detail is.
+        if (facet.normal.dot(glue_normal) < 0.)
+            out.detail_up += std::sqrt(facet.area_mm2) * std::max(0., normal.z());
+    }
+}
+
+} // namespace
+
+Vec2d find_miniature_rotation(const TriangleMesh &mesh, const RotOptimizeParams &params)
+{
+    RotfinderBoilerplate<1000> bp{TriangleMesh{mesh}, params};
+
+    if (bp.mesh.its.vertices.empty() || bp.mesh.its.indices.empty()) {
+        return Vec2d::Zero();
+    }
+
+    const std::vector<FacetMeasure> facets = measure_facets(bp.mesh);
+    const GlueFace glue = find_glue_face(bp.mesh, facets, planar_regions(bp.mesh, facets));
+
+    // A piece with no flat face keeps the pose it is loaded in: the identity rotation lays the
+    // -Z of the mesh down, which is what the fallback below does with the normal it reports.
+    const Vec3d glue_normal = glue.found ? glue.normal : Vec3d(0., 0., -1.);
+    const Eigen::Quaternionf lay_down{
+        glue.found ? Eigen::Quaternionf{}.FromTwoVectors(glue_normal.cast<float>(), DOWN)
+                   : Eigen::Quaternionf::Identity()};
+
+    // The lean: the only thing searched. The azimuths go around the plate once, so the piece is
+    // compared leaning in every direction.
+    std::vector<MiniaturePose> poses;
+    poses.reserve(miniature_tilt_directions);
+    for (size_t i = 0; i < miniature_tilt_directions; ++i) {
+        const double azimuth = 2 * PI * double(i) / double(miniature_tilt_directions);
+        const Vec3f axis{float(std::cos(azimuth)), float(std::sin(azimuth)), 0.f};
+        const Eigen::Quaternionf pose{Eigen::AngleAxisf(float(miniature_tilt_rad), axis)}
+                                   * lay_down;
+
+        score_miniature_pose(facets, glue, pose, poses.emplace_back());
+        bp.statusfn();
+
+        if (bp.stopcond()) break;
+    }
+
+    if (poses.empty())
+        return Vec2d::Zero();
+
+    // What faces the plate first, the detail among the poses that are as good as each other in
+    // that. The piece is never scored against a print and nothing is sliced.
+    double least_facing_down = std::numeric_limits<double>::max();
+    for (const MiniaturePose &pose : poses)
+        least_facing_down = std::min(least_facing_down, pose.facing_down_mm2);
+
+    const double as_good_as_the_best =
+        least_facing_down * (1. + miniature_down_area_relaxation) + glue_face_plane_tolerance_mm;
+
+    const MiniaturePose *best{nullptr};
+    for (const MiniaturePose &pose : poses) {
+        if (pose.facing_down_mm2 > as_good_as_the_best)
+            continue;
+        if (!best || pose.detail_up > best->detail_up)
+            best = &pose;
+    }
+
+    // A search that was cancelled before it scored anything still answers with a pose, as the
+    // other searches do: the piece laid on its glue face, without the lean.
+    if (!best)
+        best = &poses.front();
+
+    return {best->rot[0], best->rot[1]};
 }
 
 }} // namespace Slic3r::sla

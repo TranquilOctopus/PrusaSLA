@@ -16,7 +16,9 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <map>
 #include <numbers>
+#include <utility>
 #include <vector>
 
 using Catch::Approx;
@@ -229,6 +231,192 @@ CoarseSlices coarse_slices_after_rotation(
     return result;
 }
 
+// ------------------------------------------------------------------------------------------------
+// The shapes of the miniature goal, written out here rather than taken from a fixture file.
+
+// The angle between two directions, in degrees.
+double angle_between_degrees(const Slic3r::Vec3d& one, const Slic3r::Vec3d& other)
+{
+    const double cos_angle = one.normalized().dot(other.normalized());
+    return std::acos(std::clamp(cos_angle, -1., 1.)) * 180. / std::numbers::pi;
+}
+
+// The smallest angle between the normals of two facets of the mesh that share an edge, in degrees.
+// This is what says whether a mesh has a flat face in it at all: the facets of one flat face
+// differ by the noise of the tessellation and not by anything like this, while the facets of a
+// curved surface differ by the grid they are cut on.
+double smallest_shared_edge_normal_angle_deg(const Slic3r::Domain::TriangleMesh& mesh)
+{
+    double smallest = 180.;
+    std::map<std::pair<size_t, size_t>, Slic3r::Vec3d> normal_of_edge;
+
+    for (size_t fi = 0; fi < mesh.its.indices.size(); ++fi) {
+        const auto& face = mesh.its.indices[fi];
+        const Slic3r::Vec3d p0{mesh.its.vertices[face[0]].cast<double>()};
+        const Slic3r::Vec3d p1{mesh.its.vertices[face[1]].cast<double>()};
+        const Slic3r::Vec3d p2{mesh.its.vertices[face[2]].cast<double>()};
+        const Slic3r::Vec3d normal = (p1 - p0).cross(p2 - p0).normalized();
+
+        for (int edge = 0; edge < 3; ++edge) {
+            const size_t a = std::min(face[edge], face[(edge + 1) % 3]);
+            const size_t b = std::max(face[edge], face[(edge + 1) % 3]);
+            const auto it = normal_of_edge.find({a, b});
+            if (it == normal_of_edge.end()) {
+                normal_of_edge.emplace(std::make_pair(a, b), normal);
+            } else {
+                smallest = std::min(smallest, angle_between_degrees(normal, it->second));
+            }
+        }
+    }
+
+    return smallest;
+}
+
+// A sphere of the given radius, written out of triangles: `rings` rows of quads between the two
+// poles, every quad split into two triangles. The quads of the first and the last row have no area
+// at all, so they are left out and the poles are fans of single triangles, which is how a sphere
+// arrives from a scanner too.
+indexed_triangle_set make_sphere(double radius, size_t rings, size_t segments)
+{
+    indexed_triangle_set its;
+    its.vertices.reserve(2 + (rings - 1) * segments);
+    its.indices.reserve(2 * segments + 2 * (rings - 2) * segments);
+
+    its.vertices.emplace_back(0.f, 0.f, float(radius)); // the top pole
+    for (size_t ring = 1; ring < rings; ++ring) {
+        const double theta = std::numbers::pi * double(ring) / double(rings);
+        for (size_t seg = 0; seg < segments; ++seg) {
+            const double phi = 2 * std::numbers::pi * double(seg) / double(segments);
+            its.vertices.emplace_back(float(radius * std::sin(theta) * std::cos(phi)),
+                                      float(radius * std::sin(theta) * std::sin(phi)),
+                                      float(radius * std::cos(theta)));
+        }
+    }
+    its.vertices.emplace_back(0.f, 0.f, float(-radius)); // the bottom pole
+
+    const size_t bottom_pole = its.vertices.size() - 1;
+    const auto ring_vertex = [segments](int ring, int seg) {
+        return int(1 + size_t(ring - 1) * segments + size_t(seg) % segments);
+    };
+
+    for (int seg = 0; seg < int(segments); ++seg)
+        its.indices.push_back({0, ring_vertex(1, seg), ring_vertex(1, seg + 1)});
+
+    for (int ring = 1; ring + 1 < int(rings); ++ring) {
+        for (int seg = 0; seg < int(segments); ++seg) {
+            const int here = ring_vertex(ring, seg);
+            const int next = ring_vertex(ring, seg + 1);
+            const int below = ring_vertex(ring + 1, seg);
+            const int below_next = ring_vertex(ring + 1, seg + 1);
+            its.indices.push_back({here, below, below_next});
+            its.indices.push_back({here, below_next, next});
+        }
+    }
+
+    for (int seg = 0; seg < int(segments); ++seg) {
+        its.indices.push_back(
+            {ring_vertex(int(rings) - 1, seg), int(bottom_pole), ring_vertex(int(rings) - 1, seg + 1)});
+    }
+
+    return its;
+}
+
+// A closed cylinder standing on the z = 0 plane with its axis on the origin, with a cap at both
+// ends: the bottom one wound so that it looks down, the top one so that it looks up.
+indexed_triangle_set make_cylinder(double radius, double height, size_t segments)
+{
+    indexed_triangle_set its;
+    its.vertices.reserve(2 * segments + 2);
+    its.indices.reserve(4 * segments);
+
+    for (size_t seg = 0; seg < segments; ++seg) {
+        const double phi = 2 * std::numbers::pi * double(seg) / double(segments);
+        its.vertices.emplace_back(float(radius * std::cos(phi)), float(radius * std::sin(phi)), 0.f);
+        its.vertices.emplace_back(
+            float(radius * std::cos(phi)), float(radius * std::sin(phi)), float(height));
+    }
+    its.vertices.emplace_back(0.f, 0.f, 0.f);            // the centre of the bottom cap
+    its.vertices.emplace_back(0.f, 0.f, float(height));  // the centre of the top cap
+
+    const int bottom_centre = int(2 * segments), top_centre = int(2 * segments + 1);
+    const auto rim = [segments](int seg, bool top) { return 2 * (seg % int(segments)) + (top ? 1 : 0); };
+
+    for (int seg = 0; seg < int(segments); ++seg) {
+        its.indices.push_back({rim(seg, false), rim(seg + 1, false), rim(seg + 1, true)});
+        its.indices.push_back({rim(seg, false), rim(seg + 1, true), rim(seg, true)});
+        its.indices.push_back({bottom_centre, rim(seg + 1, false), rim(seg, false)});
+        its.indices.push_back({top_centre, rim(seg, true), rim(seg + 1, true)});
+    }
+
+    return its;
+}
+
+// A head on a neck: a sphere for the head and a short cylinder for the neck under it, with the
+// bottom of the head inside the neck so that the two read as one piece. The flat cut at the bottom
+// of the neck is the only flat face of the mesh that is at an extreme of it, so it is the face the
+// miniature goal lays on the plate.
+Slic3r::Domain::TriangleMesh make_head_on_neck(
+    double head_radius, double neck_radius, double neck_height
+)
+{
+    // The head sits that far above the cut, so that its bottom is inside the neck.
+    Slic3r::Domain::TriangleMesh head{std::move(make_sphere(head_radius, 12, 24))};
+    head.translate(Slic3r::Vec3f{0.f, 0.f, float(head_radius + 2.)});
+    Slic3r::Domain::TriangleMesh neck{std::move(make_cylinder(neck_radius, neck_height, 24))};
+
+    indexed_triangle_set its;
+    Slic3r::Domain::its_merge(its, head.its);
+    Slic3r::Domain::its_merge(its, neck.its);
+
+    return Slic3r::Domain::TriangleMesh{std::move(its)};
+}
+
+// A bust: a box shaped body with one small flat face at its lower end, the cut it is glued to a
+// body by. Its four sides are deliberately not flat: the top is a wide rectangle turned against the
+// small one at the bottom, so every side is a warped quad and no two of its triangles lie in a plane
+// together. That is what a bust is like, and it is what makes the cut the only face on the piece
+// instead of one of six.
+Slic3r::Domain::TriangleMesh make_bust(double cut_x, double cut_y, double top_x, double top_y,
+                                       double height, double twist_deg)
+{
+    const double twist = twist_deg * std::numbers::pi / 180.;
+    const auto turn = [twist](double x, double y, double z) {
+        return Slic3r::Vec3f{float(x * std::cos(twist) - y * std::sin(twist) + 1.5),
+                             float(x * std::sin(twist) + y * std::cos(twist) + 0.5),
+                             float(z)};
+    };
+
+    indexed_triangle_set its;
+    const Slic3r::Vec3f bottom[4] = {{float(-cut_x / 2.), float(-cut_y / 2.), 0.f},
+                                     {float(cut_x / 2.), float(-cut_y / 2.), 0.f},
+                                     {float(cut_x / 2.), float(cut_y / 2.), 0.f},
+                                     {float(-cut_x / 2.), float(cut_y / 2.), 0.f}};
+    for (const Slic3r::Vec3f& corner : bottom)
+        its.vertices.push_back(corner);
+    for (const Slic3r::Vec3f& corner : {turn(-top_x / 2., -top_y / 2., height),
+                                         turn(top_x / 2., -top_y / 2., height),
+                                         turn(top_x / 2., top_y / 2., height),
+                                         turn(-top_x / 2., top_y / 2., height)})
+        its.vertices.push_back(corner);
+
+    const auto bottom_corner = [](int i) { return i % 4; };
+    const auto top_corner    = [](int i) { return 4 + i % 4; };
+
+    // The cut at the bottom, wound so that it looks down.
+    its.indices.push_back({bottom_corner(0), bottom_corner(3), bottom_corner(2)});
+    its.indices.push_back({bottom_corner(0), bottom_corner(2), bottom_corner(1)});
+    // The top of the bust, looking up.
+    its.indices.push_back({top_corner(0), top_corner(1), top_corner(2)});
+    its.indices.push_back({top_corner(0), top_corner(2), top_corner(3)});
+    // The four sides.
+    for (int side = 0; side < 4; ++side) {
+        its.indices.push_back({bottom_corner(side), bottom_corner(side + 1), top_corner(side + 1)});
+        its.indices.push_back({bottom_corner(side), top_corner(side + 1), top_corner(side)});
+    }
+
+    return Slic3r::Domain::TriangleMesh{std::move(its)};
+}
+
 } // namespace
 
 TEST_CASE("Rotfinder: minimum-height rotation lays a tall box down", "[SLA][Rotfinder]")
@@ -298,6 +486,7 @@ TEST_CASE("Auto orient: an object with nothing to rotate does not throw", "[SLA]
     CHECK_NOTHROW(Slic3r::sla::auto_orient(*object, Slic3r::sla::AutoOrientGoal::MinHeight));
     CHECK_NOTHROW(Slic3r::sla::auto_orient(*object, Slic3r::sla::AutoOrientGoal::LeastPeel));
     CHECK_NOTHROW(Slic3r::sla::auto_orient(*object, Slic3r::sla::AutoOrientGoal::NoCups));
+    CHECK_NOTHROW(Slic3r::sla::auto_orient(*object, Slic3r::sla::AutoOrientGoal::Miniature));
 
     // The mesh of an object with no geometry is empty, and an empty mesh has nothing to rotate.
     CHECK(Slic3r::sla::auto_orient_mesh(*object).its.vertices.empty());
@@ -410,12 +599,104 @@ TEST_CASE("Auto orient: the mesh of the object searches like the object does", "
 
     for (const Slic3r::sla::AutoOrientGoal goal : {Slic3r::sla::AutoOrientGoal::MinHeight,
                                                     Slic3r::sla::AutoOrientGoal::LeastPeel,
-                                                    Slic3r::sla::AutoOrientGoal::NoCups}) {
+                                                    Slic3r::sla::AutoOrientGoal::NoCups,
+                                                    Slic3r::sla::AutoOrientGoal::Miniature}) {
         const Slic3r::Vec2d from_object = Slic3r::sla::auto_orient(*plate.object, goal);
         const Slic3r::Vec2d from_mesh   = Slic3r::sla::auto_orient(mesh, goal);
         CHECK(from_mesh.x() == from_object.x());
         CHECK(from_mesh.y() == from_object.y());
     }
+}
+
+TEST_CASE("Auto orient: miniature lays a head on its neck cut", "[SLA][Rotfinder]")
+{
+    // A head of 8 mm on a neck of 3 mm, with the neck cut flat. The head sits 10 mm above the cut,
+    // so the piece is 18 mm tall as it is loaded.
+    Slic3r::Domain::TriangleMesh mesh = make_head_on_neck(8., 3., 5.);
+
+    // The neck is cut flat, so the facets of the bottom of it are exactly in one plane, which is
+    // what the goal looks a cut out by.
+    REQUIRE(smallest_shared_edge_normal_angle_deg(mesh) < 2.);
+
+    MeshModel head{std::move(mesh)};
+    const Slic3r::Vec2d rotation =
+        Slic3r::sla::auto_orient(*head.object, Slic3r::sla::AutoOrientGoal::Miniature);
+    REQUIRE(std::isfinite(rotation.x()));
+    REQUIRE(std::isfinite(rotation.y()));
+
+    const Slic3r::Transform3d trafo = rotation_transform(rotation);
+
+    // The cut of the neck points at the plate, off by the lean of the goal and nothing else: the
+    // cut is 35 degrees off straight down, because the lean of the miniature goal is 35 degrees.
+    const Slic3r::Vec3d cut_after = trafo * -Slic3r::Vec3d::UnitZ();
+    CHECK(cut_after.z() < -0.5);
+    CHECK(angle_between_degrees(cut_after, -Slic3r::Vec3d::UnitZ()) == Approx(35.).margin(0.5));
+
+    // The piece leans over by that same angle, which is what makes the cross sections of the print
+    // ramp in from the narrow neck up to the head instead of starting at the width of the head.
+    const Slic3r::Vec3d up_after = trafo * Slic3r::Vec3d::UnitZ();
+    CHECK(angle_between_degrees(up_after, Slic3r::Vec3d::UnitZ()) == Approx(35.).margin(0.5));
+
+    // The head ends up above the cut and off to one side of it, which is the pose the goal is for.
+    const Slic3r::Vec3d head_centre = trafo * Slic3r::Vec3d{0., 0., 10.};
+    CHECK(head_centre.z() > 5.);
+    CHECK(std::abs(head_centre.x()) + std::abs(head_centre.y()) > 1.);
+}
+
+TEST_CASE("Auto orient: miniature lays a bust on its small flat face", "[SLA][Rotfinder]")
+{
+    // A bust 6 x 5 mm at the cut and 20 x 14 mm at the top, 10 mm tall, with the top turned 15
+    // degrees against the cut so that its four sides are warped quads and not flat. The cut is a
+    // few percent of the surface and it is the only flat face of the piece that is at an extreme
+    // of it, which is what makes it the face the piece is printed on.
+    Slic3r::Domain::TriangleMesh mesh = make_bust(6., 5., 20., 14., 10., 15.);
+
+    // The two triangles of the cut are exactly in one plane; no other face of the bust is flat at
+    // all, its sides being warped.
+    REQUIRE(smallest_shared_edge_normal_angle_deg(mesh) < 2.);
+
+    MeshModel bust{std::move(mesh)};
+    const Slic3r::Vec2d rotation =
+        Slic3r::sla::auto_orient(*bust.object, Slic3r::sla::AutoOrientGoal::Miniature);
+    REQUIRE(std::isfinite(rotation.x()));
+    REQUIRE(std::isfinite(rotation.y()));
+
+    const Slic3r::Transform3d trafo = rotation_transform(rotation);
+
+    // The small flat face is the one on the plate, within the lean.
+    const Slic3r::Vec3d cut_after = trafo * -Slic3r::Vec3d::UnitZ();
+    CHECK(cut_after.z() < -0.5);
+    CHECK(angle_between_degrees(cut_after, -Slic3r::Vec3d::UnitZ()) == Approx(35.).margin(0.5));
+
+    // The wide end of the bust is up and leaning, so the layers grow as the print goes up and the
+    // face of it is not cut along its own layers.
+    const Slic3r::Vec3d top_centre = trafo * Slic3r::Vec3d{1.5, 0.5, 10.};
+    CHECK(top_centre.z() > 5.);
+    const Slic3r::Vec3d up_after = trafo * Slic3r::Vec3d::UnitZ();
+    CHECK(angle_between_degrees(up_after, Slic3r::Vec3d::UnitZ()) == Approx(35.).margin(0.5));
+}
+
+TEST_CASE("Auto orient: a miniature with no flat face is only leaned over", "[SLA][Rotfinder]")
+{
+    // A sphere: there is no flat face in it at all, so there is no cut for the goal to find. Its
+    // facets differ by the 15 degrees of the grid they are cut on, so not two of them that share an
+    // edge lie in one plane.
+    Slic3r::Domain::TriangleMesh mesh{make_sphere(10., 12, 24)};
+    REQUIRE(smallest_shared_edge_normal_angle_deg(mesh) > 2.);
+    MeshModel ball{std::move(mesh)};
+
+    Slic3r::Vec2d rotation{Slic3r::Vec2d::Zero()};
+    CHECK_NOTHROW(
+        rotation = Slic3r::sla::auto_orient(*ball.object, Slic3r::sla::AutoOrientGoal::Miniature));
+    REQUIRE(std::isfinite(rotation.x()));
+    REQUIRE(std::isfinite(rotation.y()));
+
+    // The fallback keeps the pose the piece was loaded in and only leans it over, by the same 35
+    // degrees as every other piece: no cut, nothing turned over, nothing thrown away.
+    const Slic3r::Transform3d trafo = rotation_transform(rotation);
+    const Slic3r::Vec3d up_after = trafo * Slic3r::Vec3d::UnitZ();
+    CHECK(angle_between_degrees(up_after, Slic3r::Vec3d::UnitZ()) == Approx(35.).margin(0.5));
+    CHECK((trafo * Slic3r::Vec3d{0., 0., 10.}).z() > 5.);
 }
 
 TEST_CASE("Auto orient: the status callback stops the search", "[SLA][Rotfinder]")
