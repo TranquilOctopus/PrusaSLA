@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Slic3r/Domain/ConfigDefsSLA.hpp" // Domain::sla::RaftType
-#include "Slic3r/Domain/TriangleMesh.hpp"   // Domain::indexed_triangle_set
+#include "Slic3r/Domain/TriangleMesh.hpp"   // indexed_triangle_set (admesh/stl.h, global scope)
 #include "libslic3r/SLA/Pad.hpp"            // ThrowOnCancel
 
 #include <cstddef>
@@ -66,10 +66,10 @@ struct RaftAutoDecision
  * held above the plate by its supports gets the full plate raft: it is the slab the pillars stand
  * on, and its top skin is what the pocket opens onto instead of the film.
  */
-RaftAutoDecision auto_raft_decision(const Domain::indexed_triangle_set& mesh_in_print_pose,
-                                    double                           layer_height_mm,
-                                    double                           object_elevation_mm,
-                                    const RaftAutoOptions&           opts           = {},
-                                    const ThrowOnCancel&             throw_on_cancel = {});
+RaftAutoDecision auto_raft_decision(const indexed_triangle_set& mesh_in_print_pose,
+                                    double                     layer_height_mm,
+                                    double                     object_elevation_mm,
+                                    const RaftAutoOptions&     opts           = {},
+                                    const ThrowOnCancel&       throw_on_cancel = {});
 
 } // namespace Slic3r::sla

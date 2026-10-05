@@ -12,9 +12,6 @@ namespace Slic3r::sla {
 
 namespace {
 
-using Domain::ExPolygons;
-using Domain::indexed_triangle_set;
-
 // The lift under which a part no longer stands on the plate. The elevation of a print is never
 // smaller than this, and a part lifted by less than it stands on the plate as far as this rule is
 // concerned.
@@ -82,12 +79,14 @@ RaftAutoDecision auto_raft_decision(const indexed_triangle_set& mesh_in_print_po
     if (object_elevation_mm != 0.)
         params.trafo = Domain::translation_transform(Domain::Vec3d(0., 0., object_elevation_mm));
 
-    const ExPolygons layers = throw_on_cancel
+    const std::vector<Domain::ExPolygons> layers = throw_on_cancel
         ? slice_mesh_ex(mesh_in_print_pose, zs, params, throw_on_cancel)
         : slice_mesh_ex(mesh_in_print_pose, zs, params);
 
-    const CavityAnalysis cavities =
-        detect_cavities(layers, thicknesses_mm, CavityDetectionOptions{opts.min_cup_opening_mm2});
+    // The cup detection lives in Slic3r::SLA, not in Slic3r::sla, and it takes the very
+    // std::vector<Domain::ExPolygons> slice_mesh_ex returned, so the two need no conversion.
+    const SLA::CavityAnalysis cavities = SLA::detect_cavities(
+        layers, thicknesses_mm, SLA::CavityDetectionOptions{opts.min_cup_opening_mm2});
 
     // No cup under the part: no raft (R6.1). A pocket that is still open on the last layer read
     // vents instead, which the detection does not report as a cup, so it ends here as well.
@@ -95,7 +94,7 @@ RaftAutoDecision auto_raft_decision(const indexed_triangle_set& mesh_in_print_po
         return decision;
 
     // The lowest cup is the one to answer for: the rule is about the first layers of the part.
-    const CupHit& cup = cavities.cups.front();
+    const SLA::CupHit& cup = cavities.cups.front();
     decision.suction          = true;
     decision.first_cup_layer  = cup.first_layer;
     decision.opening_area_mm2 = cup.opening_area_mm2;

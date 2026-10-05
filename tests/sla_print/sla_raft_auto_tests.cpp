@@ -28,6 +28,8 @@
 #include "Slic3r/Domain/PrinterTechnology.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
 #include "Slic3r/Domain/SlicingId.hpp"
+#include "Slic3r/Domain/TriangleMesh.hpp"
+#include "Slic3r/Domain/Types.hpp"
 #include "Slic3r/TestUtils/HwConfigUtils.hpp"
 #include "libslic3r/ConfigViews.hpp"
 #include "libslic3r/IThumbnailImageGenerator.hpp"
@@ -40,15 +42,18 @@ namespace MeshBoolean = Slic3r::Biz::CGAL::Algorithms::MeshBoolean;
 
 using Slic3r::Domain::sla::RaftType;
 
+// The mesh type below is `indexed_triangle_set`, unqualified on purpose: admesh/stl.h declares it
+// in the global namespace, and Slic3r::Domain only carries the coloured variant
+// (Slic3r/Domain/TriangleMesh.hpp). It is written the way libslic3r/SLA/Pad.hpp writes it.
+
 // The layer height of a real SLA print, so the millimetre of underside the shapes below put their
 // pocket in is twenty layers of it.
 constexpr double layer_height_mm = 0.05;
 
 // A box centred on the origin in x and y, its bottom face at z0.
-Slic3r::Domain::indexed_triangle_set box(double x_mm, double y_mm, double z_mm, double z0 = 0.)
+indexed_triangle_set box(double x_mm, double y_mm, double z_mm, double z0 = 0.)
 {
-    Slic3r::Domain::indexed_triangle_set its =
-        Slic3r::Biz::Algorithms::TriangleMesh::its_make_cube(x_mm, y_mm, z_mm);
+    indexed_triangle_set its = Slic3r::Biz::Algorithms::TriangleMesh::its_make_cube(x_mm, y_mm, z_mm);
     for (Slic3r::Domain::Vec3f& vertex : its.vertices) {
         vertex += Slic3r::Domain::Vec3f(0.f, 0.f, float(z0));
     }
@@ -58,24 +63,24 @@ Slic3r::Domain::indexed_triangle_set box(double x_mm, double y_mm, double z_mm, 
 // A block with a pocket closed above it between the two heights: a hollow sole, a recess of a solid,
 // anything that would seal a pocket against the plate. Its underside is solid up to
 // pocket_roof_mm, hollow up to pocket_floor_mm and solid above that.
-Slic3r::Domain::indexed_triangle_set
+indexed_triangle_set
 block_with_pocket(double x_mm, double y_mm, double z_mm, double wall_mm, double pocket_roof_mm,
                   double pocket_floor_mm)
 {
-    Slic3r::Domain::indexed_triangle_set its = box(x_mm, y_mm, z_mm);
-    Slic3r::Domain::indexed_triangle_set pocket = box(x_mm - 2. * wall_mm, y_mm - 2. * wall_mm,
-                                                      pocket_floor_mm - pocket_roof_mm, pocket_roof_mm);
+    indexed_triangle_set its = box(x_mm, y_mm, z_mm);
+    indexed_triangle_set pocket = box(x_mm - 2. * wall_mm, y_mm - 2. * wall_mm,
+                                      pocket_floor_mm - pocket_roof_mm, pocket_roof_mm);
     MeshBoolean::cgal::minus(its, pocket);
     return its;
 }
 
 // A cup standing open side down on the plate: a hollow block open at the bottom, so the first layer
 // is a ring and the empty ring it leaves is sealed by the solid above it.
-Slic3r::Domain::indexed_triangle_set
+indexed_triangle_set
 cup_open_down(double x_mm, double y_mm, double z_mm, double wall_mm)
 {
-    Slic3r::Domain::indexed_triangle_set its = box(x_mm, y_mm, z_mm);
-    Slic3r::Domain::indexed_triangle_set cavity =
+    indexed_triangle_set its = box(x_mm, y_mm, z_mm);
+    indexed_triangle_set cavity =
         box(x_mm - 2. * wall_mm, y_mm - 2. * wall_mm, z_mm + layer_height_mm, -layer_height_mm);
     MeshBoolean::cgal::minus(its, cavity);
     return its;
@@ -176,9 +181,9 @@ ToolConfig make_tool_config(const Slic3r::Domain::ConfigPackSLA& pack)
 // Slice @p its as a model standing on the plate, and ask the support preview for the tree of the
 // very same object. Nothing here slices outside that one print: the preview is the support tool
 // path, which builds a tree and a raft and slices neither.
-RaftOutcome resolve_and_build(const Slic3r::Domain::indexed_triangle_set&  its,
+RaftOutcome resolve_and_build(const indexed_triangle_set&                its,
                               Slic3r::Domain::ConfigPackSLA               config,
-                              const Slic3r::Domain::SLA::SupportPoints&   points = {})
+                              const Slic3r::Domain::SLA::SupportPoints& points = {})
 {
     Slic3r::Domain::Model model;
     Slic3r::Domain::ModelObject* object = model.add_object();
@@ -286,7 +291,7 @@ TEST_CASE("A raft the rule did not ask for is not built, whatever the underside 
     // The four types that are not Auto are the user's own decision and M7.8.4 leaves them as they
     // were: a cup under None prints without a raft, and the same cup under Around object gets one
     // because the user asked for it and not because the rule read anything.
-    const Slic3r::Domain::indexed_triangle_set cup = cup_open_down(20., 20., 20., 4.);
+    const indexed_triangle_set cup = cup_open_down(20., 20., 20., 4.);
 
     SECTION("None prints no raft")
     {
@@ -313,14 +318,17 @@ TEST_CASE("The slice and the support preview resolve the same raft", "[SLA][Raft
     // The rule is one function on the mesh in the print pose, so the raft of the preview is the
     // raft of the print: the same mesh, the same elevation and the same settings give the same
     // answer on both sides, whatever the underside is.
-    for (const Slic3r::Domain::indexed_triangle_set its :
+    for (const indexed_triangle_set its :
          {box(20., 20., 20.), cup_open_down(20., 20., 20., 4.),
           block_with_pocket(20., 20., 20., 4., layer_height_mm, 1.0)}) {
         const RaftOutcome outcome = resolve_and_build(its, make_print_config(RaftType::Auto));
         INFO("part volume " << Slic3r::Domain::its_volume(its) << " mm3");
+        // The raft that was resolved is the one the config helpers answer for, and an Auto that
+        // resolved to None is the no raft of R6.1. The conjunction is spelled out here: a CHECK
+        // takes no `&&` (see the traps in AGENTS.md).
+        const bool expect_pad = outcome.raft_type.has_value() && *outcome.raft_type != RaftType::None;
         CHECK(outcome.preview_pad == outcome.sliced_pad);
-        CHECK(outcome.pad_enabled == (outcome.raft_type.has_value()
-                                      && *outcome.raft_type != RaftType::None));
+        CHECK(outcome.pad_enabled == expect_pad);
     }
 }
 
