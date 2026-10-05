@@ -684,6 +684,35 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->max = 90;
     def->init_fn = init_with(90.);
 
+    def = defs.add("support_auto_heavy_base", typeid(bool));
+    def->location = Print;
+    def->label = L("Heavy supports on the base of the model");
+    def->row_group = L("Support points");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Supports_Generation;
+    def->category = ConfigItemDef::Category::Print_Supports;
+    def->gui_type = ConfigItemDef::GUIType::checkbox;
+    def->tooltip = L("The automatic placement gives the supports of the lowest island of the model "
+        "the Heavy preset. That island is the first part of the model that prints, so on a head or "
+        "a bust that is glued into its base it is where the supports are hidden and where a thin one "
+        "would show. Off gives that island the preset below like every other support.");
+    def->init_fn = init_with(true);
+
+    def = defs.add("support_auto_detail_preset", typeid(EnumWrapper));
+    def->location = Print;
+    def->label = L("Auto support preset for the detail");
+    def->row_group = L("Support points");
+    def->option_group = ConfigItemDef::OptionGroup::Print_Supports_Generation;
+    def->category = ConfigItemDef::Category::Print_Supports;
+    def->gui_type = ConfigItemDef::GUIType::combobox;
+    def->tooltip = L("The preset the automatic placement gives every generated support that is not "
+        "on the base of the model, so the detail of the model gets the small supports it needs.");
+    def->init_fn = init_with(
+        sla::SupportAutoDetailPreset::Light,
+        {{int(sla::SupportAutoDetailPreset::Mini), "mini", L("Mini")},
+         {int(sla::SupportAutoDetailPreset::Light), "light", L("Light")},
+         {int(sla::SupportAutoDetailPreset::Medium), "medium", L("Medium")}}
+    );
+
     def = defs.add("pad_enable", typeid(bool));
     def->location = Print;
     def->overrides_in = Locations{ Object };

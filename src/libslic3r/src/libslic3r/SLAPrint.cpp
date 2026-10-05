@@ -830,6 +830,11 @@ const std::map<std::string, std::vector<Step>> invalidated_by{
     {"slice_closing_radius", steps({propagate(slaposObjectSlice)})},
     {"slicing_mode", steps({propagate(slaposObjectSlice)})},
     {"slow_tilt_time", steps({})},
+    // M2.37: the automatic placement sizes the points it generates (the heavy base of the model and
+    // the preset of the detail). The support points of the model carry the sizes, so a slice needs
+    // no step of its own for these, like the preset keys above.
+    {"support_auto_detail_preset", steps({})},
+    {"support_auto_heavy_base", steps({})},
     {"support_base_diameter", steps({propagate(slaposSupportTree)})},
     {"support_base_height", steps({propagate(slaposSupportTree)})},
     {"support_base_safety_distance", steps({propagate(slaposSupportTree)})},
