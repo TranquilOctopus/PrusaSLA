@@ -932,6 +932,11 @@ void SLAPrint::Steps::support_points(SLAPrintObject &po)
     const AABBMesh& emesh = po.m_supportable_mesh->emesh;
     prepare_permanent_support_points(permanent_supports, object_supports, object_trafo, emesh);
 
+    // The radius one point may hold is a size, so it scales with the size of the part (M7.8.7), the
+    // same way the support tool of the preview does it. See support_curve_size_factor in
+    // SupportPointGenerator.hpp.
+    config.support_curve = support_curve_for_part(config.support_curve, data);
+
     ThrowOnCancel cancel = [this]() { throw_if_canceled(); };
     StatusFunction status = statuscb;
     LayerSupportPoints layer_support_points = generate_support_points(data, config, cancel, status);

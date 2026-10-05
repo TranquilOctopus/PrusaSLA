@@ -21,7 +21,9 @@ shell; contact tips are support-shell vertices within 0.5 mm of the model shell)
 
 Our generator, same category, for comparison (default config, model as loaded, M4.3c local run on
 the benchmark heads bm01/bm13 of similar size): 4 and 9 points. The per-pair comparison in the expert
-orientation comes from `sla_calibration_support_tests` and is still to be run.
+orientation comes from `sla_calibration_support_tests` and is still to be run. Those two
+numbers are the ones from before M7.8.7, which makes the density of a small part follow
+the size of the part, so they are to be measured again with it in.
 
 ### What it says
 

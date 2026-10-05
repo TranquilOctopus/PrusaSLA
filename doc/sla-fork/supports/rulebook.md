@@ -124,6 +124,11 @@ maintainer's earlier "the raft stays a user setting" (M4.6b) and V's "always an 
 - **R7.1 Spacing does not depend on resin, printer or layer height** (R1.2). It is hard to give as a
   number (M), so the generator's support radius curve keeps setting it; the M7.4c measurements of the
   reference library may calibrate it later.
+  Implemented by: M7.8.7 (the curve is scaled by the size of the object: the largest radius one point
+  may hold is 0.36 times the size of the part, and the size is measured off the layers, so a
+  9 mm miniature head is supported as densely as the studio supports it and a plate keeps the points
+  it had. Nothing about the resin, the printer or the layer height is read, which is what R7.1
+  asks for).
 
 ## Open questions for the maintainer
 

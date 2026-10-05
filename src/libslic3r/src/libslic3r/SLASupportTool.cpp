@@ -265,6 +265,12 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const SupportToolMod
         config.island_configuration = sla::SampleConfigFactory::apply_density(
             sla::SampleConfigFactory::create(config.head_diameter), config.density_relative);
 
+        // The radius one point may hold is a size, so it scales with the size of the part (M7.8.7):
+        // a miniature head a few millimetres across gets the density the studio gives such a model
+        // by hand, a plate is big enough to keep the points it had. See support_curve_size_factor
+        // in SupportPointGenerator.hpp.
+        config.support_curve = sla::support_curve_for_part(config.support_curve, gen_data);
+
         // Generate support points
         sla::LayerSupportPoints layer_support_points = sla::generate_support_points(
             gen_data, config, throw_on_cancel, [](int){});
