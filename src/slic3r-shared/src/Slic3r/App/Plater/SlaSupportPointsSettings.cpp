@@ -353,6 +353,18 @@ const std::string& sla_support_preset_name(int preset_index)
     return names[std::clamp(preset_index, 0, 3)];
 }
 
+void apply_sla_support_preset(SupportPoint& point, const SlaSupportPreset& preset)
+{
+    apply_support_geometry(
+        point,
+        geometry_of_field(SupportGeometryField::TipDiameter, preset.tip_diameter_mm),
+        SupportGeometryField::TipDiameter
+    );
+    point.pillar_diameter = static_cast<float>(preset.stem_diameter_mm);
+    point.base_diameter   = static_cast<float>(preset.base_diameter_mm);
+    point.base_height     = static_cast<float>(preset.base_height_mm);
+}
+
 void
 sla_new_support_preset_changed(SlaSupportPointsEditing& editing, const SlaSupportPreset& preset)
 {
@@ -383,14 +395,7 @@ void sla_selected_support_preset_changed(
         if (idx >= editing.points.size()) {
             continue;
         }
-        apply_support_geometry(
-            editing.points[idx],
-            geometry_of_field(SupportGeometryField::TipDiameter, preset.tip_diameter_mm),
-            SupportGeometryField::TipDiameter
-        );
-        editing.points[idx].pillar_diameter = static_cast<float>(preset.stem_diameter_mm);
-        editing.points[idx].base_diameter   = static_cast<float>(preset.base_diameter_mm);
-        editing.points[idx].base_height     = static_cast<float>(preset.base_height_mm);
+        apply_sla_support_preset(editing.points[idx], preset);
     }
 }
 

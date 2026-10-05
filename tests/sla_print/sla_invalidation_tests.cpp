@@ -125,6 +125,8 @@ std::vector<std::string> get_all_sla_config_keys() {
     keys.push_back("slice_closing_radius");
     keys.push_back("slicing_mode");
     keys.push_back("slow_tilt_time");
+    keys.push_back("support_auto_detail_preset");
+    keys.push_back("support_auto_heavy_base");
     keys.push_back("support_base_diameter");
     keys.push_back("support_base_height");
     keys.push_back("support_base_safety_distance");

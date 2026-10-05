@@ -148,6 +148,12 @@ SlaSupportPreset sla_support_preset(const std::string& preset_name);
 /// The name of the preset of a preset button of either group: 0 Mini, 1 Light, 2 Medium, 3 Heavy.
 const std::string& sla_support_preset_name(int preset_index);
 
+/// Writes one preset onto one point: the tip diameter becomes the head radius of the point and the
+/// three sizes stop following the global settings, which is what a preset button does to the next
+/// point and to the points of the selection (M2.18a). Nothing else of the point is touched, so the
+/// position, the type and the tip geometry it carries stay as they are.
+void apply_sla_support_preset(Domain::SLA::SupportPoint& point, const SlaSupportPreset& preset);
+
 /// A preset button of the "New supports" group: the four values a clicked point takes from now on.
 /// The points that exist are not touched.
 void
