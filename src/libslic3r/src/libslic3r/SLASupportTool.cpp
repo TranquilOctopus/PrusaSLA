@@ -3,6 +3,7 @@
 #include "libslic3r/ConfigViews.hpp"
 #include "libslic3r/SLAPrint.hpp"
 #include "libslic3r/SLA/SupportFacetPaint.hpp"
+#include "libslic3r/SLA/SupportAnchors.hpp"
 #include "libslic3r/SLA/SupportPointGenerator.hpp"
 #include "libslic3r/SLA/SupportRoles.hpp"
 #include "libslic3r/SLA/SupportTree.hpp"
@@ -121,6 +122,13 @@ SupportToolTree build_support_tree_for_tool(const SupportToolModelMesh& model_me
         Domain::TriangleMesh mesh = build_object_mesh(model_mesh, object_to_world);
         if (mesh.empty()) return empty_tree();
 
+        // JobController with stop condition
+        sla::JobController ctl;
+        ctl.stopcondition = stop;
+        ctl.cancelfn = [&stop]() {
+            if (stop && stop()) throw Slic3r::RuntimeError("Support tool canceled");
+        };
+
         // Points are in object's mesh frame; transform to world frame
         Domain::SLA::SupportPoints world_points = points;
         {
@@ -141,13 +149,6 @@ SupportToolTree build_support_tree_for_tool(const SupportToolModelMesh& model_me
             .cfg      = make_support_cfg(cfg),
             .pad_cfg  = make_pad_cfg(cfg),
             .zoffset  = mesh.bounding_box().min.z(),
-        };
-
-        // JobController with stop condition
-        sla::JobController ctl;
-        ctl.stopcondition = stop;
-        ctl.cancelfn = [&stop]() {
-            if (stop && stop()) throw Slic3r::RuntimeError("Support tool canceled");
         };
 
         // Create support tree
@@ -264,6 +265,12 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const SupportToolMod
         config.island_configuration = sla::SampleConfigFactory::apply_density(
             sla::SampleConfigFactory::create(config.head_diameter), config.density_relative);
 
+        // The radius one point may hold is a size, so it scales with the size of the part (M7.8.7):
+        // a miniature head a few millimetres across gets the density the studio gives such a model
+        // by hand, a plate is big enough to keep the points it had. See support_curve_size_factor
+        // in SupportPointGenerator.hpp.
+        config.support_curve = sla::support_curve_for_part(config.support_curve, gen_data);
+
         // Generate support points
         sla::LayerSupportPoints layer_support_points = sla::generate_support_points(
             gen_data, config, throw_on_cancel, [](int){});
@@ -277,12 +284,23 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const SupportToolMod
 
         // What every point carries, which is what the tip class of its support is picked from
         // (M7.8.2, the support rulebook R4.1 and R4.3 - R4.6): the anchor of the lowest island, an
-        // island, a small island, a thin fragile feature or an overhang. A point that sits on small
-        // surface detail moves to the plain surface next to it first, and the role it ends up with is
-        // the one of the spot it holds. The head radius of a point stays the one the generator gave
-        // it, as it was before.
+        // island, a small island, a thin fragile feature or an overhang, and the minimum tip of a
+        // detailed region whatever any of those would have been (M7.8.5, R4.9). A point that sits on
+        // small surface detail moves to the plain surface next to it first, and the role it ends up
+        // with is the one of the spot it holds. The head radius of a point stays the one the
+        // generator gave it, as it was before.
         sla::classify_support_point_roles(
             support_points, emesh, gen_data.layers, layer_height, {}, throw_on_cancel);
+
+        // The heavy anchors the rulebook asks for on the flat, low-detail areas of the surface that
+        // faces the plate (M7.8.3, R4.2): a few of them, more the bigger the footprint of the object
+        // is, and the largest tip on a very large one. It runs after the roles, so that it can tell
+        // the points of the other rules from the ones it adds itself, and before the zero-elevation
+        // filter below, which takes away the anchors of an object standing on the plate. Running
+        // last is also what keeps an anchor an anchor: R4.9 leaves the anchors alone in the pass
+        // above, and this one only ever adds an anchor or turns an overhang or an island into one,
+        // never back into a Detail.
+        sla::add_heavy_anchors(support_points, emesh, {}, config.head_diameter / 2.f, throw_on_cancel);
 
         // Zero-elevation filter
         if (is_zero_elevation(cfg)) {

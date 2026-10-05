@@ -179,6 +179,25 @@ class DefaultSupportTree {
         return head_id < m_sm.pts->size() ? &m_sm.pts->at(head_id) : nullptr;
     }
 
+    // The support point a pillar belongs to, or null for one the tree added on its own: the
+    // stability pillars that stand next to a lonely one hang from no head, so they carry no
+    // per-point values and follow the object. A pillar that hangs from a head remembers that head
+    // (Pillar::start_junction_id), which is the point the head was made from (M2.38).
+    const Domain::SLA::SupportPoint *point_of(const Pillar &pillar) const
+    {
+        if (!pillar.starts_from_head)
+            return nullptr;
+        return point_at(static_cast<unsigned>(pillar.start_junction_id));
+    }
+
+    // Whether this pillar may be braced (M2.38): Off keeps it out of every brace and On asks for
+    // one even where the object has bracing off, while a pillar with no point of its own and a
+    // point that says Inherit follow the object's support_brace_enable.
+    bool pillar_may_brace(const Pillar &pillar) const
+    {
+        return sla::may_brace(m_sm, point_of(pillar));
+    }
+
     // Helper function for interconnecting two pillars with zig-zag bridges.
     bool interconnect(const Pillar& pillar, const Pillar& nextpillar);
 

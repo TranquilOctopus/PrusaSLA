@@ -463,6 +463,25 @@ inline bool may_rest_on_model(const SupportableMesh            &sm,
     return ret;
 }
 
+// Whether the pillar of this support point may be braced to its neighbours (M2.38). Without a
+// switch of its own the point follows the object's support_brace_enable, which is what every point
+// did before the switch existed. On asks for a brace even on an object whose bracing is off, Off
+// keeps this one pillar out of every brace even on an object whose bracing is on.
+inline bool may_brace(const SupportableMesh            &sm,
+                      const Domain::SLA::SupportPoint *sp)
+{
+    if (sp != nullptr) {
+        switch (sp->brace) {
+        case Domain::SLA::SupportPoint::Brace::On: return true;
+        case Domain::SLA::SupportPoint::Brace::Off: return false;
+        case Domain::SLA::SupportPoint::Brace::Inherit:
+        default: break;
+        }
+    }
+
+    return sm.cfg.brace_enable;
+}
+
 // Whether any point of the object may end on the model. The trees ask this before
 // they sample the model surface as a place to anchor a support on (M2.26): a point
 // that allows a model anchor of its own needs the model points even on an object

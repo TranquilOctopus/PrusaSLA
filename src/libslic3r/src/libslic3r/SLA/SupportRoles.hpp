@@ -71,8 +71,9 @@ struct SupportRoleThresholds
 /// R4.5 comes first, because a point that sits on a rivet moves to the plain surface next to it
 /// and is then classified there; the role it ends up with is the one of the spot it holds. R4.9
 /// comes last, because it is the one rule that overrides another: a fragile point stays Fragile,
-/// which takes the same minimum tip, and the Anchor of the lowest island is never Detail, since
-/// that anchor carries the whole part early in the print (R4.1).
+/// which takes the same minimum tip, and neither an Anchor nor an AnchorLarge is ever Detail,
+/// since an anchor carries the whole part early in the print (R4.1, and R4.2 for the AnchorLarge
+/// of a very large object, which M7.8.3 promotes after this pass has run).
 ///
 /// How a detailed region is found (R4.9)
 ///

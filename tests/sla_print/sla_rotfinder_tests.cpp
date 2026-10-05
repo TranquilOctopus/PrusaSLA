@@ -652,15 +652,15 @@ TEST_CASE("Auto orient: miniature lays a head on its neck cut", "[SLA][Rotfinder
     const Slic3r::Transform3d trafo = rotation_transform(rotation);
 
     // The cut of the neck points at the plate, off by the lean of the goal and nothing else: the
-    // cut is 35 degrees off straight down, because the lean of the miniature goal is 35 degrees.
+    // cut is 48 degrees off straight down, because the lean of the miniature goal is 48 degrees.
     const Slic3r::Vec3d cut_after = trafo * -Slic3r::Vec3d::UnitZ();
     CHECK(cut_after.z() < -0.5);
-    CHECK(angle_between_degrees(cut_after, -Slic3r::Vec3d::UnitZ()) == Approx(35.).margin(0.5));
+    CHECK(angle_between_degrees(cut_after, -Slic3r::Vec3d::UnitZ()) == Approx(48.).margin(0.5));
 
     // The piece leans over by that same angle, which is what makes the cross sections of the print
     // ramp in from the narrow neck up to the head instead of starting at the width of the head.
     const Slic3r::Vec3d up_after = trafo * Slic3r::Vec3d::UnitZ();
-    CHECK(angle_between_degrees(up_after, Slic3r::Vec3d::UnitZ()) == Approx(35.).margin(0.5));
+    CHECK(angle_between_degrees(up_after, Slic3r::Vec3d::UnitZ()) == Approx(48.).margin(0.5));
 
     // The head ends up above the cut and off to one side of it, which is the pose the goal is for.
     const Slic3r::Vec3d head_centre = trafo * Slic3r::Vec3d{0., 0., 10.};
@@ -691,14 +691,14 @@ TEST_CASE("Auto orient: miniature lays a bust on its small flat face", "[SLA][Ro
     // The small flat face is the one on the plate, within the lean.
     const Slic3r::Vec3d cut_after = trafo * -Slic3r::Vec3d::UnitZ();
     CHECK(cut_after.z() < -0.5);
-    CHECK(angle_between_degrees(cut_after, -Slic3r::Vec3d::UnitZ()) == Approx(35.).margin(0.5));
+    CHECK(angle_between_degrees(cut_after, -Slic3r::Vec3d::UnitZ()) == Approx(48.).margin(0.5));
 
     // The wide end of the bust is up and leaning, so the layers grow as the print goes up and the
     // face of it is not cut along its own layers.
     const Slic3r::Vec3d top_centre = trafo * Slic3r::Vec3d{1.5, 0.5, 10.};
     CHECK(top_centre.z() > 5.);
     const Slic3r::Vec3d up_after = trafo * Slic3r::Vec3d::UnitZ();
-    CHECK(angle_between_degrees(up_after, Slic3r::Vec3d::UnitZ()) == Approx(35.).margin(0.5));
+    CHECK(angle_between_degrees(up_after, Slic3r::Vec3d::UnitZ()) == Approx(48.).margin(0.5));
 }
 
 TEST_CASE("Auto orient: a miniature with no flat face is only leaned over", "[SLA][Rotfinder]")
@@ -715,11 +715,11 @@ TEST_CASE("Auto orient: a miniature with no flat face is only leaned over", "[SL
     REQUIRE(std::isfinite(rotation.x()));
     REQUIRE(std::isfinite(rotation.y()));
 
-    // The fallback keeps the pose the piece was loaded in and only leans it over, by the same 35
+    // The fallback keeps the pose the piece was loaded in and only leans it over, by the same 48
     // degrees as every other piece: no cut, nothing turned over, nothing thrown away.
     const Slic3r::Transform3d trafo = rotation_transform(rotation);
     const Slic3r::Vec3d up_after = trafo * Slic3r::Vec3d::UnitZ();
-    CHECK(angle_between_degrees(up_after, Slic3r::Vec3d::UnitZ()) == Approx(35.).margin(0.5));
+    CHECK(angle_between_degrees(up_after, Slic3r::Vec3d::UnitZ()) == Approx(48.).margin(0.5));
     CHECK((trafo * Slic3r::Vec3d{0., 0., 10.}).z() > 5.);
 }
 

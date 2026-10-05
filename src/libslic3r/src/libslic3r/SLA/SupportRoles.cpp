@@ -484,6 +484,15 @@ bool is_fragile(
     return at.part->prev_parts.empty() && narrow_above(*at.part, thresholds);
 }
 
+/// Whether a role is one of the two anchors, i.e. a point that carries the whole part early in the
+/// print. R4.9 leaves both of them alone, and R4.2 (M7.8.3, SLA/SupportAnchors.cpp) promotes the
+/// anchors of a very large object to AnchorLarge after this pass has run, so the two are told apart
+/// by their role here rather than by which pass wrote it.
+bool is_anchor(Role role)
+{
+    return role == Role::Anchor || role == Role::AnchorLarge;
+}
+
 /// What the surface around a point does within the detail radius (R4.9), measured by the samples of
 /// `probe_detail_neighbourhood()`.
 struct DetailNeighbourhood
@@ -680,9 +689,11 @@ void classify_support_point_roles(
         }
 
         // R4.9 comes last, because it is the one rule of the four that overrides another: a point in
-        // a detailed region takes the minimum tip whatever its role is, except the anchor of the
-        // lowest island, which carries the whole part early in the print and stays heavy (R4.1).
-        if (role != Role::Anchor && is_detailed_region(mesh, p, n, thresholds))
+        // a detailed region takes the minimum tip whatever its role is, except an anchor, which
+        // carries the whole part early in the print and stays heavy or xheavy (R4.1, and R4.2 for the
+        // AnchorLarge of a very large object). Both anchor roles are named here, so that the rule
+        // holds on its own and not only because add_heavy_anchors runs after this pass.
+        if (!is_anchor(role) && is_detailed_region(mesh, p, n, thresholds))
             role = Role::Detail;
 
         point.role = role;
