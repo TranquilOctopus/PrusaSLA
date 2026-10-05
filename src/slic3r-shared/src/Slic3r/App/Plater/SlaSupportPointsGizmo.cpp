@@ -54,6 +54,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cstddef>
 
 using namespace Slic3r;
 using namespace Slic3r::App::Yoga;
@@ -2119,9 +2120,13 @@ SlaAutoSupportChoice SlaSupportPointsGizmo::auto_support_preset_choice() const
 
 // What the generator leaves open on every point it produced: the tip shape, tip length, knot, stem
 // cross-section, stem taper and foot shape of the settings of this model (support_geometry_defaults,
-// M2.16c / M2.24 / M2.23b), and then the sizes the automatic placement picks per point (M2.37): the
-// T0.4 class on the island the model is glued on, the detail class on everything else. Both
-// generation paths come through here, so a generated point is the same support whichever made it.
+// M2.16c / M2.24 / M2.23b), and then the sizes the automatic placement picks per point: the tip
+// class of the role the point was classified with (M7.8.8, the rule of M7.8.2 in
+// SlaSupportRoles.{hpp,cpp}), with the two settings of M2.37 deciding what a role is given - the
+// heavy class on the island the model is glued on, the detail class everywhere else, and the
+// classes of the roles in between. A point the generator did not classify keeps the band rule of
+// M2.37 on its own. Both generation paths come through here, so a generated point is the same
+// support whichever made it.
 void SlaSupportPointsGizmo::fill_generated_point_geometry(
     Domain::SLA::SupportPoints& points,
     const Domain::ModelObject* model_object,
@@ -2160,12 +2165,19 @@ void SlaSupportPointsGizmo::fill_generated_point_geometry(
     }
 
     const SlaAutoSupportChoice choice = this->auto_support_preset_choice();
-    // Preset button 3 of the five is the "heavy" id, which is the T0.4 mm class since M7.8.1: that is
-    // the one the base of the model gets. The detail takes the class the setting names.
-    const SlaAutoSupportPresets presets{
-        this->get_support_preset_values(sla_support_preset_name(3)),
-        this->get_support_preset_values(sla_auto_detail_preset_name(choice.detail))
-    };
+
+    // All five tip classes of the rulebook as the print preset carries them, since the role of a
+    // point picks its class out of them (M7.8.8) and the two classes of M2.37 are two of the five.
+    SlaAutoSupportPresets presets;
+    for (int index = 0; index < sla_support_preset_count; ++index) {
+        presets.classes[std::size_t(index)] =
+            this->get_support_preset_values(sla_support_preset_name(index));
+    }
+    // What the base of the model gets is the "heavy" id, which is the T0.4 mm class since M7.8.1,
+    // and the detail takes the class the setting names.
+    presets.base = presets.classes[std::size_t(sla_auto_heavy_base_preset_index)];
+    presets.detail = presets.class_of(sla_auto_detail_preset_name(choice.detail));
+
     sla_apply_auto_support_presets(points, lowest_z_mm, layer_height_mm, presets, choice);
 }
 

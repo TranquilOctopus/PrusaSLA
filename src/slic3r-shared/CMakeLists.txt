@@ -1746,6 +1746,8 @@ test/Slic3r/App/SlaObjectUseRowsTests.cpp
 
             test/Slic3r/App/Plater/SlaSupportRolesTests.cpp
 
+            test/Slic3r/App/Plater/SlaSupportRoleFillTests.cpp
+
             test/Slic3r/App/Plater/SlaUndoActionTests.cpp
 
             test/Slic3r/App/Plater/SlaSupportPointsUndoTests.cpp

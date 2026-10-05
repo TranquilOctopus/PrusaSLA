@@ -4,6 +4,8 @@
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
 
+#include <array>
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -14,6 +16,11 @@ namespace Slic3r::App::Plater {
 /// the detail above it, which is what the miniature printers ask for: a fat support where the glue
 /// hides it and small ones everywhere else, so no detail is lost to a support of its own (M2.37).
 constexpr double auto_support_base_layers = 2.;
+
+/// Which of the five preset buttons of the tool is the heavy base, i.e. the class the lowest island
+/// of the model takes while support_auto_heavy_base is on: button 3, the "heavy" id, which is T0.4
+/// since M7.8.1.
+inline constexpr int sla_auto_heavy_base_preset_index = 3;
 
 /// Which preset the automatic placement gives which of the points it generated (M2.37), worked out
 /// from the generated points alone: no model, no config, no scene. The caller reads the two
@@ -37,10 +44,28 @@ struct SlaAutoSupportChoice
 /// stem and a prism base along with the four sizes the settings carry.
 struct SlaAutoSupportPresets
 {
-    /// What the base of the model gets, i.e. the T0.4 class of the support tool.
+    /// What the base of the model gets, i.e. the T0.4 class of the support tool. It is the class of
+    /// @p classes at sla_auto_heavy_base_preset_index whenever the caller fills all five.
     SlaSupportPreset base;
-    /// What every other generated support gets.
+    /// What every other generated point gets.
     SlaSupportPreset detail;
+    /// All five tip classes of the rulebook as the print preset of the printer carries them, which
+    /// is where the class of a role comes from (M7.8.8): index @p i is what
+    /// sla_support_preset_name(@p i) names, so 0 is mini (T0.1) and 4 is xheavy (T0.6). They
+    /// default to the values of the config definitions, which is what a print preset that carries
+    /// none of the keys gets.
+    std::array<SlaSupportPreset, std::size_t(sla_support_preset_count)> classes{
+        sla_support_preset(sla_support_preset_name(0)),
+        sla_support_preset(sla_support_preset_name(1)),
+        sla_support_preset(sla_support_preset_name(2)),
+        sla_support_preset(sla_support_preset_name(3)),
+        sla_support_preset(sla_support_preset_name(4))
+    };
+
+    /// The values of the class a preset name asks for (sla_support_preset_name's ids, which is what
+    /// rulebook_tip_class and sla_auto_detail_preset_name answer with). A name the tool does not
+    /// have takes the last class, which is what sla_support_preset() does with such a name.
+    const SlaSupportPreset& class_of(const std::string& preset_name) const;
 };
 
 /// The preset a detail value names, as the support tool names its preset buttons: "mini", "light" or
@@ -63,13 +88,17 @@ bool is_sla_auto_support_base_point(
     double layer_height_mm
 );
 
-/// Sizes @p points the way the automatic placement sizes what it generates: the base of the model
-/// takes @p presets.base when @p choice.heavy_base is on and every other generated point takes
-/// @p presets.detail. Every point gets its whole class, geometry and four sizes, through
-/// apply_sla_support_preset() - the one function a preset button uses as well, so an automatic
-/// support and a hand-placed one of the same class are the same support. The points the user placed
-/// or edited are never touched, so a generation never resizes a support of theirs. @p points is the
-/// set the generator produced, which replaces the points of the model rather than adding to them.
+/// Sizes @p points the way the automatic placement sizes what it generates: a point the generator
+/// classified takes the tip class of its role (M7.8.8, sla_role_tip_class), and a point it did not
+/// - one of a project written before the roles existed, or one from a path that does not classify -
+/// takes the band rule of M2.37: the base of the model takes @p presets.base while
+/// @p choice.heavy_base is on and every other generated point takes @p presets.detail.
+///
+/// Every point gets its whole class, geometry and four sizes, through apply_sla_support_preset() -
+/// the one function a preset button uses as well, so an automatic support and a hand-placed one of
+/// the same class are the same support. The points the user placed or edited are never touched, so
+/// a generation never resizes a support of theirs. @p points is the set the generator produced,
+/// which replaces the points of the model rather than adding to them.
 void sla_apply_auto_support_presets(
     Domain::SLA::SupportPoints& points,
     double lowest_z_mm,

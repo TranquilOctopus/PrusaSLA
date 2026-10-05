@@ -12,11 +12,13 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 
+#include <cstddef>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "Slic3r/App/Plater/SlaSupportAutoPresets.hpp"
+#include "Slic3r/App/Plater/SlaSupportPointsSettings.hpp"
 #include "Slic3r/Domain/ConfigDefsSLA.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
 
@@ -25,7 +27,10 @@ using Slic3r::App::Plater::auto_support_base_layers;
 using Slic3r::App::Plater::is_sla_auto_support_base_point;
 using Slic3r::App::Plater::sla_apply_auto_support_presets;
 using Slic3r::App::Plater::sla_auto_detail_preset_name;
+using Slic3r::App::Plater::sla_auto_heavy_base_preset_index;
 using Slic3r::App::Plater::sla_support_preset;
+using Slic3r::App::Plater::sla_support_preset_count;
+using Slic3r::App::Plater::sla_support_preset_name;
 using Slic3r::App::Plater::SlaAutoSupportChoice;
 using Slic3r::App::Plater::SlaAutoSupportPresets;
 using Slic3r::App::Plater::SlaSupportGeometry;
@@ -96,11 +101,85 @@ SupportPoints a_generated_set()
     };
 }
 
+/// The same generation with the roles the generator puts on a model (M7.8.2), which is what decides
+/// the class of a point since M7.8.8, plus the two kinds of point that keep the band rule of M2.37
+/// (no role) and a support of the user (never touched).
+enum RoleIndex
+{
+    anchor_point = 0,
+    island_point_above,
+    small_island_point,
+    overhang_point,
+    fragile_point,
+    unknown_point_on_the_base,
+    unknown_point_over_the_detail,
+    point_of_the_user
+};
+
+SupportPoints a_generated_set_with_roles()
+{
+    SupportPoint anchor = island_point(0.5 * layer_height_mm);
+    anchor.role         = SupportPoint::Role::Anchor;
+
+    SupportPoint island = island_point(40.);
+    island.role         = SupportPoint::Role::Island;
+
+    SupportPoint small_island = island_point(41.);
+    small_island.role         = SupportPoint::Role::SmallIsland;
+
+    SupportPoint overhang = slope_point(12.);
+    overhang.role         = SupportPoint::Role::Overhang;
+
+    SupportPoint fragile = island_point(25.);
+    fragile.role         = SupportPoint::Role::Fragile;
+
+    // Two points from before the roles existed: the one on the base is the band of M2.37, the one
+    // over the detail is everything else.
+    const SupportPoint unknown_on_the_base = island_point(1.5 * layer_height_mm);
+    const SupportPoint unknown_over_detail = island_point(40.5);
+
+    // A support of the user, with sizes of its own and an anchor role: a generation never resizes a
+    // support of theirs, whatever its role says.
+    SupportPoint placed      = user_point(0.5 * layer_height_mm);
+    placed.role              = SupportPoint::Role::Anchor;
+    placed.pillar_diameter   = 1.2f;
+    placed.base_diameter     = 3.f;
+    placed.base_height       = 0.7f;
+    placed.head_front_radius = 0.3f;
+    placed.tip_shape         = SupportPoint::TipShape::Ball;
+
+    return {
+        anchor,
+        island,
+        small_island,
+        overhang,
+        fragile,
+        unknown_on_the_base,
+        unknown_over_detail,
+        placed
+    };
+}
+
 /// The two presets of the settings at their config definition values, which is what a print preset
 /// that does not carry the keys gets: the T0.4 class on the base and the T0.2 one on the detail.
 SlaAutoSupportPresets the_presets()
 {
     return SlaAutoSupportPresets{sla_support_preset("heavy"), sla_support_preset("light")};
+}
+
+/// The same, with all five classes filled the way the tool fills them: as the print preset of the
+/// printer carries them, which for a preset without the keys is what the config definitions ship
+/// (M7.8.8).
+SlaAutoSupportPresets the_presets_with_every_class()
+{
+    SlaAutoSupportPresets presets;
+    for (std::size_t index = 0; index < presets.classes.size(); ++index) {
+        const std::string name = sla_support_preset_name(static_cast<int>(index));
+        presets.classes[index] = sla_support_preset(name);
+    }
+    presets.base   = presets.classes[std::size_t(sla_auto_heavy_base_preset_index)];
+    presets.detail = presets.class_of(sla_auto_detail_preset_name(SlaAutoSupportChoice{}.detail));
+    return presets;
 }
 
 /// Everything a class puts on a point, not only its four sizes: the tip is the class itself, the
@@ -127,6 +206,16 @@ void check_class_of(const SupportPoint& point, const SlaSupportPreset& preset)
 
     // Half the tip of the class that landed on the point, not of the class of the other points.
     CHECK(point.contact_depth == Approx(0.5 * geometry.tip_diameter_mm));
+}
+
+/// Two bundles are the same class when they carry the same geometry and the same three sizes, which
+/// is what a class of the tool is (M7.8.1): the four settings and the rest of R3.
+void check_same_class(const SlaSupportPreset& actual, const SlaSupportPreset& expected)
+{
+    CHECK(actual.geometry == expected.geometry);
+    CHECK(actual.stem_diameter_mm == Approx(expected.stem_diameter_mm));
+    CHECK(actual.base_diameter_mm == Approx(expected.base_diameter_mm));
+    CHECK(actual.base_height_mm == Approx(expected.base_height_mm));
 }
 
 const ConfigItemDef* find_def(const std::string& name)
@@ -347,6 +436,173 @@ TEST_CASE(
     CHECK_FALSE(is_sla_auto_support_base_point(points[0], lowest_z_mm, layer_height_mm));
     // The generated point beside it takes the whole T0.4 class, tip and sizes together.
     check_class_of(points[1], heavy);
+}
+
+TEST_CASE(
+    "The class of a generated point is the class of its role, with the two settings on top",
+    "[SlaSupportAutoPresets][SlaSupportRoles]"
+)
+{
+    const SlaAutoSupportChoice choice; // the defaults: heavy base on, Light for the detail
+
+    SECTION("Every role takes its own class and a point without one keeps the band rule of M2.37")
+    {
+        SupportPoints points = a_generated_set_with_roles();
+
+        sla_apply_auto_support_presets(
+            points,
+            lowest_z_mm,
+            layer_height_mm,
+            the_presets_with_every_class(),
+            choice
+        );
+
+        // R4.1: the anchor of the lowest island is the heavy class.
+        check_class_of(points[anchor_point], sla_support_preset("heavy"));
+        // R4.3, R4.6: an island, a small island and an overhang take the detail preset, which is the
+        // T0.2 class by default.
+        check_class_of(points[island_point_above], sla_support_preset("light"));
+        check_class_of(points[small_island_point], sla_support_preset("light"));
+        check_class_of(points[overhang_point], sla_support_preset("light"));
+        // R4.4 and R4.5: a thin feature takes the minimum tip, whatever the settings ask for.
+        check_class_of(points[fragile_point], sla_support_preset("mini"));
+        // A point of a project written before the roles existed is still sized the way it was: the
+        // band of the base heavy, everything else the detail preset.
+        check_class_of(points[unknown_point_on_the_base], sla_support_preset("heavy"));
+        check_class_of(points[unknown_point_over_the_detail], sla_support_preset("light"));
+    }
+
+    SECTION("The heavy base switched off gives the anchors the detail preset")
+    {
+        SupportPoints points = a_generated_set_with_roles();
+        SlaAutoSupportChoice without_heavy_base;
+        without_heavy_base.heavy_base = false;
+
+        sla_apply_auto_support_presets(
+            points,
+            lowest_z_mm,
+            layer_height_mm,
+            the_presets_with_every_class(),
+            without_heavy_base
+        );
+
+        // With nothing to tell the base of the model apart, an anchor is a light support like any
+        // other generated point.
+        check_class_of(points[anchor_point], sla_support_preset("light"));
+        check_class_of(points[unknown_point_on_the_base], sla_support_preset("light"));
+        // The other roles are where they were, and the fragile one is still the minimum tip.
+        check_class_of(points[island_point_above], sla_support_preset("light"));
+        check_class_of(points[fragile_point], sla_support_preset("mini"));
+    }
+
+    SECTION("The detail setting names the class of the islands and the overhangs")
+    {
+        SlaAutoSupportChoice mini;
+        mini.detail = SupportAutoDetailPreset::Mini;
+        SlaAutoSupportChoice medium;
+        medium.detail = SupportAutoDetailPreset::Medium;
+
+        SlaAutoSupportPresets presets = the_presets_with_every_class();
+
+        SupportPoints mini_points   = a_generated_set_with_roles();
+        sla_apply_auto_support_presets(mini_points, lowest_z_mm, layer_height_mm, presets, mini);
+        // T0.1 everywhere the setting reaches, the anchor keeps its own class and the fragile point
+        // is at the same size as the rest.
+        check_class_of(mini_points[island_point_above], sla_support_preset("mini"));
+        check_class_of(mini_points[small_island_point], sla_support_preset("mini"));
+        check_class_of(mini_points[overhang_point], sla_support_preset("mini"));
+        check_class_of(mini_points[anchor_point], sla_support_preset("heavy"));
+        check_class_of(mini_points[fragile_point], sla_support_preset("mini"));
+
+        SlaAutoSupportPresets medium_presets = presets;
+        medium_presets.detail                = medium_presets.class_of("medium");
+        SupportPoints medium_points          = a_generated_set_with_roles();
+        sla_apply_auto_support_presets(
+            medium_points,
+            lowest_z_mm,
+            layer_height_mm,
+            medium_presets,
+            medium
+        );
+        // T0.3, which is the medium tip of R4.3 an island keeps and the heaviest class the setting
+        // offers, so nothing here is as thick as the anchor.
+        check_class_of(medium_points[island_point_above], sla_support_preset("medium"));
+        check_class_of(medium_points[small_island_point], sla_support_preset("medium"));
+        check_class_of(medium_points[overhang_point], sla_support_preset("medium"));
+        check_class_of(medium_points[anchor_point], sla_support_preset("heavy"));
+        check_class_of(medium_points[fragile_point], sla_support_preset("mini"));
+    }
+
+    SECTION("A role decides on its own, whatever height the point stands at")
+    {
+        // The band of M2.37 is a height, the role is not: an anchor far above the base is still the
+        // heavy class, and an overhang on the lowest layer of the model is not, since it is not what
+        // holds the model up (R4.1, R4.6).
+        SupportPoint high_anchor          = slope_point(40.);
+        high_anchor.role                  = SupportPoint::Role::Anchor;
+        SupportPoint overhang_on_the_base = slope_point(0.5 * layer_height_mm);
+        overhang_on_the_base.role         = SupportPoint::Role::Overhang;
+
+        SupportPoints points{high_anchor, overhang_on_the_base};
+
+        sla_apply_auto_support_presets(
+            points,
+            lowest_z_mm,
+            layer_height_mm,
+            the_presets_with_every_class(),
+            choice
+        );
+
+        check_class_of(points[0], sla_support_preset("heavy"));
+        check_class_of(points[1], sla_support_preset("light"));
+    }
+
+    SECTION("A support of the user is never resized, whatever role it carries")
+    {
+        SupportPoints points         = a_generated_set_with_roles();
+        const SupportPoint as_placed = points[point_of_the_user];
+
+        sla_apply_auto_support_presets(
+            points,
+            lowest_z_mm,
+            layer_height_mm,
+            the_presets_with_every_class(),
+            choice
+        );
+
+        CHECK(points[point_of_the_user] == as_placed);
+    }
+}
+
+TEST_CASE(
+    "The automatic placement carries the five tip classes and answers with the one a name asks for",
+    "[SlaSupportAutoPresets]"
+)
+{
+    const SlaAutoSupportPresets presets = the_presets_with_every_class();
+
+    // Every class of the tool is in the bundle, as the print preset of the printer carries it, so a
+    // role can pick any of the five (M7.8.8).
+    for (int index = 0; index < sla_support_preset_count; ++index) {
+        const std::string name = sla_support_preset_name(index);
+        INFO("class " << name);
+        check_same_class(presets.class_of(name), sla_support_preset(name));
+    }
+
+    // The two classes of M2.37 are two of the five: the base is the heavy one (T0.4, button 3) and
+    // the detail is whatever support_auto_detail_preset names.
+    check_same_class(presets.base, sla_support_preset("heavy"));
+    CHECK(
+        presets.classes[std::size_t(sla_auto_heavy_base_preset_index)].geometry.tip_diameter_mm
+        == Approx(0.4)
+    );
+    check_same_class(
+        presets.detail,
+        sla_support_preset(sla_auto_detail_preset_name(SlaAutoSupportChoice{}.detail))
+    );
+
+    // A name the tool has no button for is the largest class, as it is in sla_support_preset().
+    check_same_class(presets.class_of("no-such-class"), sla_support_preset("xheavy"));
 }
 
 TEST_CASE(

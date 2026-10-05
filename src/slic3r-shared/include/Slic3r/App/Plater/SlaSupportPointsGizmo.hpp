@@ -249,9 +249,10 @@ private:
 
     // What every point of a generation takes: the tip shape, tip length, knot, stem cross-section,
     // stem taper and foot shape of the Supports & raft settings of @p model_object, and then the
-    // sizes the automatic placement picks for the point (M2.37). Both generation paths (Generate and
-    // Auto support) call this and nothing else, so a generated point is the same support whichever
-    // of the two made it.
+    // tip class of the role the point carries, with the two settings of the automatic placement
+    // (support_auto_heavy_base, support_auto_detail_preset) deciding what a role is given
+    // (M2.37, M7.8.8). Both generation paths (Generate and Auto support) call this and nothing
+    // else, so a generated point is the same support whichever of the two made it.
     void fill_generated_point_geometry(
         Domain::SLA::SupportPoints& points,
         const Domain::ModelObject* model_object,
