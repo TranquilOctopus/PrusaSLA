@@ -8,24 +8,33 @@ namespace Slic3r::App::Plater {
 using Domain::SLA::SupportPoint;
 using Domain::SLA::SupportPoints;
 
-// The preset values of the config definitions, in mm: support_preset_{mini,light,medium,heavy}_*
-// (M2.18, M2.22). They are what the tool falls back to for a print preset that does not carry them.
-static constexpr double MINI_TIP_DIAMETER_MM    = 0.2;
-static constexpr double MINI_STEM_DIAMETER_MM   = 0.5;
-static constexpr double MINI_BASE_DIAMETER_MM   = 1.4;
-static constexpr double MINI_BASE_HEIGHT_MM     = 0.4;
-static constexpr double LIGHT_TIP_DIAMETER_MM   = 0.30;
-static constexpr double LIGHT_STEM_DIAMETER_MM  = 0.8;
-static constexpr double LIGHT_BASE_DIAMETER_MM  = 2.0;
-static constexpr double LIGHT_BASE_HEIGHT_MM    = 0.5;
-static constexpr double MEDIUM_TIP_DIAMETER_MM  = 0.45;
-static constexpr double MEDIUM_STEM_DIAMETER_MM = 1.2;
-static constexpr double MEDIUM_BASE_DIAMETER_MM = 3.0;
-static constexpr double MEDIUM_BASE_HEIGHT_MM   = 0.7;
-static constexpr double HEAVY_TIP_DIAMETER_MM   = 0.60;
-static constexpr double HEAVY_STEM_DIAMETER_MM  = 1.8;
-static constexpr double HEAVY_BASE_DIAMETER_MM  = 4.0;
-static constexpr double HEAVY_BASE_HEIGHT_MM    = 1.0;
+// The support presets are the tip classes of the support rulebook (M7.8.1, R3): a support is named
+// by the size of its contact, not by weight, so the classes are T0.1 to T0.6 mm. The four ids are
+// the ones the presets have had since M2.18, so a print preset that carries their config keys keeps
+// loading with the values it stored; "xheavy" is the 0.6 mm class the rulebook adds. They are what
+// the tool falls back to for a print preset that does not carry the keys.
+static constexpr double MINI_TIP_DIAMETER_MM   = 0.1;
+static constexpr double LIGHT_TIP_DIAMETER_MM  = 0.2;
+static constexpr double MEDIUM_TIP_DIAMETER_MM = 0.3;
+static constexpr double HEAVY_TIP_DIAMETER_MM  = 0.4;
+static constexpr double XHEAVY_TIP_DIAMETER_MM = 0.6;
+
+// What every class has in common (M7.8.1, R3).
+static constexpr double CLASS_STEM_DIAMETER_MM = 1.0; // R3.3
+static constexpr double CLASS_BASE_DIAMETER_MM = 6.0; // R3.4
+static constexpr double CLASS_BASE_HEIGHT_MM   = 0.3; // R3.4
+// The length of the cone between the contact and the stem (R3.2). The rulebook asks for a narrow
+// neck right under the contact that widens to 0.8 mm; the tree has one cone from the contact to the
+// stem, whose width at the stem end is the stem diameter, so the neck is as narrow as the tree can
+// make it by keeping the cone short: a support then breaks just under its contact.
+static constexpr double CLASS_CONE_LENGTH_MM = 0.5;
+static constexpr int CLASS_STEM_SIDES        = 6; // R3.3: a prism stem
+
+double sla_support_contact_depth(double tip_diameter_mm)
+{
+    // R3.1: a ball contact sunk half its diameter.
+    return 0.5 * tip_diameter_mm;
+}
 
 double sla_support_point_field_value(SupportPoint::TipShape shape)
 {
@@ -48,6 +57,30 @@ double sla_support_point_field_value(SupportBrace brace)
 }
 
 namespace {
+
+/// The preset of one tip class: the class itself and the geometry of R3 that every class shares.
+SlaSupportPreset rulebook_preset(double tip_diameter_mm)
+{
+    SlaSupportPreset preset;
+    // The class: the diameter of the contact (R3), 0.1 to 0.6 mm.
+    preset.geometry.tip_diameter_mm = tip_diameter_mm;
+    // A ball contact (R3.1); how deep it sinks is sla_support_contact_depth(), half this diameter.
+    preset.geometry.tip_shape = SupportPoint::TipShape::Ball;
+    // The cone under the contact (R3.2), short so that the break point is right under the ball.
+    preset.geometry.tip_length_mm = CLASS_CONE_LENGTH_MM;
+    // No knot: the rulebook breaks the support at the neck, not at a ball in the joint.
+    preset.geometry.knot_diameter_mm = 0.;
+    // A hexagonal stem of one diameter (R3.3).
+    preset.geometry.stem_sides = CLASS_STEM_SIDES;
+    preset.geometry.stem_taper = 0.;
+    // A prism base (R3.4): a cylinder is the foot that keeps its height, which a flat disc clamps.
+    preset.geometry.base_shape = SupportPoint::BaseShape::Cylinder;
+
+    preset.stem_diameter_mm = CLASS_STEM_DIAMETER_MM;
+    preset.base_diameter_mm = CLASS_BASE_DIAMETER_MM;
+    preset.base_height_mm   = CLASS_BASE_HEIGHT_MM;
+    return preset;
+}
 
 /// The one of the per-point geometry fields a field of the tool is, for the fields that are one.
 /// The four sizes and the two states have no geometry field of their own.
@@ -334,52 +367,58 @@ void sla_selected_support_setting_changed(
 SlaSupportPreset sla_support_preset(const std::string& preset_name)
 {
     if (preset_name == "mini") {
-        return {
-            MINI_TIP_DIAMETER_MM,
-            MINI_STEM_DIAMETER_MM,
-            MINI_BASE_DIAMETER_MM,
-            MINI_BASE_HEIGHT_MM
-        };
+        return rulebook_preset(MINI_TIP_DIAMETER_MM);
     }
     if (preset_name == "light") {
-        return {
-            LIGHT_TIP_DIAMETER_MM,
-            LIGHT_STEM_DIAMETER_MM,
-            LIGHT_BASE_DIAMETER_MM,
-            LIGHT_BASE_HEIGHT_MM
-        };
+        return rulebook_preset(LIGHT_TIP_DIAMETER_MM);
     }
     if (preset_name == "medium") {
-        return {
-            MEDIUM_TIP_DIAMETER_MM,
-            MEDIUM_STEM_DIAMETER_MM,
-            MEDIUM_BASE_DIAMETER_MM,
-            MEDIUM_BASE_HEIGHT_MM
-        };
+        return rulebook_preset(MEDIUM_TIP_DIAMETER_MM);
     }
-    return {
-        HEAVY_TIP_DIAMETER_MM,
-        HEAVY_STEM_DIAMETER_MM,
-        HEAVY_BASE_DIAMETER_MM,
-        HEAVY_BASE_HEIGHT_MM
-    };
+    if (preset_name == "heavy") {
+        return rulebook_preset(HEAVY_TIP_DIAMETER_MM);
+    }
+    // "xheavy", the T0.6 class, and the fallback of an unknown name: the rulebook has no other class.
+    return rulebook_preset(XHEAVY_TIP_DIAMETER_MM);
 }
 
 const std::string& sla_support_preset_name(int preset_index)
 {
-    static const std::string names[4]{"mini", "light", "medium", "heavy"};
-    return names[std::clamp(preset_index, 0, 3)];
+    static const std::string
+        names[sla_support_preset_count]{"mini", "light", "medium", "heavy", "xheavy"};
+    return names[std::clamp(preset_index, 0, sla_support_preset_count - 1)];
+}
+
+void apply_sla_support_preset(SupportPoint& point, const SlaSupportPreset& preset)
+{
+    // The whole geometry of the class (R3.1 to R3.4) first, its tip diameter next: the two-argument
+    // overload leaves the tip diameter to the caller, which is the generator and a clicked point,
+    // while a class is named by its tip (R3), so the class writes both.
+    apply_support_geometry(point, preset.geometry);
+    apply_support_geometry(point, preset.geometry, SupportGeometryField::TipDiameter);
+
+    // The three sizes the preset carries as settings are the values the point now holds, so it stops
+    // following the global settings on them, and the contact of a class sinks half the tip of that
+    // class into the model (R3.1): a class whose tip a print preset overrides sinks half of that tip.
+    point.pillar_diameter = static_cast<float>(preset.stem_diameter_mm);
+    point.base_diameter   = static_cast<float>(preset.base_diameter_mm);
+    point.base_height     = static_cast<float>(preset.base_height_mm);
+    point.contact_depth
+        = static_cast<float>(sla_support_contact_depth(preset.geometry.tip_diameter_mm));
 }
 
 void
 sla_new_support_preset_changed(SlaSupportPointsEditing& editing, const SlaSupportPreset& preset)
 {
-    editing.support_geometry.tip_diameter_mm = preset.tip_diameter_mm;
-    editing.pillar_diameter_mm               = preset.stem_diameter_mm;
-    editing.base_diameter_mm                 = preset.base_diameter_mm;
-    editing.base_height_mm                   = preset.base_height_mm;
     // A preset is a bundle of values of its own, so a point placed from now on carries them instead
-    // of following the global settings.
+    // of following the global settings: the tip class, the geometry around it (R3.1 to R3.4) and
+    // the sizes of the stem and the base.
+    editing.support_geometry   = preset.geometry;
+    editing.pillar_diameter_mm = preset.stem_diameter_mm;
+    editing.base_diameter_mm   = preset.base_diameter_mm;
+    editing.base_height_mm     = preset.base_height_mm;
+    // The contact of a class sinks half the tip of that class into the model (R3.1).
+    editing.contact_depth_mm           = sla_support_contact_depth(preset.geometry.tip_diameter_mm);
     editing.head_diameter_use_global   = false;
     editing.pillar_diameter_use_global = false;
     editing.base_diameter_use_global   = false;
@@ -396,19 +435,14 @@ void sla_selected_support_preset_changed(
     }
 
     // What a clicked point takes is not touched: the preset of the "Selected supports" group is an
-    // edit of the selection like any other value of it.
+    // edit of the selection like any other value of it. A preset is one bundle of values, so the
+    // points of the selection get all of it in one undo step, through the one function that writes a
+    // class onto a point.
     for (size_t idx : editing.selected_point_indices) {
         if (idx >= editing.points.size()) {
             continue;
         }
-        apply_support_geometry(
-            editing.points[idx],
-            geometry_of_field(SupportGeometryField::TipDiameter, preset.tip_diameter_mm),
-            SupportGeometryField::TipDiameter
-        );
-        editing.points[idx].pillar_diameter = static_cast<float>(preset.stem_diameter_mm);
-        editing.points[idx].base_diameter   = static_cast<float>(preset.base_diameter_mm);
-        editing.points[idx].base_height     = static_cast<float>(preset.base_height_mm);
+        apply_sla_support_preset(editing.points[idx], preset);
     }
 }
 

@@ -18,8 +18,8 @@ Everything below is merged on `sla/main`; the open todos are in the progress tab
 ### Prepare
 
 - **Supports, by hand.** The *SLA Support Points* tool puts points on the lifted model: click to add, Ctrl-click to
-  remove, drag to move, head diameter per point. *Mini*, *Light*, *Medium* and *Heavy* size new points, and the tree
-  stays on the model.
+  remove, drag to move, head diameter per point. The five support classes *0.1*, *0.2*, *0.3*, *0.4* and *0.6* size
+  new points, and the tree stays on the model.
 - **Point geometry.** Tip shape (Default, Cone or Ball), knot, stem sides, stem taper and the shape of the foot are
   per point and are built into the tree; *Supports & raft* sets what a new point starts from.
 - **Auto support.** For the selected models or for all of them, writing the points into the models so you can still
@@ -142,23 +142,22 @@ branch, one commit, the box ticked in the same commit.
 
 ## Progress
 
-**312 of 351 todos done (89%)** · updated 2026-10-02 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
+**321 of 360 todos done (89%)** · updated 2026-10-05 · full list and result notes in [`doc/sla-fork/ROADMAP.md`](doc/sla-fork/ROADMAP.md)
 
 | Milestone | Done | |
 |---|---|---|
-| M0: Foundation | 68/69 | `████████████` 99% |
+| M0: Foundation | 69/70 | `████████████` 99% |
 | M1: Look, feel and SLA-first shell | 44/45 | `████████████` 98% |
-| M2: SLA editing tools (porting the legacy gizmos) | 91/92 | `████████████` 99% |
+| M2: SLA editing tools (porting the legacy gizmos) | 93/94 | `████████████` 99% |
 | M3: Resin profile import (Chitubox, Lychee and others) | 24/28 | `██████████░░` 86% |
-| M4: Engine quality (measure first; every PR includes before/after metrics) | 26/36 | `█████████░░░` 72% |
+| M4: Engine quality (measure first; every PR includes before/after metrics) | 27/36 | `█████████░░░` 75% |
 | M5: Formats and inspection | 38/43 | `███████████░` 88% |
-| M6: Quality gates and release | 16/21 | `█████████░░░` 76% |
-| M7: Excellent auto-supports *(parked)* | 5/17 | `████░░░░░░░░` 29% |
+| M6: Quality gates and release | 17/22 | `█████████░░░` 77% |
+| M7: Excellent auto-supports *(parked)* | 9/22 | `█████░░░░░░░` 41% |
 
 ### Waiting on you
 
 - **M3.1** Put a few real `.cfg`, `.cfgx`, `.lyr` and `.lyp` files in `local-samples/`, exported from your own Chitubo…
-- **M4.6b** Decide whether a raft around an object that is printed directly on the build plate should still need the "r…
 - **M5.3.samples** Provide one sliced sample archive per target printer (from Chitubox/Lychee/Photon Workshop) and list the pr…
 - **M6.2a** The visual regression has never been run end to end: build the app, choose the three fixture scenes and bot…
 - **M6.4** End-to-end walk through the M1.1 journeys on an integrated build, filing new todos for gaps.
@@ -192,7 +191,7 @@ branch, one commit, the box ticked in the same commit.
 
 </details>
 
-<details><summary>M4: Engine quality (measure first; every PR includes before/after metrics) — 10 open</summary>
+<details><summary>M4: Engine quality (measure first; every PR includes before/after metrics) — 9 open</summary>
 
 - [ ] **M4.1** Tracy profiling run over the benchmark set. Write a hotspot report in `doc/sla-fork/profiling/`. No code ch…
 - [ ] **M4.2** Re-rank M4.3–M4.10 based on the M4.1 report. *(needs you)*
@@ -201,7 +200,6 @@ branch, one commit, the box ticked in the same commit.
 - [ ] **M4.5** Branching tree: reduce support volume with no new unsupported points (PLAN B3).
   - [ ] **M4.5b** A/B the key and the existing widening factor on the benchmark set with the M0.13 harness, record the suppor…
 - [ ] **M4.6** Pad robustness when printing directly on the plate, plus pad generation speed (PLAN B4).
-- [ ] **M4.6b** Decide whether a raft around an object that is printed directly on the build plate should still need the "r… *(needs you)*
 - [ ] **M4.7** Hollowing performance and wall thickness tolerance test (PLAN B5).
 - [ ] **M4.14** Peak memory when slicing for 12K and 16K displays (Photon Mono M5: 11520 × 5120, about 59 megapixels per la…
 
@@ -227,15 +225,16 @@ branch, one commit, the box ticked in the same commit.
 
 </details>
 
-<details><summary>M7: Excellent auto-supports — 12 open (parked)</summary>
+<details><summary>M7: Excellent auto-supports — 13 open (parked)</summary>
 
-- [ ] **M7.1** Expert supporting interview. Record the answers in `doc/sla-fork/supports/expert-rules.md`, one numbered ru… *(needs you)*
 - [ ] **M7.3** Contact extraction script.
 - [ ] **M7.4** Rule mining across the dataset. Measure things like:
-- [ ] **M7.5** Rulebook review. Merge the interview rules (M7.1) with the mined rules (M7.4) into `doc/sla-fork/supports/r… *(needs you)*
 - [ ] **M7.6** Support quality scorecard. The benchmark harness writes the generator's support points and tip sizes to JSO…
 - [ ] **M7.7** Baseline scorecard for the current generator (default and branching tree). Commit only the aggregate number…
 - [ ] **M7.8** Implement the rulebook in the generator, one sub-todo per rule (`M7.8.<n>`). Each must raise the scorecard…
+  - [ ] **M7.8.2** Size by role and keep off detail (R4.1, R4.3-R4.6): every generated point gets a role (anchor, island, smal…
+  - [ ] **M7.8.3** Heavy anchors (R4.2): a few T0.4 anchors on flat, low-detail areas facing the plate, scaled with the model'…
+  - [ ] **M7.8.4** Raft against suction (R6): a raft type Auto, the default, that builds no raft unless the part's underside w…
 - [ ] **M7.9** Cosmetic surface awareness. Detect likely cosmetic surfaces (faces, fine detail, high-curvature upward regi…
 - [ ] **M7.10** Size tips for each region, following the rulebook: light tips on small detail, heavier tips where the load…
 - [ ] **M7.11** Automated tuning. Search the generator parameters against the dataset scorecard, and promote the best setti…

@@ -95,6 +95,10 @@ class DefaultSupportTree {
     // come in handy.
     ThrowOnCancel m_thr;
 
+    // Ask whether the job wants to stop, which is what the searches below are given up on
+    // between their iterations (M4.16). m_thr aborts, this one only answers.
+    JobController::StopCond m_stopcond;
+
     // A spatial index to easily find strong pillars to connect to.
     PillarIndex m_pillar_index;
 
@@ -230,7 +234,8 @@ class DefaultSupportTree {
                                                    double       radius,
                                                    double       new_radius)
     {
-        return sla::search_widening_path(suptree_ex_policy, m_sm, jp, dir, radius, new_radius);
+        return sla::search_widening_path(suptree_ex_policy, m_sm, jp, dir, radius, new_radius,
+                                         m_stopcond);
     }
 
 public:

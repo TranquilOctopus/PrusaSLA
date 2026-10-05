@@ -1,5 +1,5 @@
 // M2.28: the keyboard shortcuts of the support points tool. Lychee and Chitubox users expect the
-// presets on 1 to 4, auto support on A, the per-point "Support on model" on G and Escape to drop
+// presets on 1 to 5, auto support on A, the per-point "Support on model" on G and Escape to drop
 // the selection, and they expect the keys to be dead while a text field has the focus. The mapping
 // from a key to the action of the tool is a function of its own, so it is tested here without a
 // gizmo, a project or a window: what the gizmo does with the action is its own business.
@@ -45,18 +45,20 @@ SupportToolKeyEvent key_press(KeyCode code, KeyModifiers modifiers)
 
 } // namespace
 
-TEST_CASE("The support tool picks a preset with 1 to 4", "[SlaSupportToolShortcuts]")
+TEST_CASE("The support tool picks a tip class with 1 to 5", "[SlaSupportToolShortcuts]")
 {
-    // The keys are the preset buttons: the size a new point takes, and the size written on the
-    // points that are selected.
-    CHECK(support_tool_action_for(key_press(KeyCode::Num1)) == SupportToolAction::PresetMini);
-    CHECK(support_tool_action_for(key_press(KeyCode::Num2)) == SupportToolAction::PresetLight);
-    CHECK(support_tool_action_for(key_press(KeyCode::Num3)) == SupportToolAction::PresetMedium);
-    CHECK(support_tool_action_for(key_press(KeyCode::Num4)) == SupportToolAction::PresetHeavy);
+    // The keys are the preset buttons: the tip class a new point takes, and the class written on the
+    // points that are selected. The classes are the five of the support rulebook (M7.8.1, R3), T0.1
+    // to T0.6, so the keys go 1, 2, 3, 4 and 5: there is no T0.5.
+    CHECK(support_tool_action_for(key_press(KeyCode::Num1)) == SupportToolAction::PresetT01);
+    CHECK(support_tool_action_for(key_press(KeyCode::Num2)) == SupportToolAction::PresetT02);
+    CHECK(support_tool_action_for(key_press(KeyCode::Num3)) == SupportToolAction::PresetT03);
+    CHECK(support_tool_action_for(key_press(KeyCode::Num4)) == SupportToolAction::PresetT04);
+    CHECK(support_tool_action_for(key_press(KeyCode::Num5)) == SupportToolAction::PresetT06);
 
-    // The fifth preset does not exist, and neither does a preset behind a modifier that the app
-    // uses for something else.
-    CHECK(support_tool_action_for(key_press(KeyCode::Num5)) == SupportToolAction::None);
+    // A sixth preset does not exist, and neither does a preset behind a modifier that the app uses
+    // for something else.
+    CHECK(support_tool_action_for(key_press(KeyCode::Num6)) == SupportToolAction::None);
     CHECK(support_tool_action_for(key_press(KeyCode::Num0)) == SupportToolAction::None);
     CHECK(
         support_tool_action_for(key_press(KeyCode::Num1, KeyModifiers(KeyModifier::Ctrl)))
@@ -70,7 +72,7 @@ TEST_CASE("The support tool picks a preset with 1 to 4", "[SlaSupportToolShortcu
     // On some layouts a digit is only reachable with the shift, so the presets take one too.
     CHECK(
         support_tool_action_for(key_press(KeyCode::Num3, KeyModifiers(KeyModifier::Shift)))
-        == SupportToolAction::PresetMedium
+        == SupportToolAction::PresetT03
     );
 }
 
@@ -149,6 +151,7 @@ TEST_CASE(
         KeyCode::Num2,
         KeyCode::Num3,
         KeyCode::Num4,
+        KeyCode::Num5,
         KeyCode::A,
         KeyCode::G,
         KeyCode::Escape,
@@ -175,6 +178,7 @@ TEST_CASE(
         KeyCode::Num2,
         KeyCode::Num3,
         KeyCode::Num4,
+        KeyCode::Num5,
         KeyCode::A,
         KeyCode::G,
         KeyCode::Escape,
@@ -224,12 +228,14 @@ TEST_CASE("The support tool lists its shortcuts, one line per key", "[SlaSupport
 {
     const std::vector<std::string> lines = support_tool_shortcut_lines();
 
-    // Every key the mapping answers to is in the list the tool shows, and nothing else is.
+    // Every key the mapping answers to is in the list the tool shows, and nothing else is. The
+    // five presets are the tip classes of the support rulebook (M7.8.1), so they say their size.
     const std::vector<std::string> expected_keys{
         "1",
         "2",
         "3",
         "4",
+        "5",
         "A",
         "Shift+A",
         "G",

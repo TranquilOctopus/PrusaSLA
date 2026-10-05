@@ -51,8 +51,9 @@ public:
         std::function<void(SlaSupportSettingsGroup, SlaSupportPointField, double)> support_setting_changed =
             [](SlaSupportSettingsGroup, SlaSupportPointField, double) {};
 
-        /// A preset button of one of the two groups (M2.18, M2.22, M2.33): 0 Mini, 1 Light, 2 Medium,
-        /// 3 Heavy. The "New supports" preset is what a clicked point takes from then on, the
+        /// A preset button of one of the two groups (M2.18, M2.22, M2.33, M7.8.1): 0 T0.1,
+        /// 1 T0.2, 2 T0.3, 3 T0.4, 4 T0.6, the tip classes of the support rulebook. The
+        /// "New supports" preset is what a clicked point takes from then on, the
         /// "Selected supports" preset lands on the points that are selected.
         std::function<void(SlaSupportSettingsGroup, int)> support_preset_selected =
             [](SlaSupportSettingsGroup, int) {};
@@ -85,7 +86,8 @@ public:
     /// a selection, its title naming how many points are in it (M2.33).
     void set_selected_support_values(const SlaSupportSelectionView& view);
 
-    /// Which preset button of which group is checked, the one that was last chosen there.
+    /// Which preset button of which group is checked, the one that was last chosen there. The index
+    /// is the tip class of the support rulebook (M7.8.1): 0 T0.1 to 4 T0.6.
     void set_active_preset(int index, SlaSupportSettingsGroup group);
 
     void set_clipping_plane_position(double pos);
@@ -105,10 +107,13 @@ private:
     /// the same fields and their own preset row.
     struct SupportValueControls
     {
-        Yoga::LayoutButton* preset_mini_button = nullptr;
-        Yoga::LayoutButton* preset_light_button = nullptr;
-        Yoga::LayoutButton* preset_medium_button = nullptr;
-        Yoga::LayoutButton* preset_heavy_button = nullptr;
+        // The five preset buttons: the tip classes of the support rulebook (M7.8.1, R3), named by
+        // the size of their contact, on the keys 1 to 5.
+        Yoga::LayoutButton* preset_t01_button = nullptr;
+        Yoga::LayoutButton* preset_t02_button = nullptr;
+        Yoga::LayoutButton* preset_t03_button = nullptr;
+        Yoga::LayoutButton* preset_t04_button = nullptr;
+        Yoga::LayoutButton* preset_t06_button = nullptr;
         Yoga::SliderWithInput* tip_diameter_slider = nullptr;
         Yoga::ToggleButton* tip_diameter_follow_global_checkbox = nullptr;
         Yoga::SliderWithInput* stem_diameter_slider = nullptr;
@@ -130,9 +135,10 @@ private:
         Yoga::LayoutButton* delete_button = nullptr;
     };
 
-    /// Builds one group of support settings: the preset row, the four sizes with their "follow the
-    /// global setting" switches, and the per-point tip shape, tip length, knot, stem cross-section,
-    /// stem taper, foot shape and "support on model".
+    /// Builds one group of support settings: the preset row of the tip classes, the four sizes with
+    /// their "follow the global setting" switches, and the per-point tip shape, tip length, knot,
+    /// stem cross-section, stem taper, foot shape, "support on model" and bracing. The "Selected
+    /// supports" group ends with the button that removes what is selected.
     void add_support_value_group(
         Yoga::Item*           parent,
         SlaSupportSettingsGroup group,

@@ -404,8 +404,9 @@ TEST_CASE("The foot shape alone decides the widening of the pillar above it", "[
 
 TEST_CASE("The support_base_shape setting sits with the other base settings", "[suptreetree]")
 {
-    // The dropdown lives next to the base diameter and height, in the group that shows them,
-    // and it starts at the cone, so a print preset that never sets it keeps today's supports.
+    // The dropdown lives next to the base diameter and height, in the group that shows them, and it
+    // starts at the prism of the support rulebook (M7.8.1, R3.4), so a fresh profile gets the one
+    // base every support gets.
     const ConfigItemDef *base_diameter = find_def("support_base_diameter");
     const ConfigItemDef *base_shape = find_def("support_base_shape");
 
@@ -417,7 +418,7 @@ TEST_CASE("The support_base_shape setting sits with the other base settings", "[
     CHECK(base_shape->gui_type == ConfigItemDef::GUIType::combobox);
     CHECK_FALSE(base_shape->row_group.empty());
     CHECK_FALSE(base_shape->tooltip.empty());
-    CHECK(base_shape->init_fn().get<SupportBaseShape>() == SupportBaseShape::Cone);
+    CHECK(base_shape->init_fn().get<SupportBaseShape>() == SupportBaseShape::Cylinder);
 
     // The branching tree reads the same setting under its own name, like the base diameter.
     CHECK(find_def("branchingsupport_base_shape") != nullptr);

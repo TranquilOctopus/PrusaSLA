@@ -10,6 +10,7 @@
 #include <Slic3r/Biz/Algorithms/Optimize/BruteforceOptimizer.hpp>
 #include <libslic3r/MeshNormals.hpp>
 #include <libslic3r/Geometry.hpp>
+#include <libslic3r/SLA/JobController.hpp>
 #include <libslic3r/SLA/SupportTreeBuilder.hpp>
 
 #include <boost/variant.hpp>
@@ -103,11 +104,32 @@ template<class It> Hit min_hit(It from, It to)
     return *mit;
 }
 
+// The defaults of a support tree search: the tolerances and the iteration count of the config.
 inline StopCriteria get_criteria(const SupportTreeConfig &cfg)
 {
     return StopCriteria{}
         .rel_score_diff(cfg.optimizer_rel_score_diff)
         .max_iterations(cfg.optimizer_max_iterations);
+}
+
+// The same, with the stop condition of the job the tree is built for (M4.16). NLopt reads the stop
+// condition of the criteria before every evaluation of the objective and forces the search to stop
+// when it says so, so a search checks between its iterations and not only between the heads it is
+// run for: since M4.5c the searches of the different leaves run one after the other and the whole
+// run hangs on one of them otherwise. The predicate is only asked, never stored differently, so a
+// build nobody stopped searches exactly what it searched before.
+//
+// A caller that cannot be stopped passes detail::never_stop, the named function of JobController
+// and not a lambda: MSVC mangles the lambdas of a default function argument with a counter that is
+// per namespace, so the same mangled name can stand for different lambdas in different translation
+// units and the linker keeps one body, and a stop condition that then reads whatever was left in the
+// return register would abort every build of a support tree.
+inline StopCriteria get_criteria(const SupportTreeConfig &cfg, JobController::StopCond stopcond)
+{
+    StopCriteria criteria = get_criteria(cfg);
+    if (stopcond)
+        criteria.stop_condition(stopcond);
+    return criteria;
 }
 
 // A simple sphere with a center and a radius
@@ -473,10 +495,14 @@ inline bool any_may_rest_on_model(const SupportableMesh &sm)
                        });
 }
 
+// The stop condition is the one of the job the tree is built for (M4.16): the search below is one
+// per support point, and a search that is not given up when the tool is asked to stop holds the
+// whole tool up. detail::never_stop leaves it searching exactly what it searched before.
 template<class Ex>
 bool optimize_pinhead_placement(Ex                     policy,
                                 const SupportableMesh &m,
-                                Head                  &head)
+                                Head                  &head,
+                                JobController::StopCond stopcond = &detail::never_stop)
 {
     Vec3d n = get_normal(m.emesh, head.pos);
     assert(std::abs(n.norm() - 1.0) < EPSILON);
@@ -527,7 +553,8 @@ bool optimize_pinhead_placement(Ex                     policy,
         // viable normal that doesn't collide with the model
         // geometry and its very close to the default.
 
-        Optimizer<Biz::Algorithms::Optimize::AlgNLoptMLSL_Subplx> solver(get_criteria(m.cfg).stop_score(w).max_iterations(100));
+        Optimizer<Biz::Algorithms::Optimize::AlgNLoptMLSL_Subplx> solver(
+            get_criteria(m.cfg, stopcond).stop_score(w).max_iterations(100));
         solver.seed(0); // we want deterministic behavior
 
         auto oresult = solver.to_max().optimize(
@@ -563,7 +590,7 @@ bool optimize_pinhead_placement(Ex                     policy,
         ret = true;
     } else if (back_r > m.cfg.head_fallback_radius_mm) {
         head.r_back_mm = m.cfg.head_fallback_radius_mm;
-        ret = optimize_pinhead_placement(policy, m, head);
+        ret = optimize_pinhead_placement(policy, m, head, stopcond);
     }
 
     return ret;
@@ -572,7 +599,8 @@ bool optimize_pinhead_placement(Ex                     policy,
 template<class Ex>
 std::optional<Head> calculate_pinhead_placement(Ex                     policy,
                                                 const SupportableMesh &sm,
-                                                size_t suppt_idx)
+                                                size_t suppt_idx,
+                                                JobController::StopCond stopcond = &detail::never_stop)
 {
     if (suppt_idx >= sm.pts->size())
         return {};
@@ -601,7 +629,7 @@ std::optional<Head> calculate_pinhead_placement(Ex                     policy,
     head.knot_radius_mm = double(sp.knot_radius);
     head.stem           = stem_geometry(sm, &sp);
 
-    if (optimize_pinhead_placement(policy, sm, head)) {
+    if (optimize_pinhead_placement(policy, sm, head, stopcond)) {
         head.id = long(suppt_idx);
 
         return head;
@@ -806,7 +834,8 @@ GroundConnection deepsearch_ground_connection(
     const Junction                 &source,
     WideningFn                     &&wideningfn,
     const Vec3d                    &init_dir = DOWN,
-    const Domain::SLA::SupportPoint *sp       = nullptr)
+    const Domain::SLA::SupportPoint *sp       = nullptr,
+    JobController::StopCond          stopcond = &detail::never_stop)
 {
     constexpr unsigned MaxIterationsGlobal = 5000;
     constexpr unsigned MaxIterationsLocal  = 100;
@@ -819,7 +848,7 @@ GroundConnection deepsearch_ground_connection(
     // local searches are quick and less accurate. The global method will only
     // consider the max iteration number and the stop score (Z level <= ground)
 
-    auto criteria = get_criteria(sm.cfg); // get defaults from cfg
+    auto criteria = get_criteria(sm.cfg, stopcond); // get defaults from cfg
     criteria.max_iterations(MaxIterationsGlobal);
     criteria.abs_score_diff(NaNd);
     criteria.rel_score_diff(NaNd);
@@ -898,7 +927,10 @@ GroundConnection deepsearch_ground_connection(
     // terminating the search as soon as the ground is found.
     double l = 0., l_max = bridge_l;
     double zlvl = std::numeric_limits<double>::infinity();
-    while(zlvl > gndlvl && l <= l_max) {
+    // Every step of this loop is a beam cast of its own, so it asks the stop condition on its way:
+    // a route of a long drop is hundreds of steps (M4.16). Asking it in the condition keeps a run
+    // nobody stopped walking the very same steps.
+    while(zlvl > gndlvl && l <= l_max && !(stopcond && stopcond())) {
 
         zlvl = check_ground_route(policy, sm, source, n, l, wideningfn,
                                   GroundRouteCheck::PillarOnly,
@@ -942,7 +974,8 @@ GroundConnection deepsearch_ground_connection(Ex                              po
                                               const Junction                 &source,
                                               double                          end_radius,
                                               const Vec3d                    &init_dir = DOWN,
-                                              const Domain::SLA::SupportPoint *sp       = nullptr)
+                                              const Domain::SLA::SupportPoint *sp       = nullptr,
+                                              JobController::StopCond          stopcond = &detail::never_stop)
 {
     double gndlvl = ground_level(sm);
     auto wfn = [end_radius, gndlvl](const Ball &src, const Vec3d &dir, double len) {
@@ -960,7 +993,7 @@ GroundConnection deepsearch_ground_connection(Ex                              po
 
     static_assert(IsWideningFn<decltype(wfn)>, "Not a widening function");
 
-    return deepsearch_ground_connection(policy, sm, source, wfn, init_dir, sp);
+    return deepsearch_ground_connection(policy, sm, source, wfn, init_dir, sp, stopcond);
 }
 
 struct DefaultWideningModel {
@@ -984,17 +1017,19 @@ template<class Ex>
 GroundConnection deepsearch_ground_connection(Ex policy,
                                               const SupportableMesh &sm,
                                               const Junction &source,
-                                              const Vec3d &init_dir = DOWN)
+                                              const Vec3d &init_dir = DOWN,
+                                              JobController::StopCond stopcond = &detail::never_stop)
 {
     return deepsearch_ground_connection(policy, sm, source,
-                                        DefaultWideningModel{sm}, init_dir);
+                                        DefaultWideningModel{sm}, init_dir, nullptr, stopcond);
 }
 
 template<class Ex>
 bool optimize_anchor_placement(Ex                     policy,
                                const SupportableMesh &sm,
                                const Junction        &from,
-                               Anchor                &anchor)
+                               Anchor                &anchor,
+                               JobController::StopCond stopcond = &detail::never_stop)
 {
     Vec3d n = get_normal(sm.emesh, anchor.pos);
 
@@ -1009,7 +1044,7 @@ bool optimize_anchor_placement(Ex                     policy,
 
     double sd = sm.cfg.safety_distance(anchor.r_back_mm);
 
-    Optimizer<AlgNLoptGenetic> solver(get_criteria(sm.cfg)
+    Optimizer<AlgNLoptGenetic> solver(get_criteria(sm.cfg, stopcond)
                                           .stop_score(anchor.fullwidth())
                                           .max_iterations(100));
 
@@ -1049,7 +1084,8 @@ template<class Ex>
 std::optional<Anchor> calculate_anchor_placement(Ex policy,
                                                  const SupportableMesh &sm,
                                                  const Junction        &from,
-                                                 const Vec3d &to_hint)
+                                                 const Vec3d &to_hint,
+                                                 JobController::StopCond stopcond = &detail::never_stop)
 {
     double back_r    = from.r;
     double pin_r     = sm.cfg.head_front_radius_mm;
@@ -1062,10 +1098,10 @@ std::optional<Anchor> calculate_anchor_placement(Ex policy,
 
     Anchor anchor(back_r, pin_r, hwidth, penetr, anchordir, to_hint);
 
-    if (optimize_anchor_placement(policy, sm, from, anchor)) {
+    if (optimize_anchor_placement(policy, sm, from, anchor, stopcond)) {
         ret = anchor;
     } else if (anchor.r_back_mm = sm.cfg.head_fallback_radius_mm;
-               optimize_anchor_placement(policy, sm, from, anchor)) {
+               optimize_anchor_placement(policy, sm, from, anchor, stopcond)) {
         // Retrying with the fallback strut radius as a last resort.
         ret = anchor;
     }

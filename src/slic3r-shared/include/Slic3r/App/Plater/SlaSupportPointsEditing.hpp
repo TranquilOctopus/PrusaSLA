@@ -32,6 +32,12 @@ struct SlaSupportPointsEditing
     // only home of that number, which a preset button also writes.
     SlaSupportGeometry support_geometry;
 
+    // How deep the contact of a clicked point sinks into the model, 0 for the configured
+    // support_head_penetration. It is a rule of the tip rather than a field of the tool
+    // (support rulebook R3.1: half the tip), so a preset of a tip class is what sets it, to half
+    // the tip of that class.
+    double contact_depth_mm = 0.0;
+
     // The "may this support end on the model" state a clicked point takes (M2.33). It belongs to
     // the "New supports" group, so a point placed by hand is an ordinary support (Inherit, the
     // object's own setting) until the group is changed, and editing the state of points that are
