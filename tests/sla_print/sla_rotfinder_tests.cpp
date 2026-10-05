@@ -272,51 +272,76 @@ double smallest_shared_edge_normal_angle_deg(const Slic3r::Domain::TriangleMesh&
     return smallest;
 }
 
-// A sphere of the given radius, written out of triangles: `rings` rows of quads between the two
-// poles, every quad split into two triangles. The quads of the first and the last row have no area
-// at all, so they are left out and the poles are fans of single triangles, which is how a sphere
-// arrives from a scanner too.
-indexed_triangle_set make_sphere(double radius, size_t rings, size_t segments)
+// A ball of the given radius, written out of triangles: an icosahedron with every edge split
+// `subdivisions` times and the corners pushed out onto the sphere.
+//
+// Not a latitude/longitude ball, which would be the obvious thing to write: the quads between two
+// rings of it are planar (their corners are mirrored into each other, so they are two parallel
+// lines in one plane) and the two triangles of every quad are therefore exactly coplanar. A goal
+// that looks for flat faces would find one in every quad of such a ball, and the "no flat face at
+// all" case could not be written down. An icosphere has no two facets that share an edge in one
+// plane, which is also what a piece that came out of a scanner looks like.
+indexed_triangle_set make_sphere(double radius, size_t subdivisions)
 {
-    indexed_triangle_set its;
-    its.vertices.reserve(2 + (rings - 1) * segments);
-    its.indices.reserve(2 * segments + 2 * (rings - 2) * segments);
-
-    its.vertices.emplace_back(0.f, 0.f, float(radius)); // the top pole
-    for (size_t ring = 1; ring < rings; ++ring) {
-        const double theta = std::numbers::pi * double(ring) / double(rings);
-        for (size_t seg = 0; seg < segments; ++seg) {
-            const double phi = 2 * std::numbers::pi * double(seg) / double(segments);
-            its.vertices.emplace_back(float(radius * std::sin(theta) * std::cos(phi)),
-                                      float(radius * std::sin(theta) * std::sin(phi)),
-                                      float(radius * std::cos(theta)));
-        }
-    }
-    its.vertices.emplace_back(0.f, 0.f, float(-radius)); // the bottom pole
-
-    const size_t bottom_pole = its.vertices.size() - 1;
-    const auto ring_vertex = [segments](int ring, int seg) {
-        return int(1 + size_t(ring - 1) * segments + size_t(seg) % segments);
+    const double golden = (1. + std::sqrt(5.)) / 2.;
+    std::vector<Slic3r::Vec3f> vertices{
+        {-1.f, float(golden), 0.f},
+        {1.f, float(golden), 0.f},
+        {-1.f, float(-golden), 0.f},
+        {1.f, float(-golden), 0.f},
+        {0.f, -1.f, float(golden)},
+        {0.f, 1.f, float(golden)},
+        {0.f, -1.f, float(-golden)},
+        {0.f, 1.f, float(-golden)},
+        {float(golden), 0.f, -1.f},
+        {float(golden), 0.f, 1.f},
+        {float(-golden), 0.f, -1.f},
+        {float(-golden), 0.f, 1.f}
+    };
+    std::vector<Slic3r::Domain::Index3> faces{
+        {0, 11, 5},  {0, 5, 1},  {0, 1, 7},  {0, 7, 10}, {0, 10, 11}, {1, 5, 9}, {5, 11, 4},
+        {11, 10, 2}, {10, 7, 6}, {7, 1, 8},  {3, 9, 4},  {3, 4, 2},   {3, 2, 6}, {3, 6, 8},
+        {3, 8, 9},   {4, 9, 5},  {2, 4, 11}, {6, 2, 10}, {8, 6, 7},   {9, 8, 1}
     };
 
-    for (int seg = 0; seg < int(segments); ++seg)
-        its.indices.push_back({0, ring_vertex(1, seg), ring_vertex(1, seg + 1)});
+    for (size_t pass = 0; pass < subdivisions; ++pass) {
+        // The corner in the middle of every edge, kept once per edge.
+        std::map<std::pair<size_t, size_t>, size_t> middle;
+        const auto between = [&vertices, &middle](size_t one, size_t other)
+        {
+            const auto key{std::make_pair(std::min(one, other), std::max(one, other))};
+            const auto it = middle.find(key);
+            if (it != middle.end())
+                return it->second;
+            // Out of the two corners it is put in, not off them: the corner is a value of its own
+            // before the vector of the corners is grown under it.
+            const Slic3r::Vec3f half{vertices[one] + vertices[other]};
+            vertices.push_back(half / 2.f);
+            const size_t index{vertices.size() - 1};
+            middle.emplace(key, index);
+            return index;
+        };
 
-    for (int ring = 1; ring + 1 < int(rings); ++ring) {
-        for (int seg = 0; seg < int(segments); ++seg) {
-            const int here = ring_vertex(ring, seg);
-            const int next = ring_vertex(ring, seg + 1);
-            const int below = ring_vertex(ring + 1, seg);
-            const int below_next = ring_vertex(ring + 1, seg + 1);
-            its.indices.push_back({here, below, below_next});
-            its.indices.push_back({here, below_next, next});
+        std::vector<Slic3r::Domain::Index3> split;
+        split.reserve(4 * faces.size());
+        for (const Slic3r::Domain::Index3& face : faces) {
+            const size_t a{size_t(face[0])}, b{size_t(face[1])}, c{size_t(face[2])};
+            const size_t ab{between(a, b)};
+            const size_t bc{between(b, c)};
+            const size_t ca{between(c, a)};
+            split.push_back({int(a), int(ab), int(ca)});
+            split.push_back({int(b), int(bc), int(ab)});
+            split.push_back({int(c), int(ca), int(bc)});
+            split.push_back({int(ab), int(bc), int(ca)});
         }
+        faces = std::move(split);
     }
 
-    for (int seg = 0; seg < int(segments); ++seg) {
-        its.indices.push_back(
-            {ring_vertex(int(rings) - 1, seg), int(bottom_pole), ring_vertex(int(rings) - 1, seg + 1)});
-    }
+    indexed_triangle_set its;
+    its.vertices.reserve(vertices.size());
+    for (const Slic3r::Vec3f& vertex : vertices)
+        its.vertices.push_back(vertex.normalized() * float(radius));
+    its.indices = std::move(faces);
 
     return its;
 }
@@ -351,16 +376,16 @@ indexed_triangle_set make_cylinder(double radius, double height, size_t segments
     return its;
 }
 
-// A head on a neck: a sphere for the head and a short cylinder for the neck under it, with the
+// A head on a neck: a ball for the head and a short cylinder for the neck under it, with the
 // bottom of the head inside the neck so that the two read as one piece. The flat cut at the bottom
-// of the neck is the only flat face of the mesh that is at an extreme of it, so it is the face the
-// miniature goal lays on the plate.
+// of the neck is the only flat face of the mesh at all, so it is the face the miniature goal lays
+// on the plate.
 Slic3r::Domain::TriangleMesh make_head_on_neck(
     double head_radius, double neck_radius, double neck_height
 )
 {
     // The head sits that far above the cut, so that its bottom is inside the neck.
-    Slic3r::Domain::TriangleMesh head{std::move(make_sphere(head_radius, 12, 24))};
+    Slic3r::Domain::TriangleMesh head{std::move(make_sphere(head_radius, 1))};
     head.translate(Slic3r::Vec3f{0.f, 0.f, float(head_radius + 2.)});
     Slic3r::Domain::TriangleMesh neck{std::move(make_cylinder(neck_radius, neck_height, 24))};
 
@@ -372,10 +397,10 @@ Slic3r::Domain::TriangleMesh make_head_on_neck(
 }
 
 // A bust: a box shaped body with one small flat face at its lower end, the cut it is glued to a
-// body by. Its four sides are deliberately not flat: the top is a wide rectangle turned against the
-// small one at the bottom, so every side is a warped quad and no two of its triangles lie in a plane
-// together. That is what a bust is like, and it is what makes the cut the only face on the piece
-// instead of one of six.
+// body by, and a wide flat top, which is the face of the piece a support could not be hidden in.
+// Its four sides are deliberately not flat: the top is a wide rectangle turned against the small
+// one at the bottom, so every side is a warped quad and no two of its triangles lie in a plane
+// together.
 Slic3r::Domain::TriangleMesh make_bust(double cut_x, double cut_y, double top_x, double top_y,
                                        double height, double twist_deg)
 {
@@ -614,8 +639,8 @@ TEST_CASE("Auto orient: miniature lays a head on its neck cut", "[SLA][Rotfinder
     // so the piece is 18 mm tall as it is loaded.
     Slic3r::Domain::TriangleMesh mesh = make_head_on_neck(8., 3., 5.);
 
-    // The neck is cut flat, so the facets of the bottom of it are exactly in one plane, which is
-    // what the goal looks a cut out by.
+    // The neck is cut flat, so the facets of the bottom of it are exactly in one plane, and the
+    // ball of the head has nothing flat in it at all: the cut is the only face the goal can find.
     REQUIRE(smallest_shared_edge_normal_angle_deg(mesh) < 2.);
 
     MeshModel head{std::move(mesh)};
@@ -646,12 +671,12 @@ TEST_CASE("Auto orient: miniature lays a head on its neck cut", "[SLA][Rotfinder
 TEST_CASE("Auto orient: miniature lays a bust on its small flat face", "[SLA][Rotfinder]")
 {
     // A bust 6 x 5 mm at the cut and 20 x 14 mm at the top, 10 mm tall, with the top turned 15
-    // degrees against the cut so that its four sides are warped quads and not flat. The cut is a
-    // few percent of the surface and it is the only flat face of the piece that is at an extreme
-    // of it, which is what makes it the face the piece is printed on.
+    // degrees against the cut so that its four sides are warped quads and not flat. The wide top is
+    // flat as well, but a face that is a third of the surface of the piece is a side of it and not
+    // somewhere to hide a support in, so the small face at the bottom is the one that is printed on.
     Slic3r::Domain::TriangleMesh mesh = make_bust(6., 5., 20., 14., 10., 15.);
 
-    // The two triangles of the cut are exactly in one plane; no other face of the bust is flat at
+    // The two triangles of the cut are exactly in one plane, and no side of the bust is flat at
     // all, its sides being warped.
     REQUIRE(smallest_shared_edge_normal_angle_deg(mesh) < 2.);
 
@@ -678,10 +703,9 @@ TEST_CASE("Auto orient: miniature lays a bust on its small flat face", "[SLA][Ro
 
 TEST_CASE("Auto orient: a miniature with no flat face is only leaned over", "[SLA][Rotfinder]")
 {
-    // A sphere: there is no flat face in it at all, so there is no cut for the goal to find. Its
-    // facets differ by the 15 degrees of the grid they are cut on, so not two of them that share an
-    // edge lie in one plane.
-    Slic3r::Domain::TriangleMesh mesh{make_sphere(10., 12, 24)};
+    // A ball: there is no flat face in it at all, so there is no cut for the goal to find. Not two
+    // of its facets that share an edge lie in one plane, which is what the icosphere is for.
+    Slic3r::Domain::TriangleMesh mesh{make_sphere(10., 1)};
     REQUIRE(smallest_shared_edge_normal_angle_deg(mesh) > 2.);
     MeshModel ball{std::move(mesh)};
 

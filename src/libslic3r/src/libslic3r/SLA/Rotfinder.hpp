@@ -127,30 +127,32 @@ Vec2d find_no_cups_rotation(const Domain::ModelObject &modelobj,
                             const RotOptimizeParams & = {});
 
 /**
-  * Find the rotation a miniature (a pre-supported head, a helmet, a bust) is printed in.
-  *
-  * This is not a search over poses the way the goals above are: the way such a piece is printed is
-  * decided by the person who made it. The flat face it is glued to a body by - the cut of a neck,
-  * the underside of a head, the flat back of a bust - is found in the mesh and pointed at the plate,
-  * and the model is then leaned over by a fixed angle about a horizontal axis, which is what makes
-  * the cross sections of the print ramp in gradually from the narrow cut instead of standing up as
-  * a full width disc. The lean is the only thing searched: the azimuths around the plate are tried
-  * and the one that keeps the most detail - the surface on the side away from the glue face, the
-  * part that is finely tessellated and that the print has to show - facing up, and the least area
-  * facing the plate, is the one taken. The rotation about Z is never part of it, so the model is
-  * not turned on the plate. See the constants of the implementation for the numbers and the rules.
-  *
-  * A model with no flat face at all has no cut to find: it keeps the pose it is loaded in and is
-  * only leaned over.
-  *
-  * @param modelobj The model object representing the 3d mesh.
-  * @param params The optimization accuracy and the status callback, as above.
-  *
-  * @return Returns the rotations around the X and Y axes in the same convention as the functions
-  * above: R = Ry(y) * Rx(x).
-  */
-Vec2d find_miniature_rotation(const Domain::ModelObject &modelobj,
-                              const RotOptimizeParams & = {});
+ * Find the rotation a miniature (a pre-supported head, a helmet, a bust) is printed in.
+ *
+ * This is not a search over poses the way the goals above are: the way such a piece is printed is
+ * decided by the person who made it. The flat face it is glued to a body by - the cut of a neck,
+ * the underside of a head, the flat back of a bust - is found in the mesh and pointed at the plate,
+ * and the model is then leaned over by a fixed angle about a horizontal axis, which is what makes
+ * the cross sections of the print ramp in gradually from the narrow cut instead of standing up as
+ * a full width disc. The lean is the only thing searched: the azimuths around the plate are tried
+ * and the one that keeps the most detail - the surface on the side away from the glue face, the
+ * part that is finely tessellated and that the print has to show - facing up, and the least area
+ * facing the plate, is the one taken. The rotation about Z is never part of it, so the model is
+ * not turned on the plate. A lean is a pose with a spin around the plate in it, which the two
+ * rotations of the convention can only say together on most pieces: the pose is built inside them
+ * and a piece whose flat face points along an axis of the plate can only be leaned to one side.
+ * See the constants of the implementation for the numbers and the rules.
+ *
+ * A model with no flat face at all has no cut to find: it keeps the pose it is loaded in and is
+ * only leaned over.
+ *
+ * @param modelobj The model object representing the 3d mesh.
+ * @param params The optimization accuracy and the status callback, as above.
+ *
+ * @return Returns the rotations around the X and Y axes in the same convention as the functions
+ * above: R = Ry(y) * Rx(x).
+ */
+Vec2d find_miniature_rotation(const Domain::ModelObject& modelobj, const RotOptimizeParams& = {});
 
 // The mesh the search above works on, taken out of the model so that a caller holding no model (a
 // job off the UI thread) can run the same search. See SLAAutoOrient.hpp, which is the public way in.
