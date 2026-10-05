@@ -1812,6 +1812,76 @@ SampleConfig create_default_island_configuration(float head_diameter_in_mm) {
     return SampleConfigFactory::create(head_diameter_in_mm);
 }
 
+double support_size_reference(const SupportPointGeneratorData& data)
+{
+    constexpr double sf = Biz::Algorithms::Scaling::SCALING_FACTOR;
+
+    // The area of an ExPolygon is in scaled units, so it is scaled twice to get mm2.
+    double min_x = 0., min_y = 0., max_x = 0., max_y = 0.;
+    double max_area = 0.;
+    bool measured   = false;
+    for (const Layer& layer : data.layers) {
+        double layer_area = 0.;
+        for (const LayerPart& part : layer.parts) {
+            const Domain::BoundingBox2crd& extent = part.shape_extent;
+            const double x0                       = unscale<double>(extent.min.x());
+            const double x1                       = unscale<double>(extent.max.x());
+            const double y0                       = unscale<double>(extent.min.y());
+            const double y1                       = unscale<double>(extent.max.y());
+            if (!measured) {
+                min_x    = x0;
+                max_x    = x1;
+                min_y    = y0;
+                max_y    = y1;
+                measured = true;
+            } else {
+                min_x = std::min(min_x, x0);
+                max_x = std::max(max_x, x1);
+                min_y = std::min(min_y, y0);
+                max_y = std::max(max_y, y1);
+            }
+            layer_area += std::abs(part.shape->area()) * sf * sf;
+        }
+        max_area = std::max(max_area, layer_area);
+    }
+
+    // Nothing was sliced, or nothing of it has an area: there is no size to scale the density by and
+    // the caller keeps the curve it has.
+    if (!measured || max_area <= 0.)
+        return 0.;
+
+    // How wide the part is, in plan and where it is widest, whichever of the two is the smaller.
+    return std::min(std::min(max_x - min_x, max_y - min_y), std::sqrt(max_area));
+}
+
+std::vector<Vec2f> support_curve_for_size(const std::vector<Vec2f>& curve, double size_in_mm)
+{
+    if (curve.empty() || !(size_in_mm > 0.))
+        return curve;
+
+    const double own_maximum = curve.back().x();
+    const double limit       = support_curve_size_factor * size_in_mm;
+    if (!(limit < own_maximum))
+        return curve; // a part this size keeps the density it had
+
+    std::vector<Vec2f> scaled;
+    scaled.reserve(curve.size());
+    for (const Vec2f& point : curve) {
+        // Only the radius is scaled. The y of a point of the curve is the height over the support
+        // point a radius grows with, and that height is a height of the part and not a radius.
+        Vec2f scaled_point = point;
+        scaled_point.x()   = static_cast<float>(point.x() * limit / own_maximum);
+        scaled.push_back(scaled_point);
+    }
+    return scaled;
+}
+
+std::vector<Vec2f>
+support_curve_for_part(const std::vector<Vec2f>& curve, const SupportPointGeneratorData& data)
+{
+    return support_curve_for_size(curve, support_size_reference(data));
+}
+
 LayerSupportPoints generate_support_points(
     const SupportPointGeneratorData &data,
     const SupportPointGeneratorConfig &config,

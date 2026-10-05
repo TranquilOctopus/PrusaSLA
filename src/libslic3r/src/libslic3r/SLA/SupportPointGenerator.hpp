@@ -20,6 +20,36 @@ namespace Slic3r::sla {
 std::vector<Domain::Vec2f> create_default_support_curve();
 SampleConfig create_default_island_configuration(float head_diameter_in_mm);
 
+// M7.8.7: the largest radius one support point may hold is a size, so it is a size of the part and
+// not a constant of the program. The curve of create_default_support_curve() holds up to 6 mm of
+// surface, which is right for a plate and for everything from a figurine up and which swallows a
+// whole 9 mm miniature head in one or two points, where the studio that supports these models by
+// hand in another slicer puts 17 to 24 tips on a head of that size (doc/sla-fork/supports/
+// calibration.md, five studio supported heads of 8.4 to 9.7 mm, median 20).
+//
+// So the largest radius a point may hold is the smaller of the maximum of the curve and
+// support_curve_size_factor times the characteristic size of the part (support_size_reference()),
+// and the whole curve is scaled by that one factor: its y, the height over the point a radius grows
+// with, stays, because a height is not a radius. A part that is big enough for the factor not to
+// reach its curve keeps the density it had, and a small part gets a proportionally denser support.
+//
+// 0.36 is the calibration. It puts the synthetic head of tests/sla_print - a sphere of 8 mm on a
+// short neck cylinder, 8.6 mm tall, sliced at 0.05 mm - in the middle of the 15 to 25 points its
+// test asks for, which is where the 17 to 24 of the studio heads sit, while a 40 mm cube and a
+// 100 mm plate are big enough for the factor not to reach their curve at all. Rulebook R7.1
+// holds: nothing here knows the resin, the printer or the layer height.
+constexpr double support_curve_size_factor = 0.36;
+
+/**
+@brief The support curve of a part of the given characteristic size [in mm]
+@param curve The curve to scale, e.g. create_default_support_curve()
+@param size_in_mm Characteristic size of the part, see support_size_reference()
+@return The curve with every radius scaled by one factor, which is the curve itself when there is
+no size to scale it by or when the part is big enough for the factor not to reach the curve
+*/
+std::vector<Domain::Vec2f>
+support_curve_for_size(const std::vector<Domain::Vec2f>& curve, double size_in_mm);
+
 /**
 @brief Configuration for automatic support placement
 */
@@ -167,6 +197,26 @@ struct SupportPointGeneratorData
     // slices above. Empty for a model with nothing painted, and then every rule reading it is off.
     SupportFacetPaint facet_paint;
 };
+
+/**
+@brief The characteristic size of the object the data holds [in mm] (M7.8.7)
+How wide the part is, both in plan and where it is widest: the smaller of the two extents of its
+bounding box in XY and the side of the square of the area of its largest layer. Measured from the
+prepared layers, so it knows nothing but the shape of the object.
+@return The size in mm, or zero when the data holds no layer with an area
+*/
+double support_size_reference(const SupportPointGeneratorData& data);
+
+/**
+@brief The support curve the generator is to use for the object of the data (M7.8.7)
+@param curve The curve of the configuration, e.g. create_default_support_curve()
+@param data The prepared data of the object the points are generated for
+@return The curve scaled by the size of the object, see support_curve_for_size()
+*/
+std::vector<Domain::Vec2f> support_curve_for_part(
+    const std::vector<Domain::Vec2f>& curve,
+    const SupportPointGeneratorData& data
+);
 
 // call during generation of support points to check cancel event
 using ThrowOnCancel = std::function<void(void)>;
