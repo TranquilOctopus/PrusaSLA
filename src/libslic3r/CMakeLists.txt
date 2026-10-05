@@ -358,6 +358,8 @@ set(SLIC3R_SOURCES
     src/libslic3r/SLA/SupportIslands/SupportIslandPoint.hpp
     src/libslic3r/SLA/SupportIslands/UniformSupportIsland.cpp
     src/libslic3r/SLA/SupportIslands/UniformSupportIsland.hpp
+    src/libslic3r/SLA/SupportAnchors.cpp
+    src/libslic3r/SLA/SupportAnchors.hpp
     src/libslic3r/SLA/SupportFacetPaint.cpp
     src/libslic3r/SLA/SupportPointGenerator.cpp
     src/libslic3r/SLA/SupportRoles.cpp
