@@ -110,16 +110,37 @@ TEST_CASE("The per-point support geometry settings sit in the head and the pilla
     CHECK(tip_shape->gui_type == ConfigItemDef::GUIType::combobox);
 }
 
-TEST_CASE("The per-point support geometry defaults are the geometry of today", "[Config][SLA][Supports]")
+TEST_CASE(
+    "The per-point support geometry defaults are the support rulebook",
+    "[Config][SLA][Supports]"
+)
 {
-    // The configured tip diameter, Default, a tip length derived from the pinhead width, no knot and
-    // a round stem of one diameter: what the support tree has always built, so a print preset that
-    // never sets the keys keeps today's supports.
-    CHECK(find_def("support_tip_shape")->init_fn().get<SupportTipShape>() == SupportTipShape::Default);
-    CHECK(find_def("support_tip_length")->init_fn().get<double>() == Approx(0.));
+    // The geometry of R3, which a support point placed by hand takes when the print preset says
+    // nothing else (M7.8.1): a ball contact (R3.1), the short cone under it (R3.2), no knot, a
+    // hexagonal stem (R3.3) and a prism foot (R3.4).
+    CHECK(find_def("support_tip_shape")->init_fn().get<SupportTipShape>() == SupportTipShape::Ball);
+    CHECK(find_def("support_tip_length")->init_fn().get<double>() == Approx(0.5));
     CHECK(find_def("support_knot_diameter")->init_fn().get<double>() == Approx(0.));
-    CHECK(find_def("support_stem_sides")->init_fn().get<int>() == 0);
+    CHECK(find_def("support_stem_sides")->init_fn().get<int>() == 6);
     CHECK(find_def("support_stem_taper")->init_fn().get<double>() == Approx(0.));
+}
+
+TEST_CASE(
+    "The global support defaults are the T0.2 class of the support rulebook",
+    "[Config][SLA][Supports]"
+)
+{
+    // What a fresh profile gets: the tip of the T0.2 class, sunk half of it into the model (R3.1), a
+    // stem of one diameter (R3.3) and the one base of 6 mm by 0.3 mm as a prism (R3.4).
+    CHECK(find_def("support_head_front_diameter")->init_fn().get<double>() == Approx(0.2));
+    CHECK(find_def("support_head_penetration")->init_fn().get<double>() == Approx(0.1));
+    CHECK(find_def("support_pillar_diameter")->init_fn().get<double>() == Approx(1.));
+    CHECK(find_def("support_base_diameter")->init_fn().get<double>() == Approx(6.));
+    CHECK(find_def("support_base_height")->init_fn().get<double>() == Approx(0.3));
+    CHECK(
+        find_def("support_base_shape")->init_fn().get<SupportBaseShape>()
+        == SupportBaseShape::Cylinder
+    );
 }
 
 TEST_CASE("A support point carries the support geometry it is given", "[SlaSupportGeometry]")

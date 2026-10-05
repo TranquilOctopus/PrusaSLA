@@ -29,6 +29,7 @@ add_executable(${_TEST_NAME}_tests ${_TEST_NAME}_tests_main.cpp
     sla_calibration_support_tests.cpp
     sla_support_tool_tests.cpp
     sla_support_preset_tests.cpp
+    sla_support_rulebook_tests.cpp
     sla_support_base_shape_tests.cpp
     sla_branching_volume_tests.cpp
     sla_branching_determinism_tests.cpp

@@ -42,9 +42,10 @@ because it would have no effect.
 
 *Supports & raft.* A dropdown with the print presets, **Standard supports** and **Fine
 supports**, then **Raft type** and **Object elevation** (mm, 5 by default), which is how far the
-supports lift the model, then the four sizes of every support preset — **Mini**, **Light**,
-**Medium**, **Heavy**, in that order: tip diameter, pillar diameter, base diameter and base height of
-each. Those are the values the preset buttons in the support tool place. **More...** opens the full
+supports lift the model, then the four sizes of every support preset — **0.1**, **0.2**, **0.3**,
+**0.4**, **0.6**, in that order: tip diameter, pillar diameter, base diameter and base height of
+each. The button is named by the tip of the preset, which is the class of support it places. Those
+are the values the preset buttons in the support tool place. **More...** opens the full
 print settings: **Generate supports**, **Support tree type**, **Support points density**, **Support
 only in enforced regions**, the tip and the stem (**Tip shape**, **Knot diameter**, **Stem sides**,
 **Stem taper**), the foot (**Support base shape**, with its diameter and height), the bracing
@@ -139,10 +140,13 @@ opens, and everything below it comes after that section:
   changes no point that is already there, and a value in **Selected supports** is written on the
   points you have selected and on nothing else. The second group is only there while something is
   selected, and its title counts the selection. Both have the same rows:
-  - **Mini** / **Light** / **Medium** / **Heavy** set the four sizes at once, and clear the four
-    *Use global* toggles. In **New supports** they are what the next point takes, and the keys `1`
-    to `4` pick them there; in **Selected supports** they land on the selection in one undo step.
-    Their four dimensions each live in *Supports & raft*, so the buttons follow that preset.
+  - **0.1** / **0.2** / **0.3** / **0.4** / **0.6** are the five support classes, named by the tip
+    they place: a ball contact sunk half its own diameter into the model, the narrow cone under it, a
+    hexagonal stem of 1.0 mm and a 6 mm by 0.3 mm prism base. They set those sizes at once, and
+    clear the four *Use global* toggles. In **New supports** they are what the next point takes, and
+    the keys `1` to `5` pick them there; in **Selected supports** they land on the selection in one
+    undo step. Their four dimensions each live in *Supports & raft*, so the buttons follow that
+    preset.
   - The four size sliders — **Head diameter**, **Stem diameter**, **Base diameter**, **Base
     height** — each with a *Use global …* toggle. A toggle on means the point takes the value from
     the *Supports & raft* preset; a toggle off means the slider value is carried by the point.
