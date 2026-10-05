@@ -191,7 +191,13 @@ AABBMesh::hit_result DefaultSupportTree::bridge_mesh_intersect(
 bool DefaultSupportTree::interconnect(const Pillar &pillar,
                                      const Pillar &nextpillar)
 {
-    // Bracing off: the pillars may not be linked to each other at all.
+    // A point that says Off stays out of every brace, and one that says On is braced even where the
+    // object has bracing off (M2.38). Both are decided by the point each pillar belongs to, so they
+    // are asked before the object-wide switch: On is exactly a request that overrides it.
+    if (!pillar_may_brace(pillar) || !pillar_may_brace(nextpillar))
+        return false;
+
+    // Bracing off for the object as a whole: the pillars may not be linked to each other at all.
     if (!m_sm.cfg.brace_enable)
         return false;
 
@@ -294,6 +300,12 @@ bool DefaultSupportTree::connect_to_nearpillar(const Head &head,
     // Bracing off: a pinhead may not lean on a neighbouring pillar either, it has to
     // reach the ground or the model body on its own.
     if (!m_sm.cfg.brace_enable)
+        return false;
+
+    // A point that says Off has no brace at all (M2.38): neither a link to a neighbouring pillar
+    // nor a pillar of its own to lean on one. On is the other way round, the object may have bracing
+    // off and this support is braced anyway.
+    if (!sla::may_brace(m_sm, point_at(static_cast<unsigned>(head.id))))
         return false;
 
     auto nearpillar = [this, nearpillar_id]() -> const Pillar& {

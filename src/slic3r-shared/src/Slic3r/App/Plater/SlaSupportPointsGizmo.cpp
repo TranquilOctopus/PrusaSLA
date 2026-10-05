@@ -1,6 +1,7 @@
 #include "Slic3r/App/Plater/SlaSupportPointsGizmo.hpp"
 #include "Slic3r/App/Plater/SlaSupportAutoPresets.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointPick.hpp"
+#include "Slic3r/App/Plater/SlaSupportPointEdits.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsClear.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsEditing.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsLeaving.hpp"
@@ -111,6 +112,9 @@ SlaSupportPointsGizmo::SlaSupportPointsGizmo(
     m_dialog->callbacks().discard = [this]() { this->discard_generated_points(); };
     m_dialog->callbacks().auto_support_all = [this]() { this->auto_support(); };
     m_dialog->callbacks().remove_all_points = [this]() { this->remove_all_points(); };
+    // The "Delete" button of the "Selected supports" group: the same action the Delete key, Ctrl and
+    // the right button take, so removing one support is one gesture in the panel as well (M2.38).
+    m_dialog->callbacks().delete_selected_points = [this]() { this->delete_selected_points(); };
     m_dialog->callbacks().value_editing_started = [this]() { this->on_value_editing_started(); };
     m_dialog->callbacks().value_editing_ended = [this]() { this->on_value_editing_ended(); };
     m_dialog->callbacks().density_changed = [this](double value)
@@ -1062,6 +1066,11 @@ void SlaSupportPointsGizmo::end_editing()
 {
     clear_point_visuals();
     m_hovered_point_idx.reset();
+    // A value edit that was running when the tool was closed is over: the next value change is an
+    // action of its own again and owes its own undo snapshot (M2.38). Without this a slider drag
+    // that was interrupted would leave the next change of the reopened tool, a dropdown in
+    // particular, without one.
+    m_value_edit_action.end();
     m_edit_state.reset();
 }
 
@@ -1071,17 +1080,11 @@ void SlaSupportPointsGizmo::commit_edited_points_live()
         return;
     }
 
-    Domain::Project& project = m_project_interactor.selected_project();
-    Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
-    if (!model_object) {
-        return;
-    }
-
+    // The one write of the points the session holds, so a support added, removed, moved or changed
+    // is on the ModelObject the moment the user changes it and the preview service rebuilds the
+    // drawn tree for it (M2.38).
     const Domain::ElementRef object_ref{m_selected_object_id.id, m_selected_instance_id};
-    m_project_interactor.scene_interactor().modify_sla_support_points(object_ref, [&](Domain::ModelObject& mo) {
-        mo.sla_support_points = m_edit_state->editing.points;
-        mo.sla_points_status = PointsStatus::UserModified;
-    });
+    commit_sla_support_point_edits(m_project_interactor, object_ref, m_edit_state->editing.points);
 
     // The points are the model's now, so the M2.21 support preview has built its tree for them (or
     // dropped it for a model without points), and the lift the scene draws the model with may have
@@ -1206,6 +1209,9 @@ void SlaSupportPointsGizmo::remove_point_at_index(size_t idx)
     m_dialog->set_point_count(m_edit_state->editing.points.size());
     take_undo_snapshot();
     update_point_visuals();
+    // The removed point may have been the selected one, so the "Selected supports" group has to be
+    // shown with what the selection carries now and not with what it carried before (M2.38).
+    this->update_selected_support_values();
     commit_edited_points_live();
 }
 
@@ -1497,78 +1503,81 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
         }
     }
 
-    // Left button down
-    if (is_left_button_event && mouse_event.type() == MouseEvent::Type::ButtonDown) {
-        // Ctrl+click: remove point
+    // A click: a button going down. What it asks for is one question with no camera, no scene and
+    // no gizmo in it (M2.38): select a support and change it, remove one, or add one on the drawn
+    // model. The pick of M2.35 and the raycast of M2.33 are what it is asked about, and the answer
+    // is acted on here.
+    if ((is_left_button_event || is_right_button_event) && mouse_event.type() == MouseEvent::Type::ButtonDown) {
+        SlaSupportClick click;
+        click.button = is_left_button_event ? SlaSupportClickButton::Left : SlaSupportClickButton::Right;
         if (ctrl_down) {
-            if (point_under_cursor.has_value()) {
-                const size_t idx = point_under_cursor->index;
-                if (!m_edit_state->editing.lock_island_supports || !m_edit_state->editing.points[idx].is_island()) {
-                    remove_point_at_index(idx);
-                }
-                return Scene::GizmoActivationState::Active;
-            }
-            return Scene::GizmoActivationState::Inactive;
+            click.modifier = SlaSupportClickModifier::Ctrl;
+        } else if (shift_down) {
+            click.modifier = SlaSupportClickModifier::Shift;
         }
 
-        // Shift+click on empty space: start rectangle selection
-        if (shift_down && !point_under_cursor.has_value()) {
+        const std::optional<Domain::Vec3d> surface_pos =
+            has_hit ? std::optional<Domain::Vec3d>(hit_to_object_pos(*hit_opt)) : std::nullopt;
+
+        const SlaSupportClickResult result = sla_support_click_action(
+            click,
+            point_under_cursor,
+            m_edit_state->editing.points,
+            m_edit_state->editing.lock_island_supports,
+            surface_pos
+        );
+
+        switch (result.action) {
+        case SlaSupportClickAction::DeletePoint:
+            remove_point_at_index(*result.point_index);
+            return Scene::GizmoActivationState::Active;
+
+        case SlaSupportClickAction::TogglePoint:
+            m_edit_state->editing.toggle_point(*result.point_index);
+            update_point_visuals();
+            // The selection the group shows changed, so its title and its fields follow (M2.38).
+            this->update_selected_support_values();
+            return Scene::GizmoActivationState::Active;
+
+        case SlaSupportClickAction::SelectPoint: {
+            const size_t idx = *result.point_index;
+            clear_selection();
+            select_point(idx);
+            if (result.drag_allowed) {
+                m_edit_state->dragged_point_idx = idx;
+                // The drag starts on the surface under the cursor when the ray hit one, and on the
+                // point itself when it did not: a support under an overhang is picked by its
+                // marker with the ray never reaching the model at all.
+                m_edit_state->drag_start_world_pos =
+                    has_hit ? m_paintable_volumes[hit_opt->volume_idx].world_trafo * hit_opt->volume_hit_position
+                            : this->object_drawing_trafo() * m_edit_state->editing.points[idx].pos.cast<double>();
+                m_edit_state->drag_start_mesh_pos = m_edit_state->editing.points[idx].pos.cast<double>();
+            }
+            return Scene::GizmoActivationState::Active;
+        }
+
+        case SlaSupportClickAction::AddPoint:
+            // A click on no support at all falls back to the model surface, where a new support
+            // point goes (M2.35 keeps M2.33 for this, the marker and the tree only come first).
+            clear_selection();
+            add_point_at_mesh_pos(*result.surface_pos);
+            return Scene::GizmoActivationState::Active;
+
+        case SlaSupportClickAction::RectangleSelect:
             start_rectangle_selection(mouse_position, true);
             return Scene::GizmoActivationState::Probing;
-        }
 
-        // Shift+click on point: toggle selection
-        if (shift_down && point_under_cursor.has_value()) {
-            m_edit_state->editing.toggle_point(point_under_cursor->index);
-            update_point_visuals();
-            return Scene::GizmoActivationState::Active;
-        }
-
-        // Regular click on point: select it. A click on the drawn tree of a point selects it and
-        // nothing more, since a drag starts from the marker of the point (M2.35).
-        if (point_under_cursor.has_value()) {
-            const size_t idx = point_under_cursor->index;
-            if (!m_edit_state->editing.lock_island_supports || !m_edit_state->editing.points[idx].is_island()) {
-                clear_selection();
-                select_point(idx);
-                if (point_under_cursor->from_marker) {
-                    m_edit_state->dragged_point_idx = idx;
-                    // The drag starts on the surface under the cursor when the ray hit one, and on the
-                    // point itself when it did not: a support under an overhang is picked by its
-                    // marker with the ray never reaching the model at all.
-                    m_edit_state->drag_start_world_pos =
-                        has_hit ? m_paintable_volumes[hit_opt->volume_idx].world_trafo * hit_opt->volume_hit_position
-                                : this->object_drawing_trafo() * m_edit_state->editing.points[idx].pos.cast<double>();
-                    m_edit_state->drag_start_mesh_pos = m_edit_state->editing.points[idx].pos.cast<double>();
-                }
-            }
-            return Scene::GizmoActivationState::Active;
-        }
-
-        // A click on no point at all falls back to the model surface, where a new support point goes
-        // (M2.35 keeps M2.33 for this, the marker and the tree only come first).
-        if (has_hit) {
+        case SlaSupportClickAction::ClearSelection:
             clear_selection();
-            add_point_at_mesh_pos(hit_to_object_pos(*hit_opt));
-            return Scene::GizmoActivationState::Active;
-        }
+            update_point_visuals();
+            return Scene::GizmoActivationState::Inactive;
 
-        // Click on empty space: clear selection
-        clear_selection();
-        update_point_visuals();
-        return Scene::GizmoActivationState::Inactive;
-    }
-
-    // Right button down: remove point (or deselect if locked)
-    if (is_right_button_event && mouse_event.type() == MouseEvent::Type::ButtonDown) {
-        if (point_under_cursor.has_value()) {
-            const size_t idx = point_under_cursor->index;
-            if (!m_edit_state->editing.lock_island_supports || !m_edit_state->editing.points[idx].is_island()) {
-                remove_point_at_index(idx);
-            }
+        case SlaSupportClickAction::Ignored:
             return Scene::GizmoActivationState::Active;
+
+        case SlaSupportClickAction::None:
+            return Scene::GizmoActivationState::Inactive;
         }
-        return Scene::GizmoActivationState::Inactive;
     }
 
     // Mouse move during drag

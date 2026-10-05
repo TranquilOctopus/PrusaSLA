@@ -51,6 +51,11 @@ double sla_support_point_field_value(SupportOnModel on_model)
     return static_cast<double>(on_model);
 }
 
+double sla_support_point_field_value(SupportBrace brace)
+{
+    return static_cast<double>(brace);
+}
+
 namespace {
 
 /// The preset of one tip class: the class itself and the geometry of R3 that every class shares.
@@ -151,6 +156,11 @@ SupportOnModel on_model_of(double value)
     return static_cast<SupportOnModel>(static_cast<int>(value));
 }
 
+SupportBrace brace_of(double value)
+{
+    return static_cast<SupportBrace>(static_cast<int>(value));
+}
+
 } // namespace
 
 SlaSupportNewValues sla_new_support_values(const SlaSupportPointsEditing& editing)
@@ -166,6 +176,7 @@ SlaSupportNewValues sla_new_support_values(const SlaSupportPointsEditing& editin
     values.follow_global.base_diameter = editing.base_diameter_use_global;
     values.follow_global.base_height   = editing.base_height_use_global;
     values.on_model                    = editing.new_support_on_model;
+    values.brace                       = editing.new_support_brace;
     return values;
 }
 
@@ -182,6 +193,7 @@ SlaSupportSelectionView selection_support_view(
     SlaSupportSelectionView view;
     view.geometry = selection_support_geometry(points, selected_point_indices);
     view.on_model = selection_support_on_model(points, selected_point_indices);
+    view.brace    = selection_support_brace(points, selected_point_indices);
     view.count    = selected_point_indices.size();
 
     std::optional<SlaSupportSizes> common_sizes;
@@ -255,6 +267,9 @@ void sla_new_support_setting_changed(
     case SlaSupportPointField::SupportOnModel:
         editing.new_support_on_model = on_model_of(value);
         break;
+    case SlaSupportPointField::Bracing:
+        editing.new_support_brace = brace_of(value);
+        break;
     case SlaSupportPointField::FollowGlobalTipDiameter:
         editing.head_diameter_use_global = value != 0.;
         break;
@@ -319,6 +334,9 @@ void sla_selected_support_setting_changed(
         }
         case SlaSupportPointField::SupportOnModel:
             point.on_model = on_model_of(value);
+            break;
+        case SlaSupportPointField::Bracing:
+            point.brace = brace_of(value);
             break;
         case SlaSupportPointField::FollowGlobalTipDiameter:
             apply_support_geometry(

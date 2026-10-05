@@ -35,6 +35,7 @@ using Slic3r::App::Plater::SlaSupportPointField;
 using Slic3r::App::Plater::SlaSupportPointsEditing;
 using Slic3r::App::Plater::SlaSupportPreset;
 using Slic3r::App::Plater::SlaSupportSelectionView;
+using Slic3r::App::Plater::SupportBrace;
 using Slic3r::App::Plater::SupportOnModel;
 using Slic3r::Domain::Vec3d;
 using Slic3r::Domain::Vec3f;
@@ -85,6 +86,11 @@ TEST_CASE(
             SlaSupportPointField::SupportOnModel,
             sla_support_point_field_value(SupportOnModel::Allow)
         );
+        sla_new_support_setting_changed(
+            editing,
+            SlaSupportPointField::Bracing,
+            sla_support_point_field_value(SupportBrace::Off)
+        );
 
         // The point that is selected is left exactly as it was: the "Selected supports" group is
         // where a point that is there gets changed.
@@ -94,6 +100,7 @@ TEST_CASE(
             CHECK(point.stem_sides == 0);
             CHECK(point.tip_shape == SupportPoint::TipShape::Default);
             CHECK(point.on_model == SupportPoint::OnModel::Inherit);
+            CHECK(point.brace == SupportPoint::Brace::Inherit);
         }
 
         editing.add_point(Vec3d{1., 2., 3.});
@@ -106,6 +113,7 @@ TEST_CASE(
         CHECK(placed.stem_sides == 6);
         CHECK(placed.tip_shape == SupportPoint::TipShape::Ball);
         CHECK(placed.on_model == SupportPoint::OnModel::Allow);
+        CHECK(placed.brace == SupportPoint::Brace::Off);
     }
 
     SECTION("One value at a time leaves the other values of a clicked point alone")
@@ -297,6 +305,24 @@ TEST_CASE(
         CHECK(editing.points[1].on_model == SupportPoint::OnModel::Forbid);
     }
 
+    SECTION("The bracing switch of the group lands on the selection")
+    {
+        SlaSupportPointsEditing editing = make_editing();
+        editing.select_point(1);
+
+        sla_selected_support_setting_changed(
+            editing,
+            SlaSupportPointField::Bracing,
+            sla_support_point_field_value(SupportBrace::Off)
+        );
+
+        CHECK(editing.points[0].brace == SupportPoint::Brace::Inherit);
+        CHECK(editing.points[1].brace == SupportPoint::Brace::Off);
+
+        // What a clicked point takes is left alone by the other group (M2.38).
+        CHECK(editing.new_support_brace == SupportBrace::Inherit);
+    }
+
     SECTION("A preset of the group lands on the selection only")
     {
         SlaSupportPointsEditing editing          = make_editing();
@@ -410,6 +436,7 @@ TEST_CASE(
         CHECK(view.sizes->tip_diameter_mm == Approx(0.4));
         CHECK(view.sizes->base_diameter_mm == Approx(0.f));
         CHECK(view.on_model == SupportOnModel::Inherit);
+        CHECK(view.brace == SupportBrace::Inherit);
     }
 }
 
@@ -433,6 +460,7 @@ TEST_CASE("The New supports group shows what a clicked point takes", "[SlaSuppor
     CHECK(values.follow_global.stem_diameter == false);
     CHECK(values.follow_global.base_diameter == true);
     CHECK(values.on_model == SupportOnModel::Inherit);
+    CHECK(values.brace == SupportBrace::Inherit);
 }
 
 TEST_CASE(
