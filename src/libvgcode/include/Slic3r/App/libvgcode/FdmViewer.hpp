@@ -31,6 +31,19 @@ namespace Slic3r::App::libvgcode {
 
 struct GCodeInputData;
 
+// The bounding box of the toolpaths, and the acceleration structure built over it. An AABBMesh is
+// a view on a mesh rather than a copy of it (it keeps the pointer it was constructed from and
+// reads that mesh on every query), so the mesh has to be a member that outlives the view. The two
+// therefore live in one object, built in that order, instead of in a std::pair whose second half
+// would have to be built from a temporary of the first. (M0.15)
+struct AabbMeshBox
+{
+    Domain::TriangleMesh mesh;
+    AABBMesh aabb;
+
+    AabbMeshBox() : aabb(mesh) {}
+};
+
 class FdmViewer : public AbstractViewer
 {
 public:
@@ -381,7 +394,7 @@ private:
     size_t m_enabled_segments_count{ 0 };
     size_t m_enabled_options_count{ 0 };
 
-    std::pair<Domain::TriangleMesh, AABBMesh> m_aabb;
+    AabbMeshBox m_aabb;
 
     Scene::Node* m_main_node{nullptr};
 

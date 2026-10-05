@@ -70,11 +70,19 @@ void remove_instance_from_bed(
 BedTracking::BedCacheEntry& BedTracking::get_or_create_bed_cache(const Bed& bed)
 {
     std::map<size_t, BedCacheEntry>::iterator it = m_bed_cache.find(bed.id().id);
+    // An entry is a view on the contour mesh of the bed it was built from, so an id that is already
+    // in the cache but belongs to a different bed is a stale entry and its view dangles. Rebuild it
+    // for the bed that is being asked about. (M0.15)
+    if (it != m_bed_cache.end() && it->second.bed != &bed) {
+        m_bed_cache.erase(it);
+        it = m_bed_cache.end();
+    }
     if (it == m_bed_cache.end()) {
         it = m_bed_cache
                  .try_emplace(
                      bed.id().id,
                      BedCacheEntry{
+                         &bed,
                          Algorithms::Bed::bed_contour_as_aabb_mesh(bed),
                          Algorithms::Polygon::scaled(bed.contour())
                      }

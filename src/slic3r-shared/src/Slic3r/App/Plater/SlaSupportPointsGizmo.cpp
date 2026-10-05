@@ -225,6 +225,7 @@ void SlaSupportPointsGizmo::on_activated()
 {
     m_gizmo_active = true;
     m_project_interactor.scene_interactor().add_listener<Biz::Scene::ISceneSelectionChangedListener>(this);
+    m_project_interactor.scene_interactor().add_listener<Biz::Scene::ISceneChangedListener>(this);
     m_project_interactor.sla_object_cache().add_listener<Biz::ISLAObjectCacheChangedListener>(this);
 
     // The tool is where the support settings are changed, so it opens with them open (M2.17d4).
@@ -256,6 +257,7 @@ void SlaSupportPointsGizmo::on_deactivated()
     // (on_worker_job_completed asks for the counter, which cancel_worker_job has moved on).
     cancel_worker_job();
     m_project_interactor.scene_interactor().remove_listener<Biz::Scene::ISceneSelectionChangedListener>(this);
+    m_project_interactor.scene_interactor().remove_listener<Biz::Scene::ISceneChangedListener>(this);
     m_project_interactor.sla_object_cache().remove_listener<Biz::ISLAObjectCacheChangedListener>(this);
 
     // Leaving the tool applies the points a generation produced, so the model keeps them (M2.31).
@@ -517,6 +519,16 @@ void SlaSupportPointsGizmo::on_sla_object_cache_changed(const Domain::SlicingId&
     // Keep listener for potential future use.
     (void)id;
     (void)object_id;
+}
+
+void SlaSupportPointsGizmo::on_model_reloaded(Domain::SelectionId project_id)
+{
+    // An undo replaces the whole model, and with it every volume the tool raycasts on, so the list
+    // of them is rebuilt from the model that is there now. (M0.15)
+    if (project_id != m_project_id) {
+        return;
+    }
+    this->collect_paintable_volumes(m_project_id, m_selected_element);
 }
 
 void SlaSupportPointsGizmo::start_generation()
