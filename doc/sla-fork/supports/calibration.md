@@ -31,7 +31,8 @@ orientation comes from `sla_calibration_support_tests` and is still to be run.
 - **Tip sizes:** 0.2 and 0.3 mm dominate, with a few 0.4 mm anchors and almost no 0.1 mm, which
   matches the rulebook's classes (R3, R4.1–R4.6).
 - **Orientation:** heads are leaned 40–60° (median about 49°), never flat on their largest flat
-  area. The Miniature orient goal (M2.36) leans 35° by default; about 45–50° fits the experts better.
+  area. The Miniature orient goal (M2.36) leans 48° by default, which is this median rounded down
+  (M2.36b).
 
 Other categories (bodies, arms, weapons, bases, figures) are measured when their pairs are local; the
 library has more pairs online-only, fetched only for a run and released afterwards.
