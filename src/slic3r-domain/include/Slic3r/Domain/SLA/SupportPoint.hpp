@@ -92,7 +92,21 @@ struct SupportPoint
     // island, a small island, an overhang, or a fragile thin feature. Unknown is
     // what a point placed by hand carries, and what a project written before the
     // roles existed reads back as, so an older file keeps the point it had.
-    enum class Role : uint8_t { Unknown, Anchor, Island, SmallIsland, Overhang, Fragile };
+    //
+    // AnchorLarge is the anchor of a very large object (M7.8.3, the size table of
+    // rulebook section 3), which takes the largest tip (T0.6) instead of the heavy
+    // one. It is appended at the end and the values before it are never renumbered,
+    // so a project written before it reads back as it was.
+    enum class Role : uint8_t
+    {
+        Unknown,
+        Anchor,
+        Island,
+        SmallIsland,
+        Overhang,
+        Fragile,
+        AnchorLarge
+    };
     Role role = Role::Unknown;
 
     bool is_island() const { return type == SupportPointType::island; }

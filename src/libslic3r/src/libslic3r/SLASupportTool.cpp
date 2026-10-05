@@ -3,6 +3,7 @@
 #include "libslic3r/ConfigViews.hpp"
 #include "libslic3r/SLAPrint.hpp"
 #include "libslic3r/SLA/SupportFacetPaint.hpp"
+#include "libslic3r/SLA/SupportAnchors.hpp"
 #include "libslic3r/SLA/SupportPointGenerator.hpp"
 #include "libslic3r/SLA/SupportRoles.hpp"
 #include "libslic3r/SLA/SupportTree.hpp"
@@ -283,6 +284,13 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const SupportToolMod
         // it, as it was before.
         sla::classify_support_point_roles(
             support_points, emesh, gen_data.layers, layer_height, {}, throw_on_cancel);
+
+        // The heavy anchors the rulebook asks for on the flat, low-detail areas of the surface that
+        // faces the plate (M7.8.3, R4.2): a few of them, more the bigger the footprint of the object
+        // is, and the largest tip on a very large one. It runs after the roles, so that it can tell
+        // the points of the other rules from the ones it adds itself, and before the zero-elevation
+        // filter below, which takes away the anchors of an object standing on the plate.
+        sla::add_heavy_anchors(support_points, emesh, {}, config.head_diameter / 2.f, throw_on_cancel);
 
         // Zero-elevation filter
         if (is_zero_elevation(cfg)) {

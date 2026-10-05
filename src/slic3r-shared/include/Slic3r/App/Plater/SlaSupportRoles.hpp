@@ -16,15 +16,17 @@ namespace Slic3r::App::Plater {
 /// - SmallIsland -> light (T0.2): a very small island gets the light tip (R4.3);
 /// - Overhang    -> light (T0.2): overhangs and the rest are light by default (R4.6);
 /// - Fragile     -> mini (T0.1): a tip, a point or another thin feature takes the minimum tip, so
-/// that removing the support does not snap the feature off (R4.4, R4.5).
+/// that removing the support does not snap the feature off (R4.4, R4.5);
+/// - AnchorLarge -> xheavy (T0.6): the anchors of a very large object, one that fills a mid-size
+/// printer's plate, take the largest tip (M7.8.3, the size table of section 3 of the rulebook).
 ///
 /// Unknown is what a point placed by hand carries, and what a project written before the roles
 /// existed reads back as, so it takes the light tip as well: that is what such a support got before
 /// there were roles, and R4.6 asks for light by default.
 ///
-/// The name is one of "mini", "light", "medium", "heavy", which is what sla_support_preset() reads
-/// the sizes of, and what the preset buttons of the tool apply. The classifier of the auto support
-/// presets (M2.37) is what asks for it.
+/// The name is one of "mini", "light", "medium", "heavy" and "xheavy", which is what
+/// sla_support_preset() reads the sizes of, and what the preset buttons of the tool apply. The
+/// classifier of the auto support presets (M2.37) is what asks for it.
 const std::string& rulebook_tip_class(Domain::SLA::SupportPoint::Role role);
 
 } // namespace Slic3r::App::Plater

@@ -637,7 +637,8 @@ TEST_CASE("3MF SLA round trip preserves every per-point support field", "[3mf][s
 
     // Two points with every field set to something no default has, so nothing can pass on the
     // strength of a default. The second point differs from the first in every field again: a
-    // reader that remembered the last value it read for a field would fail on one of the two.
+    // reader that remembered the last value it read for a field would fail on one of the two. The
+    // third point below carries the role of M7.8.3 on top of that.
     SupportPoint point{};
     point.pos               = Vec3f{11.5f, 12.25f, 13.75f};
     point.head_front_radius = 0.45f;
@@ -672,14 +673,22 @@ TEST_CASE("3MF SLA round trip preserves every per-point support field", "[3mf][s
     other_point.on_model          = SupportPoint::OnModel::Allow;
     other_point.role              = SupportPoint::Role::Anchor;
 
-    object->sla_support_points = {point, other_point};
+    // A third point whose role is the anchor of a very large object (M7.8.3), the role the name table
+    // of the writer gained an entry for last. Every role of the enumeration is written through that
+    // table, so a role without an entry in it is a read past the end of it rather than a name.
+    SupportPoint large_point = point;
+    large_point.pos          = Vec3f{31.5f, 32.5f, 33.5f};
+    large_point.role         = SupportPoint::Role::AnchorLarge;
+
+    object->sla_support_points = {point, other_point, large_point};
 
     const Loaded3MF loaded = round_trip(project, "sla_point_fields.3mf");
     REQUIRE(loaded.model.objects.size() == 1);
     const ModelObject* loaded_object = loaded.model.objects[0];
-    REQUIRE(loaded_object->sla_support_points.size() == 2);
+    REQUIRE(loaded_object->sla_support_points.size() == 3);
     check_same_support_point(loaded_object->sla_support_points[0], point);
     check_same_support_point(loaded_object->sla_support_points[1], other_point);
+    check_same_support_point(loaded_object->sla_support_points[2], large_point);
 
     // A whole 3MF of these points loads without one word about the SLA data.
     for (const Read3mfIssueType type : sla_read_issue_types())
