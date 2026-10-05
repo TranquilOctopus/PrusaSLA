@@ -620,11 +620,16 @@ constexpr double glue_face_lowest_fraction = 0.1;
 /// How far a miniature is leaned over, in degrees, and the range the rule allows. A miniature
 /// leans: the glue face flat on the plate makes its first layers as wide as the widest part of the
 /// piece, which is a big peel and a cup waiting to happen, while leaning it lets the cross sections
-/// ramp in. Past about 30 degrees the lean starts to put a nose or an ear into an overhang that
-/// needs a support of its own, and 45 is where the ramp has already done its work.
+/// ramp in. The lean is the median of the studio-supported heads measured in
+/// doc/sla-fork/supports/calibration.md (five heads, 40.5 to 60.0 degrees off upright, none of them
+/// resting on its largest flat area), rounded down: 35 degrees leaned less than the experts do and
+/// the ramp of the print was still widening when the widest part of the piece came by. The range is
+/// that measurement rounded out, so that changing the number above cannot take the rule out of what
+/// it says it does: under about 30 degrees the first layers are nearly as wide as the piece again,
+/// and past 60 the ramp is long over and a nose or an ear is out in an overhang of its own.
 constexpr double miniature_tilt_min_degrees = 30.;
-constexpr double miniature_tilt_degrees     = 35.;
-constexpr double miniature_tilt_max_degrees = 45.;
+constexpr double miniature_tilt_degrees     = 48.;
+constexpr double miniature_tilt_max_degrees = 60.;
 
 /// The lean in radians, clamped into the range above, so that changing the number above cannot
 /// take the rule out of what it says it does.

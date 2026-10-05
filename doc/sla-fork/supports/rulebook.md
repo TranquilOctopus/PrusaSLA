@@ -32,7 +32,7 @@ auto-support algorithms based off of that").
   at the plate, the face points up. (M)
   Implemented by: M2.36.
 - **R2.3 Tilt instead of printing a large flat face parallel to the plate,** unless that face is
-  meant to rest on the plate. About 35 degrees by default. (V)
+  meant to rest on the plate. About 48 degrees by default, the experts' median. (V)
   Implemented by: M2.36.
 - **R2.4 Overhangs up to about 45 degrees from vertical print without support.** Steeper faces need
   support or a better pose. (V)
