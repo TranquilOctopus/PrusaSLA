@@ -88,10 +88,21 @@ indexed_triangle_set create_pad(const SupportableMesh      &sm,
     pad_blueprint(support_mesh, sup_contours, heights, ctl.cancelfn);
 
     indexed_triangle_set out;
-    create_pad(sup_contours, model_contours, out, sm.pad_cfg);
+    // The pad geometry was built with the default cancel function, which never throws, so a raft of
+    // a big model could not be given up once the support tool was asked to stop (M4.16).
+    create_pad(sup_contours, model_contours, out, sm.pad_cfg, ctl.cancelfn);
+
+    ctl.cancelfn();
 
     Vec3f offs{.0f, .0f, gndlvl};
-    for (auto &p : out.vertices) p += offs;
+    size_t vertex_id = 0;
+    for (auto &p : out.vertices) {
+        if ((vertex_id++ % 4096) == 0)
+            ctl.cancelfn();
+        p += offs;
+    }
+
+    ctl.cancelfn();
 
     namespace TriMesh = Biz::Algorithms::TriangleMesh;
     TriMesh::its_merge_vertices(out);

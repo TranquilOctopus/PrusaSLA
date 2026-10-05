@@ -34,6 +34,24 @@ namespace AABBTreeIndirect = Biz::Algorithms::AABBTreeIndirect;
 namespace execution = Slic3r::Biz::Algorithms::Execution;
 
 namespace {
+
+// How often a loop that walks a whole run of samples, points or parts asks whether the caller wants
+// to stop (M4.16). Small enough that no one of those loops can hold the tool past the second the
+// support preview or the auto support needs to come back, large enough that the check is not what
+// the loop spends its time on: every step between two checks is orders of magnitude more work than
+// the check itself. The check only ever throws when a stop was asked for, so a run nobody stopped is
+// bit for bit the run there was before.
+constexpr size_t cancel_check_every = 256;
+
+/// Asks the caller's cancel function once every @cancel_check_every-th item of a long loop, where
+/// it throws if a stop was asked for. Item zero asks right away, which is what an empty and a
+/// one-item loop both want.
+inline void ask_cancel(size_t i, const ThrowOnCancel &thr)
+{
+    if ((i % cancel_check_every) == 0)
+        thr();
+}
+
 #ifndef NDEBUG
 bool exist_point_in_distance(const Vec3f &p, float distance, const LayerSupportPoints &pts) {
     float distance_sq = sqr(distance);
@@ -323,13 +341,15 @@ public:
 /// <param name="part_z">current z coordinate of part</param>
 /// <param name="maximal_radius">Max distance to seach support for sample</param>
 /// <param name="spacing">Minimal distance between the created points</param>
+/// <param name="thr">Ask for a stop while the samples of the part are walked (M4.16)</param>
 void support_part_overhangs(
     const LayerPart &part,
     const SupportPointGeneratorConfig &config,
     NearPoints &near_points,
     float part_z,
     coord_t maximal_radius,
-    PointSpacing &spacing
+    PointSpacing &spacing,
+    ThrowOnCancel thr
 ) {
     NearPoints::CheckFnc is_supported = []
     (const LayerSupportPoint &support_point, const Point &p) -> bool {
@@ -343,7 +363,10 @@ void support_part_overhangs(
         return dp.cast<double>().squaredNorm() < r2;
     };
 
+    size_t sample_id = 0;
     for (const Point &p : part.samples) {
+        ask_cancel(sample_id++, thr);
+
         if (near_points.exist_true_in_radius(p, maximal_radius, is_supported))
             continue; // supported by a point of a lower layer
         if (spacing.too_close(p))
@@ -375,10 +398,15 @@ void support_part_overhangs(
 /// <param name="part_z">z coordinate of part</param>
 /// <param name="permanent">z coordinate of part</param>
 /// <param name="cfg"></param>
+/// <param name="thr">Ask for a stop while the island is sampled (M4.16)</param>
 void support_island(const LayerPart &part, NearPoints& near_points, float part_z,
-    const Points &permanent, const SupportPointGeneratorConfig &cfg) {
-    SupportIslandPoints samples = uniform_support_island(*part.shape, permanent, cfg.island_configuration);
-    for (const SupportIslandPointPtr &sample : samples)
+    const Points &permanent, const SupportPointGeneratorConfig &cfg, ThrowOnCancel thr) {
+    SupportIslandPoints samples =
+        uniform_support_island(*part.shape, permanent, cfg.island_configuration, thr);
+    size_t sample_id = 0;
+    for (const SupportIslandPointPtr &sample : samples) {
+        ask_cancel(sample_id++, thr);
+
         near_points.add(LayerSupportPoint{
             SupportPoint{
                 Vec3f{
@@ -429,13 +457,15 @@ Points filter_blocked_samples(Points samples, const SupportFacetPaint &facet_pai
 /// <param name="layer_grids">Grids of the layer, its own points and the ones it carries up</param>
 /// <param name="part_z">current z coordinate of the layer</param>
 /// <param name="config">Configuration of the sampling</param>
+/// <param name="thr">Ask for a stop while the regions are sampled (M4.16)</param>
 void support_enforced_regions(
     const ExPolygons &regions,
     const ExPolygons &blockers,
     NearPoints &enforced,
     const NearPointss &layer_grids,
     float part_z,
-    const SupportPointGeneratorConfig &config
+    const SupportPointGeneratorConfig &config,
+    ThrowOnCancel thr
 ) {
     if (regions.empty())
         return;
@@ -473,9 +503,13 @@ void support_enforced_regions(
     };
 
     const Points no_permanent;
+    size_t sample_id = 0;
     for (const ExPolygon &region : open_regions) {
+        ask_cancel(sample_id++, thr);
         for (const SupportIslandPointPtr &sample :
-             uniform_support_island(region, no_permanent, config.island_configuration)) {
+             uniform_support_island(region, no_permanent, config.island_configuration, thr)) {
+            ask_cancel(sample_id++, thr);
+
             if (exist_near_point(sample->point))
                 continue; // the layer made a head at this spot already
 
@@ -500,11 +534,17 @@ void support_enforced_regions(
 }
 
 void support_peninsulas(const Peninsulas& peninsulas, NearPoints& near_points, float part_z,
-    const Points &permanent, const SupportPointGeneratorConfig &cfg) {
+    const Points &permanent, const SupportPointGeneratorConfig &cfg, ThrowOnCancel thr) {
+    size_t peninsula_id = 0;
     for (const Peninsula& peninsula: peninsulas) {
+        ask_cancel(peninsula_id++, thr);
+
         SupportIslandPoints peninsula_supports =
-            uniform_support_peninsula(peninsula, permanent, cfg.island_configuration);
-        for (const SupportIslandPointPtr &support : peninsula_supports)
+            uniform_support_peninsula(peninsula, permanent, cfg.island_configuration, thr);
+        size_t support_id = 0;
+        for (const SupportIslandPointPtr &support : peninsula_supports) {
+            ask_cancel(support_id++, thr);
+
             near_points.add(LayerSupportPoint{
                 SupportPoint{
                     Vec3f{
@@ -592,7 +632,7 @@ bool exist_same_points(const ExPolygon &shape, const Points& prev_points) {
 }
 #endif // NDEBUG
 
-Points sample_overhangs(const LayerPart& part, double dist2) {
+Points sample_overhangs(const LayerPart& part, double dist2, ThrowOnCancel thr) {
     const ExPolygon &shape = *part.shape;
 
     // Collect previous expolygons by links collected in loop before    
@@ -608,12 +648,15 @@ Points sample_overhangs(const LayerPart& part, double dist2) {
     // TODO: solve case when shape and prev points has same point
     assert(!exist_same_points(shape, prev_points));
         
-    auto sample_overhang = [&prev_points, dist2](const Polygon &polygon, Points &samples) {
+    auto sample_overhang = [&prev_points, dist2, &thr](const Polygon &polygon, Points &samples) {
         const Points &pts = polygon.points;
         // first point which is not part of shape
         Points::const_iterator first_bad = pts.end();
         Points::const_iterator start_it = pts.end();
-        for (auto it = pts.begin(); it != pts.end(); ++it) {
+        size_t point_id = 0;
+        for (auto it = pts.begin(); it != pts.end(); ++it, ++point_id) {
+            ask_cancel(point_id, thr);
+
             const Point &p = *it;
             if (contain_point(p, prev_points)) {
                 if (first_bad == pts.end()) {
@@ -657,7 +700,10 @@ Points sample_overhangs(const LayerPart& part, double dist2) {
     };
 
     Points samples;
+    size_t overhang_id = 0;
     for (const ExPolygon &overhang : overhangs) {
+        ask_cancel(overhang_id++, thr);
+
         sample_overhang(overhang.contour, samples);
         for (const Polygon &hole : overhang.holes) {            
             sample_overhang(hole, samples);
@@ -675,9 +721,10 @@ Points sample_overhangs(const LayerPart& part, double dist2) {
 /// <param name="part">Part with the sampled overhangs</param>
 /// <param name="layer_height">Vertical run between the part and the layer below</param>
 /// <param name="max_angle">Maximal angle of the surface from horizontal [in degrees]</param>
+/// <param name="thr">Ask for a stop while the samples are measured (M4.16)</param>
 /// <returns>Samples of the surfaces that are flat enough to be supported</returns>
 Points filter_steep_overhangs(
-    const LayerPart &part, double layer_height, double max_angle
+    const LayerPart &part, double layer_height, double max_angle, ThrowOnCancel thr
 ) {
     const ExPolygons below_shapes = get_shapes(part.prev_parts);
     Linesf lines = Algorithms::ExPolygon::to_linesf(below_shapes);
@@ -687,7 +734,10 @@ Points filter_steep_overhangs(
     const double max_angle_tangent = std::tan(max_angle * M_PI / 180.);
     Points result;
     result.reserve(part.samples.size());
+    size_t sample_id = 0;
     for (const Point &p : part.samples) {
+        ask_cancel(sample_id++, thr);
+
         size_t line_idx = std::numeric_limits<size_t>::max();
         const Vec2d point_d = p.cast<double>();
         Vec2d hit_point;
@@ -715,7 +765,8 @@ coord_t calc_influence_radius(float z_distance, const SupportPointGeneratorConfi
 }
 
 void prepare_supports_for_layer(LayerSupportPoints &supports, float layer_z, 
-    const NearPointss& activ_points, const SupportPointGeneratorConfig &config) {
+    const NearPointss& activ_points, const SupportPointGeneratorConfig &config,
+    ThrowOnCancel thr) {
     auto set_radius = [&config](LayerSupportPoint &support, float radius) {
         if (!is_approx(config.density_relative, 1.f, 1e-4f)) // exist relative density
             radius = std::sqrt(sqr(radius) / config.density_relative);
@@ -732,7 +783,10 @@ void prepare_supports_for_layer(LayerSupportPoints &supports, float layer_z,
     const std::vector<Vec2f>& curve = config.support_curve;
     // calculate support area for each support point as radius
     // IMPROVE: use some offsets of previous supported island
+    size_t support_id = 0;
     for (LayerSupportPoint &support : supports) {
+        ask_cancel(support_id++, thr);
+
         size_t &index = support.radius_curve_index;
         if (index + 1 >= curve.size())
             continue; // already contain maximal radius
@@ -1094,9 +1148,12 @@ std::optional<SmallPart> create_small_part(
 /// the user that it can fall off, so a small part the island rule reports keeps its support
 /// point: both rules read one area threshold now.
 /// </summary>
-bool is_reportable_island(const Layers &layers, const SmallPart &small_part) {
+bool is_reportable_island(const Layers &layers, const SmallPart &small_part, ThrowOnCancel thr) {
     const double sf_sq = sqr(Biz::Algorithms::Scaling::SCALING_FACTOR); // [in mm2 per scaled unit2]
+    size_t part_id = 0;
     for (const LayerPartIndex &id : small_part) {
+        ask_cancel(part_id++, thr);
+
         const LayerPart &part = layers[id.layer_index].parts[id.part_index];
         if (!part.prev_parts.empty())
             continue; // the island rule counts the regions with nothing below them only
@@ -1109,11 +1166,13 @@ bool is_reportable_island(const Layers &layers, const SmallPart &small_part) {
 /// <summary>
 /// Detection of small parts of support
 /// </summary>
-SmallParts get_small_parts(const Layers &layers, float radius_in_mm) {
+SmallParts get_small_parts(const Layers &layers, float radius_in_mm, ThrowOnCancel thr) {
     // collect islands
     coord_t diameter = static_cast<coord_t>(2 * scale_(radius_in_mm));
     std::vector<LayerPartIndex> islands;
     for (size_t layer_i = 0; layer_i < layers.size(); ++layer_i) {
+        ask_cancel(layer_i, thr);
+
         const Layer &layer = layers[layer_i];
         for (size_t part_i = 0; part_i < layer.parts.size(); ++part_i) {
             const LayerPart &part = layer.parts[part_i];
@@ -1130,7 +1189,12 @@ SmallParts get_small_parts(const Layers &layers, float radius_in_mm) {
     std::mutex m; // write access into result
     SmallParts result;
     execution::for_each(execution::ex_tbb, size_t(0), islands.size(),
-    [&layers, radius_in_mm, &islands, &result, &m](size_t island_i) {
+    [&layers, radius_in_mm, &islands, &result, &m, thr](size_t island_i) {
+        // The small part of one island is bounded by its own depth, but a run of islands can be
+        // long, and a run nobody stopped must not pay for the check more than it has to (M4.16).
+        if ((island_i % 8) == 0)
+            thr();
+
         std::optional<SmallPart> small_part_opt = create_small_part(layers, islands[island_i], radius_in_mm);
         if (!small_part_opt.has_value())
             return; // no small part
@@ -1140,7 +1204,7 @@ SmallParts get_small_parts(const Layers &layers, float radius_in_mm) {
     return result;
 }
 
-void erase(const SmallParts &small_parts, Layers &layers) {
+void erase(const SmallParts &small_parts, Layers &layers, ThrowOnCancel thr) {
     // be carefull deleting small parts could invalidate const reference into vector with parts
     // whole layer must be threated at once
     std::vector<LayerPartIndex> to_erase;
@@ -1154,6 +1218,8 @@ void erase(const SmallParts &small_parts, Layers &layers) {
     assert(std::unique(to_erase.begin(), to_erase.end()) == to_erase.end());
     size_t erase_to; // without this index
     for (size_t erase_from = 0; erase_from < to_erase.size(); erase_from = erase_to) {
+        thr(); // a layer at a time is the finest step here (M4.16)
+
         erase_to = erase_from + 1;
         size_t layer_index = to_erase[erase_from].layer_index;
         while (erase_to < to_erase.size() && 
@@ -1228,10 +1294,10 @@ SupportPointGeneratorData Slic3r::sla::prepare_generator_data(
     // Generate Extents and SampleLayers
     execution::for_each(execution::ex_tbb, size_t(0), result.slices.size(),
     [&result, &heights, throw_on_cancel](size_t layer_id) {
-        if ((layer_id % 128) == 0)
-            // Don't call the following function too often as it flushes
-            // CPU write caches due to synchronization primitves.
-            throw_on_cancel();
+        // ask_cancel covers layer zero and then every n-th layer, where the old "layer_id % 128"
+        // check only ever asked on the layers that are a multiple of it: a model with fewer layers
+        // than the step was never asked again after its first layer (M4.16).
+        ask_cancel(layer_id, throw_on_cancel);
 
         Layer &layer = result.layers[layer_id];
         layer.print_z = heights[layer_id]; // copy
@@ -1249,12 +1315,16 @@ SupportPointGeneratorData Slic3r::sla::prepare_generator_data(
     // Link parts by intersections
     execution::for_each(execution::ex_tbb, size_t(1), result.slices.size(),
     [&result, throw_on_cancel](size_t layer_id) {
-        if ((layer_id % 16) == 0)
-            throw_on_cancel();
+        // This loop and the three below it start at layer one, so the counter is the layers done
+        // and not the layer number: ask_cancel() then asks on its first turn as well (M4.16).
+        ask_cancel(layer_id - 1, throw_on_cancel);
 
         LayerParts &parts_above = result.layers[layer_id].parts;
         LayerParts &parts_below = result.layers[layer_id-1].parts;
-        for (auto it_above = parts_above.begin(); it_above < parts_above.end(); ++it_above) {
+        size_t part_id = 0;
+        for (auto it_above = parts_above.begin(); it_above < parts_above.end(); ++it_above, ++part_id) {
+            ask_cancel(part_id, throw_on_cancel);
+
             for (auto it_below = parts_below.begin(); it_below < parts_below.end(); ++it_below) {
                 // Improve: do some sort of parts + skip some of them
                 if (!it_above->shape_extent.overlap(it_below->shape_extent))
@@ -1274,13 +1344,14 @@ SupportPointGeneratorData Slic3r::sla::prepare_generator_data(
     }, 8 /* gransize */);
 
     // erase unsupportable model parts
-    SmallParts small_parts = get_small_parts(result.layers, config.minimal_bounding_sphere_radius);
+    SmallParts small_parts =
+        get_small_parts(result.layers, config.minimal_bounding_sphere_radius, throw_on_cancel);
     // A small part the island rule reports stays: the user is told that it can fall off, so it
     // needs a support point like any other island (M4.4a).
-    std::erase_if(small_parts, [&layers = result.layers](const SmallPart &small_part) {
-        return !is_reportable_island(layers, small_part);
+    std::erase_if(small_parts, [&layers = result.layers, throw_on_cancel](const SmallPart &small_part) {
+        return !is_reportable_island(layers, small_part, throw_on_cancel);
     });
-    if(!small_parts.empty()) ::erase(small_parts, result.layers);
+    if(!small_parts.empty()) ::erase(small_parts, result.layers, throw_on_cancel);
 
     // Sample overhangs part of island
     double sample_distance_in_um = scale_(config.discretize_overhang_step);
@@ -1293,12 +1364,14 @@ SupportPointGeneratorData Slic3r::sla::prepare_generator_data(
     const bool drop_blocked_overhangs = result.facet_paint.has_blocker_regions;
     execution::for_each(execution::ex_tbb, size_t(1), result.layers.size(),
     [&result, &heights, &config, sample_distance_in_um2, drop_steep_overhangs, drop_blocked_overhangs, throw_on_cancel](size_t layer_id) {
-        if ((layer_id % 32) == 0)
-            throw_on_cancel();
+        ask_cancel(layer_id - 1, throw_on_cancel);
 
         const double layer_height = static_cast<double>(heights[layer_id] - heights[layer_id - 1]);
         LayerParts &parts = result.layers[layer_id].parts;
-        for (auto it_part = parts.begin(); it_part < parts.end(); ++it_part) {
+        size_t part_id = 0;
+        for (auto it_part = parts.begin(); it_part < parts.end(); ++it_part, ++part_id) {
+            ask_cancel(part_id, throw_on_cancel);
+
             if (it_part->prev_parts.empty())
                 continue; // island
 
@@ -1306,10 +1379,10 @@ SupportPointGeneratorData Slic3r::sla::prepare_generator_data(
             // soo one will know source shape of point and do not have to search this
             // information Get inspiration at
             // https://github.com/Prusa-Development/PrusaSlicerPrivate/blob/e00c46f070ec3d6fc325640b0dd10511f8acf5f7/src/libslic3r/PerimeterGenerator.cpp#L399
-            it_part->samples = sample_overhangs(*it_part, sample_distance_in_um2);
+            it_part->samples = sample_overhangs(*it_part, sample_distance_in_um2, throw_on_cancel);
             if (drop_steep_overhangs)
                 it_part->samples = filter_steep_overhangs(
-                    *it_part, layer_height, config.overhang_angle_threshold);
+                    *it_part, layer_height, config.overhang_angle_threshold, throw_on_cancel);
             if (drop_blocked_overhangs)
                 it_part->samples = filter_blocked_samples(
                     std::move(it_part->samples), result.facet_paint, layer_id);
@@ -1319,10 +1392,13 @@ SupportPointGeneratorData Slic3r::sla::prepare_generator_data(
     // Detect peninsula
     execution::for_each(execution::ex_tbb, size_t(1), result.layers.size(),
     [&layers = result.layers, &config, throw_on_cancel](size_t layer_id) {
-        if ((layer_id % 32) == 0)
-            throw_on_cancel();
+        ask_cancel(layer_id - 1, throw_on_cancel);
+
         LayerParts &parts = layers[layer_id].parts;
-        for (auto it_part = parts.begin(); it_part < parts.end(); ++it_part) {
+        size_t part_id = 0;
+        for (auto it_part = parts.begin(); it_part < parts.end(); ++it_part, ++part_id) {
+            ask_cancel(part_id, throw_on_cancel);
+
             if (it_part->prev_parts.empty())
                 continue; // island
             create_peninsulas(*it_part, config);
@@ -1332,11 +1408,15 @@ SupportPointGeneratorData Slic3r::sla::prepare_generator_data(
     // calc extended parts, more info PrepareSupportConfig::removing_delta
     execution::for_each(execution::ex_tbb, size_t(1), result.layers.size(),
     [&layers = result.layers, delta = config.removing_delta, throw_on_cancel](size_t layer_id) {
-        if ((layer_id % 16) == 0)
-            throw_on_cancel();
+        ask_cancel(layer_id - 1, throw_on_cancel);
+
         LayerParts &parts = layers[layer_id].parts;
-        for (auto it_part = parts.begin(); it_part < parts.end(); ++it_part)
+        size_t part_id = 0;
+        for (auto it_part = parts.begin(); it_part < parts.end(); ++it_part, ++part_id) {
+            ask_cancel(part_id, throw_on_cancel);
+
             it_part->extend_shape = offset_ex(*it_part->shape, delta, ClipperLib::jtSquare);
+        }
     }, 8 /* gransize */);
     return result;
 }
@@ -1602,7 +1682,8 @@ using PermanentSupports = std::vector<PermanentSupport>;
 PermanentSupports prepare_permanent_supports(
     const SupportPoints &permanent_supports,
     const Layers &layers,
-    const SupportPointGeneratorConfig &config
+    const SupportPointGeneratorConfig &config,
+    ThrowOnCancel thr
 ) {
     // How to propagate permanent support position into previous layers? and how deep? requirements
     // are chained. IMHO it should start togetjer from islands and permanent than propagate over surface
@@ -1617,6 +1698,8 @@ PermanentSupports prepare_permanent_supports(
     size_t permanent_index = 0;
     PermanentSupports result;
     for (size_t layer_id = 0; layer_id < layers.size(); ++layer_id) {
+        ask_cancel(layer_id, thr);
+
         float layer_max_z = get_layer_range(layers, layer_id).max;
         if (permanent_index >= permanent_supports.size())
             break; // no more permanent supports
@@ -1759,28 +1842,32 @@ LayerSupportPoints generate_support_points(
     // Index into data.permanent_supports
     size_t permanent_index = 0;
     PermanentSupports permanent_supports =
-        prepare_permanent_supports(data.permanent_supports, layers, config);
+        prepare_permanent_supports(data.permanent_supports, layers, config, throw_on_cancel);
 
     // grid index == part in layer index
     NearPointss prev_grids; // same count as previous layer item size
     for (size_t layer_id = 0; layer_id < layers.size(); ++layer_id) {
         const Layer &layer = layers[layer_id];
-        prepare_supports_for_layer(result, layer.print_z, prev_grids, config);
+        prepare_supports_for_layer(result, layer.print_z, prev_grids, config, throw_on_cancel);
 
         // grid index == part in layer index
         NearPointss grids;
         grids.reserve(layer.parts.size());
 
+        size_t part_id = 0;
         for (const LayerPart &part : layer.parts) {
-            size_t part_id = &part - &layer.parts.front();
+            ask_cancel(part_id++, throw_on_cancel);
+
+            size_t part_index = &part - &layer.parts.front();
             if (part.prev_parts.empty()) {   // Island ?
                 grids.emplace_back(&result); // only island add new grid
                 Points permanent =
-                    get_permanents(permanent_supports, permanent_index, layer_id, part_id);
-                support_island(part, grids.back(), layer.print_z, permanent, config);
+                    get_permanents(permanent_supports, permanent_index, layer_id, part_index);
+                support_island(
+                    part, grids.back(), layer.print_z, permanent, config, throw_on_cancel);
                 copy_permanent_supports(
                     grids.back(), permanent_supports, permanent_index, layer.print_z, layer_id,
-                    part_id, config
+                    part_index, config
                 );
                 continue;
             }
@@ -1794,14 +1881,16 @@ LayerSupportPoints generate_support_points(
             if (!part.peninsulas.empty()) {
                 // only get copy of points do not modify permanent_index
                 Points permanent =
-                    get_permanents(permanent_supports, permanent_index, layer_id, part_id);
-                support_peninsulas(part.peninsulas, near_points, layer.print_z, permanent, config);
+                    get_permanents(permanent_supports, permanent_index, layer_id, part_index);
+                support_peninsulas(
+                    part.peninsulas, near_points, layer.print_z, permanent, config, throw_on_cancel);
             }
             copy_permanent_supports(
-                near_points, permanent_supports, permanent_index, layer.print_z, layer_id, part_id,
-                config
+                near_points, permanent_supports, permanent_index, layer.print_z, layer_id,
+                part_index, config
             );
-            support_part_overhangs(part, config, near_points, layer.print_z, maximal_radius, spacing);
+            support_part_overhangs(
+                part, config, near_points, layer.print_z, maximal_radius, spacing, throw_on_cancel);
             grids.push_back(std::move(near_points));
         }
 
@@ -1814,7 +1903,7 @@ LayerSupportPoints generate_support_points(
             NearPoints enforced(&result);
             support_enforced_regions(
                 data.facet_paint.enforcers(layer_id), data.facet_paint.blockers(layer_id), enforced,
-                grids, layer.print_z, config);
+                grids, layer.print_z, config, throw_on_cancel);
             if (!enforced.get_indices().empty())
                 grids.push_back(std::move(enforced));
         }
