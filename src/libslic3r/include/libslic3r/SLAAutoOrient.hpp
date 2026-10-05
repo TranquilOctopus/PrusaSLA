@@ -41,7 +41,22 @@ enum class AutoOrientGoal
     // cavity detection of M4.8e on coarse slices of the rotated mesh, so it needs no print config
     // either. It is a rotation and not a drain hole: a cup of resin that is already in the vat
     // cannot be peeled off, only avoided.
-    NoCups
+    NoCups,
+    // Print a pre-supported head, a helmet or a bust the way miniature printers print them: the
+    // flat face the piece is glued to a body by (the cut of a neck, the underside of a head, the
+    // flat back of a bust) down on the plate, the detail side up so the layers cut across the face
+    // and not along it, and the piece leaned over by a fixed angle so the cross sections ramp in
+    // from the narrow cut instead of standing up as a full width disc.
+    //
+    // This one is not a search over poses: the flat face is found in the mesh and pointed at the
+    // plate, and only the azimuth of the lean is searched, so the piece keeps the pose it was
+    // loaded in around the vertical axis. It does not ask what the piece looks like and it does not
+    // count supports: LeastSupports is wrong for a miniature, because a face that is exposed to
+    // print is a face with many islands on it and so with many support points, while the way a
+    // miniature is supported is a fat support in the neck that the body hides and small ones where
+    // the detail needs them. A piece with no flat face at all keeps the pose it was loaded in and
+    // is only leaned over.
+    Miniature
 };
 
 // The rotation for the given goal. Same angle convention as auto_orient_min_height() below.

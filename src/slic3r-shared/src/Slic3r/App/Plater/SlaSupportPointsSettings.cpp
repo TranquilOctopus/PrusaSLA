@@ -371,6 +371,24 @@ const std::string& sla_support_preset_name(int preset_index)
     return names[std::clamp(preset_index, 0, sla_support_preset_count - 1)];
 }
 
+void apply_sla_support_preset(SupportPoint& point, const SlaSupportPreset& preset)
+{
+    // The whole geometry of the class (R3.1 to R3.4) first, its tip diameter next: the two-argument
+    // overload leaves the tip diameter to the caller, which is the generator and a clicked point,
+    // while a class is named by its tip (R3), so the class writes both.
+    apply_support_geometry(point, preset.geometry);
+    apply_support_geometry(point, preset.geometry, SupportGeometryField::TipDiameter);
+
+    // The three sizes the preset carries as settings are the values the point now holds, so it stops
+    // following the global settings on them, and the contact of a class sinks half the tip of that
+    // class into the model (R3.1): a class whose tip a print preset overrides sinks half of that tip.
+    point.pillar_diameter = static_cast<float>(preset.stem_diameter_mm);
+    point.base_diameter   = static_cast<float>(preset.base_diameter_mm);
+    point.base_height     = static_cast<float>(preset.base_height_mm);
+    point.contact_depth
+        = static_cast<float>(sla_support_contact_depth(preset.geometry.tip_diameter_mm));
+}
+
 void
 sla_new_support_preset_changed(SlaSupportPointsEditing& editing, const SlaSupportPreset& preset)
 {
@@ -399,24 +417,14 @@ void sla_selected_support_preset_changed(
     }
 
     // What a clicked point takes is not touched: the preset of the "Selected supports" group is an
-    // edit of the selection like any other value of it.
-    const double contact_depth_mm = sla_support_contact_depth(preset.geometry.tip_diameter_mm);
+    // edit of the selection like any other value of it. A preset is one bundle of values, so the
+    // points of the selection get all of it in one undo step, through the one function that writes a
+    // class onto a point.
     for (size_t idx : editing.selected_point_indices) {
         if (idx >= editing.points.size()) {
             continue;
         }
-        // The whole geometry of the class, then its tip, its stem and its base: a preset is one
-        // bundle of values, so the points of the selection get all of it in one undo step.
-        apply_support_geometry(editing.points[idx], preset.geometry);
-        apply_support_geometry(
-            editing.points[idx],
-            preset.geometry,
-            SupportGeometryField::TipDiameter
-        );
-        editing.points[idx].pillar_diameter = static_cast<float>(preset.stem_diameter_mm);
-        editing.points[idx].base_diameter   = static_cast<float>(preset.base_diameter_mm);
-        editing.points[idx].base_height     = static_cast<float>(preset.base_height_mm);
-        editing.points[idx].contact_depth   = static_cast<float>(contact_depth_mm);
+        apply_sla_support_preset(editing.points[idx], preset);
     }
 }
 

@@ -172,6 +172,16 @@ SlaSupportPreset sla_support_preset(const std::string& preset_name);
 /// 4 T0.6. The name is the config key prefix, which is why the first four are not the tip sizes.
 const std::string& sla_support_preset_name(int preset_index);
 
+/// Writes one preset onto one point: the whole geometry of the class lands on the point (R3.1 to
+/// R3.4), its tip diameter becomes the head radius of the point and the three sizes stop following
+/// the global settings, which is what a preset button does to the next point and to the points of
+/// the selection (M2.18a, M7.8.1) and what the automatic placement does to the points it generates
+/// (M2.37). The contact of the class sinks half its own tip into the model (R3.1). Nothing else of
+/// the point is touched, so the position, the type and the way it rests on the model stay as they
+/// are. This is the one function that writes a class onto a point, so a preset button and the
+/// automatic placement can never drift apart.
+void apply_sla_support_preset(Domain::SLA::SupportPoint& point, const SlaSupportPreset& preset);
+
 /// A preset button of the "New supports" group: the four values a clicked point takes from now on.
 /// The points that exist are not touched.
 void

@@ -77,6 +77,7 @@ private:
     Yoga::RadioButton* m_fewest_supports_button{nullptr};
     Yoga::RadioButton* m_least_peel_button{nullptr};
     Yoga::RadioButton* m_no_cups_button{nullptr};
+    Yoga::RadioButton* m_miniature_button{nullptr};
     Yoga::ButtonGroup m_auto_orient_goal_buttons;
     ReferenceFramePicker* m_reference_frame_picker;
 

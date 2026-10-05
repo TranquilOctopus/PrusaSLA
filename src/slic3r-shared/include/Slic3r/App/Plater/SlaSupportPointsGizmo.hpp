@@ -2,6 +2,7 @@
 
 #include "Slic3r/App/Scene/IGizmo.hpp"
 #include "Slic3r/App/Plater/GizmoWindow.hpp"
+#include "Slic3r/App/Plater/SlaSupportAutoPresets.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointPick.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsEditing.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsSettings.hpp"
@@ -234,6 +235,21 @@ private:
     // takes, from the Supports & raft settings of @p model_object.
     SlaSupportGeometry support_geometry_defaults(const Domain::ModelObject* model_object) const;
     SlaSupportPreset get_support_preset_values(const std::string& preset_name) const;
+
+    // What every point of a generation takes: the tip shape, tip length, knot, stem cross-section,
+    // stem taper and foot shape of the Supports & raft settings of @p model_object, and then the
+    // sizes the automatic placement picks for the point (M2.37). Both generation paths (Generate and
+    // Auto support) call this and nothing else, so a generated point is the same support whichever
+    // of the two made it.
+    void fill_generated_point_geometry(
+        Domain::SLA::SupportPoints& points,
+        const Domain::ModelObject* model_object,
+        const Domain::ModelInstance* instance
+    );
+    // The two settings of "Supports & raft" that say what the automatic placement puts where
+    // (support_auto_heavy_base and support_auto_detail_preset), read off the selected print preset,
+    // the same place the preset dimensions come from.
+    SlaAutoSupportChoice auto_support_preset_choice() const;
 
     // Rectangle selection
     void start_rectangle_selection(const Domain::Vec2d& mouse_pos, bool is_add);

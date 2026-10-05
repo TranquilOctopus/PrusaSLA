@@ -1,4 +1,5 @@
 #include "Slic3r/App/Plater/SlaSupportPointsGizmo.hpp"
+#include "Slic3r/App/Plater/SlaSupportAutoPresets.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointPick.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsClear.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsEditing.hpp"
@@ -28,12 +29,14 @@
 #include "Slic3r/Biz/IUndoProvider.hpp"
 #include "Slic3r/Biz/Utils/MeshRaycaster.hpp"
 #include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
+#include "Slic3r/Biz/Algorithms/ModelObject.hpp"
 #include "jthread/JThread.hpp"
 #include "Slic3r/Biz/Platform/PlatformServices.hpp"
 #include "Slic3r/Domain/BedInstance.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
 #include "Slic3r/Domain/SelectionId.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
+#include "Slic3r/Domain/SlaLayerHeight.hpp"
 #include "Slic3r/Domain/ConfigContainer.hpp"
 #include "Slic3r/Domain/ConfigPack.hpp"
 #include "Slic3r/Domain/Config.hpp"
@@ -587,14 +590,13 @@ void SlaSupportPointsGizmo::on_generation_completed(std::optional<Domain::SLA::S
 
     if (support_points.has_value() && !support_points->empty()) {
         // The generator only fills the position and the head diameter, so a generated point takes
-        // the tip shape, tip length, knot, stem cross-section and stem taper of the settings as well
-        // (M2.16c, M2.24). The head radius it fills is the one of the tree type it generated for.
-        const SlaSupportGeometry geometry = support_geometry_defaults(
-            m_project_interactor.selected_project().find_object_by_id(m_selected_object_id.id)
+        // the geometry and the preset size of its own model (M2.16c, M2.24, M2.37).
+        Domain::Project& project = m_project_interactor.selected_project();
+        this->fill_generated_point_geometry(
+            *support_points,
+            project.find_object_by_id(m_selected_object_id.id),
+            project.find_instance_by_id(m_selected_object_id.id, m_selected_instance_id)
         );
-        for (Domain::SLA::SupportPoint& point : *support_points) {
-            apply_support_geometry(point, geometry);
-        }
         m_generated_support_points = *support_points;
         m_has_generated_points = true;
 
@@ -936,15 +938,9 @@ void SlaSupportPointsGizmo::on_auto_support_completed(Domain::ObjectID obj_id, s
             // The snapshot of the run was already taken in auto_support(), before the first model of
             // the queue was touched, so a run over several models is one undo step.
 
-            // A generated point takes the tip shape, tip length, knot, stem cross-section and stem
-            // taper of the settings of its own model, like a point placed by hand (M2.16c, M2.24).
-            const SlaSupportGeometry geometry = support_geometry_defaults(model_object);
-            for (Domain::SLA::SupportPoint& point : *support_points) {
-                apply_support_geometry(point, geometry);
-            }
-
             // Find a printable instance on a bed for this object to get instance_id
-            Domain::SelectionId instance_id = 0;
+            Domain::SelectionId instance_id     = 0;
+            const Domain::ModelInstance* placed = nullptr;
             for (const Domain::ModelInstance* inst : model_object->instances) {
                 if (!inst || !inst->is_printable()) {
                     continue;
@@ -952,9 +948,14 @@ void SlaSupportPointsGizmo::on_auto_support_completed(Domain::ObjectID obj_id, s
                 const Domain::BedRef bed_ref = inst->get_last_bed();
                 if (project.find_bed_instance_by_id(bed_ref.instance_id) != nullptr) {
                     instance_id = inst->id().id;
+                    placed      = inst;
                     break;
                 }
             }
+
+            // A generated point takes the geometry and the preset size of its own model, like a
+            // point placed by hand (M2.16c, M2.24, M2.37).
+            this->fill_generated_point_geometry(*support_points, model_object, placed);
 
             if (m_selected_object_id == obj_id) {
                 DialogSyncGuard guard(*this);
@@ -2073,6 +2074,78 @@ SlaSupportPreset SlaSupportPointsGizmo::get_support_preset_values(const std::str
     preset.base_diameter_mm         = get_value("base_diameter", preset.base_diameter_mm);
     preset.base_height_mm           = get_value("base_height", preset.base_height_mm);
     return preset;
+}
+
+// Which preset the automatic placement gives the base of the model and which one it gives the
+// detail, read off the selected print preset next to the preset dimensions above
+// (support_auto_heavy_base and support_auto_detail_preset, M2.37). A print preset that carries
+// neither key keeps the defaults of the config definitions: the heavy base on, Light for the
+// detail.
+SlaAutoSupportChoice SlaSupportPointsGizmo::auto_support_preset_choice() const
+{
+    const auto& config_box =
+        m_project_interactor.preset_interactor().selected_printer_preset().print.config_box();
+
+    SlaAutoSupportChoice choice;
+    if (const auto* item = config_box.items.find("support_auto_heavy_base")) {
+        choice.heavy_base = item->get<bool>();
+    }
+    if (const auto* item = config_box.items.find("support_auto_detail_preset")) {
+        choice.detail = item->get<Domain::sla::SupportAutoDetailPreset>();
+    }
+    return choice;
+}
+
+// What the generator leaves open on every point it produced: the tip shape, tip length, knot, stem
+// cross-section, stem taper and foot shape of the settings of this model (support_geometry_defaults,
+// M2.16c / M2.24 / M2.23b), and then the sizes the automatic placement picks per point (M2.37): the
+// T0.4 class on the island the model is glued on, the detail class on everything else. Both
+// generation paths come through here, so a generated point is the same support whichever made it.
+void SlaSupportPointsGizmo::fill_generated_point_geometry(
+    Domain::SLA::SupportPoints& points,
+    const Domain::ModelObject* model_object,
+    const Domain::ModelInstance* instance
+)
+{
+    const SlaSupportGeometry geometry = support_geometry_defaults(model_object);
+    for (SupportPoint& point : points) {
+        apply_support_geometry(point, geometry);
+    }
+
+    if (!model_object) {
+        return;
+    }
+
+    // The generator returns its points in the model's own frame, and the mesh of the model part
+    // volumes is what it sampled them on, so the lowest z of that mesh is the bottom of the model
+    // in the very frame the points are in. The lift moves the model and its points together, so
+    // nothing here depends on how high the scene draws the object.
+    const double lowest_z_mm =
+        Biz::Algorithms::ModelObject::raw_mesh_bounding_box(*model_object).min.z();
+
+    // The band of the model the heavy supports cover is two layers, so the layer height the print
+    // will be sliced at is what says which points are in it.
+    double layer_height_mm = 0.05;
+    if (const std::optional<ObjectSlaConfig> config =
+            build_object_sla_config(model_object, instance);
+        config.has_value())
+    {
+        Domain::ConfigView config_view{config->full, {config->object}};
+        config_view.finalize();
+        const double height_mm = Domain::sla_effective_layer_height(config_view);
+        if (height_mm > 0.) {
+            layer_height_mm = height_mm;
+        }
+    }
+
+    const SlaAutoSupportChoice choice = this->auto_support_preset_choice();
+    // Preset button 3 of the five is the "heavy" id, which is the T0.4 mm class since M7.8.1: that is
+    // the one the base of the model gets. The detail takes the class the setting names.
+    const SlaAutoSupportPresets presets{
+        this->get_support_preset_values(sla_support_preset_name(3)),
+        this->get_support_preset_values(sla_auto_detail_preset_name(choice.detail))
+    };
+    sla_apply_auto_support_presets(points, lowest_z_mm, layer_height_mm, presets, choice);
 }
 
 // Rectangle selection
