@@ -285,7 +285,8 @@ bool BranchingTreeBuilder::add_ground_bridge(const branchingtree::Node &from,
 
         auto conn = deepsearch_ground_connection(beam_ex_policy , m_sm, j,
                                                  pillar_radius(from, get_radius(to)),
-                                                 init_dir, leaf_point(from));
+                                                 init_dir, leaf_point(from),
+                                                 m_builder.ctl().stopcondition);
 
         // Remember that this node was tested if can go to ground, don't
         // test it with any other destination ground point because
@@ -317,7 +318,8 @@ bool BranchingTreeBuilder::add_mesh_bridge(const branchingtree::Node &from,
     // gets none, however the object is set up.
     auto anchor = may_rest_on_model(m_sm, leaf_point(from)) ?
                       calculate_anchor_placement(beam_ex_policy , m_sm, fromj,
-                                                 to.pos.cast<double>()) :
+                                                 to.pos.cast<double>(),
+                                                 m_builder.ctl().stopcondition) :
                       std::optional<Anchor>{}; // If no mesh connections are allowed
 
     if (anchor) {
@@ -380,7 +382,7 @@ std::optional<Vec3f> BranchingTreeBuilder::suggest_avoidance(
     } else {
         auto conn = deepsearch_ground_connection(
             beam_ex_policy , m_sm, j, pillar_radius(from, get_radius(dst)),
-            sla::DOWN, leaf_point(from));
+            sla::DOWN, leaf_point(from), m_builder.ctl().stopcondition);
 
         {
             std::lock_guard lk{m_gnd_connections_mtx};
@@ -398,6 +400,9 @@ inline void build_pillars(SupportTreeBuilder &builder,
                           const SupportableMesh &sm)
 {
     for (size_t pill_id = 0; pill_id < vbuilder.pillars().size(); ++pill_id) {
+        if (builder.ctl().stopcondition())
+            return; // the run is given up, the rest of the pillars are not built (M4.16)
+
         auto * conn = vbuilder.ground_conn(pill_id);
         if (conn)
             build_ground_connection(builder, sm, *conn);
@@ -419,7 +424,8 @@ void create_branching_tree(SupportTreeBuilder &builder, const SupportableMesh &s
         execution::ex_tbb, size_t(0), nondup_idx.size(),
         [&sm, &heads, &nondup_idx, &builder](size_t i) {
             if (!builder.ctl().stopcondition())
-                heads[i] = calculate_pinhead_placement(execution::ex_seq, sm, nondup_idx[i]);
+                heads[i] = calculate_pinhead_placement(execution::ex_seq, sm, nondup_idx[i],
+                                                       builder.ctl().stopcondition);
         },
         execution::max_concurrency(execution::ex_tbb)
     );
@@ -427,7 +433,10 @@ void create_branching_tree(SupportTreeBuilder &builder, const SupportableMesh &s
     if (builder.ctl().stopcondition())
         return;
 
-    for (size_t i = 0; i < heads.size(); ++i)
+    for (size_t i = 0; i < heads.size(); ++i) {
+        if (builder.ctl().stopcondition())
+            return; // the run is given up (M4.16)
+
         if (auto &h = heads[i]; h && h->is_valid()) {
             // The leaf carries the radius of what sits at the junction: the back
             // of the pinhead, or the knot ball the point asked for. (M2.16b)
@@ -443,6 +452,7 @@ void create_branching_tree(SupportTreeBuilder &builder, const SupportableMesh &s
             // leaf would be the head of some other point. (M4.5c)
             builder.add_head(unsigned(nondup_idx[i]), *h);
         }
+    }
 
     auto &its = *sm.emesh.get_triangle_mesh();
     ExPolygons bedpolys = {branchingtree::make_bed_poly(its)};

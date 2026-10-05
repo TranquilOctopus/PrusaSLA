@@ -67,7 +67,8 @@ void breakstick_holes(Points& pts,
                       double padding,
                       double stride,
                       double stick_width,
-                      double penetration)
+                      double penetration,
+                      ThrowOnCancel thr)
 {
     if(stride <= EPSILON || stick_width <= EPSILON || padding <= EPSILON)
         return;
@@ -93,6 +94,10 @@ void breakstick_holes(Points& pts,
     // process pairs of vertices as an edge, start with the last and
     // first point
     for (size_t i = pts.size() - 1, j = 0; j < pts.size(); i = j, ++j) {
+        // One edge of the outline of a raft around a metre wide model is a walk of thousands of
+        // steps (M4.16).
+        thr();
+
         // Get vertices and the direction vectors
         const Point &a = pts[i], &b = pts[j];
         Vec2d        dir = b.cast<double>() - a.cast<double>();
@@ -133,12 +138,12 @@ void breakstick_holes(Points& pts,
 }
 
 template<class...Args>
-ExPolygons breakstick_holes(const ExPolygons &input, Args...args)
+ExPolygons breakstick_holes(const ExPolygons &input, ThrowOnCancel thr, Args...args)
 {
     ExPolygons ret = input;
     for (ExPolygon &p : ret) {
-        breakstick_holes(p.contour.points, args...);
-        for (auto &h : p.holes) breakstick_holes(h.points, args...);
+        breakstick_holes(p.contour.points, args..., thr);
+        for (auto &h : p.holes) breakstick_holes(h.points, args..., thr);
     }
 
     return ret;
@@ -280,7 +285,9 @@ public:
         // to be eliminated from areas where there is no need for a pad, due
         // to missing supports.
 
-        add_supports_to_index(support_blueprint);
+        thr(); // the offset of the model outline below and the hull above are one step each (M4.16)
+
+        add_supports_to_index(support_blueprint, thr);
 
         auto model_bp_offs =
             offset_ex(model_blueprint,
@@ -291,17 +298,21 @@ public:
             wafflized_concave_hull(support_blueprint, model_bp_offs, cfg, thr);
 
         auto model_bp_sticks =
-            breakstick_holes(model_bp_offs, cfg.embed_object.object_gap_mm,
+            breakstick_holes(model_bp_offs, thr, cfg.embed_object.object_gap_mm,
                              cfg.embed_object.stick_stride_mm,
                              cfg.embed_object.stick_width_mm,
                              cfg.embed_object.stick_penetration_mm);
 
+        thr();
+
         ExPolygons fullpad = diff_ex(fullcvh, model_bp_sticks);
+
+        thr();
 
         PadSkeleton divided = divide_blueprint(fullpad);
         
-        remove_redundant_parts(divided.outer);
-        remove_redundant_parts(divided.inner);
+        remove_redundant_parts(divided.outer, thr);
+        remove_redundant_parts(divided.inner, thr);
 
         outer = std::move(divided.outer);
         inner = std::move(divided.inner);
@@ -310,9 +321,12 @@ public:
 private:
 
     // Add the support blueprint to the search index to be queried later
-    void add_supports_to_index(const ExPolygons &supp_bp)
+    void add_supports_to_index(const ExPolygons &supp_bp, ThrowOnCancel thr)
     {
-        for (auto &ep : supp_bp) m_intersector.add(ep);
+        for (auto &ep : supp_bp) {
+            thr();
+            m_intersector.add(ep);
+        }
     }
 
     // Create the wafflized pad around all object in the scene. This pad doesnt
@@ -332,10 +346,11 @@ private:
     }
 
     // To remove parts of the pad skeleton which do not host any supports
-    void remove_redundant_parts(ExPolygons &parts)
+    void remove_redundant_parts(ExPolygons &parts, ThrowOnCancel thr)
     {
         auto endit = std::remove_if(parts.begin(), parts.end(),
-                                    [this](const ExPolygon &p) {
+                                    [this, thr](const ExPolygon &p) {
+                                        thr(); // one part of the raft is one test (M4.16)
                                         return !m_intersector.intersects(p);
                                     });
 
@@ -354,10 +369,18 @@ public:
                      const PadConfig & cfg,
                      ThrowOnCancel     thr)
     {
+        thr();
+
         outer.reserve(support_blueprint.size() + model_blueprint.size());
 
-        for (auto &ep : support_blueprint) outer.emplace_back(ep.contour);
-        for (auto &ep : model_blueprint) outer.emplace_back(ep.contour);
+        for (auto &ep : support_blueprint) {
+            thr();
+            outer.emplace_back(ep.contour);
+        }
+        for (auto &ep : model_blueprint) {
+            thr();
+            outer.emplace_back(ep.contour);
+        }
 
         ConcaveHull ochull{outer, get_merge_distance(cfg), thr};
 
@@ -511,7 +534,7 @@ struct PadInfill {
 
 // Cut the pattern of the infill out of the raft part. The part is given as the outline it has
 // where it is narrowest, so the cells are inside the raft at every height.
-PadInfill cut_infill_cells(const ExPolygon &outline, const PadConfig3D &cfg)
+PadInfill cut_infill_cells(const ExPolygon &outline, const PadConfig3D &cfg, ThrowOnCancel thr)
 {
     PadInfill infill;
 
@@ -519,8 +542,12 @@ PadInfill cut_infill_cells(const ExPolygon &outline, const PadConfig3D &cfg)
     if (!cfg.infill || cfg.infill_cells_top_z() <= -cfg.height)
         return infill;
 
+    thr();
+
     // The pattern stops at a solid rim, which is as thick as the material between two cells.
     for (const ExPolygon &region : offset_ex(outline, -scaled<float>(cfg.infill.wall_mm))) {
+        thr(); // one region of the infill is one lattice of cells (M4.16)
+
         ExPolygons cells = infill_cells(region, cfg);
 
         // An interior without a cell in it is left solid. Cutting the pattern out of it anyway
@@ -582,20 +609,26 @@ indexed_triangle_set create_infill_geometry(const PadInfill & infill,
 // the infill and the ribs around the cells, so the walls of the cells stand on its edges.
 indexed_triangle_set create_infill_floor(const ExPolygon & outline,
                                          const PadInfill & infill,
-                                         double             z)
+                                         double             z,
+                                         ThrowOnCancel      thr)
 {
     indexed_triangle_set ret;
 
     if (infill.cells.empty()) {
+        thr();
         its_merge(ret, triangulate_expolygon_3d(outline, z, NORMALS_DOWN));
         return ret;
     }
 
-    for (const ExPolygon &rim : diff_ex(ExPolygons{outline}, infill.interior))
+    for (const ExPolygon &rim : diff_ex(ExPolygons{outline}, infill.interior)) {
+        thr(); // one piece of the floor of the raft is one triangulation (M4.16)
         its_merge(ret, triangulate_expolygon_3d(rim, z, NORMALS_DOWN));
+    }
 
-    for (const ExPolygon &ribs : infill.ribs)
+    for (const ExPolygon &ribs : infill.ribs) {
+        thr();
         its_merge(ret, triangulate_expolygon_3d(ribs, z, NORMALS_DOWN));
+    }
 
     return ret;
 }
@@ -671,7 +704,7 @@ indexed_triangle_set create_outer_pad_geometry(const ExPolygons & skeleton,
 
         // The cells are cut out of the part between the bottom face and the solid skin under the
         // top face, so the wall and the top face of the raft stay where they were.
-        const PadInfill infill = cut_infill_cells(bottom_poly, cfg);
+        const PadInfill infill = cut_infill_cells(bottom_poly, cfg, thr);
         its_merge(ret, create_infill_geometry(infill, cfg, thr));
 
         double z_min = -cfg.height, z_max = 0;
@@ -700,10 +733,12 @@ indexed_triangle_set create_outer_pad_geometry(const ExPolygons & skeleton,
 
         // The bevelled rim closes the top face at z = 0, so then the holes run the full height.
         const double hole_z_max = taper_z < 0 ? 0. : z_max;
-        for (auto &h : bottom_poly.holes)
+        for (auto &h : bottom_poly.holes) {
+            thr(); // one hole of the raft is one tube of walls (M4.16)
             its_merge(ret, straight_walls(h, hole_z_max, z_min));
+        }
 
-        its_merge(ret, create_infill_floor(bottom_poly, infill, z_min));
+        its_merge(ret, create_infill_floor(bottom_poly, infill, z_min, thr));
 
         // A hole in a part is a straight tube, so the top face and the bottom face of that tube
         // have to be the same polygon: every edge of it is shared by one face of the wall and one
@@ -730,14 +765,16 @@ indexed_triangle_set create_inner_pad_geometry(const ExPolygons & skeleton,
     for (const ExPolygon &pad_part : skeleton) {
         thr();
         // An inner part is a straight prism, so its narrowest cross section is its own outline.
-        const PadInfill infill = cut_infill_cells(pad_part, cfg);
+        const PadInfill infill = cut_infill_cells(pad_part, cfg, thr);
         its_merge(ret, create_infill_geometry(infill, cfg, thr));
         its_merge(ret, straight_walls(pad_part.contour, z_max, z_min));
 
-        for (auto &h : pad_part.holes)
+        for (auto &h : pad_part.holes) {
+            thr();
             its_merge(ret, straight_walls(h, z_max, z_min));
+        }
 
-        its_merge(ret, create_infill_floor(pad_part, infill, z_min));
+        its_merge(ret, create_infill_floor(pad_part, infill, z_min, thr));
         its_merge(ret, triangulate_expolygon_3d(pad_part, z_max, NORMALS_UP));
     }
 
@@ -798,6 +835,10 @@ void pad_blueprint(const indexed_triangle_set &mesh,
     auto tmp = reserve_vector<ExPolygon>(count);
     for(ExPolygons& o : out)
         for(ExPolygon& e : o) {
+            // One outline of one slice is one simplification, and a slice of a raft mesh comes in
+            // hundreds of them (M4.16).
+            thrfn();
+
             // A slicing plane that only grazes the mesh - the bottom of a ball standing on the
             // plate is one - leaves a contour with no area in it or none at all, and the
             // simplifier reads the first point of the contour.
@@ -808,9 +849,13 @@ void pad_blueprint(const indexed_triangle_set &mesh,
             for(ExPolygon& ep : exss) tmp.emplace_back(std::move(ep));
         }
 
+    thrfn();
+
     ExPolygons utmp = union_ex(tmp);
 
     for(auto& o : utmp) {
+        thrfn();
+
         auto&& smp = Algorithms::ExPolygon::simplify(o, scaled<double>(0.1));
         output.insert(output.end(), smp.begin(), smp.end());
     }
@@ -834,6 +879,8 @@ void create_pad(const ExPolygons &    sup_blueprint,
                 const PadConfig &     cfg,
                 ThrowOnCancel         thr)
 {
+    // The geometry is built one pad part, one infill region and one hole at a time, and each of
+    // those steps asks the cancel function (M4.16).
     auto t = create_pad_geometry(sup_blueprint, model_blueprint, cfg, thr);
     its_merge(out, t);
 }

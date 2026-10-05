@@ -41,6 +41,7 @@ DefaultSupportTree::DefaultSupportTree(SupportTreeBuilder &   builder,
     , m_builder(builder)
     , m_points(sm.pts->size(), 3)
     , m_thr(builder.ctl().cancelfn)
+    , m_stopcond(builder.ctl().stopcondition)
 {
     // Prepare the support points in Eigen/IGL format as well, we will use
     // it mostly in this form.
@@ -511,7 +512,7 @@ void DefaultSupportTree::add_pinheads()
             // viable normal that doesn't collide with the model
             // geometry and its very close to the default.
 
-            Optimizer<AlgNLoptGenetic> solver(get_criteria(m_sm.cfg));
+            Optimizer<AlgNLoptGenetic> solver(get_criteria(m_sm.cfg, m_stopcond));
             solver.seed(0); // we want deterministic behavior
 
             auto oresult = solver.to_max().optimize(
@@ -710,7 +711,8 @@ bool DefaultSupportTree::connect_to_ground(Head &head)
                                                       head.junction_radius()},
                                                      head.junction_radius(),
                                                      head.dir,
-                                                     head.stem);
+                                                     head.stem,
+                                                     m_stopcond);
 
     if (pillar_id >= 0) {
         // Save the pillar endpoint in the spatial index
@@ -880,6 +882,8 @@ void DefaultSupportTree::interconnect_pillars()
     auto cascadefn =
         [this, d, &pairs, min_height_ratio, H1] (const PointIndexEl& el)
     {
+        m_thr(); // one pillar of the index at a time (M4.16)
+
         Vec3d qp = el.first;    // endpoint of the pillar
 
         const Pillar& pillar = m_builder.pillar(el.second); // actual pillar
@@ -956,6 +960,8 @@ void DefaultSupportTree::interconnect_pillars()
     // Again, go through all pillars, this time in the whole support tree
     // not just the index.
     for(size_t pid = 0; pid < pillarcount; pid++) {
+        m_thr(); // one pillar to place a neighbour next to at a time (M4.16)
+
         auto pillar = [this, pid]() { return m_builder.pillar(pid); };
 
         // Decide how many additional pillars will be needed:
@@ -993,6 +999,8 @@ void DefaultSupportTree::interconnect_pillars()
                           m_sm.cfg.base_radius_mm + EPSILON;
 
         while(!found && alpha < 2*PI) {
+            m_thr(); // one round of the 20 tried angles (M4.16)
+
             for (unsigned n = 0;
                  n < needpillars && (!n || canplace[n - 1]);
                  n++)

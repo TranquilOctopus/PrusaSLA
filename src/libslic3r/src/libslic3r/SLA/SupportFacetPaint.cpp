@@ -126,6 +126,10 @@ std::vector<Domain::ExPolygons> painted_facet_regions(const indexed_triangle_set
 
     std::vector<Domain::ExPolygons> regions(heights.size());
     for (size_t layer_id = 0; layer_id < heights.size(); ++layer_id) {
+        // One layer is one union of the facets that reach it, which is the finest step here: a
+        // layer with nothing painted in it is skipped below without any work (M4.16).
+        throw_on_cancel();
+
         Domain::Polygons collected;
         auto collect = [&collected](const std::vector<Domain::Polygons> &from, size_t index) {
             if (index >= from.size())
@@ -164,6 +168,10 @@ void collect_painted_regions(const indexed_triangle_set   &facets,
     has_regions = false;
     std::vector<Domain::ExPolygons> regions = painted_facet_regions(facets, heights, throw_on_cancel);
     for (size_t layer_id = 0; layer_id < regions.size() && layer_id < out.size(); ++layer_id) {
+        // The offset of a blocked region is one clipper run over the whole outline of the layer,
+        // so the layers are the steps here (M4.16).
+        throw_on_cancel();
+
         if (regions[layer_id].empty())
             continue;
         if (into_blockers)

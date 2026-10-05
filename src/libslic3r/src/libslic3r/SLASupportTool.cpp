@@ -122,8 +122,15 @@ SupportToolTree build_support_tree_for_tool(const SupportToolModelMesh& model_me
 
         // Points are in object's mesh frame; transform to world frame
         Domain::SLA::SupportPoints world_points = points;
-        for (auto& sp : world_points) {
-            sp.pos = (object_to_world * sp.pos.cast<double>()).cast<float>();
+        {
+            // The points of a big model are millions of them, and this walk is one of the steps of
+            // the build, so it asks the stop function on the way (M4.16).
+            size_t id = 0;
+            for (auto& sp : world_points) {
+                if ((id++ % 4096) == 0)
+                    ctl.cancelfn();
+                sp.pos = (object_to_world * sp.pos.cast<double>()).cast<float>();
+            }
         }
 
         // Create SupportableMesh (aggregate: cfg and pad_cfg have no default ctor)
@@ -276,8 +283,14 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const SupportToolMod
 
         // Transform points back to object's mesh frame
         Domain::Transform3d world_to_object = object_to_world.inverse();
-        for (auto& sp : support_points) {
-            sp.pos = (world_to_object * sp.pos.cast<double>()).cast<float>();
+        {
+            // The same walk as above, on the way back (M4.16).
+            size_t id = 0;
+            for (auto& sp : support_points) {
+                if ((id++ % 4096) == 0)
+                    throw_on_cancel();
+                sp.pos = (world_to_object * sp.pos.cast<double>()).cast<float>();
+            }
         }
 
         return support_points;

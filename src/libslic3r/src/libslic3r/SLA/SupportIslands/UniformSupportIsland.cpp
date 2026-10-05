@@ -59,6 +59,19 @@ namespace Voronoi = Slic3r::Biz::CGAL::Algorithms::Voronoi;
 
 namespace BB = Biz::Algorithms::BoundingBox;
 
+// How often a loop over samples, points or skeleton edges asks the caller's cancel function
+// (M4.16). Every step between two checks of the island sampler is orders of magnitude more work
+// than the check itself, so the check is not what any of these loops spends its time on.
+constexpr size_t island_cancel_check_every = 256;
+
+/// Asks the cancel function once every @island_cancel_check_every-th item of a long loop. Item zero
+/// asks right away, which is what an empty and a one-item loop both want.
+void ask_cancel(size_t i, const ThrowOnCancel &thr)
+{
+    if ((i % island_cancel_check_every) == 0)
+        thr();
+}
+
 /// <summary>
 /// Replace first occurence of string
 /// TODO: Generalize and Move into string utils
@@ -218,6 +231,9 @@ SVG draw_island_graph(const std::string &path, const ExPolygon &island,
 }
 #endif // OPTION_TO_STORE_ISLAND
 
+// The namespace of the cancel function is spelled out below: this file pulls both Slic3r and
+// Slic3r::sla into scope and each of them has a detail namespace, so a bare `detail` would be
+// ambiguous.
 /// <summary>
 /// keep same distances between support points
 /// call once align
@@ -227,7 +243,8 @@ SVG draw_island_graph(const std::string &path, const ExPolygon &island,
 /// <param name="config"> Sampling configuration
 /// Maximal distance between neighbor points +
 /// Term criteria for align: Minimal sample move and Maximal count of iteration</param>
-void align_samples(SupportIslandPoints &samples, const ExPolygon &island, const SampleConfig &config);
+void align_samples(SupportIslandPoints &samples, const ExPolygon &island, const SampleConfig &config,
+                   ThrowOnCancel thr = &sla::detail::generator_no_throw_on_cancel);
 
 void draw(SVG &svg, const SupportIslandPoints &supportIslandPoints, coord_t radius, bool write_type = true);
 
@@ -362,7 +379,8 @@ bool is_points_in_distance(const Point & p,
 }
 #endif // NDEBUG
 
-void move_duplicit_positions(SupportIslandPoints &supports, const Points &prev_position) {
+void move_duplicit_positions(SupportIslandPoints &supports, const Points &prev_position,
+    ThrowOnCancel thr) {
     // remove duplicit points when exist
     Points aligned = to_points(supports);
     std::vector<size_t> sorted(aligned.size());
@@ -387,7 +405,12 @@ void move_duplicit_positions(SupportIslandPoints &supports, const Points &prev_p
         return sorted.size();
     };
 
+    size_t pass = 0;
     do {
+        // Every pass is one move of one duplicate and one resort of the whole run, so a run of
+        // duplicates is a run of passes (M4.16).
+        ask_cancel(pass++, thr);
+
         size_t duplicit_index = get_duplicit_index(sorted, aligned);
         if (duplicit_index >= sorted.size())
             return; // without duplicit points
@@ -414,7 +437,8 @@ void move_duplicit_positions(SupportIslandPoints &supports, const Points &prev_p
 coord_t align_once(
     SupportIslandPoints &supports, 
     const ExPolygon &island, 
-    const SampleConfig &config) 
+    const SampleConfig &config,
+    ThrowOnCancel thr) 
 {  
     // IMPROVE: Do not calculate voronoi diagram out of island(only triangulate island)
     // https://stackoverflow.com/questions/23823345/how-to-construct-a-voronoi-diagram-inside-a-polygon 
@@ -445,6 +469,8 @@ coord_t align_once(
     // Maximal move during align each loop of align it should decrease
     coord_t max_move = 0;
     for (size_t i = 0; i < supports.size(); i++) {
+        ask_cancel(i, thr);
+
         const Polygon &cell_polygon = cell_polygons[i];
         SupportIslandPointPtr &support = supports[i];
 
@@ -524,11 +550,12 @@ coord_t align_once(
 #endif // SLA_SAMPLE_ISLAND_UTILS_STORE_ALIGN_ONCE_TO_SVG_PATH
     }
 
-    move_duplicit_positions(supports, points);
+    move_duplicit_positions(supports, points, thr);
     return max_move;
 }
 
-void align_samples(SupportIslandPoints &samples, const ExPolygon &island, const SampleConfig & config)
+void align_samples(SupportIslandPoints &samples, const ExPolygon &island, const SampleConfig & config,
+    ThrowOnCancel thr)
 {
     if (samples.size() == 1)
         return; // Do not align one support
@@ -550,7 +577,11 @@ void align_samples(SupportIslandPoints &samples, const ExPolygon &island, const 
     size_t count_iteration = config.count_iteration; // copy
     coord_t max_move        = 0;
     while (--count_iteration > 1) {
-        max_move = align_once(samples, island, config);        
+        // One iteration is one voronoi diagram over every sample of the island, the most expensive
+        // thing the sampler does, so the cancel is asked between two iterations (M4.16).
+        thr();
+
+        max_move = align_once(samples, island, config, thr);
         if (max_move < config.minimal_move) break;
     }
 
@@ -569,11 +600,12 @@ void align_samples(SupportIslandPoints &samples, const ExPolygon &island, const 
 }
 
 void align_samples_with_permanent(
-    SupportIslandPoints &samples, const ExPolygon &island, const Points& permanent, const SampleConfig &config)
+    SupportIslandPoints &samples, const ExPolygon &island, const Points& permanent,
+    const SampleConfig &config, ThrowOnCancel thr)
 {
     assert(!permanent.empty());
     if (permanent.empty())
-        return align_samples(samples, island, config);
+        return align_samples(samples, island, config, thr);
     
     // detect whether add adding support points 
     size_t tolerance = 1 + size_t(permanent.size() * 0.1); // 1 + 10% of permanent points
@@ -590,6 +622,8 @@ void align_samples_with_permanent(
         return points[idx][dim]; };
     KDTreeIndirect<2, coord_t, decltype(point_accessor)> tree(point_accessor, samples.size());
     for (size_t i = 0; i < permanent.size(); ++i) {
+        ask_cancel(i, thr);
+
         std::array<size_t, 5> closests = find_closest_points<5>(tree, permanent[i]);        
         bool found_closest = false;
         for (size_t idx : closests) {
@@ -620,7 +654,7 @@ void align_samples_with_permanent(
         samples.push_back(
             std::make_unique<SupportIslandNoMovePoint>(p, SupportIslandPoint::Type::permanent));
     
-    align_samples(samples, island, config);
+    align_samples(samples, island, config, thr);
 
     // remove permanent samples inserted for aligning
     samples.erase(std::remove_if(samples.begin(), samples.end(), [](const SupportIslandPointPtr &sample) {
@@ -675,8 +709,10 @@ using ThickParts = std::vector<ThickPart>;
 /// <param name="part">One thin part of island</param>
 /// <param name="results">[OUTPUT]Set of support points</param>
 /// <param name="config">Define density of support points</param>
+/// <param name="thr">Ask for a stop while the skeleton of the part is walked (M4.16)</param>
 void create_supports_for_thin_part(
-    const ThinPart &part, SupportIslandPoints &results, const SampleConfig &config
+    const ThinPart &part, SupportIslandPoints &results, const SampleConfig &config,
+    ThrowOnCancel thr
 ) {
     struct SupportIn
     {
@@ -702,7 +738,10 @@ void create_supports_for_thin_part(
     bool is_first_neighbor = true; // help to skip checking first neighbor exist in process
 
     // Loop over thin part of island to create support points on the voronoi skeleton.
+    size_t edge_id = 0;
     while (curr.neighbor != nullptr || !process.empty()) {
+        ask_cancel(edge_id++, thr);
+
         if (curr.neighbor == nullptr) { // need to pop next one from process
             curr = process.back();      // copy
             process.pop_back();
@@ -814,13 +853,17 @@ using WideTinyChanges = std::vector<WideTinyChange>;
 /// <param name="input">input.node lay inside of part</param>
 /// <param name="ends">Limits of part, should be accesibly only from one side</param>
 /// <returns>Source line indices of island part</returns>
-std::vector<size_t> get_line_indices(const Neighbor* input, const Positions& ends) {
+std::vector<size_t> get_line_indices(const Neighbor* input, const Positions& ends,
+    ThrowOnCancel thr) {
     std::vector<size_t> indices;
     // Process queue
     std::vector<const Neighbor *> process;
     const Neighbor *current = input;
+    size_t edge_id = 0;
     // Loop over thin part of island to create support points on the voronoi skeleton.
     while (current != nullptr || !process.empty()) {
+        ask_cancel(edge_id++, thr);
+
         if (current == nullptr) {       // need to pop next one from process
             current = process.back();   // copy
             process.pop_back();
@@ -1143,7 +1186,8 @@ std::map<size_t, WideTinyChanges> create_wide_tiny_changes(const Positions& part
 }
 
 // IMPROVE do not use pointers on node but pointers on Neighbor
-Field create_thick_field(const ThickPart& part, const Lines &lines, const SampleConfig &config)
+Field create_thick_field(const ThickPart& part, const Lines &lines, const SampleConfig &config,
+    ThrowOnCancel thr)
 {    
     // store shortening of outline segments
     //   line index, vector<next line index + 2x shortening points>
@@ -1248,7 +1292,7 @@ Field create_thick_field(const ThickPart& part, const Lines &lines, const Sample
     };
     
     // all source line indices belongs to thick part of island
-    std::vector<size_t> field_line_indices = get_line_indices(part.start, part.ends);  
+    std::vector<size_t> field_line_indices = get_line_indices(part.start, part.ends, thr);  
 
     // Collect outer points of field
     Points points;
@@ -1278,7 +1322,10 @@ Field create_thick_field(const ThickPart& part, const Lines &lines, const Sample
             }
     } // flush svg file
 #endif // SLA_SAMPLE_ISLAND_UTILS_STORE_FIELD_TO_SVG_PATH
+    size_t outline_step = 0;
     do {
+        ask_cancel(outline_step++, thr);
+
         if (!insert_changes(outline_index, points, done_indices, input_index))
             break;        
         inser_point_b(outline_index, points, done_indices);
@@ -1297,7 +1344,10 @@ Field create_thick_field(const ThickPart& part, const Lines &lines, const Sample
     ExPolygon border{Polygon{points}};
     // finding holes(another closed polygon)
     if (done_indices.size() < field_line_indices.size()) {
+        size_t hole_step = 0;
         for (const size_t &index : field_line_indices) {
+            ask_cancel(hole_step++, thr);
+
             if(done_indices.find(index) != done_indices.end()) continue;
             // new  hole
             Points hole_points;
@@ -1336,8 +1386,9 @@ Field create_thick_field(const ThickPart& part, const Lines &lines, const Sample
 /// </summary>
 /// <param name="expoly">Input area to sample.(scaled)</param>
 /// <param name="triangle_side">Distance between samples.</param>
+/// <param name="thr">Ask for a stop between two rows of the pattern (M4.16)</param>
 /// <returns>Uniform samples(scaled)</returns>
-Slic3r::Points sample_expolygon(const ExPolygon &expoly, coord_t triangle_side){
+Slic3r::Points sample_expolygon(const ExPolygon &expoly, coord_t triangle_side, ThrowOnCancel thr){
     const Points &points = expoly.contour.points;
     assert(!points.empty());
     // get y range
@@ -1374,7 +1425,11 @@ Slic3r::Points sample_expolygon(const ExPolygon &expoly, coord_t triangle_side){
     Points result;
     size_t start_index = 0;
     bool is_odd = false;
+    size_t row = 0;
     for (coord_t y = min_y + triangle_height / 2; y < max_y; y += triangle_height) {
+        // One row of a big region is thousands of samples of a metre wide layer (M4.16).
+        ask_cancel(row++, thr);
+
         is_odd = !is_odd;
         std::vector<coord_t> intersections;
         bool increase_start_index = true;
@@ -1418,9 +1473,13 @@ Slic3r::Points sample_expolygon(const ExPolygon &expoly, coord_t triangle_side){
 /// <summary>
 /// Same as sample_expolygon but offseted by centroid and rotate by farrest point from centroid
 /// </summary>
-Slic3r::Points sample_expolygons_with_centering(const ExPolygons &expolys, coord_t triangle_side) {
+Slic3r::Points sample_expolygons_with_centering(const ExPolygons &expolys, coord_t triangle_side,
+    ThrowOnCancel thr) {
     Points result;
+    size_t polygon_id = 0;
     for (const ExPolygon &expoly : expolys) {
+        ask_cancel(polygon_id++, thr);
+
         assert(!expoly.contour.empty());
         if (expoly.contour.size() < 3)
             continue;
@@ -1440,7 +1499,7 @@ Slic3r::Points sample_expolygons_with_centering(const ExPolygons &expolys, coord
         double angle = atan2(extrem.y() - center.y(), extrem.x() - center.x());
         ExPolygon expoly_tr = expoly; // copy
         expoly_tr.rotate(angle, center);
-        Points samples = sample_expolygon(expoly_tr, triangle_side);
+        Points samples = sample_expolygon(expoly_tr, triangle_side, thr);
         for (Point &sample : samples) 
             sample = Domain::rotated(sample, -angle, center);
         append(result, samples);        
@@ -1454,7 +1513,7 @@ Slic3r::Points sample_expolygons_with_centering(const ExPolygons &expolys, coord
 /// <param name="field">Input field</param>
 /// <param name="config">Parameters for sampling.</param>
 /// <returns>support for outline</returns>
-SupportIslandPoints sample_outline(const Field &field, const SampleConfig &config){
+SupportIslandPoints sample_outline(const Field &field, const SampleConfig &config, ThrowOnCancel thr){
     coord_t max_align_distance = config.max_align_distance;
     coord_t sample_distance = config.thick_outline_max_distance;
     SupportIslandPoints result;
@@ -1619,7 +1678,10 @@ SupportIslandPoints sample_outline(const Field &field, const SampleConfig &confi
 
     // Sample inner outlines
     size_t index_offset = 0;
+    size_t polygon_id = 0;
     for (const ExPolygon & inner: field.inner) {
+        ask_cancel(polygon_id++, thr);
+
         sample_polygon(inner.contour, index_offset);
         index_offset += inner.contour.size();
         for (const Polygon &hole: inner.holes) {
@@ -1639,19 +1701,21 @@ SupportIslandPoints sample_outline(const Field &field, const SampleConfig &confi
 /// <param name="results">OUTPUT support points</param>
 /// <param name="lines">Island contour(with holes)</param>
 /// <param name="config">Define support density (by grid size and contour step)</param>
+/// <param name="thr">Ask for a stop while the part is sampled (M4.16)</param>
 void create_supports_for_thick_part(const ThickPart &part, SupportIslandPoints &results, 
-    const Lines &lines, const SampleConfig &config) {
+    const Lines &lines, const SampleConfig &config, ThrowOnCancel thr) {
     // Create field for thick part of island
-    Field field = create_thick_field(part, lines, config);
+    Field field = create_thick_field(part, lines, config, thr);
     if (field.inner.empty())
         return; // no inner part
-    SupportIslandPoints outline_support = sample_outline(field, config);
+    SupportIslandPoints outline_support = sample_outline(field, config, thr);
     results.insert(results.end(), 
         std::move_iterator(outline_support.begin()),
         std::move_iterator(outline_support.end()));
     // Inner must survive after sample field for aligning supports(move along outline)
     auto inner = std::make_shared<ExPolygons>(field.inner);    
-    Points inner_points = sample_expolygons_with_centering(*inner, config.thick_inner_max_distance);    
+    Points inner_points =
+        sample_expolygons_with_centering(*inner, config.thick_inner_max_distance, thr);    
     std::transform(inner_points.begin(), inner_points.end(), std::back_inserter(results), 
         [&](const Point &point) { 
             return std::make_unique<SupportIslandInnerPoint>(
@@ -1893,9 +1957,11 @@ void merge_parts_and_fix_process(IslandParts &island_parts,
         --item.i; // decrease index
 }
 
-void merge_middle_parts_into_biggest_neighbor(IslandParts& island_parts) {
+void merge_middle_parts_into_biggest_neighbor(IslandParts& island_parts, ThrowOnCancel thr) {
     // Connect parts till there is no middle parts
     for (size_t index = 0; index < island_parts.size(); ++index) {
+        ask_cancel(index, thr);
+
         const IslandPart &island_part = island_parts[index];
         if (island_part.type != IslandPartType::middle) continue; // only middle parts
         // there must be change into middle part island always start as thin part
@@ -1921,10 +1987,15 @@ void merge_middle_parts_into_biggest_neighbor(IslandParts& island_parts) {
     }
 }
 
-void merge_same_neighbor_type_parts(IslandParts &island_parts) {
+void merge_same_neighbor_type_parts(IslandParts &island_parts, ThrowOnCancel thr) {
     // connect neighbor parts with same type
     for (size_t island_part_index = 0; island_part_index < island_parts.size(); ++island_part_index) {
+        size_t merge_id = 0;
         while (true) {
+            // Every round of this loop takes one part out, so a run of merges is a run of rounds
+            // (M4.16).
+            ask_cancel(merge_id++, thr);
+
             const IslandPart &island_part = island_parts[island_part_index];
             assert(island_part.type != IslandPartType::middle); // only thin or thick parts        
             const IslandPartChanges &changes = island_part.changes;
@@ -1944,8 +2015,12 @@ void merge_same_neighbor_type_parts(IslandParts &island_parts) {
 /// </summary>
 /// <param name="changes">transition into different part island</param>
 /// <param name="center">[optional]Center of longest path</param>
+/// <param name="thr">Ask for a stop while the graph of the part is walked (M4.16)</param>
 /// <returns>Length of island part defined as longest distance on graph inside part</returns>
-coord_t get_longest_distance(const IslandPartChanges& changes, Position* center = nullptr) {
+coord_t get_longest_distance(const IslandPartChanges& changes, Position* center,
+    ThrowOnCancel thr) {
+    thr();
+
     const Neighbor *front_twin = VoronoiGraphUtils::get_twin(*changes.front().position.neighbor);
     if (changes.size() == 2 && front_twin == changes.back().position.neighbor) {
         // Special case when part lay only on one neighbor
@@ -2253,7 +2328,8 @@ std::pair<size_t, std::vector<size_t>> merge_negihbor(IslandParts &island_parts,
 /// </summary>
 /// <param name="island_parts">Only thin or thick parts</param>
 /// <param name="min_part_length">Minimal length of part to not be merged into neighbors</param>
-void merge_short_parts(IslandParts &island_parts, coord_t min_part_length) {    
+/// <param name="thr">Ask for a stop while the parts are merged (M4.16)</param>
+void merge_short_parts(IslandParts &island_parts, coord_t min_part_length, ThrowOnCancel thr) {    
     // should be called only for multiple island parts, at least 2
     assert(island_parts.size() > 1);
     if (island_parts.size() <= 1) return; // nothing to merge
@@ -2266,10 +2342,13 @@ void merge_short_parts(IslandParts &island_parts, coord_t min_part_length) {
     std::vector<coord_t> part_lengths;
     part_lengths.reserve(island_parts.size());
     for (const IslandPart& island_part: island_parts)
-        part_lengths.push_back(get_longest_distance(island_part.changes));
+        part_lengths.push_back(get_longest_distance(island_part.changes, nullptr, thr));
 
     // Merge island parts in order from shortest length
+    size_t merge_id = 0;
     while(true){
+        ask_cancel(merge_id++, thr);
+
         // find smallest part
         size_t smallest_part_index = std::min_element(part_lengths.begin(), part_lengths.end()) - part_lengths.begin();
         if (part_lengths[smallest_part_index] >= min_part_length)
@@ -2280,7 +2359,7 @@ void merge_short_parts(IslandParts &island_parts, coord_t min_part_length) {
             return; // only longest part left
 
         // update part lengths
-        part_lengths[index] = get_longest_distance(island_parts[index].changes);
+        part_lengths[index] = get_longest_distance(island_parts[index].changes, nullptr, thr);
         for (auto remove_index_it = remove_indices.rbegin();
              remove_index_it != remove_indices.rend(); 
             ++remove_index_it)
@@ -2317,7 +2396,7 @@ const VoronoiGraph::Node::Neighbor *get_smallest_source_index(const Positions& p
 }
 
 std::pair<ThinParts, ThickParts> convert_island_parts_to_thin_thick(
-    const IslandParts& island_parts, const VoronoiGraph::ExPath &path)
+    const IslandParts& island_parts, const VoronoiGraph::ExPath &path, ThrowOnCancel thr)
 {
     // always must be at least one island part
     assert(!island_parts.empty());
@@ -2333,7 +2412,10 @@ std::pair<ThinParts, ThickParts> convert_island_parts_to_thin_thick(
     std::pair<ThinParts, ThickParts> result;
     ThinParts& thin_parts = result.first;
     ThickParts& thick_parts = result.second;
+    size_t part_id = 0;
     for (const IslandPart& i:island_parts) {
+        ask_cancel(part_id++, thr);
+
         // Only one island item is solved earlier, soo each part has to have changes
         assert(!i.changes.empty());
         Positions ends;
@@ -2345,7 +2427,7 @@ std::pair<ThinParts, ThickParts> convert_island_parts_to_thin_thick(
         if (i.type == IslandPartType::thin) {
             // Calculate center of longest distance, discard distance
             Position center;
-            get_longest_distance(i.changes, &center);
+            get_longest_distance(i.changes, &center, thr);
             thin_parts.push_back(ThinPart{center, std::move(ends)});
         } else {
             assert(i.type == IslandPartType::thick);
@@ -2522,9 +2604,11 @@ bool exist_twin_change_in_part(const IslandParts &parts){
 /// <param name="lines">Island border</param>
 /// <param name="config">Define border between thin and thick part 
 /// and minimal length of separable part</param>
+/// <param name="thr">Ask for a stop while the skeleton of the island is walked (M4.16)</param>
 /// <returns>Thin and thick parts</returns>
 std::pair<ThinParts, ThickParts> separate_thin_thick(
-    const VoronoiGraph::ExPath &path, const Lines &lines, const SampleConfig &config
+    const VoronoiGraph::ExPath &path, const Lines &lines, const SampleConfig &config,
+    ThrowOnCancel thr
 ) {
     // Check input
     assert(!path.nodes.empty());
@@ -2541,7 +2625,12 @@ std::pair<ThinParts, ThickParts> separate_thin_thick(
     IslandParts island_parts{IslandPart{IslandPartType::thin, /*changes*/{}, /*sum_lengths*/0}};
     ProcessItem item = {/*prev_node*/ nullptr, start_node, 0}; // current processing item
     ProcessItems process; // queue of nodes to process     
+    size_t node_id = 0;
     do { // iterate over all nodes in graph and collect interfaces into island_parts
+        // One node of the skeleton of a big island can carry thousands of edges, so this asks on
+        // the way (M4.16).
+        ask_cancel(node_id++, thr);
+
 //#ifdef SLA_SAMPLE_ISLAND_UTILS_DEBUG_PARTS_PATH
 //        draw(island_parts, process, item, lines);
 //#endif // SLA_SAMPLE_ISLAND_UTILS_DEBUG_PARTS_PATH
@@ -2582,16 +2671,16 @@ std::pair<ThinParts, ThickParts> separate_thin_thick(
     draw(island_parts, process, item, lines);
 #endif // SLA_SAMPLE_ISLAND_UTILS_DEBUG_PARTS_PATH
 
-    merge_middle_parts_into_biggest_neighbor(island_parts);
+    merge_middle_parts_into_biggest_neighbor(island_parts, thr);
     if (island_parts.size() != 1)
-        merge_same_neighbor_type_parts(island_parts);
+        merge_same_neighbor_type_parts(island_parts, thr);
     if (island_parts.size() != 1)
-        merge_short_parts(island_parts, config.min_part_length);
+        merge_short_parts(island_parts, config.min_part_length, thr);
     assert(!exist_twin_change_in_part(island_parts));
 #ifdef SLA_SAMPLE_ISLAND_UTILS_DEBUG_PARTS_PATH
     draw(island_parts, {}, {}, lines);
 #endif // SLA_SAMPLE_ISLAND_UTILS_DEBUG_PARTS_PATH
-    return convert_island_parts_to_thin_thick(island_parts, path);
+    return convert_island_parts_to_thin_thick(island_parts, path, thr);
 }
 
 /// <summary>
@@ -2656,7 +2745,7 @@ void draw(SVG &svg, const SupportIslandPoints &supportIslandPoints, coord_t radi
 //////////////////////////////
 namespace Slic3r::sla {
 SupportIslandPoints uniform_support_island(
-    const ExPolygon &island, const Points& permanent, const SampleConfig &config){
+    const ExPolygon &island, const Points& permanent, const SampleConfig &config, ThrowOnCancel thr){
     ExPolygon simplified_island = get_simplified(island, config);
 #ifdef OPTION_TO_STORE_ISLAND
     std::string path;
@@ -2712,6 +2801,10 @@ SupportIslandPoints uniform_support_island(
     assert(start_node != nullptr);
     longest_path = VoronoiGraphUtils::create_longest_path(start_node);
 
+    // The diagram and the skeleton of a metre wide island are built in one go by CGAL, so this is
+    // the finest step between them and between the steps below (M4.16).
+    thr();
+
 #ifdef OPTION_TO_STORE_ISLAND // add voronoi diagram with longest path into image
     if (!path.empty()) draw_island_graph(path, island, simplified_island, skeleton, longest_path, lines, config);
 #endif // OPTION_TO_STORE_ISLAND
@@ -2749,10 +2842,17 @@ SupportIslandPoints uniform_support_island(
 
     // 4) Divide island on Thin & Thick part and support by parts
     SupportIslandPoints supports;
-    auto [thin, thick] = separate_thin_thick(longest_path, lines, config);
+    auto [thin, thick] = separate_thin_thick(longest_path, lines, config, thr);
     assert(!thin.empty() || !thick.empty());
-    for (const ThinPart &part : thin) create_supports_for_thin_part(part, supports, config);
-    for (const ThickPart &part : thick) create_supports_for_thick_part(part, supports, lines, config);
+    size_t part_id = 0;
+    for (const ThinPart &part : thin) {
+        ask_cancel(part_id++, thr);
+        create_supports_for_thin_part(part, supports, config, thr);
+    }
+    for (const ThickPart &part : thick) {
+        ask_cancel(part_id++, thr);
+        create_supports_for_thick_part(part, supports, lines, config, thr);
+    }
 
     // At least 2 support points are neccessary after thin/thick sampling heuristic
     if (supports.size() <= 2){
@@ -2777,9 +2877,9 @@ SupportIslandPoints uniform_support_island(
 
     // allign samples
     if (permanent.empty())
-        align_samples(supports, island, config);
+        align_samples(supports, island, config, thr);
     else 
-        align_samples_with_permanent(supports, island, permanent, config);
+        align_samples_with_permanent(supports, island, permanent, config, thr);
 
 #ifdef OPTION_TO_STORE_ISLAND
     if (!path.empty()) {
@@ -2802,7 +2902,8 @@ SupportIslandPoints uniform_support_island(
 
 // Follow implementation "create_supports_for_thick_part("
 SupportIslandPoints uniform_support_peninsula(
-    const Peninsula &peninsula, const Points& permanent, const SampleConfig &config){
+    const Peninsula &peninsula, const Points& permanent, const SampleConfig &config,
+    ThrowOnCancel thr){
     // create_peninsula_field
     float delta = static_cast<float>(config.minimal_distance_from_outline);
     Field field = create_field(peninsula.unsuported_area, delta, peninsula.is_outline);
@@ -2826,19 +2927,20 @@ SupportIslandPoints uniform_support_peninsula(
     }
 #endif // SLA_SAMPLE_ISLAND_UTILS_STORE_PENINSULA_FIELD_TO_SVG_PATH
 
-    SupportIslandPoints results = sample_outline(field, config);
+    SupportIslandPoints results = sample_outline(field, config, thr);
     // Inner must survive after sample field for aligning supports(move along outline)
     auto inner = std::make_shared<ExPolygons>(field.inner);    
-    Points inner_points = sample_expolygons_with_centering(*inner, config.thick_inner_max_distance);    
+    Points inner_points =
+        sample_expolygons_with_centering(*inner, config.thick_inner_max_distance, thr);    
     std::transform(inner_points.begin(), inner_points.end(), std::back_inserter(results), 
         [&inner](const Point &point) { return std::make_unique<SupportIslandInnerPoint>(
                                       point, inner, SupportIslandPoint::Type::thick_part_inner);});
     
     // allign samples
     if (permanent.empty())
-        align_samples(results, peninsula.unsuported_area, config);
+        align_samples(results, peninsula.unsuported_area, config, thr);
     else
-        align_samples_with_permanent(results, peninsula.unsuported_area, permanent, config);
+        align_samples_with_permanent(results, peninsula.unsuported_area, permanent, config, thr);
     return results;
 }
 
