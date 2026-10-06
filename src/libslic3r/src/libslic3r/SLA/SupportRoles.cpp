@@ -653,6 +653,23 @@ void classify_support_point_roles(
         bool stuck_on_raised_detail = false;
         const std::optional<LocalSurface> around =
             probe_surface_around(mesh, p, n, thresholds.detail_flatness_mm);
+
+        // R4.4 fix: when a local surface plane is found, also measure thickness along its normal.
+        // The point normal at a sharp feature (e.g. pyramid apex) can be nearly horizontal, making
+        // the single ray measure a sub-detail width instead of the part thickness. The fitted plane
+        // normal represents the underlying surface orientation; use the larger of the two thicknesses.
+        double thickness_plane = thickness;
+        if (around.has_value()) {
+            const TangentPlane plane = tangent_plane(n);
+            // Fitted plane normal: n + slope.x()*first - slope.y()*second (normalized).
+            const Vec3d fitted_normal = (n + around->slope.x() * plane.first - around->slope.y() * plane.second).normalized();
+            if (fitted_normal.allFinite() && fitted_normal.squaredNorm() > 1e-18) {
+                const double t = thickness_at(mesh, p, fitted_normal);
+                if (t > thickness_plane)
+                    thickness_plane = t;
+            }
+        }
+
         if (around.has_value()
             && is_raised_detail(
                 *around,
@@ -670,12 +687,13 @@ void classify_support_point_roles(
                 n         = spot->normal;
                 point.pos = p.cast<float>();
                 thickness = thickness_at(mesh, p, n);
+                thickness_plane = thickness; // moved to plain spot: single ray is reliable
             }
         }
 
         // R4.4: a thin feature. R4.9 may still override to Detail (except for anchors).
         Role role = Role::Overhang;
-        if (is_fragile(p, thickness, layers, layer_height, thresholds)) {
+        if (is_fragile(p, thickness_plane, layers, layer_height, thresholds)) {
             role = Role::Fragile;
         }
 
