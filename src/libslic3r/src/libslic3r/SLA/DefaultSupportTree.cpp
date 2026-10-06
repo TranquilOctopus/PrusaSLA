@@ -986,19 +986,6 @@ void DefaultSupportTree::interconnect_pillars()
         if (!pillar_may_brace(pillar()))
             continue;
 
-        // Also skip if there are no other braceable pillars to connect to
-        // (stability pillars would only connect to each other, which is not useful).
-        bool has_other_braceable = false;
-        for (size_t other_pid = 0; other_pid < pillarcount; ++other_pid) {
-            if (other_pid == pid) continue;
-            if (pillar_may_brace(m_builder.pillar(other_pid))) {
-                has_other_braceable = true;
-                break;
-            }
-        }
-        if (!has_other_braceable)
-            continue;
-
         // Decide how many additional pillars will be needed:
 
         unsigned needpillars = 0;

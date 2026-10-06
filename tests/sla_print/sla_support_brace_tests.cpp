@@ -101,6 +101,14 @@ struct Bracing
     size_t links         = 0; // pillar to pillar links
     double radius        = 0.; // radius of the braces, they are all the same
     double pillar_radius = 0.; // radius of the pillars, they are all the same
+
+    // Per-pillar info for the two original support points (indices 0 and 1).
+    // Only valid when the tree was built from exactly those two points.
+    struct PillarInfo {
+        size_t links = 0;
+        size_t brace_ends = 0; // how many crossbridges end at this pillar
+    };
+    std::array<PillarInfo, 2> point_pillars{};
 };
 
 Bracing build_bracing(const Slic3r::sla::SupportableMesh& sm)
@@ -115,9 +123,25 @@ Bracing build_bracing(const Slic3r::sla::SupportableMesh& sm)
     for (const Slic3r::sla::Pillar& pillar : builder.pillars()) {
         ret.links += pillar.links;
         ret.pillar_radius = pillar.r_start;
+
+        // Track per-pillar info for the two original support points (indices 0 and 1).
+        if (pillar.starts_from_head && pillar.start_junction_id >= 0 && pillar.start_junction_id < 2) {
+            size_t idx = static_cast<size_t>(pillar.start_junction_id);
+            ret.point_pillars[idx].links = pillar.links;
+        }
     }
-    for (const Slic3r::sla::Bridge& brace : builder.crossbridges())
+    for (const Slic3r::sla::Bridge& brace : builder.crossbridges()) {
         ret.radius = brace.r;
+        // Count brace ends on the two original pillars.
+        for (const Slic3r::sla::Pillar& pillar : builder.pillars()) {
+            if (pillar.starts_from_head && pillar.start_junction_id >= 0 && pillar.start_junction_id < 2) {
+                if (brace.startp == pillar.startpoint() || brace.endp == pillar.startpoint()) {
+                    size_t idx = static_cast<size_t>(pillar.start_junction_id);
+                    ret.point_pillars[idx].brace_ends++;
+                }
+            }
+        }
+    }
 
     return ret;
 }
@@ -213,12 +237,19 @@ TEST_CASE("A support point that says Off is left out of every brace", "[suptreet
         const Bracing bracing =
             build_bracing(make_supportable_mesh_with(braceable_points_with(Brace::Off, Brace::Inherit)));
 
-        // The pillar of the first point is left out of the only brace there is, so the tree has
-        // none left: a brace needs two ends that both asked for one.
-        CHECK(bracing.braces == 0);
-        // The pillars themselves are untouched, they only do not lean on each other.
-        CHECK(bracing.pillars == 2);
-        CHECK(bracing.links == 0);
+        // The first point says Off: its pillar must have no links and no brace ends.
+        CHECK(bracing.point_pillars[0].links == 0);
+        CHECK(bracing.point_pillars[0].brace_ends == 0);
+
+        // The second point inherits: it is now lonely, so it gets stability pillars.
+        // Total pillars: 2 original + 1 stability = 3.
+        CHECK(bracing.pillars == 3);
+        // Braces exist between the second pillar and its stability pillar.
+        CHECK(bracing.braces > 0);
+        // The two original pillars are not linked to each other.
+        CHECK(bracing.point_pillars[1].links == 0);
+        // The second pillar has links to its stability pillar(s).
+        CHECK(bracing.point_pillars[1].brace_ends > 0);
     }
 
     SECTION("the second point says Off and the first inherits")
@@ -226,8 +257,17 @@ TEST_CASE("A support point that says Off is left out of every brace", "[suptreet
         const Bracing bracing =
             build_bracing(make_supportable_mesh_with(braceable_points_with(Brace::Inherit, Brace::Off)));
 
-        CHECK(bracing.braces == 0);
-        CHECK(bracing.pillars == 2);
+        // The second point says Off: its pillar must have no links and no brace ends.
+        CHECK(bracing.point_pillars[1].links == 0);
+        CHECK(bracing.point_pillars[1].brace_ends == 0);
+
+        // The first point inherits: it is now lonely, so it gets stability pillars.
+        CHECK(bracing.pillars == 3);
+        CHECK(bracing.braces > 0);
+        // The two original pillars are not linked to each other.
+        CHECK(bracing.point_pillars[0].links == 0);
+        // The first pillar has links to its stability pillar(s).
+        CHECK(bracing.point_pillars[0].brace_ends > 0);
     }
 
     SECTION("both points say Off")
@@ -245,10 +285,18 @@ TEST_CASE("A support point that says Off is left out of every brace", "[suptreet
         const Bracing bracing =
             build_bracing(make_supportable_mesh_with(braceable_points_with(Brace::Off, Brace::On)));
 
-        // On is a request of its own, but it is a request for a brace, and a brace hangs between two
-        // pillars. One of the two says Off, so there is no brace at all here.
-        CHECK(bracing.braces == 0);
-        CHECK(bracing.pillars == 2);
+        // The first point says Off: its pillar must have no links and no brace ends.
+        CHECK(bracing.point_pillars[0].links == 0);
+        CHECK(bracing.point_pillars[0].brace_ends == 0);
+
+        // The second point says On: it is braceable and lonely (neighbour is Off),
+        // so it gets stability pillars.
+        CHECK(bracing.pillars == 3);
+        CHECK(bracing.braces > 0);
+        // The two original pillars are not linked to each other.
+        CHECK(bracing.point_pillars[1].links == 0);
+        // The second pillar has links to its stability pillar(s).
+        CHECK(bracing.point_pillars[1].brace_ends > 0);
     }
 }
 
