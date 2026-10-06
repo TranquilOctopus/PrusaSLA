@@ -1,5 +1,11 @@
 #include "Slic3r/App/Plater/SlaSupportAutoPresets.hpp"
 
+#include "Slic3r/App/Plater/SlaSupportRoles.hpp"
+
+#include <cstddef>
+#include <optional>
+#include <string>
+
 namespace Slic3r::App::Plater {
 
 using Domain::SLA::SupportPoint;
@@ -43,6 +49,17 @@ bool is_sla_auto_support_base_point(
         <= lowest_z_mm + auto_support_base_layers * layer_height_mm;
 }
 
+const SlaSupportPreset& SlaAutoSupportPresets::class_of(const std::string& preset_name) const
+{
+    for (std::size_t index = 0; index < classes.size(); ++index) {
+        if (sla_support_preset_name(static_cast<int>(index)) == preset_name) {
+            return classes[index];
+        }
+    }
+    // A name the tool has no button for is the largest class, as it is in sla_support_preset().
+    return classes.back();
+}
+
 bool sla_auto_support_is_detailed(const SupportPoint& point)
 {
     // The role the generator gave the point is what says it stands in a detailed region: the engine
@@ -69,6 +86,18 @@ void sla_apply_auto_support_presets(
             continue;
         }
 
+        // A point the generator classified takes the whole tip class of its role (M7.8.8, the rule
+        // in sla_role_tip_class), the two settings of M2.37 deciding what a role is given.
+        if (const std::optional<std::string> tip_class =
+                sla_role_tip_class(point.role, choice.heavy_base, choice.detail);
+            tip_class.has_value())
+        {
+            apply_sla_support_preset(point, presets.class_of(*tip_class));
+            continue;
+        }
+
+        // A point with no role keeps the band rule of M2.37: the lowest island heavy, everything
+        // else the detail preset.
         const bool is_base = is_sla_auto_support_base_point(point, lowest_z_mm, layer_height_mm);
 
         // R4.9 (M7.8.5): a point in a detailed region takes the minimum class, except where it is
