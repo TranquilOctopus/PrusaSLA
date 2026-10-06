@@ -14,6 +14,7 @@
 // against the mesh of the model, not against a fixture someone measured before.
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_message.hpp>
 
 #include <algorithm>
 #include <array>
@@ -302,7 +303,7 @@ void info_role_histogram(const SupportPoints& points)
             counts[idx]++;
         }
     }
-    INFO("Role histogram: Unknown=" << counts[0]
+    UNSCOPED_INFO("Role histogram: Unknown=" << counts[0]
         << " Anchor=" << counts[1]
         << " Island=" << counts[2]
         << " SmallIsland=" << counts[3]
@@ -310,6 +311,12 @@ void info_role_histogram(const SupportPoints& points)
         << " Fragile=" << counts[5]
         << " AnchorLarge=" << counts[6]
         << " Detail=" << counts[7]);
+    for (const SupportPoint& point : points) {
+        const char* type_str = point.type == SupportPointType::island ? "island" : 
+                              point.type == SupportPointType::slope ? "slope" : "other";
+        UNSCOPED_INFO("point: type=" << type_str << " role=" << static_cast<int>(point.role)
+            << " pos=(" << point.pos.x() << ", " << point.pos.y() << ", " << point.pos.z() << ")");
+    }
 }
 
 /// Everything a class puts on a generated point, one role at a time: the tip is the class itself,
