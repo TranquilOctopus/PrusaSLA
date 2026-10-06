@@ -45,7 +45,6 @@
 using Catch::Approx;
 namespace triangle_mesh = Slic3r::Biz::Algorithms::TriangleMesh;
 
-using Slic3r::indexed_triangle_set;
 using Slic3r::App::Plater::apply_support_geometry;
 using Slic3r::App::Plater::auto_support_base_layers;
 using Slic3r::App::Plater::sla_apply_auto_support_presets;

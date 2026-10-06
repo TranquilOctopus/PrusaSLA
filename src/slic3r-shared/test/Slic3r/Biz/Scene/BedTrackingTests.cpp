@@ -8,8 +8,8 @@
 
 #include <memory>
 
-using Slic3r::BedTracking;
-using Slic3r::Biz::Algorithms::BoundingBox;
+using Slic3r::Biz::BedTracking;
+namespace BoundingBox = Slic3r::Biz::Algorithms::BoundingBox;
 using Slic3r::Biz::Algorithms::Bed::bed_contour_as_its;
 using Slic3r::Biz::Algorithms::Bed::BedContainmentState;
 using Slic3r::Domain::Bed;
