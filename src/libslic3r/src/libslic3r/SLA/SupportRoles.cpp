@@ -640,8 +640,13 @@ void classify_support_point_roles(
 
         double thickness = thickness_at(mesh, p, n);
 
-        // R4.5 comes first, because a point on a rivet or a stud holds whatever is under it from the
-        // plain spot next to it, and that spot is what the rest of the rules are then asked about.
+        // R4.5: a point on small surface detail (rivet, stud). Try to move it to the plain surface
+        // next to the detail. If it cannot move, remember that it is stuck on raised detail; the role
+        // will be decided after R4.4 and the base role (R4.1/R4.3/R4.6) so that:
+        //   - R4.4 (thin/fragile) wins over R4.1 (anchor) for spike tips.
+        //   - R4.1 (anchor of lowest island) wins over R4.9 (detailed region).
+        //   - R4.5 stuck on detail becomes Anchor if it is the lowest island, otherwise Fragile.
+        bool stuck_on_raised_detail = false;
         const std::optional<LocalSurface> around =
             probe_surface_around(mesh, p, n, thresholds.detail_flatness_mm);
         if (around.has_value()
@@ -654,10 +659,8 @@ void classify_support_point_roles(
             const std::optional<SurfaceSample> spot =
                 find_plain_spot(mesh, layers, p, n, *around, layer_height, thresholds);
             if (!spot.has_value()) {
-                // Nowhere plain to move to: the point stays on the detail. R4.9 may still override
-                // this to Detail if the region is detailed (R4.9 overrides whatever role, except
-                // the lowest-point anchor).
-                point.role = Role::Fragile;
+                // Nowhere plain to move to: the point stays on the detail. The role is decided later.
+                stuck_on_raised_detail = true;
             } else {
                 p         = spot->pos;
                 n         = spot->normal;
@@ -667,14 +670,13 @@ void classify_support_point_roles(
         }
 
         // R4.4: a thin feature. R4.9 may still override to Detail (except for anchors).
-        Role role = point.role;
-        if (role != Role::Fragile && is_fragile(p, thickness, layers, layer_height, thresholds)) {
+        Role role = Role::Overhang;
+        if (is_fragile(p, thickness, layers, layer_height, thresholds)) {
             role = Role::Fragile;
         }
 
-        // R4.6 / R4.3 / R4.1: base role if not already set by R4.4/R4.5.
+        // R4.6 / R4.3 / R4.1: base role if not already set by R4.4.
         if (role != Role::Fragile) {
-            role = Role::Overhang;
             if (point.is_island()) {
                 // R4.3, and with R4.1 the size of the island the point starts: the lowest island of the
                 // object is carried by its heavy anchors, every other island by its own size.
@@ -686,6 +688,14 @@ void classify_support_point_roles(
                     role = area < thresholds.small_island_area_mm2 ? Role::SmallIsland : Role::Island;
                 }
             }
+        }
+
+        // R4.5 stuck on raised detail: if the point could not move off the detail and is not already
+        // Fragile (R4.4 wins), it becomes Anchor if it is the lowest island (R4.1 wins), otherwise
+        // it takes the minimum tip as Fragile (R4.5 "shrink it to T0.1 when it cannot move").
+        if (stuck_on_raised_detail && role != Role::Fragile) {
+            if (!is_anchor(role))
+                role = Role::Fragile;
         }
 
         // R4.9 comes last, because it is the one rule of the four that overrides another: a point in
