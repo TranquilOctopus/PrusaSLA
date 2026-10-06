@@ -640,6 +640,10 @@ void classify_support_point_roles(
 
         double thickness = thickness_at(mesh, p, n);
 
+        // Whether this point is the anchor of the lowest island (R4.1), decided by where the
+        // generator put it, before R4.5 may move it to a plain spot beside the detail.
+        const bool lowest_island = point.is_island() && double(point.pos.z()) <= anchor_top;
+
         // R4.5: a point on small surface detail (rivet, stud). Try to move it to the plain surface
         // next to the detail. If it cannot move, remember that it is stuck on raised detail; the role
         // will be decided after R4.4 and the base role (R4.1/R4.3/R4.6) so that:
@@ -680,7 +684,7 @@ void classify_support_point_roles(
             if (point.is_island()) {
                 // R4.3, and with R4.1 the size of the island the point starts: the lowest island of the
                 // object is carried by its heavy anchors, every other island by its own size.
-                if (p.z() <= anchor_top) {
+                if (lowest_island) {
                     role = Role::Anchor;
                 } else {
                     const LayerAtPoint at = layer_part_at(layers, p, layer_height);
