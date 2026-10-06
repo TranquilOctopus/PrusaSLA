@@ -448,9 +448,11 @@ TEST_CASE("SLASupportTool: a branching tree gives up between two of its serialis
     // Since M4.5c the searches of the different leaves of a branching tree run one after the other
     // (the nlopt lock is held from the seeding to the end of nlopt_optimize()), so a stop can only
     // be seen from inside a search itself: that is what this case is for.
+    // Use more points and a taller pillar height so the serialised ground-connection searches take
+    // long enough for the stop condition to be observed.
     BoxModel box{1000., 1000., 1000.};
     box.object->instances.front()->set_offset({0., 0., 10.});
-    add_island_points(box.object, 1000., 2000);
+    add_island_points(box.object, 1000., 5000);
 
     Slic3r::Domain::Transform3d object_to_world = Slic3r::Domain::Transform3d::Identity();
     object_to_world.translate(Slic3r::Domain::Vec3d(0., 0., 10.));
@@ -459,6 +461,7 @@ TEST_CASE("SLASupportTool: a branching tree gives up between two of its serialis
     pack.sla_print_settings.items.opt("supports_enable").set(true);
     pack.sla_print_settings.items.opt("pad_enable").set(true);
     pack.sla_print_settings.items.opt("support_object_elevation").set(10.0);
+    pack.sla_print_settings.items.opt("branchingsupport_object_elevation").set(10.0);
     pack.sla_print_settings.items.opt("support_tree_type")
         .set(Slic3r::Domain::sla::SupportTreeType::Branching);
     SlaConfig config = make_sla_config(std::move(pack));
@@ -473,6 +476,11 @@ TEST_CASE("SLASupportTool: a branching tree gives up between two of its serialis
 
     INFO("asked to stop after " << stop.delay.count() << " ms, took "
                                 << stop.unwind_time(returned_at).count() << " ms to give up");
+    INFO("input points: " << box.object->sla_support_points.size());
+    INFO("tree.tree != nullptr: " << (tree.tree != nullptr));
+    INFO("tree.pad != nullptr: " << (tree.pad != nullptr));
+    INFO("tree.elevation_mm: " << tree.elevation_mm);
+    INFO("tree.raft: " << (tree.raft ? "present" : "none"));
     REQUIRE(stop.expired());
     CHECK(stop.unwind_time(returned_at) <= stop_budget);
     CHECK(tree.tree == nullptr);
