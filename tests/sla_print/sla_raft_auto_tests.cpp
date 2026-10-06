@@ -5,6 +5,7 @@
 // preview.
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_message.hpp>
 
 #include <future>
 #include <memory>
@@ -60,7 +61,7 @@ indexed_triangle_set box(double x_mm, double y_mm, double z_mm, double z0 = 0.)
 {
     indexed_triangle_set its = Slic3r::Biz::Algorithms::TriangleMesh::its_make_cube(x_mm, y_mm, z_mm);
     for (Slic3r::Domain::Vec3f& vertex : its.vertices) {
-        vertex += Slic3r::Domain::Vec3f(0.f, 0.f, float(z0));
+        vertex += Slic3r::Domain::Vec3f(float(-x_mm / 2.), float(-y_mm / 2.), float(z0));
     }
     return its;
 }
@@ -85,10 +86,10 @@ indexed_triangle_set
 cup_open_down(double x_mm, double y_mm, double z_mm, double wall_mm)
 {
     indexed_triangle_set its = box(x_mm, y_mm, z_mm);
-    // Cavity from -layer_height_mm to z_mm (height z_mm + layer_height_mm), so it intersects the box
-    // from 0 to z_mm - layer_height_mm, leaving a solid roof of thickness layer_height_mm at the top.
+    // Cavity from -layer_height_mm to z_mm - wall_mm (height z_mm - wall_mm + layer_height_mm),
+    // so it intersects the box from 0 to z_mm - wall_mm, leaving a solid roof of thickness wall_mm at the top.
     indexed_triangle_set cavity =
-        box(x_mm - 2. * wall_mm, y_mm - 2. * wall_mm, z_mm, -layer_height_mm);
+        box(x_mm - 2. * wall_mm, y_mm - 2. * wall_mm, z_mm - wall_mm + layer_height_mm, -layer_height_mm);
     MeshBoolean::cgal::minus(its, cavity);
     return its;
 }
@@ -461,7 +462,7 @@ TEST_CASE("auto_raft_decision finds the cup of a cup standing open side down", "
                 total_holes += expoly.holes.size();
                 total_area += std::abs(expoly.area()) * Slic3r::Biz::Algorithms::Scaling::SCALING_FACTOR * Slic3r::Biz::Algorithms::Scaling::SCALING_FACTOR;
             }
-            INFO(label << " layer " << idx << ": z=" << zs[idx] << " expolys=" << num_expolys
+            UNSCOPED_INFO(label << " layer " << idx << ": z=" << zs[idx] << " expolys=" << num_expolys
                  << " holes=" << total_holes << " area_mm2=" << total_area);
         }
     };
