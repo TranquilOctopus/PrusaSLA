@@ -399,7 +399,18 @@ double support_tool_elevation(const Domain::FullConfigSLAPtr& full_config,
     if (is_zero_elevation(cfg, raft)) return 0.;
 
     bool supports_enable = cfg.get<bool>("supports_enable");
-    double ret = supports_enable ? cfg.get<double>("support_object_elevation") : 0.;
+    double ret = 0.;
+    if (supports_enable) {
+        switch (cfg.get<Domain::sla::SupportTreeType>("support_tree_type")) {
+            case Domain::sla::SupportTreeType::Default:
+            case Domain::sla::SupportTreeType::Organic:
+                ret = cfg.get<double>("support_object_elevation");
+                break;
+            case Domain::sla::SupportTreeType::Branching:
+                ret = cfg.get<double>("branchingsupport_object_elevation");
+                break;
+        }
+    }
 
     if (supports_enable && is_pad_enabled(cfg, raft)) {
         sla::PadConfig pcfg = make_pad_cfg(cfg, raft);
