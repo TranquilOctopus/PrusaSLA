@@ -27,6 +27,13 @@ Bed make_rectangular_bed(const Vec2ds& contour)
     return Bed::create(BedCreationData{BedType::Rectangle, contour, bed_contour_as_its(contour), 250.0f});
 }
 
+// A bed with the contour of @p shape and the id of @p id_of: what a copied project holds next to
+// the one it was copied from, with the contour changed.
+struct BedWithIdOf : Bed
+{
+    BedWithIdOf(Bed shape, const Bed& id_of) : Bed(std::move(shape)) { copy_id(id_of); }
+};
+
 const Vec2ds small_contour = {{-50, -50}, {50, -50}, {50, 50}, {-50, 50}};
 const Vec2ds large_contour = {{-500, -500}, {500, -500}, {500, 500}, {-500, 500}};
 
@@ -61,10 +68,7 @@ TEST_CASE("BedTracking - a cached bed contour is rebuilt when the bed id names a
     BedContainer copied = original.copy();
     REQUIRE(copied.beds_count() == 1u);
     // Replace the copied bed with one that has the same id but the large contour.
-    const ObjectID bed_id = small_bed.id();
-    copied.beds().front() = std::make_unique<Bed>(Bed::create_with_id(bed_id, BedCreationData{
-        BedType::Rectangle, large_contour, bed_contour_as_its(large_contour), 250.0f
-    }));
+    copied.beds().front() = std::make_unique<BedWithIdOf>(make_rectangular_bed(large_contour), small_bed);
     Bed& large_bed = *copied.beds().front();
     REQUIRE(large_bed.id().id == small_bed.id().id);
     REQUIRE(&large_bed != &small_bed);

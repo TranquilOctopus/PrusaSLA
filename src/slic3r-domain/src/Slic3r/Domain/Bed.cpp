@@ -55,34 +55,6 @@ Bed Bed::create(const BedCreationData& data)
     return ret;
 }
 
-Bed Bed::create_with_id(const ObjectID& id, const BedCreationData& data)
-{
-    Bed ret;
-    ret.copy_id(ObjectBase(id));
-    ret.m_type                    = data.type;
-    ret.m_contour                 = data.contour;
-    ret.m_contour_mesh            = data.contour_mesh;
-    ret.m_max_print_height        = data.max_print_height;
-    ret.m_segments                = data.segments;
-    ret.m_auxiliary_travel_anchor = data.auxiliary_travel_anchor;
-    ret.m_model_filename          = data.model_filename;
-    ret.m_texture_filename        = data.texture_filename;
-
-    Vec2d min = {DBL_MAX, DBL_MAX};
-    Vec2d max = {-DBL_MAX, -DBL_MAX};
-
-    for (const Vec2d& v : ret.m_contour) {
-        min.x() = std::min(v.x(), min.x());
-        min.y() = std::min(v.y(), min.y());
-        max.x() = std::max(v.x(), max.x());
-        max.y() = std::max(v.y(), max.y());
-    }
-
-    ret.m_contour_aabb = BoundingBoxf{ min, max };
-    ret.m_center       = 0.5 * (min + max);
-    return ret;
-}
-
 static bool vec2d_equal(const Vec2d& a, const Vec2d& b)
 {
     return Domain::fuzzy_compare(a.x(), b.x()) && Domain::fuzzy_compare(a.y(), b.y());

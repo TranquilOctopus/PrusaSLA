@@ -50,8 +50,6 @@ class Bed : public ObjectBase
 {
 public:
     [[nodiscard]] static Bed create(const BedCreationData& data);
-    // Test-only: create a Bed with a specific ID (for test fixtures that need same-ID-different-contour scenarios)
-    [[nodiscard]] static Bed create_with_id(const ObjectID& id, const BedCreationData& data);
 
     [[nodiscard]] BedType type() const
     {
