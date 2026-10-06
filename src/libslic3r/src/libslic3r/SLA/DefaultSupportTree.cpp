@@ -198,7 +198,13 @@ bool DefaultSupportTree::interconnect(const Pillar &pillar,
         return false;
 
     // Bracing off for the object as a whole: the pillars may not be linked to each other at all.
-    if (!m_sm.cfg.brace_enable)
+    // But a point that says On overrides this (M2.38).
+    bool pillar1_on = false, pillar2_on = false;
+    if (auto sp1 = point_of(pillar); sp1 != nullptr)
+        pillar1_on = (sp1->brace == Domain::SLA::SupportPoint::Brace::On);
+    if (auto sp2 = point_of(nextpillar); sp2 != nullptr)
+        pillar2_on = (sp2->brace == Domain::SLA::SupportPoint::Brace::On);
+    if (!m_sm.cfg.brace_enable && !pillar1_on && !pillar2_on)
         return false;
 
     // We need to get the starting point of the zig-zag pattern. We have to
@@ -975,6 +981,10 @@ void DefaultSupportTree::interconnect_pillars()
         m_thr(); // one pillar to place a neighbour next to at a time (M4.16)
 
         auto pillar = [this, pid]() { return m_builder.pillar(pid); };
+
+        // Skip stability pillars for pillars that may not be braced (M2.38: Off).
+        if (!pillar_may_brace(pillar()))
+            continue;
 
         // Decide how many additional pillars will be needed:
 

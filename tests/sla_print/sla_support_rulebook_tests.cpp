@@ -255,8 +255,12 @@ TEST_CASE("A default support point builds the head and the base of the rulebook"
     CHECK(pedestal->height == Approx(0.3));
     CHECK(pedestal->r_top == Approx(0.5));
     CHECK(pedestal->shape == SupportBaseShape::Cylinder);
-    CHECK(volume(Slic3r::sla::get_mesh(*pedestal, steps)) ==
-          Approx(volume(Slic3r::sla::cylinder(3.0, 0.3, steps))));
+    {
+        auto expected = Slic3r::sla::cylinder(3.0, 0.3, steps);
+        Vec3f pos = pedestal->pos.cast<float>();
+        for (auto &v : expected.vertices) v += pos;
+        CHECK(volume(Slic3r::sla::get_mesh(*pedestal, steps)) == Approx(volume(expected)));
+    }
 }
 
 TEST_CASE("BranchingSupportTree::A default support point builds the rulebook head and base",
@@ -328,9 +332,12 @@ TEST_CASE("Every tip class builds its own rulebook support", "[suptreetree]")
         CHECK(pedestal->r_bottom == Approx(0.5 * rulebook_base_diameter));
         CHECK(pedestal->height == Approx(rulebook_base_height));
         CHECK(pedestal->shape == SupportBaseShape::Cylinder);
-        CHECK(volume(Slic3r::sla::get_mesh(*pedestal, steps)) ==
-              Approx(volume(Slic3r::sla::cylinder(0.5 * rulebook_base_diameter,
-                                                 rulebook_base_height, steps))));
+        {
+            auto expected = Slic3r::sla::cylinder(0.5 * rulebook_base_diameter, rulebook_base_height, steps);
+            Vec3f pos = pedestal->pos.cast<float>();
+            for (auto &v : expected.vertices) v += pos;
+            CHECK(volume(Slic3r::sla::get_mesh(*pedestal, steps)) == Approx(volume(expected)));
+        }
     }
 }
 
