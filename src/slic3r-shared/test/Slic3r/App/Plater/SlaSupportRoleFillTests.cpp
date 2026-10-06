@@ -16,6 +16,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <memory>
 #include <string>
@@ -291,6 +292,26 @@ size_t points_of_role(const SupportPoints& points, SupportPoint::Role role)
     return of_this_role;
 }
 
+/// Print a histogram of all roles in the points for debugging.
+void info_role_histogram(const SupportPoints& points)
+{
+    std::array<size_t, 8> counts{};
+    for (const SupportPoint& point : points) {
+        size_t idx = static_cast<size_t>(point.role);
+        if (idx < counts.size()) {
+            counts[idx]++;
+        }
+    }
+    INFO("Role histogram: Unknown=" << counts[0]
+        << " Anchor=" << counts[1]
+        << " Island=" << counts[2]
+        << " SmallIsland=" << counts[3]
+        << " Overhang=" << counts[4]
+        << " Fragile=" << counts[5]
+        << " AnchorLarge=" << counts[6]
+        << " Detail=" << counts[7]);
+}
+
 /// Everything a class puts on a generated point, one role at a time: the tip is the class itself,
 /// the contact sinks half of it (R3.1), and the stem, the foot and the cross-section are what every
 /// class shares (R3.2 to R3.4), never the class of the point next to it.
@@ -315,6 +336,7 @@ void check_the_classes_of(
     double layer_height_mm
 )
 {
+    info_role_histogram(points);
     for (const RoleExpectation& one : expected) {
         for (const SupportPoint& point : points) {
             if (point.role != one.role) {
