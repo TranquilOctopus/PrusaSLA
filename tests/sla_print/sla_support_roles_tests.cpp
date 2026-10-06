@@ -215,6 +215,18 @@ indexed_triangle_set two_blocks_shape()
         .build();
 }
 
+/// Sort support points by (z, y, x) so that two runs of the generator on the same shape can be
+/// compared as sets. The generator uses parallel execution (TBB), so the order of points in the
+/// result vector is non-deterministic, but the set of points and their roles is deterministic.
+void sort_points_by_zyx(SupportPoints& points)
+{
+    std::sort(points.begin(), points.end(), [](const SupportPoint& a, const SupportPoint& b) {
+        if (a.pos.z() != b.pos.z()) return a.pos.z() < b.pos.z();
+        if (a.pos.y() != b.pos.y()) return a.pos.y() < b.pos.y();
+        return a.pos.x() < b.pos.x();
+    });
+}
+
 } // namespace
 
 TEST_CASE("The point on the tip of a spike is fragile", "[SupportRoles]")
@@ -303,18 +315,24 @@ TEST_CASE("The roles of a model are the same every run", "[SupportRoles]")
     // The roles are decided by ray casts and by the layers of the slice, and a second run of the
     // same shape has to answer the same: the tool generates the points of an object again and again
     // while the settings are moved, and the points it shows may not jump around.
+    // The generator uses parallel execution (TBB), so the order of points is non-deterministic.
+    // Sort both runs by (z, y, x) before comparing them as sets.
     const indexed_triangle_set shape = spike_shape();
     const SupportPoints first        = generate(shape);
     const SupportPoints second       = generate(shape);
 
     REQUIRE(first.size() == second.size());
-    for (size_t i = 0; i < first.size(); ++i) {
-        INFO("point " << i << " at z " << first[i].pos.z());
-        const Slic3r::Domain::Vec3d here  = first[i].pos.cast<double>();
-        const Slic3r::Domain::Vec3d there = second[i].pos.cast<double>();
+    SupportPoints first_sorted  = first;
+    SupportPoints second_sorted = second;
+    sort_points_by_zyx(first_sorted);
+    sort_points_by_zyx(second_sorted);
+    for (size_t i = 0; i < first_sorted.size(); ++i) {
+        INFO("point " << i << " at z " << first_sorted[i].pos.z());
+        const Slic3r::Domain::Vec3d here  = first_sorted[i].pos.cast<double>();
+        const Slic3r::Domain::Vec3d there = second_sorted[i].pos.cast<double>();
         const bool same_place             = Slic3r::Domain::is_approx(there, here, 1e-4);
         CHECK(same_place);
-        CHECK(second[i].role == first[i].role);
+        CHECK(second_sorted[i].role == first_sorted[i].role);
     }
 }
 

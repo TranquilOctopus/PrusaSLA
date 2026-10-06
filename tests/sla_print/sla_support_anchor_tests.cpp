@@ -382,12 +382,17 @@ TEST_CASE("The same model gets the same heavy anchors every run", "[SupportAncho
     REQUIRE(first.size() == second.size());
     CHECK(first_placed.placed == second_placed.placed);
     CHECK(first_placed.added == second_placed.added);
-    for (size_t i = 0; i < first.size(); ++i) {
-        INFO("point " << i << " at " << first[i].pos.x() << ", " << first[i].pos.y());
-        const Slic3r::Domain::Vec3d here  = first[i].pos.cast<double>();
-        const Slic3r::Domain::Vec3d there = second[i].pos.cast<double>();
+    // add_heavy_anchors is deterministic, but sort to be safe.
+    SupportPoints first_sorted  = first;
+    SupportPoints second_sorted = second;
+    sort_points_by_zyx(first_sorted);
+    sort_points_by_zyx(second_sorted);
+    for (size_t i = 0; i < first_sorted.size(); ++i) {
+        INFO("point " << i << " at " << first_sorted[i].pos.x() << ", " << first_sorted[i].pos.y());
+        const Slic3r::Domain::Vec3d here  = first_sorted[i].pos.cast<double>();
+        const Slic3r::Domain::Vec3d there = second_sorted[i].pos.cast<double>();
         CHECK(Slic3r::Domain::is_approx(there, here, 1e-4));
-        CHECK(second[i].role == first[i].role);
+        CHECK(second_sorted[i].role == first_sorted[i].role);
     }
 }
 
@@ -406,6 +411,18 @@ SupportPoints generate(const indexed_triangle_set& its)
         cfg.object_settings,
         [] { return false; }
     );
+}
+
+/// Sort support points by (z, y, x) so that two runs of the generator on the same shape can be
+/// compared as sets. The generator uses parallel execution (TBB), so the order of points in the
+/// result vector is non-deterministic, but the set of points and their roles is deterministic.
+void sort_points_by_zyx(SupportPoints& points)
+{
+    std::sort(points.begin(), points.end(), [](const SupportPoint& a, const SupportPoint& b) {
+        if (a.pos.z() != b.pos.z()) return a.pos.z() < b.pos.z();
+        if (a.pos.y() != b.pos.y()) return a.pos.y() < b.pos.y();
+        return a.pos.x() < b.pos.x();
+    });
 }
 
 } // namespace
@@ -436,13 +453,19 @@ TEST_CASE(
     CHECK(anchors >= 2);
 
     // The same shape gives the same points, and the same roles, on a second run of the same shape.
+    // The generator uses parallel execution (TBB), so the order of points is non-deterministic.
+    // Sort both runs by (z, y, x) before comparing them as sets.
     const SupportPoints second = generate(shape);
     REQUIRE(first.size() == second.size());
-    for (size_t i = 0; i < first.size(); ++i) {
+    SupportPoints first_sorted  = first;
+    SupportPoints second_sorted = second;
+    sort_points_by_zyx(first_sorted);
+    sort_points_by_zyx(second_sorted);
+    for (size_t i = 0; i < first_sorted.size(); ++i) {
         INFO("point " << i);
-        const Slic3r::Domain::Vec3d here  = first[i].pos.cast<double>();
-        const Slic3r::Domain::Vec3d there = second[i].pos.cast<double>();
+        const Slic3r::Domain::Vec3d here  = first_sorted[i].pos.cast<double>();
+        const Slic3r::Domain::Vec3d there = second_sorted[i].pos.cast<double>();
         CHECK(Slic3r::Domain::is_approx(there, here, 1e-4));
-        CHECK(second[i].role == first[i].role);
+        CHECK(second_sorted[i].role == first_sorted[i].role);
     }
 }
