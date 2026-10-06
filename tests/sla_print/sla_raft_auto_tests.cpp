@@ -276,7 +276,7 @@ TEST_CASE("Auto builds a raft under a hollow sole", "[SLA][RaftAuto]")
     // A 20 mm block with a 12 mm pocket in the bottom millimetre of it: the pocket is closed above
     // by the sole and open below onto the film, which is the same suction as the cup's.
     const RaftOutcome outcome = resolve_and_build(
-        block_with_pocket(20., 20., 20., 4., layer_height_mm, 1.0), make_print_config(RaftType::Auto));
+        block_with_pocket(20., 20., 20., 4., 0., 1.0), make_print_config(RaftType::Auto));
 
     REQUIRE(outcome.raft_type.has_value());
     CHECK(*outcome.raft_type == RaftType::AroundObject);
@@ -320,7 +320,7 @@ TEST_CASE("The slice and the support preview resolve the same raft", "[SLA][Raft
     // answer on both sides, whatever the underside is.
     for (const indexed_triangle_set its :
          {box(20., 20., 20.), cup_open_down(20., 20., 20., 4.),
-          block_with_pocket(20., 20., 20., 4., layer_height_mm, 1.0)}) {
+          block_with_pocket(20., 20., 20., 4., 0., 1.0)}) {
         const RaftOutcome outcome = resolve_and_build(its, make_print_config(RaftType::Auto));
         INFO("part volume " << Slic3r::Domain::its_volume(its) << " mm3");
         // The raft that was resolved is the one the config helpers answer for, and an Auto that
@@ -373,7 +373,7 @@ TEST_CASE("Auto builds the slab a lifted part stands on", "[SLA][RaftAuto]")
     config.sla_print_settings.items.opt("support_object_elevation").set(5.);
 
     const RaftOutcome outcome =
-        resolve_and_build(block_with_pocket(20., 20., 20., 4., 0.2, 1.0), config, corner_points());
+        resolve_and_build(block_with_pocket(20., 20., 20., 4., 0., 1.0), config, corner_points());
 
     REQUIRE(outcome.raft_type.has_value());
     CHECK(*outcome.raft_type == RaftType::Full);
