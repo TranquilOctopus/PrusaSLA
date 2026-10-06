@@ -30,6 +30,8 @@
 #include "Slic3r/Domain/SlicingId.hpp"
 #include "Slic3r/Domain/TriangleMesh.hpp"
 #include "Slic3r/Domain/Types.hpp"
+#include "Slic3r/Domain/ExPolygon.hpp"
+#include "Slic3r/Biz/Algorithms/Scaling.hpp"
 #include "Slic3r/TestUtils/HwConfigUtils.hpp"
 #include "libslic3r/ConfigViews.hpp"
 #include "libslic3r/IThumbnailImageGenerator.hpp"
@@ -406,14 +408,14 @@ TEST_CASE("auto_raft_decision finds the cup of a cup standing open side down", "
     const indexed_triangle_set mesh = cup_open_down(20., 20., 20., 4.);
     const double layer_height_mm = 0.05;
     const double elevation_mm = 0.0;
-    const sla::RaftAutoOptions opts{1000.0, 1.0}; // scan_height_mm = 1000, min_cup_opening_mm2 = 1
+    const Slic3r::sla::RaftAutoOptions opts{1000.0, 1.0}; // scan_height_mm = 1000, min_cup_opening_mm2 = 1
 
     // Call the function directly
-    const sla::RaftAutoDecision decision =
-        sla::auto_raft_decision(mesh, layer_height_mm, elevation_mm, opts, [] { return false; });
+    const Slic3r::sla::RaftAutoDecision decision =
+        Slic3r::sla::auto_raft_decision(mesh, layer_height_mm, elevation_mm, opts, [] { return false; });
 
     // Report mesh bounding box
-    const Domain::BoundingBox3d bb = Domain::bounding_box(mesh);
+    const Slic3r::Domain::BoundingBox3d bb = Slic3r::Domain::bounding_box(mesh);
     INFO("Mesh bbox: min=(" << bb.min.x() << "," << bb.min.y() << "," << bb.min.z()
          << ") max=(" << bb.max.x() << "," << bb.max.y() << "," << bb.max.z() << ")");
 
@@ -421,7 +423,7 @@ TEST_CASE("auto_raft_decision finds the cup of a cup standing open side down", "
     std::vector<float> zs;
     std::vector<float> thicknesses_mm;
     {
-        const Domain::BoundingBox3d bb2 = Domain::bounding_box(mesh);
+        const Slic3r::Domain::BoundingBox3d bb2 = Slic3r::Domain::bounding_box(mesh);
         const double bottom = bb2.min.z() + elevation_mm;
         const double scan_top = std::min(bb2.max.z() + elevation_mm, bottom + opts.scan_height_mm);
 
@@ -442,11 +444,11 @@ TEST_CASE("auto_raft_decision finds the cup of a cup standing open side down", "
 
     // Slice the mesh
     Slic3r::MeshSlicingParamsEx params;
-    const std::vector<Domain::ExPolygons> layers = Slic3r::slice_mesh_ex(mesh, zs, params);
+    const std::vector<Slic3r::Domain::ExPolygons> layers = Slic3r::slice_mesh_ex(mesh, zs, params);
 
     // Detect cavities
-    const SLA::CavityAnalysis cavities = SLA::detect_cavities(
-        layers, thicknesses_mm, SLA::CavityDetectionOptions{opts.min_cup_opening_mm2});
+    const Slic3r::SLA::CavityAnalysis cavities = Slic3r::SLA::detect_cavities(
+        layers, thicknesses_mm, Slic3r::SLA::CavityDetectionOptions{opts.min_cup_opening_mm2});
 
     // Report layer details for key layers
     auto report_layer = [&](size_t idx, const char* label) {

@@ -183,6 +183,18 @@ void check_spacing(const SupportPoints& points)
         }
 }
 
+/// Sort support points by (z, y, x) so that two runs of the generator on the same shape can be
+/// compared as sets. The generator uses parallel execution (TBB), so the order of points in the
+/// result vector is non-deterministic, but the set of points and their roles is deterministic.
+void sort_points_by_zyx(SupportPoints& points)
+{
+    std::sort(points.begin(), points.end(), [](const SupportPoint& a, const SupportPoint& b) {
+        if (a.pos.z() != b.pos.z()) return a.pos.z() < b.pos.z();
+        if (a.pos.y() != b.pos.y()) return a.pos.y() < b.pos.y();
+        return a.pos.x() < b.pos.x();
+    });
+}
+
 } // namespace
 
 TEST_CASE("The heavy anchors of a small miniature are on its flat underside", "[SupportAnchors]")
@@ -411,18 +423,6 @@ SupportPoints generate(const indexed_triangle_set& its)
         cfg.object_settings,
         [] { return false; }
     );
-}
-
-/// Sort support points by (z, y, x) so that two runs of the generator on the same shape can be
-/// compared as sets. The generator uses parallel execution (TBB), so the order of points in the
-/// result vector is non-deterministic, but the set of points and their roles is deterministic.
-void sort_points_by_zyx(SupportPoints& points)
-{
-    std::sort(points.begin(), points.end(), [](const SupportPoint& a, const SupportPoint& b) {
-        if (a.pos.z() != b.pos.z()) return a.pos.z() < b.pos.z();
-        if (a.pos.y() != b.pos.y()) return a.pos.y() < b.pos.y();
-        return a.pos.x() < b.pos.x();
-    });
 }
 
 } // namespace
