@@ -45,8 +45,13 @@ bool is_sla_auto_support_base_point(
         return false;
     }
 
+    // SupportPoint::pos is a float (Vec3f), so a point exactly at the boundary (e.g. two layers up)
+    // may have pos.z() = 0.10000001f instead of 0.1. Add a small tolerance to account for float
+    // precision (1e-4 mm = 0.1 micron, well below any physical resolution).
+    constexpr double base_point_tolerance_mm = 1e-4;
+
     return static_cast<double>(point.pos.z())
-        <= lowest_z_mm + auto_support_base_layers * layer_height_mm;
+        <= lowest_z_mm + auto_support_base_layers * layer_height_mm + base_point_tolerance_mm;
 }
 
 const SlaSupportPreset& SlaAutoSupportPresets::class_of(const std::string& preset_name) const
@@ -88,6 +93,17 @@ void sla_apply_auto_support_presets(
 
         // A point the generator classified takes the whole tip class of its role (M7.8.8, the rule
         // in sla_role_tip_class), the two settings of M2.37 deciding what a role is given.
+        // Exception: a Detail point at the base of the model (R4.1 vs R4.9). The anchor of the
+        // lowest island keeps its heavy class even on the finest relief; R4.9 never overrides an
+        // anchor. A Detail point at the base is not an anchor but the base band rule (R4.1) takes
+        // precedence over the detail rule (R4.9). A Fragile point at the base stays the minimum
+        // (R4.4 thin features win over R4.1; the engine's classify_support_point_roles does the same).
+        const bool is_base = is_sla_auto_support_base_point(point, lowest_z_mm, layer_height_mm);
+        if (is_base && point.role == SupportPoint::Role::Detail) {
+            apply_sla_support_preset(point, choice.heavy_base ? presets.base : presets.detail);
+            continue;
+        }
+
         if (const std::optional<std::string> tip_class =
                 sla_role_tip_class(point.role, choice.heavy_base, choice.detail);
             tip_class.has_value())
@@ -98,8 +114,6 @@ void sla_apply_auto_support_presets(
 
         // A point with no role keeps the band rule of M2.37: the lowest island heavy, everything
         // else the detail preset.
-        const bool is_base = is_sla_auto_support_base_point(point, lowest_z_mm, layer_height_mm);
-
         // R4.9 (M7.8.5): a point in a detailed region takes the minimum class, except where it is
         // the anchor of the lowest island, which the heavy class of R4.1 stays with.
         if (!is_base && sla_auto_support_is_detailed(point)) {
