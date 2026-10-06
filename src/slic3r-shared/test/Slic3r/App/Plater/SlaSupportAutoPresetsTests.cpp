@@ -238,9 +238,9 @@ const ConfigItemDef* find_def(const std::string& name)
 /// presets of the support tool are named by) beside what it shows (the tip size, since M7.8.1).
 std::vector<EnumValueDef> enum_options_of(const ConfigValue& value)
 {
-    std::vector<EnumValueDef> options;
-    value.visit([&options](const EnumWrapper& wrapper) { options = wrapper.def(); });
-    return options;
+    if (!value.holds_alternative<EnumWrapper>())
+        return {};
+    return value.get<EnumWrapper>().def();
 }
 
 } // namespace
