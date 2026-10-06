@@ -10,7 +10,7 @@
 using Catch::Approx;
 using Slic3r::AABBMesh;
 using Slic3r::App::Scene::TriangleMesh;
-using Slic3r::Domain::TriangleMesh as DomainMesh;
+using DomainMesh = Slic3r::Domain::TriangleMesh;
 using Slic3r::Domain::Vec3d;
 
 namespace TriMesh = Slic3r::Biz::Algorithms::TriangleMesh;

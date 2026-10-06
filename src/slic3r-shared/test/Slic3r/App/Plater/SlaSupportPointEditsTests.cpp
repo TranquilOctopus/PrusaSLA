@@ -241,7 +241,7 @@ struct SupportPointsFlowFixture
         undo_provider->take_snapshot(UndoSnapshotType::InitializeProject);
     }
 
-    ModelObject* model() const
+    ModelObject* model()
     {
         return project_interactor.selected_project().find_object_by_id(object_id);
     }
@@ -252,7 +252,7 @@ struct SupportPointsFlowFixture
     }
 
     /// An edit session over the points the model carries, the way begin_editing opens one.
-    SlaSupportPointsEditing session() const
+    SlaSupportPointsEditing session()
     {
         SlaSupportPointsEditing editing;
         editing.points                           = model()->sla_support_points;
@@ -263,7 +263,7 @@ struct SupportPointsFlowFixture
 
     /// The preview key of the object as the M2.21 service computes it, so a test can ask whether an
     /// edit is a new tree or the same one.
-    SlaSupportPreviewKey preview_key() const
+    SlaSupportPreviewKey preview_key()
     {
         REQUIRE(instance() != nullptr);
         return make_sla_support_preview_key(
@@ -306,7 +306,7 @@ struct SupportPointsFlowFixture
     }
 
     /// The one write of the points of the session, which is what every edit of the tool ends with.
-    void commit(const SlaSupportPointsEditing& editing) const
+    void commit(const SlaSupportPointsEditing& editing)
     {
         commit_sla_support_point_edits(project_interactor, object_ref, editing.points);
     }
@@ -345,7 +345,7 @@ TEST_CASE_METHOD(
     {
         const std::optional<SlaSupportPointTarget> target = pick_marker(editing.points, 1);
         REQUIRE(target.has_value());
-        REQUIRE(*target->point_index == 1u);
+        REQUIRE(target->index == 1u);
 
         const SlaSupportClickResult result =
             click_on(SlaSupportClickButton::Left, SlaSupportClickModifier::None, editing, target);
@@ -539,7 +539,7 @@ TEST_CASE_METHOD(
     // about: a click that lands on that marker and nowhere else.
     const std::optional<SlaSupportPointTarget> target = pick_marker(editing.points, 1);
     REQUIRE(target.has_value());
-    REQUIRE(*target->point_index == 1u);
+    REQUIRE(target->index == 1u);
 
     SECTION("the Delete key with the support selected")
     {
@@ -547,7 +547,7 @@ TEST_CASE_METHOD(
         key.code          = Platform::KeyCode::Delete;
         key.tool_active   = true;
         key.has_selection = true;
-        editing.select_point(*target->point_index);
+        editing.select_point(target->index);
         REQUIRE(support_tool_action_for(key) == SupportToolAction::DeleteSelectedPoints);
 
         snapshot_edit();
@@ -562,7 +562,7 @@ TEST_CASE_METHOD(
     {
         // The button is on while the group has a selection to remove, which is the count the group
         // is titled and shown with, and off with none.
-        editing.select_point(*target->point_index);
+        editing.select_point(target->index);
         CHECK(selection_support_view(editing).count == 1u);
 
         snapshot_edit();
@@ -585,7 +585,7 @@ TEST_CASE_METHOD(
         }
 
         snapshot_edit();
-        editing.remove_point(*target->point_index);
+        editing.remove_point(target->index);
         commit(editing);
 
         CHECK(editing.points.size() == 2u);
