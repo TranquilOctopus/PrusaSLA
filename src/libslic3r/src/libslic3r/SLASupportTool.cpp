@@ -23,6 +23,7 @@
 #include <Slic3r/Domain/Constants.hpp>
 #include <Slic3r/Domain/SlaLayerHeight.hpp>
 #include <Slic3r/Exception.hpp>
+#include <Slic3r/Log.hpp>
 
 namespace Slic3r::sla {
 
@@ -194,9 +195,20 @@ SupportToolTree build_support_tree_for_tool(const SupportToolModelMesh& model_me
 
         return out;
 
-    } catch (const Slic3r::RuntimeError&) {
+    } catch (const Slic3r::RuntimeError& e) {
+        // "Support tool canceled" is expected when the stop condition triggers; log at debug only.
+        std::string what = e.what();
+        if (what == "Support tool canceled") {
+            SPDLOG_DEBUG("Support tool: canceled");
+        } else {
+            SPDLOG_ERROR("Support tool: {}", what);
+        }
+        return empty_tree();
+    } catch (const std::exception& e) {
+        SPDLOG_ERROR("Support tool: {}", e.what());
         return empty_tree();
     } catch (...) {
+        SPDLOG_ERROR("Support tool: unknown exception");
         return empty_tree();
     }
 }
@@ -351,9 +363,20 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const SupportToolMod
 
         return support_points;
 
-    } catch (const Slic3r::RuntimeError&) {
+    } catch (const Slic3r::RuntimeError& e) {
+        // "Support tool canceled" is expected when the stop condition triggers; log at debug only.
+        std::string what = e.what();
+        if (what == "Support tool canceled") {
+            SPDLOG_DEBUG("Support tool: canceled");
+        } else {
+            SPDLOG_ERROR("Support tool: {}", what);
+        }
+        return {};
+    } catch (const std::exception& e) {
+        SPDLOG_ERROR("Support tool: {}", e.what());
         return {};
     } catch (...) {
+        SPDLOG_ERROR("Support tool: unknown exception");
         return {};
     }
 }
@@ -376,7 +399,18 @@ double support_tool_elevation(const Domain::FullConfigSLAPtr& full_config,
     if (is_zero_elevation(cfg, raft)) return 0.;
 
     bool supports_enable = cfg.get<bool>("supports_enable");
-    double ret = supports_enable ? cfg.get<double>("support_object_elevation") : 0.;
+    double ret = 0.;
+    if (supports_enable) {
+        switch (cfg.get<Domain::sla::SupportTreeType>("support_tree_type")) {
+            case Domain::sla::SupportTreeType::Default:
+            case Domain::sla::SupportTreeType::Organic:
+                ret = cfg.get<double>("support_object_elevation");
+                break;
+            case Domain::sla::SupportTreeType::Branching:
+                ret = cfg.get<double>("branchingsupport_object_elevation");
+                break;
+        }
+    }
 
     if (supports_enable && is_pad_enabled(cfg, raft)) {
         sla::PadConfig pcfg = make_pad_cfg(cfg, raft);

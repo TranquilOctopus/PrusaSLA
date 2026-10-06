@@ -1681,7 +1681,18 @@ double SLAPrintObject::get_elevation() const {
 
     bool en = has_supports();
 
-    double ret = en ? m_config.get<double>("support_object_elevation") : 0.;
+    double ret = 0.;
+    if (en) {
+        switch (m_config.get<Domain::sla::SupportTreeType>("support_tree_type")) {
+            case Domain::sla::SupportTreeType::Default:
+            case Domain::sla::SupportTreeType::Organic:
+                ret = m_config.get<double>("support_object_elevation");
+                break;
+            case Domain::sla::SupportTreeType::Branching:
+                ret = m_config.get<double>("branchingsupport_object_elevation");
+                break;
+        }
+    }
 
     if (en && is_pad_enabled(m_config, raft)) {
         // Normally the elevation for the pad itself would be the thickness of
@@ -1712,7 +1723,13 @@ double SLAPrintObject::get_current_elevation() const
     if(!has_supports && !has_pad)
         return 0;
     else if(has_supports && !has_pad) {
-        return m_config.get<double>("support_object_elevation");
+        switch (m_config.get<Domain::sla::SupportTreeType>("support_tree_type")) {
+            case Domain::sla::SupportTreeType::Default:
+            case Domain::sla::SupportTreeType::Organic:
+                return m_config.get<double>("support_object_elevation");
+            case Domain::sla::SupportTreeType::Branching:
+                return m_config.get<double>("branchingsupport_object_elevation");
+        }
     }
 
     return get_elevation();
