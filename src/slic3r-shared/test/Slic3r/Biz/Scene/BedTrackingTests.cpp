@@ -60,9 +60,15 @@ TEST_CASE("BedTracking - a cached bed contour is rebuilt when the bed id names a
     // puts on the workbench next to the project it was copied from.
     BedContainer copied = original.copy();
     REQUIRE(copied.beds_count() == 1u);
+    // Replace the copied bed with one that has the same id but the large contour.
+    const ObjectID bed_id = small_bed.id();
+    copied.beds().front() = std::make_unique<Bed>(Bed::create_with_id(bed_id, BedCreationData{
+        BedType::Rectangle, large_contour, bed_contour_as_its(large_contour), 250.0f
+    }));
     Bed& large_bed = *copied.beds().front();
     REQUIRE(large_bed.id().id == small_bed.id().id);
     REQUIRE(&large_bed != &small_bed);
+    REQUIRE(large_bed.contour() != small_bed.contour());
 
     const BoundingBox2d middle_box = BoundingBox::construct(middle_hull);
     const BoundingBox2d far_box    = BoundingBox::construct(far_hull);
