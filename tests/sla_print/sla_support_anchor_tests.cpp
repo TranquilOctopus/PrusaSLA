@@ -36,7 +36,6 @@
 using Catch::Approx;
 namespace triangle_mesh = Slic3r::Biz::Algorithms::TriangleMesh;
 
-using Slic3r::indexed_triangle_set;
 using Slic3r::Domain::Vec3f;
 using Slic3r::Domain::SLA::SupportPoint;
 using Slic3r::Domain::SLA::SupportPoints;

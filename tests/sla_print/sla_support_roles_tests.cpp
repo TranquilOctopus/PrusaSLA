@@ -42,7 +42,6 @@ using Catch::Approx;
 namespace triangle_mesh = Slic3r::Biz::Algorithms::TriangleMesh;
 namespace scaling       = Slic3r::Biz::Algorithms::Scaling;
 
-using Slic3r::indexed_triangle_set;
 using Slic3r::Domain::Point;
 using Slic3r::Domain::Vec3f;
 using Slic3r::Domain::SLA::SupportPoint;

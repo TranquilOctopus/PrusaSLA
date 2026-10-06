@@ -138,7 +138,7 @@ make_preset_metadata(const Slic3r::Domain::Preset::HwPrinterConfig& hw_config)
 class NoopThumbnailGenerator : public Slic3r::Biz::Slicing::IThumbnailImageGenerator
 {
     std::future<Slic3r::Biz::Slicing::ThumbnailImageResults> enqueue_thumbnail_requests(
-        Slic3r::Biz::Slicing::ThumbnailImageRequests&) override
+        const Slic3r::Biz::Slicing::ThumbnailImageRequests&) override
     {
         std::promise<Slic3r::Biz::Slicing::ThumbnailImageResults> promise;
         promise.set_value(Slic3r::Biz::Slicing::ThumbnailImageResults{});

@@ -219,7 +219,7 @@ TEST_CASE("A default support point builds the head and the base of the rulebook"
     SupportPoint point;
     point.pos               = point_pos.cast<float>();
     point.head_front_radius = static_cast<float>(0.5 * default_number("support_head_front_diameter"));
-    point.tip_shape         = find_def("support_tip_shape")->init_fn().get<SupportTipShape>();
+    point.tip_shape         = static_cast<SupportPoint::TipShape>(find_def("support_tip_shape")->init_fn().get<SupportTipShape>()); // SupportTipShape and SupportPoint::TipShape share the same order
     point.stem_sides        = static_cast<uint8_t>(default_sides("support_stem_sides"));
 
     Slic3r::sla::SupportableMesh sm = make_supportable_mesh(SupportPoints{point});
