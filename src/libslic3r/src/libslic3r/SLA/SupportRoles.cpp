@@ -654,37 +654,37 @@ void classify_support_point_roles(
             const std::optional<SurfaceSample> spot =
                 find_plain_spot(mesh, layers, p, n, *around, layer_height, thresholds);
             if (!spot.has_value()) {
-                // Nowhere plain to move to, so the point stays on the detail and takes the minimum
-                // tip, which is the other half of R4.5.
+                // Nowhere plain to move to: the point stays on the detail. R4.9 may still override
+                // this to Detail if the region is detailed (R4.9 overrides whatever role, except
+                // the lowest-point anchor).
                 point.role = Role::Fragile;
-                continue;
-            }
-
-            p         = spot->pos;
-            n         = spot->normal;
-            point.pos = p.cast<float>();
-            thickness = thickness_at(mesh, p, n);
-        }
-
-        // R4.4 and R4.5 both land here: a thin feature, and a point on detail that cannot move.
-        // A fragile point stays Fragile below whatever R4.9 finds around it: it takes the minimum
-        // tip either way (R4.4), and the fragile reason is the one that says what it is.
-        if (is_fragile(p, thickness, layers, layer_height, thresholds)) {
-            point.role = Role::Fragile;
-            continue;
-        }
-
-        // R4.6: an overhang is what the rules say nothing about, and it is the last role left.
-        Role role = Role::Overhang;
-        if (point.is_island()) {
-            // R4.3, and with R4.1 the size of the island the point starts: the lowest island of the
-            // object is carried by its heavy anchors, every other island by its own size.
-            if (p.z() <= anchor_top) {
-                role = Role::Anchor;
             } else {
-                const LayerAtPoint at = layer_part_at(layers, p, layer_height);
-                const double area     = at.found() ? part_area_mm2(*at.part) : 0.;
-                role = area < thresholds.small_island_area_mm2 ? Role::SmallIsland : Role::Island;
+                p         = spot->pos;
+                n         = spot->normal;
+                point.pos = p.cast<float>();
+                thickness = thickness_at(mesh, p, n);
+            }
+        }
+
+        // R4.4: a thin feature. R4.9 may still override to Detail (except for anchors).
+        Role role = point.role;
+        if (role != Role::Fragile && is_fragile(p, thickness, layers, layer_height, thresholds)) {
+            role = Role::Fragile;
+        }
+
+        // R4.6 / R4.3 / R4.1: base role if not already set by R4.4/R4.5.
+        if (role != Role::Fragile) {
+            role = Role::Overhang;
+            if (point.is_island()) {
+                // R4.3, and with R4.1 the size of the island the point starts: the lowest island of the
+                // object is carried by its heavy anchors, every other island by its own size.
+                if (p.z() <= anchor_top) {
+                    role = Role::Anchor;
+                } else {
+                    const LayerAtPoint at = layer_part_at(layers, p, layer_height);
+                    const double area     = at.found() ? part_area_mm2(*at.part) : 0.;
+                    role = area < thresholds.small_island_area_mm2 ? Role::SmallIsland : Role::Island;
+                }
             }
         }
 
