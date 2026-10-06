@@ -355,7 +355,7 @@ TEST_CASE("The size of the island decides between an island and a small island",
     const Slic3r::AABBMesh mesh{slab};
 
     const Slic3r::Domain::ExPolygon island = rectangle(-4., -4., 4., 4.); // 64 mm2
-    const Slic3r::Domain::ExPolygon speck  = rectangle(-4., -0.225, -2., 0.225); // 0.9 mm2
+    const Slic3r::Domain::ExPolygon speck  = rectangle(5., -0.225, 7., 0.225); // 0.9 mm2, next to island
 
     // One layer on the underside of the slab and one on its upper face, so that the points of the
     // upper face are far enough above the lowest island to be islands and not anchors of R4.1.
@@ -378,7 +378,7 @@ TEST_CASE("The size of the island decides between an island and a small island",
     points[1].type = SupportPointType::island;
     points[1].pos  = Slic3r::Domain::Vec3f{1.5f, 0.f, 2.f}; // an island of 64 mm2 above it
     points[2].type = SupportPointType::island;
-    points[2].pos  = Slic3r::Domain::Vec3f{-3.f, 0.f, 2.f}; // the 0.9 mm2 speck next to it
+    points[2].pos  = Slic3r::Domain::Vec3f{6.f, 0.f, 2.f}; // the 0.9 mm2 speck next to it
     points[3].type = SupportPointType::slope;
     points[3].pos  = Slic3r::Domain::Vec3f{1.5f, 0.f, 0.f}; // an overhang, not an island at all
 
