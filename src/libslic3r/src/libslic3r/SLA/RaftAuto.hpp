@@ -15,8 +15,9 @@ struct RaftAutoOptions
     /// How much of the underside is read, in mm above the lowest point of the part. A suction cup is
     /// a pocket of the first layers (a hollow sole, a cup standing on its rim, a ring), so only the
     /// bottom of the part is scanned and this bounds it: a pocket deeper than this is not the cup
-    /// this rule is about. 10 mm by default, which is the whole underside of a small part.
-    double scan_height_mm = 10.;
+    /// this rule is about. 1000 mm by default (effectively the full part height, capped by the
+    /// part's bounding box), so tall cups and deep soles are detected.
+    double scan_height_mm = 1000.;
 
     /// A pocket whose opening is smaller than this cannot seal against the vat film, so it is not a
     /// cup (it is a drain hole, which is what hollow prints have on purpose). Same value and the
