@@ -239,7 +239,8 @@ TEST_CASE(
     // A 40 x 40 mm plate: the two anchors of a footprint that fits in 30 x 30 mm, and one more for the
     // 700 mm2 of footprint above that. The plate is flat and thick, so every spot of its underside may
     // carry an anchor.
-    const Slic3r::AABBMesh medium{ShapeBuilder{}.box(40., 40., 4.).build()};
+    const indexed_triangle_set medium_shape = ShapeBuilder{}.box(40., 40., 4.).build();
+    const Slic3r::AABBMesh medium{medium_shape};
     SupportPoints medium_points;
     const AnchorPlacement medium_placed = add_heavy_anchors(medium_points, medium);
     CHECK(medium_placed.wanted == 3);
@@ -248,7 +249,8 @@ TEST_CASE(
     CHECK(medium_placed.large == false);
 
     // A 60 x 60 mm plate is past the cap of R4.2, which is eight anchors, whatever its footprint is.
-    const Slic3r::AABBMesh large{ShapeBuilder{}.box(60., 60., 4.).build()};
+    const indexed_triangle_set large_shape = ShapeBuilder{}.box(60., 60., 4.).build();
+    const Slic3r::AABBMesh large{large_shape};
     SupportPoints large_points;
     const AnchorPlacement large_placed = add_heavy_anchors(large_points, large);
     CHECK(large_placed.wanted == 8);
@@ -278,7 +280,8 @@ TEST_CASE("The anchors of a very large model take the largest tip", "[SupportAnc
 {
     // A 200 x 200 mm plate fills a mid-size printer's plate, so the size table of the rulebook gives
     // its anchors the largest tip (T0.6), which is the AnchorLarge role.
-    const Slic3r::AABBMesh mesh{ShapeBuilder{}.box(200., 200., 10.).build()};
+    const indexed_triangle_set large_shape = ShapeBuilder{}.box(200., 200., 10.).build();
+    const Slic3r::AABBMesh mesh{large_shape};
 
     // The lowest point of the model is an anchor of R4.1 before this pass sees the model, and it is
     // one of the anchors of the model: the rule is about the anchors of a very large object and not
@@ -307,7 +310,8 @@ TEST_CASE(
     // A slab standing on the plate, 40 x 12 mm in the plane and 20 mm tall: the only surface of it
     // that faces the plate is the strip of its underside, and the generator leaves slope points on
     // that strip.
-    const Slic3r::AABBMesh mesh{ShapeBuilder{}.box(40., 12., 20.).build()};
+    const indexed_triangle_set slab_shape = ShapeBuilder{}.box(40., 12., 20.).build();
+    const Slic3r::AABBMesh mesh{slab_shape};
 
     // Points all over the strip, close enough together that every spot of the pass has one within
     // reach of it, which is what a generator that samples a flat face does.
@@ -342,7 +346,8 @@ TEST_CASE("No heavy anchor stands on a surface that faces away from the plate", 
     // is the only surface of the model that faces the build plate: the top of the plate faces up, the
     // two large faces of the wall are vertical, and the plate is the whole footprint of the model, so
     // the anchors of R4.2 go on its underside and nowhere else.
-    const Slic3r::AABBMesh mesh{ShapeBuilder{}.box(40., 40., 3.).box(40., 3., 20., 3.).build()};
+    const indexed_triangle_set plate_wall_shape = ShapeBuilder{}.box(40., 40., 3.).box(40., 3., 20., 3.).build();
+    const Slic3r::AABBMesh mesh{plate_wall_shape};
 
     SupportPoints points;
     const AnchorPlacement placed = add_heavy_anchors(points, mesh);
@@ -366,7 +371,8 @@ TEST_CASE("The same model gets the same heavy anchors every run", "[SupportAncho
     // points they are placed from arrive in the order the generator made them, so the same shape has
     // to get the same anchors again: the tool generates the points of an object again and again while
     // the settings are moved, and the points it shows may not jump around.
-    const Slic3r::AABBMesh mesh{ShapeBuilder{}.box(60., 60., 4.).build()};
+    const indexed_triangle_set plate_shape = ShapeBuilder{}.box(60., 60., 4.).build();
+    const Slic3r::AABBMesh mesh{plate_shape};
 
     SupportPoints first{point_at(Vec3f{10.f, 10.f, 0.f}, Role::Anchor)};
     SupportPoints second{point_at(Vec3f{10.f, 10.f, 0.f}, Role::Anchor)};
