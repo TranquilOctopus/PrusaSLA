@@ -351,6 +351,10 @@ TEST_CASE("An unresolved Auto builds no raft, the safe half of the rule", "[SLA]
     const Slic3r::SLAPrintObjectConfigView view{full, object};
 
     CHECK(Slic3r::is_raft_auto(view));
+    // Unresolved (no raft passed): the helpers answer the no raft of R6.1.
+    CHECK_FALSE(Slic3r::is_pad_enabled(view));
+    CHECK_FALSE(Slic3r::is_pad_around_object(view));
+    CHECK_FALSE(Slic3r::is_zero_elevation(view));
     // An Auto that found no suction cup RESOLVES to RaftType::None (R6.1), it is not unresolved.
     const std::optional<Slic3r::ObjectRaft> raft_solid =
         Slic3r::resolve_object_raft(view, box(20., 20., 20.), 0.);
