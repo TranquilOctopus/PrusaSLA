@@ -174,8 +174,6 @@ std::optional<ObjectRaft> resolve_object_raft(const SLAPrintObjectConfigView &c,
                 int(decision.raft_type),
                 decision.suction ? "suction cup under the object" : "no suction cup");
 
-    if (!decision.suction)
-        return std::nullopt;
     return ObjectRaft{decision.raft_type, decision.suction};
 }
 

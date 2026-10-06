@@ -35,6 +35,9 @@
 #include "libslic3r/IThumbnailImageGenerator.hpp"
 #include "libslic3r/SLAPrint.hpp"
 #include "libslic3r/SLASupportTool.hpp"
+#include "libslic3r/SLA/RaftAuto.hpp"
+#include "libslic3r/SLA/CavityDetection.hpp"
+#include "libslic3r/TriangleMeshSlicer.hpp"
 
 namespace {
 
@@ -80,8 +83,10 @@ indexed_triangle_set
 cup_open_down(double x_mm, double y_mm, double z_mm, double wall_mm)
 {
     indexed_triangle_set its = box(x_mm, y_mm, z_mm);
+    // Cavity from -layer_height_mm to z_mm (height z_mm + layer_height_mm), so it intersects the box
+    // from 0 to z_mm - layer_height_mm, leaving a solid roof of thickness layer_height_mm at the top.
     indexed_triangle_set cavity =
-        box(x_mm - 2. * wall_mm, y_mm - 2. * wall_mm, z_mm + layer_height_mm, -layer_height_mm);
+        box(x_mm - 2. * wall_mm, y_mm - 2. * wall_mm, z_mm, -layer_height_mm);
     MeshBoolean::cgal::minus(its, cavity);
     return its;
 }
@@ -346,10 +351,19 @@ TEST_CASE("An unresolved Auto builds no raft, the safe half of the rule", "[SLA]
     const Slic3r::SLAPrintObjectConfigView view{full, object};
 
     CHECK(Slic3r::is_raft_auto(view));
-    CHECK_FALSE(Slic3r::resolve_object_raft(view, box(20., 20., 20.), 0.).has_value());
+    // Unresolved (no raft passed): the helpers answer the no raft of R6.1.
     CHECK_FALSE(Slic3r::is_pad_enabled(view));
     CHECK_FALSE(Slic3r::is_pad_around_object(view));
     CHECK_FALSE(Slic3r::is_zero_elevation(view));
+    // An Auto that found no suction cup RESOLVES to RaftType::None (R6.1), it is not unresolved.
+    const std::optional<Slic3r::ObjectRaft> raft_solid =
+        Slic3r::resolve_object_raft(view, box(20., 20., 20.), 0.);
+    REQUIRE(raft_solid.has_value());
+    CHECK_FALSE(raft_solid->suction);
+    CHECK(raft_solid->type == RaftType::None);
+    CHECK_FALSE(Slic3r::is_pad_enabled(view, raft_solid));
+    CHECK_FALSE(Slic3r::is_pad_around_object(view, raft_solid));
+    CHECK_FALSE(Slic3r::is_zero_elevation(view, raft_solid));
 
     // The other half: with the decision the rule made for a cup, it is a raft around the object.
     const std::optional<Slic3r::ObjectRaft> raft =
@@ -383,4 +397,94 @@ TEST_CASE("Auto builds the slab a lifted part stands on", "[SLA][RaftAuto]")
     CHECK(outcome.elevation_mm > 0.);
     CHECK(outcome.sliced_pad);
     CHECK(outcome.preview_pad);
+}
+
+TEST_CASE("auto_raft_decision finds the cup of a cup standing open side down", "[SLA][RaftAuto]")
+{
+    // Diagnostic test: call auto_raft_decision directly and also repeat its steps manually
+    // to understand why the cup is not detected.
+    const indexed_triangle_set mesh = cup_open_down(20., 20., 20., 4.);
+    const double layer_height_mm = 0.05;
+    const double elevation_mm = 0.0;
+    const sla::RaftAutoOptions opts{1000.0, 1.0}; // scan_height_mm = 1000, min_cup_opening_mm2 = 1
+
+    // Call the function directly
+    const sla::RaftAutoDecision decision =
+        sla::auto_raft_decision(mesh, layer_height_mm, elevation_mm, opts, [] { return false; });
+
+    // Report mesh bounding box
+    const Domain::BoundingBox3d bb = Domain::bounding_box(mesh);
+    INFO("Mesh bbox: min=(" << bb.min.x() << "," << bb.min.y() << "," << bb.min.z()
+         << ") max=(" << bb.max.x() << "," << bb.max.y() << "," << bb.max.z() << ")");
+
+    // Replicate scan_layers logic (from RaftAuto.cpp anonymous namespace)
+    std::vector<float> zs;
+    std::vector<float> thicknesses_mm;
+    {
+        const Domain::BoundingBox3d bb2 = Domain::bounding_box(mesh);
+        const double bottom = bb2.min.z() + elevation_mm;
+        const double scan_top = std::min(bb2.max.z() + elevation_mm, bottom + opts.scan_height_mm);
+
+        zs.clear();
+        thicknesses_mm.clear();
+        zs.push_back(float(bottom - layer_height_mm * 0.5));
+        thicknesses_mm.push_back(float(layer_height_mm));
+        for (double z = bottom + layer_height_mm * 0.5; z < scan_top; z += layer_height_mm) {
+            zs.push_back(float(z));
+            thicknesses_mm.push_back(float(layer_height_mm));
+        }
+        zs.push_back(float(scan_top + layer_height_mm * 0.5));
+        thicknesses_mm.push_back(float(layer_height_mm));
+    }
+    INFO("zs.size() = " << zs.size());
+    INFO("zs.front() = " << zs.front());
+    INFO("zs.back() = " << zs.back());
+
+    // Slice the mesh
+    Slic3r::MeshSlicingParamsEx params;
+    const std::vector<Domain::ExPolygons> layers = Slic3r::slice_mesh_ex(mesh, zs, params);
+
+    // Detect cavities
+    const SLA::CavityAnalysis cavities = SLA::detect_cavities(
+        layers, thicknesses_mm, SLA::CavityDetectionOptions{opts.min_cup_opening_mm2});
+
+    // Report layer details for key layers
+    auto report_layer = [&](size_t idx, const char* label) {
+        if (idx < layers.size()) {
+            const auto& layer = layers[idx];
+            size_t num_expolys = layer.size();
+            size_t total_holes = 0;
+            double total_area = 0.0;
+            for (const auto& expoly : layer) {
+                total_holes += expoly.holes.size();
+                total_area += std::abs(expoly.area()) * Slic3r::Biz::Algorithms::Scaling::SCALING_FACTOR * Slic3r::Biz::Algorithms::Scaling::SCALING_FACTOR;
+            }
+            INFO(label << " layer " << idx << ": z=" << zs[idx] << " expolys=" << num_expolys
+                 << " holes=" << total_holes << " area_mm2=" << total_area);
+        }
+    };
+
+    report_layer(0, "first");
+    report_layer(1, "second");
+    report_layer(2, "third");
+    size_t mid = layers.size() / 2;
+    report_layer(mid, "middle");
+    if (layers.size() >= 2) report_layer(layers.size() - 2, "last-but-one");
+    if (layers.size() >= 1) report_layer(layers.size() - 1, "last");
+
+    // Report cavity detection results
+    INFO("cavities.cups.size() = " << cavities.cups.size());
+    INFO("cavities.trapped_resin.size() = " << cavities.trapped_resin.size());
+    for (size_t i = 0; i < cavities.cups.size(); ++i) {
+        const auto& cup = cavities.cups[i];
+        INFO("cup " << i << ": first_layer=" << cup.first_layer
+             << " last_layer=" << cup.last_layer
+             << " opening_area_mm2=" << cup.opening_area_mm2
+             << " volume_mm3=" << cup.volume_mm3
+             << " centroid=(" << cup.opening_centroid.x() << "," << cup.opening_centroid.y() << ")");
+    }
+
+    // Check the decision
+    REQUIRE(decision.suction);
+    CHECK(decision.first_cup_layer == 1); // cup starts at layer 1 (layer 0 is below part)
 }
