@@ -450,7 +450,7 @@ TEST_CASE("SLASupportTool: a branching tree gives up between two of its serialis
     // be seen from inside a search itself: that is what this case is for.
     BoxModel box{1000., 1000., 1000.};
     box.object->instances.front()->set_offset({0., 0., 10.});
-    add_island_points(box.object, 1000., 200);
+    add_island_points(box.object, 1000., 2000);
 
     Slic3r::Domain::Transform3d object_to_world = Slic3r::Domain::Transform3d::Identity();
     object_to_world.translate(Slic3r::Domain::Vec3d(0., 0., 10.));
