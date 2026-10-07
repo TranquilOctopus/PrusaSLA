@@ -18,6 +18,7 @@
 #include "libslic3r/SLA/JobController.hpp"
 #include "libslic3r/SLA/Pad.hpp"
 #include "libslic3r/SLA/SupportTreeStrategies.hpp"
+#include "libslic3r/SLA/ToolTrace.hpp"
 #include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
 #include "libslic3r/libslic3r.h"
 
@@ -27,9 +28,16 @@ namespace Slic3r { namespace sla {
 indexed_triangle_set create_support_tree(const SupportableMesh &sm,
                                          const JobController   &ctl)
 {
+    using tool_trace::trace_ms;
+    auto t0 = tool_trace::start();
+
+    trace_ms("create_support_tree_entry", t0, [&ctl](){ return ctl.stopcondition(); });
+
     auto builder = std::make_unique<SupportTreeBuilder>(ctl);
 
     if (sm.cfg.enabled) {
+        trace_ms("create_support_tree_dispatch", t0, [&ctl](){ return ctl.stopcondition(); });
+
         using std::chrono::high_resolution_clock;
         auto start{high_resolution_clock::now()};
 
