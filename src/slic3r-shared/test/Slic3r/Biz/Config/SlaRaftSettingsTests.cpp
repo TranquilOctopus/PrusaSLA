@@ -42,22 +42,21 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         CHECK(def->tooltip.find("half the expansion and a 70 degree wall slope") != std::string::npos);
         // The type picks the knobs, so it is shown above them.
         CHECK(def->tooltip.find("shows only those") != std::string::npos);
-        // Auto is the rule the rulebook R6 asks for, so it is the one a new config gets, and the
-        // tooltip says what it decides and when.
+        // None is the default (M7.8.4b), so a new config gets no raft by default.
         REQUIRE(def->init_fn != nullptr);
         CHECK(def->init_fn().get<Slic3r::Domain::sla::RaftType>()
-              == Slic3r::Domain::sla::RaftType::Auto);
+              == Slic3r::Domain::sla::RaftType::None);
         CHECK(def->tooltip.find("would form a suction cup") != std::string::npos);
-        // Auto is the first entry of the combo, so it is the one the drop-down opens on.
+        // None is the first entry of the combo, so it is the one the drop-down opens on.
         const Slic3r::Domain::EnumValueDefs& enum_values =
             def->init_fn().get<Slic3r::Domain::EnumWrapper>().def();
         REQUIRE(!enum_values.empty());
-        CHECK(enum_values.front().enum_value == int(Slic3r::Domain::sla::RaftType::Auto));
-        CHECK(enum_values.front().str_ui == "Auto (raft only against suction)");
+        CHECK(enum_values.front().enum_value == int(Slic3r::Domain::sla::RaftType::None));
+        CHECK(enum_values.front().str_ui == "None");
         // What a preset or a project stores is the name of the type and not its number, so the four
         // shapes from before Auto keep their names and every project that names one of them reads
         // what it always read.
-        const std::vector<std::string> stored_names{"auto", "none", "full", "around_object", "skate"};
+        const std::vector<std::string> stored_names{"none", "auto", "full", "around_object", "skate"};
         REQUIRE(enum_values.size() == stored_names.size());
         for (size_t i = 0; i < stored_names.size(); ++i) {
             INFO("raft type " << i);

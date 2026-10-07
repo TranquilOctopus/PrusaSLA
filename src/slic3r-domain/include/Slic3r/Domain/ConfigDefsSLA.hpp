@@ -14,10 +14,9 @@ enum SLAMaterialSpeed { slamsSlow, slamsFast, slamsHighViscosity };
 namespace sla {
     enum class SupportTreeType { Default, Branching, Organic };
     enum class PillarConnectionMode { zigzag, cross, dynamic };
-    // The raft type, as raft_type stores it. Auto is first because it is the default (M7.8.4,
-    // rulebook R6: no raft unless the underside of a part would form a suction cup) and the rows of
-    // the option are shown in the order of the enumerators, so the default has to be the first of
-    // them. What a preset or a project stores is the name of the type ("auto", "none", "full",
+    // The raft type, as raft_type stores it. None is the default (M7.8.4b). The rows of the combobox
+    // are ordered with None first, then Auto, then the four shapes, so the default is the first row.
+    // What a preset or a project stores is the name of the type ("none", "auto", "full",
     // "around_object", "skate"), never the number, so the four shapes from before Auto keep their
     // names and every project and preset that names one of them reads what it always read.
     enum class RaftType { Auto, None, Full, AroundObject, Skate };

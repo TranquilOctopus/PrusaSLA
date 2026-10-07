@@ -181,9 +181,9 @@ uint64_t hash_with(std::function<void(Slic3r::Domain::ConfigPackSLA&)> tweak)
     config.sla_print_settings.items.opt("layer_height").set(0.5);
     config.sla_material_settings.items.opt("initial_layer_height").set(0.5);
     config.sla_print_settings.items.opt("supports_enable").set(true);
-    // The raft is named rather than asked for with pad_enable: raft_type is Auto by default since
-    // M7.8.4, and Auto would read the underside of this cube (and find no pocket in it) instead of
-    // building the full plate raft this fixture is about.
+    // The raft is named rather than asked for with pad_enable: raft_type is explicitly set to Full
+    // here (M7.8.4b changed the default to None), and Full builds the full plate raft this fixture
+    // is about.
     config.sla_print_settings.items.opt("raft_type")
         .set(Slic3r::Domain::sla::RaftType::Full);
     // The elephant foot compensation is ramped over the first faded_layers layers OF THE PRINT,

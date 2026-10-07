@@ -337,8 +337,8 @@ struct SlaConfig
 };
 
 // Supports on and a raft under the object (a full plate one, so the pillars stand on it; the raft
-// type is named because raft_type is Auto by default since M7.8.4, and Auto would read the underside
-// of every one of these meshes instead), a 0.05 mm layer.
+// type is named explicitly (M7.8.4b changed the default to None, which would build no raft), a
+// 0.05 mm layer.
 SlaConfig make_sla_config(double layer_height, bool supports)
 {
     Slic3r::Domain::ConfigPackSLA pack;
