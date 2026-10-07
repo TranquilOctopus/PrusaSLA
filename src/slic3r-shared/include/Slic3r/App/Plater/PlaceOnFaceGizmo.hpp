@@ -98,7 +98,7 @@ private:
     Biz::ProjectInteractor& m_project_interactor;
     Biz::Scene::SceneInteractor& m_scene_interactor;
 
-    void rotate_selection(const Domain::Vec3d& direction, const Domain::Vec3d& point) const;
+    void rotate_selection_now(const Domain::Vec3d& direction, const Domain::Vec3d& point);
 
     std::vector<std::array<Domain::Vec3d, 2>> m_normals_and_points;
 };

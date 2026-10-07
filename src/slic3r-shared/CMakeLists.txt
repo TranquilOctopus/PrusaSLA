@@ -139,6 +139,8 @@ set(SLIC3R_SHARED_FILES
         src/Slic3r/App/Plater/SlaSupportAutoPresets.cpp
         src/Slic3r/App/Plater/SlaSupportPointsClear.hpp
         src/Slic3r/App/Plater/SlaSupportPointsClear.cpp
+        include/Slic3r/App/Plater/SlaRotateSupported.hpp
+        src/Slic3r/App/Plater/SlaRotateSupported.cpp
         include/Slic3r/App/Plater/SlaSupportGeometry.hpp
         src/Slic3r/App/Plater/SlaSupportGeometry.cpp
         include/Slic3r/App/Plater/SlaSupportOnModel.hpp
@@ -1733,6 +1735,8 @@ test/Slic3r/App/SlaObjectUseRowsTests.cpp
             test/Slic3r/App/Plater/SlaSupportPointEditsTests.cpp
 
             test/Slic3r/App/Plater/SlaSupportPointsClearTests.cpp
+
+            test/Slic3r/App/Plater/SlaRotateSupportedTests.cpp
 
             test/Slic3r/App/Plater/SlaSupportPointsSettingsTests.cpp
 

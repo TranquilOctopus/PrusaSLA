@@ -14,6 +14,8 @@
 #include "Slic3r/Biz/Scene/SceneInteractor.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
 #include "Slic3r/Domain/Project.hpp"
+#include "Slic3r/App/Plater/SlaRotateSupported.hpp"
+#include "Slic3r/App/Plater/SlaSupportPointsClear.hpp"
 #include "libslic3r/SLAAutoOrient.hpp"
 #include "Slic3r/Assert.hpp"
 #include "Slic3r/LegacyFormat.hpp"
@@ -416,37 +418,46 @@ void RotationDialog::on_auto_orient()
 
     // The mesh the engine searches is taken out of the model here, on the UI thread, so that the
     // worker thread has a copy of its own and nothing to read while the user works on the project.
-    const Domain::TriangleMesh mesh{Slic3r::sla::auto_orient_mesh(*object)};
+    Domain::TriangleMesh mesh{Slic3r::sla::auto_orient_mesh(*object)};
     if (mesh.its.vertices.empty()) {
         return;
     }
 
-    m_auto_orient_job_name = auto_orient_job_name(project_id);
-    const std::string job_name{m_auto_orient_job_name};
-    m_auto_orient_progress_percent = 0;
-    Biz::Platform::PlatformServices::instance().job_manager()
-        .create_job(job_name, run_auto_orient, std::move(mesh), auto_orient_goal())
-        .set_project_id(project_id)
-        .on_result([this, job_name, element](AutoOrientResult result)
-                   {
-                       if (m_auto_orient_job_name != job_name)
-                           return; // a newer search took over while this one was finishing
-                       if (result.has_rotation) {
-                           apply_auto_orient_rotation(result.rotation, element);
-                       }
-                       m_auto_orient_job_name.clear();
-                       reload_auto_orient_status();
-                   })
-        .on_exception([this, job_name](const std::exception_ptr&)
-                      {
-                          if (m_auto_orient_job_name != job_name)
-                              return;
-                          m_auto_orient_job_name.clear();
-                          reload_auto_orient_status();
-                      })
-        .start();
+    // Check if the selected object has supports and ask before starting the auto-orient job.
+    const SlaRotateSupportedCheck check = sla_rotate_supported_check(m_project_interactor);
+    sla_rotate_supported_ask_then_apply(
+        m_project_interactor,
+        check,
+        [this, mesh = std::move(mesh), project_id, element]() mutable
+        {
+            m_auto_orient_job_name = auto_orient_job_name(project_id);
+            const std::string job_name{m_auto_orient_job_name};
+            m_auto_orient_progress_percent = 0;
+            Biz::Platform::PlatformServices::instance().job_manager()
+                .create_job(job_name, run_auto_orient, std::move(mesh), auto_orient_goal())
+                .set_project_id(project_id)
+                .on_result([this, job_name, element](AutoOrientResult result)
+                           {
+                               if (m_auto_orient_job_name != job_name)
+                                   return; // a newer search took over while this one was finishing
+                               if (result.has_rotation) {
+                                   apply_auto_orient_rotation(result.rotation, element);
+                               }
+                               m_auto_orient_job_name.clear();
+                               reload_auto_orient_status();
+                           })
+                .on_exception([this, job_name](const std::exception_ptr&)
+                              {
+                                  if (m_auto_orient_job_name != job_name)
+                                      return;
+                                  m_auto_orient_job_name.clear();
+                                  reload_auto_orient_status();
+                              })
+                .start();
 
-    reload_auto_orient_status();
+            reload_auto_orient_status();
+        }
+    );
 }
 
 void RotationDialog::apply_auto_orient_rotation(
@@ -505,11 +516,19 @@ void RotationDialog::apply_auto_orient_rotation(
     relative_transform_world.block<3, 3>(0, 0) = R_relative;
     relative_transform_world.block<3, 1>(0, 3) = center - R_relative * center;
 
-    // Apply transform and place on bed
-    scene_interactor.transform_selection(relative_transform_world, true);
+    const SlaRotateSupportedCheck check = sla_rotate_supported_check(m_project_interactor);
+    sla_rotate_supported_ask_then_apply(
+        m_project_interactor,
+        check,
+        [this, relative_transform_world]()
+        {
+            // Apply transform and place on bed
+            m_project_interactor.scene_interactor().transform_selection(relative_transform_world, true);
 
-    // Take undo snapshot
-    m_project_interactor.undo_provider().take_snapshot(Biz::UndoSnapshotType::Rotate);
+            // Take undo snapshot
+            m_project_interactor.undo_provider().take_snapshot(Biz::UndoSnapshotType::Rotate);
+        }
+    );
 }
 
 void RotationDialog::add_rotation(Domain::Vec3d rotate_by_rads)
@@ -526,16 +545,25 @@ void RotationDialog::add_rotation(Domain::Vec3d rotate_by_rads)
     rotate_by_rads(1) = -rotate_by_rads(1);
 
     const bool was_floating{selection_bounding_box->is_floating()};
-    Biz::Scene::SceneInteractor& scene_interactor{m_project_interactor.scene_interactor()};
-    scene_interactor.transform_selection(
-        get_rotation_matrix(
-            bounding_box.rotation,
-            bounding_box.center,
-            rotate_by_rads
-        ),
-        !was_floating
+
+    const SlaRotateSupportedCheck check = sla_rotate_supported_check(m_project_interactor);
+    sla_rotate_supported_ask_then_apply(
+        m_project_interactor,
+        check,
+        [this, rotate_by_rads, bounding_box, was_floating]()
+        {
+            Biz::Scene::SceneInteractor& scene_interactor{m_project_interactor.scene_interactor()};
+            scene_interactor.transform_selection(
+                get_rotation_matrix(
+                    bounding_box.rotation,
+                    bounding_box.center,
+                    rotate_by_rads
+                ),
+                !was_floating
+            );
+            m_project_interactor.undo_provider().take_snapshot(Biz::UndoSnapshotType::SetRotation);
+        }
     );
-    m_project_interactor.undo_provider().take_snapshot(Biz::UndoSnapshotType::SetRotation);
 }
 
 Domain::SquareMatrix4d remove_rotation(
