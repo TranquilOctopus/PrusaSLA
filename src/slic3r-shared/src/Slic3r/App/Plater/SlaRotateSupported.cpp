@@ -10,6 +10,7 @@
 #include "Slic3r/Domain/ObjectID.hpp"
 #include "Slic3r/App/IsSlaActive.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsClear.hpp"
+#include "Slic3r/App/AppServices.hpp"
 
 using Slic3r::Biz::_u8L;
 using Slic3r::Domain::ElementRef;
@@ -29,7 +30,7 @@ sla_rotate_supported_check(Biz::ProjectInteractor& project_interactor)
     );
 
     for (const ElementRef& element : selection.elements) {
-        if (!element.has_object()) {
+        if (element.object_id == 0 || element.is_wipe_tower()) {
             continue;
         }
         const ModelObject* object = project.find_object_by_id(element.object_id);
@@ -122,7 +123,7 @@ void sla_rotate_supported_ask_then_apply(
             std::vector<const ModelObject*> objects_with_points;
             objects_with_points.reserve(asked_for_object_refs.size());
             for (const ElementRef& ref : asked_for_object_refs) {
-                if (ref.has_object()) {
+                if (ref.object_id != 0 && !ref.is_wipe_tower()) {
                     const ModelObject* obj = project.find_object_by_id(ref.object_id);
                     if (obj && !obj->sla_support_points.empty()) {
                         objects_with_points.push_back(obj);

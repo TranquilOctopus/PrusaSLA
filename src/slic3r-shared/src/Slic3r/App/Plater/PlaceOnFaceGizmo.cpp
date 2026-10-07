@@ -3,6 +3,7 @@
 #include "Slic3r/App/Plater/PlaterScenePresenter.hpp"
 #include "Slic3r/App/Scene/NodeVisitor.hpp"
 #include "Slic3r/App/Scene/SceneNodeTag.hpp"
+#include "Slic3r/App/AppServices.hpp"
 
 #include "Slic3r/Domain/ModelVolume.hpp"
 #include "Slic3r/Domain/ObjectID.hpp"
@@ -314,7 +315,7 @@ PlaceOnFaceGizmo::on_mouse(Scene::GizmoEventContext& ctx, bool only_active)
                                 std::vector<const ModelObject*> objects_with_points;
                                 objects_with_points.reserve(asked_for_object_refs.size());
                                 for (const ElementRef& ref : asked_for_object_refs) {
-                                    if (ref.has_object()) {
+                                    if (ref.object_id != 0 && !ref.is_wipe_tower()) {
                                         const ModelObject* obj = project.find_object_by_id(ref.object_id);
                                         if (obj && !obj->sla_support_points.empty()) {
                                             objects_with_points.push_back(obj);

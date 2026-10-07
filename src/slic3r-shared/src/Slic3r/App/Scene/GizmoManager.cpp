@@ -214,8 +214,8 @@ void GizmoManager::on_scene_mouse_event(const Platform::MouseEvent& e, const Sli
 #endif
 
             if (is_relevant_event) {
-                SPDLOG_INFO("[SupportPick] GizmoManager gizmo on_mouse returned activation_state={} gizmo_type={}",
-                    static_cast<int>(ret), static_cast<int>(g->type()));
+                SPDLOG_INFO("[SupportPick] GizmoManager gizmo on_mouse returned activation_state={} current_tool_type={}",
+                    static_cast<int>(ret), static_cast<int>(current_tool_type()));
             }
 
             if (ret == GizmoActivationState::Inactive) {

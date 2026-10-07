@@ -3,6 +3,7 @@
 #include "Slic3r/App/Plater/PlaterSceneLayer.hpp"
 #include "Slic3r/App/Render/Device.hpp"
 #include "Slic3r/App/Plater/PlaterScenePresenter.hpp"
+#include "Slic3r/App/AppServices.hpp"
 
 #include "Slic3r/Biz/Algorithms/Line.hpp"
 #include "Slic3r/Biz/Algorithms/Point.hpp"
@@ -485,7 +486,7 @@ Scene::GizmoActivationState RotationGizmo::on_mouse(Scene::GizmoEventContext& ct
             AppServices::instance().dialog_manager().show_yesno_dialog(
                 _u8L("Rotate supported part"),
                 question,
-                [this, memento = std::move(memento), asked_for_object_refs = std::move(asked_for_object_refs), was_floating](bool answer)
+                [this, memento = std::move(memento), asked_for_object_refs = std::move(asked_for_object_refs), was_floating](bool answer) mutable
                 {
                     // Verify selection still matches (defensive).
                     const auto& selection = m_project_interactor.scene_interactor().object_selection();
@@ -523,7 +524,7 @@ Scene::GizmoActivationState RotationGizmo::on_mouse(Scene::GizmoEventContext& ct
                         std::vector<const Domain::ModelObject*> objects_with_points;
                         objects_with_points.reserve(asked_for_object_refs.size());
                         for (const ElementRef& ref : asked_for_object_refs) {
-                            if (ref.has_object()) {
+                            if (ref.object_id != 0 && !ref.is_wipe_tower()) {
                                 const Domain::ModelObject* obj = project.find_object_by_id(ref.object_id);
                                 if (obj && !obj->sla_support_points.empty()) {
                                     objects_with_points.push_back(obj);
