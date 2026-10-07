@@ -11,6 +11,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <limits>
 #include <numbers>
 #include <optional>
@@ -614,6 +616,8 @@ void classify_support_point_roles(
     ThrowOnCancel throw_on_cancel
 )
 {
+    static const bool trace = std::getenv("SLA_ROLES_TRACE") != nullptr;
+
     if (points.empty() || !(layer_height > 0.))
         return;
 
@@ -626,15 +630,29 @@ void classify_support_point_roles(
             anchor_z = std::min(anchor_z, double(point.pos.z()));
     const double anchor_top = anchor_z + thresholds.anchor_layers * layer_height;
 
-    for (SupportPoint& point : points) {
+    for (size_t idx = 0; idx < points.size(); ++idx) {
+        SupportPoint& point = points[idx];
         throw_on_cancel();
 
         Vec3d p = point.pos.cast<double>();
+        const Vec3d original_pos = p;
         Vec3d n = outward_normal_at(mesh, p);
         if (!has_normal(n)) {
             // A point that is not on the model has no surface to measure. It carries nothing that
             // says it is thin, and it is no island either, so it is an overhang like any other.
             point.role = Role::Overhang;
+
+            if (trace) {
+                const char* point_type = point.is_island() ? "island" : "slope";
+                std::fprintf(stderr,
+                    "ROLES_TRACE idx=%zu type=%s original=(%.3f,%.3f,%.3f) final=(%.3f,%.3f,%.3f) "
+                    "lowest_island=0 anchor_z=inf anchor_top=inf around=0 is_raised_detail=0 "
+                    "stuck_on_raised_detail=0 r45_moved=0 thickness=inf thickness_plane=inf "
+                    "is_fragile=0 is_detailed_region=0 role=%d\n",
+                    idx, point_type,
+                    original_pos.x(), original_pos.y(), original_pos.z(),
+                    p.x(), p.y(), p.z(), static_cast<int>(Role::Overhang));
+            }
             continue;
         }
 
@@ -651,15 +669,17 @@ void classify_support_point_roles(
         //   - R4.1 (anchor of lowest island) wins over R4.9 (detailed region).
         //   - R4.5 stuck on detail becomes Anchor if it is the lowest island, otherwise Fragile.
         bool stuck_on_raised_detail = false;
+        bool r45_moved = false;
         const std::optional<LocalSurface> around =
             probe_surface_around(mesh, p, n, thresholds.detail_flatness_mm);
+        const bool around_has = around.has_value();
 
         // R4.4 fix: when a local surface plane is found, also measure thickness along its normal.
         // The point normal at a sharp feature (e.g. pyramid apex) can be nearly horizontal, making
         // the single ray measure a sub-detail width instead of the part thickness. The fitted plane
         // normal represents the underlying surface orientation; use the larger of the two thicknesses.
         double thickness_plane = thickness;
-        if (around.has_value()) {
+        if (around_has) {
             const TangentPlane plane = tangent_plane(n);
             // Fitted plane normal: n + slope.x()*first - slope.y()*second (normalized).
             const Vec3d fitted_normal = (n + around->slope.x() * plane.first - around->slope.y() * plane.second).normalized();
@@ -670,13 +690,15 @@ void classify_support_point_roles(
             }
         }
 
-        if (around.has_value()
+        bool is_raised_detail_result = false;
+        if (around_has
             && is_raised_detail(
                 *around,
                 thresholds.detail_bulge_mm,
                 thresholds.detail_move_radius_mm
             ))
         {
+            is_raised_detail_result = true;
             const std::optional<SurfaceSample> spot =
                 find_plain_spot(mesh, layers, p, n, *around, layer_height, thresholds);
             if (!spot.has_value()) {
@@ -688,12 +710,14 @@ void classify_support_point_roles(
                 point.pos = p.cast<float>();
                 thickness = thickness_at(mesh, p, n);
                 thickness_plane = thickness; // moved to plain spot: single ray is reliable
+                r45_moved = true;
             }
         }
 
         // R4.4: a thin feature. R4.9 may still override to Detail (except for anchors).
         Role role = Role::Overhang;
-        if (is_fragile(p, thickness_plane, layers, layer_height, thresholds)) {
+        const bool is_fragile_result = is_fragile(p, thickness_plane, layers, layer_height, thresholds);
+        if (is_fragile_result) {
             role = Role::Fragile;
         }
 
@@ -725,10 +749,35 @@ void classify_support_point_roles(
         // carries the whole part early in the print and stays heavy or xheavy (R4.1, and R4.2 for the
         // AnchorLarge of a very large object). Both anchor roles are named here, so that the rule
         // holds on its own and not only because add_heavy_anchors runs after this pass.
-        if (!is_anchor(role) && is_detailed_region(mesh, p, n, thresholds))
+        const bool is_detailed_region_result = !is_anchor(role) && is_detailed_region(mesh, p, n, thresholds);
+        if (is_detailed_region_result)
             role = Role::Detail;
 
         point.role = role;
+
+        if (trace) {
+            const char* point_type = point.is_island() ? "island" : "slope";
+            std::fprintf(stderr,
+                "ROLES_TRACE idx=%zu type=%s original=(%.3f,%.3f,%.3f) final=(%.3f,%.3f,%.3f) "
+                "lowest_island=%d anchor_z=%.3f anchor_top=%.3f around=%d is_raised_detail=%d "
+                "stuck_on_raised_detail=%d r45_moved=%d thickness=%.3f thickness_plane=%.3f "
+                "is_fragile=%d is_detailed_region=%d role=%d\n",
+                idx, point_type,
+                original_pos.x(), original_pos.y(), original_pos.z(),
+                p.x(), p.y(), p.z(),
+                lowest_island ? 1 : 0,
+                anchor_z == std::numeric_limits<double>::infinity() ? -1.0 : anchor_z,
+                anchor_top == std::numeric_limits<double>::infinity() ? -1.0 : anchor_top,
+                around_has ? 1 : 0,
+                is_raised_detail_result ? 1 : 0,
+                stuck_on_raised_detail ? 1 : 0,
+                r45_moved ? 1 : 0,
+                thickness == std::numeric_limits<double>::infinity() ? -1.0 : thickness,
+                thickness_plane == std::numeric_limits<double>::infinity() ? -1.0 : thickness_plane,
+                is_fragile_result ? 1 : 0,
+                is_detailed_region_result ? 1 : 0,
+                static_cast<int>(role));
+        }
     }
 }
 
