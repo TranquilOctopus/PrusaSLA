@@ -112,8 +112,11 @@ SupportToolTree build_support_tree_for_tool(const SupportToolModelMesh& model_me
         // is the same pure function the slice runs (resolve_object_raft in SLAPrint.cpp), so the
         // preview and the print cannot show two different rafts. It is read before anything else,
         // because it decides whether the object stands on the plate, and with that the elevation.
+        sla::ThrowOnCancel throw_on_cancel = [&stop]() {
+            if (stop && stop()) throw Slic3r::RuntimeError("Support tool canceled");
+        };
         const std::optional<ObjectRaft> raft = resolve_object_raft(
-            cfg, its, support_tool_elevation(full_config, object_settings));
+            cfg, its, support_tool_elevation(full_config, object_settings), throw_on_cancel);
 
         SupportToolTree out;
         out.raft         = raft;
@@ -246,8 +249,11 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const SupportToolMod
         // The same raft decision the tree is built from (M7.8.4): points on the bottom of an object
         // that prints in a raft around it would stand inside that raft, so the zero elevation filter
         // below needs to know what raft_type resolved to and not just that it is Auto.
+        sla::ThrowOnCancel throw_on_cancel = [&stop]() {
+            if (stop && stop()) throw Slic3r::RuntimeError("Support tool canceled");
+        };
         const std::optional<ObjectRaft> raft = resolve_object_raft(
-            cfg, its, support_tool_elevation(full_config, object_settings));
+            cfg, its, support_tool_elevation(full_config, object_settings), throw_on_cancel);
 
         // Compute slice heights
         double layer_height = Domain::sla_effective_layer_height(cfg);
@@ -262,10 +268,6 @@ Domain::SLA::SupportPoints generate_support_points_for_tool(const SupportToolMod
             case Domain::SlicingMode::EvenOdd:    params.mode = MeshSlicingParams::SlicingMode::EvenOdd; break;
             case Domain::SlicingMode::CloseHoles: params.mode = MeshSlicingParams::SlicingMode::Positive; break;
         }
-
-        ThrowOnCancel throw_on_cancel = [&stop]() {
-            if (stop && stop()) throw Slic3r::RuntimeError("Support tool canceled");
-        };
 
         std::vector<Domain::ExPolygons> slices = slice_mesh_ex(its, heights, params, throw_on_cancel);
 

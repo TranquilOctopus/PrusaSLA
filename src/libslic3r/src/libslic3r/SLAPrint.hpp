@@ -507,9 +507,11 @@ bool is_raft_auto(const SLAPrintObjectConfigView &c);
 // raft_type as it is stored, with Auto resolved for this object. Nothing else resolves:
 // @p mesh_in_print_pose is the object as it prints (its transform applied, no lift),
 // @p object_elevation_mm is how high above the plate its lowest point prints without a raft.
+// @p throw_on_cancel is called between layers; empty means never.
 std::optional<ObjectRaft> resolve_object_raft(const SLAPrintObjectConfigView &c,
                                               const indexed_triangle_set      &mesh_in_print_pose,
-                                              double                           object_elevation_mm);
+                                              double                           object_elevation_mm,
+                                              const sla::ThrowOnCancel&        throw_on_cancel = {});
 
 // raft_type is the single source of truth for the raft (pad); pad_enable and
 // pad_around_object are only read for configs that have no (known) raft_type. An Auto that nothing

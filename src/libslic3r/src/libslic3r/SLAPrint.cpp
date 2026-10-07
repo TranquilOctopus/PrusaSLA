@@ -161,14 +161,15 @@ bool is_raft_auto(const SLAPrintObjectConfigView &c)
 // raft_type as it is stored, with Auto resolved for this object from its underside (M7.8.4).
 std::optional<ObjectRaft> resolve_object_raft(const SLAPrintObjectConfigView &c,
                                               const indexed_triangle_set      &mesh_in_print_pose,
-                                              double                           object_elevation_mm)
+                                              double                           object_elevation_mm,
+                                              const sla::ThrowOnCancel&        throw_on_cancel = {})
 {
     if (!is_raft_auto(c))
         return std::nullopt;
 
     const sla::RaftAutoDecision decision =
         sla::auto_raft_decision(mesh_in_print_pose, Domain::sla_effective_layer_height(c),
-                                object_elevation_mm);
+                                object_elevation_mm, {}, throw_on_cancel);
 
     SPDLOG_INFO("Object raft: type {} ({})",
                 int(decision.raft_type),
@@ -1663,7 +1664,9 @@ void SLAPrintObject::resolve_object_raft()
     const indexed_triangle_set its          = csg::csgmesh_merge_positive_parts(m_mesh_to_slice);
     const double                elevation_mm = this->get_elevation();
 
-    const std::optional<ObjectRaft> raft = ::Slic3r::resolve_object_raft(m_config, its, elevation_mm);
+    // Pass the print's cancellation callback so the raft decision can be stopped.
+    sla::ThrowOnCancel throw_on_cancel = [this]() { m_print->throw_if_canceled(); };
+    const std::optional<ObjectRaft> raft = ::Slic3r::resolve_object_raft(m_config, its, elevation_mm, throw_on_cancel);
     if (!raft)
         return;
 

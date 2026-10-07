@@ -49,6 +49,54 @@ void scan_layers(const indexed_triangle_set& mesh,
     thicknesses_mm.push_back(float(layer_height_mm));
 }
 
+// Early-out scan: only the virtual layer under the part and the first real layer.
+// If the first real layer has no hole with area >= min_cup_opening_mm2, there is no cup.
+bool first_layer_has_cup_opening(const indexed_triangle_set& mesh_in_print_pose,
+                                 double                     layer_height_mm,
+                                 double                     object_elevation_mm,
+                                 const RaftAutoOptions&     opts,
+                                 const ThrowOnCancel&       throw_on_cancel)
+{
+    const Domain::BoundingBox3d bb = Domain::bounding_box(mesh_in_print_pose);
+    const double bottom = bb.min.z() + object_elevation_mm;
+
+    // Two layers: virtual layer below the part, and the first real layer.
+    std::vector<float> early_zs;
+    std::vector<float> early_thicknesses;
+    early_zs.push_back(float(bottom - layer_height_mm * 0.5));
+    early_thicknesses.push_back(float(layer_height_mm));
+    early_zs.push_back(float(bottom + layer_height_mm * 0.5));
+    early_thicknesses.push_back(float(layer_height_mm));
+
+    MeshSlicingParamsEx params;
+    if (object_elevation_mm != 0.)
+        params.trafo = Domain::translation_transform(Domain::Vec3d(0., 0., object_elevation_mm));
+
+    const std::vector<Domain::ExPolygons> early_layers = throw_on_cancel
+        ? slice_mesh_ex(mesh_in_print_pose, early_zs, params, throw_on_cancel)
+        : slice_mesh_ex(mesh_in_print_pose, early_zs, params);
+
+    if (early_layers.size() < 2)
+        return false;
+
+    // The first real layer is at index 1. Check its holes for openings large enough to be a cup.
+    // A suction cup's opening is a hole in the first real layer of the part (a pocket open below
+    // onto the film, or onto the first printed layers of a lifted part). We check the raw holes
+    // of the ExPolygons; holes_of() in CavityDetection.cpp also subtracts solid inside the holes,
+    // but for the early-out the raw hole area is a conservative overestimate: if even the raw hole
+    // is smaller than min_cup_opening_mm2, the cup cannot exist.
+    constexpr double sf = Slic3r::Biz::Algorithms::Scaling::SCALING_FACTOR;
+    const Domain::ExPolygons& first_real_layer = early_layers[1];
+    for (const Domain::ExPolygon& region : first_real_layer) {
+        for (const Domain::Polygon& hole : region.holes) {
+            const double area_mm2 = std::abs(hole.area()) * sf * sf;
+            if (area_mm2 >= opts.min_cup_opening_mm2)
+                return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 RaftAutoDecision auto_raft_decision(const indexed_triangle_set& mesh_in_print_pose,
@@ -64,6 +112,13 @@ RaftAutoDecision auto_raft_decision(const indexed_triangle_set& mesh_in_print_po
     if (mesh_in_print_pose.vertices.empty() || mesh_in_print_pose.indices.empty())
         return decision;
     if (!(layer_height_mm > 0.))
+        return decision;
+
+    // CHEAP EARLY OUT: a suction cup's opening is on the FIRST real layer of the part.
+    // Slice only the virtual layer under the part and the first real layer.
+    // If the first real layer has no hole with opening area >= min_cup_opening_mm2,
+    // there is no cup and we can return immediately without slicing the rest.
+    if (!first_layer_has_cup_opening(mesh_in_print_pose, layer_height_mm, object_elevation_mm, opts, throw_on_cancel))
         return decision;
 
     std::vector<float> zs;
