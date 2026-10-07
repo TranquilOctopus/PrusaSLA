@@ -164,6 +164,9 @@ private:
     Yoga::CollapsibleWindow* m_shortcuts_window = nullptr;
     Yoga::CollapsibleWindow* m_new_supports_window = nullptr;
     Yoga::CollapsibleWindow* m_selected_supports_window = nullptr;
+    // Previous collapsed state of New supports, saved when Selected supports becomes visible
+    // so it can be restored when the selection is cleared (M2.39a).
+    bool m_new_supports_was_collapsed = false;
     Yoga::SliderWithInput* m_density_slider = nullptr;
     SupportValueControls m_new_supports;
     SupportValueControls m_selected_supports;

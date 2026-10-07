@@ -191,6 +191,14 @@ public:
     /// none yet; a caller that wants to know whether a support of it can be picked asks here (M2.35).
     [[nodiscard]] bool has_preview(Domain::ObjectID object_id) const;
 
+    /// @brief The support tree mesh of this object, if it has been built and is currently drawn.
+    /// Returns nullptr when the object has no preview, the preview is still building, or the tree
+    /// is empty. The mesh is in the world coordinates of the print pose (M2.34), i.e. the same
+    /// frame the preview draws it in: object_to_world from sla_support_tree_placement() without the
+    /// node_trafo lift. A caller that wants to raycast against the real drawn tree uses this mesh
+    /// with the same drawing transform the preview uses (object_drawing_trafo() while the tool is open).
+    [[nodiscard]] std::shared_ptr<const Domain::TriangleMesh> support_tree_mesh(Domain::ObjectID object_id) const;
+
     /// @brief What the raft of this object came to when raft_type is Auto (rulebook R6, M7.8.4),
     /// as the build that drew it last decided it.
     ///

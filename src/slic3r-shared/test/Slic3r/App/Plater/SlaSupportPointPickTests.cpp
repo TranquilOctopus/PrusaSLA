@@ -18,12 +18,14 @@ using Catch::Approx;
 using Slic3r::App::Plater::sla_support_point_click_radius_px;
 using Slic3r::App::Plater::sla_support_point_click_target;
 using Slic3r::App::Plater::sla_support_point_marker_at;
+using Slic3r::App::Plater::sla_support_point_pick_from_tree_hit;
 using Slic3r::App::Plater::sla_support_tree_part_at;
 using Slic3r::App::Plater::sla_support_tree_pick_slack_px;
 using Slic3r::App::Plater::SlaSupportPointMarker;
 using Slic3r::App::Plater::SlaSupportPointTarget;
 using Slic3r::App::Plater::SlaSupportTreePart;
 using Slic3r::Domain::Vec2d;
+using Slic3r::Domain::Vec3d;
 
 namespace {
 
@@ -261,3 +263,116 @@ TEST_CASE(
         CHECK_FALSE(target.has_value());
     }
 }
+
+// M2.39a: picking a support point from a hit on the real support tree mesh.
+// The function takes the support point heads in world coordinates and a hit position on the tree mesh,
+// and returns the index of the point whose head is nearest in 3D to the hit, preferring points whose
+// head is ABOVE the hit (head_z >= hit_z - 0.5 mm). A click on a stem or trunk belongs to the head it carries.
+TEST_CASE(
+    "Picking a support point from a tree mesh hit (sla_support_point_pick_from_tree_hit)",
+    "[SlaSupportPointPick][M2.39a]"
+)
+{
+    SECTION("A lone vertical support: hit on the stem picks its head")
+    {
+        const std::vector<Vec3d> heads{{10., 10., 50.}}; // head at z=50
+        const Vec3d hit{10., 10., 10.};                  // hit on stem at z=10
+        const auto picked = sla_support_point_pick_from_tree_hit(heads, hit);
+        REQUIRE(picked.has_value());
+        CHECK(*picked == 0u);
+    }
+
+    SECTION("Two supports sharing a trunk: hit on shared trunk picks the head above the hit")
+    {
+        // Two supports whose stems merge into a shared trunk at z=20
+        const std::vector<Vec3d> heads{{10., 10., 50.}, {12., 10., 45.}};
+        const Vec3d hit{11., 10., 15.}; // hit on shared trunk below both heads
+        const auto picked = sla_support_point_pick_from_tree_hit(heads, hit);
+        REQUIRE(picked.has_value());
+        // The hit is below both heads; nearest in 3D is point 0 (head at z=50, dist~35) vs point 1 (head at z=45, dist~30)
+        // But both are above the hit (z >= 15 - 0.5 = 14.5), so nearest 3D distance wins -> point 1
+        CHECK(*picked == 1u);
+    }
+
+    SECTION("A leaning branch: hit on the branch picks the head it connects to")
+    {
+        // A support whose stem leans: head at (15, 10, 40), base at (10, 10, 0)
+        // Hit is on the leaning stem, closer to head than base
+        const std::vector<Vec3d> heads{{15., 10., 40.}};
+        const Vec3d hit{13., 10., 20.}; // on the leaning stem
+        const auto picked = sla_support_point_pick_from_tree_hit(heads, hit);
+        REQUIRE(picked.has_value());
+        CHECK(*picked == 0u);
+    }
+
+    SECTION("Hit far from every head still picks the nearest one above the hit")
+    {
+        const std::vector<Vec3d> heads{
+            {0., 0., 50.},   // point 0
+            {100., 0., 40.}, // point 1
+            {0., 100., 30.}  // point 2
+        };
+        // Hit is at (50, 50, 10) - equidistant from all in XY, but different Z
+        const Vec3d hit{50., 50., 10.};
+        const auto picked = sla_support_point_pick_from_tree_hit(heads, hit);
+        REQUIRE(picked.has_value());
+        // All heads are above the hit (z >= 9.5). Nearest in 3D:
+        // point 0: dist^2 = 50^2 + 50^2 + 40^2 = 2500+2500+1600 = 6600
+        // point 1: dist^2 = 50^2 + 50^2 + 30^2 = 2500+2500+900 = 5900
+        // point 2: dist^2 = 50^2 + 50^2 + 20^2 = 2500+2500+400 = 5400 -> point 2 wins
+        CHECK(*picked == 2u);
+    }
+
+    SECTION("Hit above all heads: prefers heads above hit, falls back to nearest")
+    {
+        const std::vector<Vec3d> heads{{0., 0., 10.}, {10., 0., 5.}};
+        const Vec3d hit{0., 0., 20.}; // hit is ABOVE both heads
+        const auto picked = sla_support_point_pick_from_tree_hit(heads, hit);
+        REQUIRE(picked.has_value());
+        // Neither head is above the hit (head_z >= 20 - 0.5 = 19.5 is false for both)
+        // So both are "not above", nearest 3D distance wins -> point 0 (dist=10 vs 22.36)
+        CHECK(*picked == 0u);
+    }
+
+    SECTION("Empty point list returns nullopt")
+    {
+        const std::vector<Vec3d> heads{};
+        const Vec3d hit{0., 0., 0.};
+        const auto picked = sla_support_point_pick_from_tree_hit(heads, hit);
+        CHECK_FALSE(picked.has_value());
+    }
+
+    SECTION("Point exactly at hit threshold (head_z == hit_z - 0.5) counts as above")
+    {
+        const std::vector<Vec3d> heads{{0., 0., 9.5}}; // exactly at threshold
+        const Vec3d hit{0., 0., 10.};
+        const auto picked = sla_support_point_pick_from_tree_hit(heads, hit);
+        REQUIRE(picked.has_value());
+        CHECK(*picked == 0u);
+    }
+
+    SECTION("Point just below threshold (head_z == hit_z - 0.5 - epsilon) does not count as above")
+    {
+        const std::vector<Vec3d> heads{{0., 0., 9.49}}; // just below threshold
+        const Vec3d hit{0., 0., 10.};
+        const auto picked = sla_support_point_pick_from_tree_hit(heads, hit);
+        REQUIRE(picked.has_value());
+        // Not above, but only one point so it wins by distance
+        CHECK(*picked == 0u);
+    }
+
+    SECTION("Multiple points, one above threshold wins over closer one below threshold")
+    {
+        // Point 0: head at z=9.4 (below threshold 9.5), very close in XY
+        // Point 1: head at z=10.0 (above threshold), farther in XY
+        const std::vector<Vec3d> heads{{0., 0., 9.4}, {5., 0., 10.0}};
+        const Vec3d hit{0., 0., 10.};
+        const auto picked = sla_support_point_pick_from_tree_hit(heads, hit);
+        REQUIRE(picked.has_value());
+        // Point 1 is above (z=10.0 >= 9.5), point 0 is not (z=9.4 < 9.5)
+        // So point 1 wins even though it's farther in 3D
+        CHECK(*picked == 1u);
+    }
+}
+
+} // namespace Slic3r::App::Plater

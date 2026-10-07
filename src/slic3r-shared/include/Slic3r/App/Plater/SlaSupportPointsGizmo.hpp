@@ -219,6 +219,8 @@ private:
     // tool on a support), otherwise for the object the tool works on.
     void collect_tree_parts(std::vector<SlaSupportTreePart>& out_parts, bool whole_plate) const;
     std::optional<SlaSupportPointTarget> point_at(const Domain::Vec2d& cursor) const;
+    // Raycast against the real support tree mesh and pick the support point whose head is nearest.
+    std::optional<std::pair<size_t, Domain::Vec3d>> raycast_tree_mesh(const Domain::Vec2d& cursor) const;
     // Selects the point a double click on a drawn support opened the tool on (M2.35).
     void open_on_picked_point();
 
@@ -388,6 +390,11 @@ private:
     // Auto support all queue
     std::deque<Domain::ObjectID> m_auto_support_queue;
     std::optional<bool> m_auto_support_keep_existing;
+
+    // Cache of AABBMesh for the support tree mesh, keyed by the shared_ptr to the tree mesh.
+    // Built lazily on first raycast against the tree, reused for subsequent clicks.
+    // Mutable because it's built during a const raycast operation.
+    mutable std::unordered_map<std::shared_ptr<const Domain::TriangleMesh>, std::unique_ptr<Slic3r::AABBMesh>> m_tree_aabb_cache;
 
     // Guard to prevent dialog setters from triggering value-change callbacks
     bool m_syncing_dialog{false};

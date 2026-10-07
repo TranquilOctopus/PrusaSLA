@@ -55,18 +55,9 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     // supports" is what a clicked point takes and changes no point that is already there, "Selected
     // supports (N)" is what the points of the selection carry and only ever changes those. One set
     // of fields doing both jobs at once is what made it unclear what a changed value touched.
+    // Selected supports is created FIRST so it appears ABOVE New supports in the layout (M2.39a).
+    // It is hidden when no points are selected.
     this->add_separator(settings);
-
-    m_new_supports_window = settings->emplace_back<CollapsibleWindow>(
-        _u8L("New supports"),
-        "SlaSupportPointsNewSupports"
-    );
-    m_new_supports_window->set_padding(0.f);
-    m_new_supports_window->set_collapsed(false);
-    Item* new_supports = m_new_supports_window->content();
-    new_supports->set_padding(0.f);
-    new_supports->set_gap(2.f * gap_size());
-    this->add_support_value_group(new_supports, SlaSupportSettingsGroup::NewSupports, m_new_supports);
 
     m_selected_supports_window = settings->emplace_back<CollapsibleWindow>(
         _u8L("Selected supports"),
@@ -85,6 +76,17 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
     // There is nothing to edit while no point is selected, so the group is only there with a
     // selection (M2.33).
     m_selected_supports_window->set_visible(false);
+
+    m_new_supports_window = settings->emplace_back<CollapsibleWindow>(
+        _u8L("New supports"),
+        "SlaSupportPointsNewSupports"
+    );
+    m_new_supports_window->set_padding(0.f);
+    m_new_supports_window->set_collapsed(false);
+    Item* new_supports = m_new_supports_window->content();
+    new_supports->set_padding(0.f);
+    new_supports->set_gap(2.f * gap_size());
+    this->add_support_value_group(new_supports, SlaSupportSettingsGroup::NewSupports, m_new_supports);
 
     add_row_with_slider(
         content(),
@@ -722,6 +724,19 @@ void SlaSupportPointsDialog::set_selected_support_values(const SlaSupportSelecti
     m_selected_supports_window->set_visible(view.count > 0);
     m_selected_supports_window->set_label(
         fmt::format("{} ({})", _u8L("Selected supports"), view.count));
+
+    // While a selection exists, collapse New supports to make Selected supports prominent.
+    // Restore New supports' previous collapsed state when the selection is cleared (M2.39a).
+    if (m_new_supports_window) {
+        if (view.count > 0) {
+            // Save the current state before collapsing
+            m_new_supports_was_collapsed = m_new_supports_window->is_collapsed();
+            m_new_supports_window->set_collapsed(true);
+        } else {
+            // Restore the previous state
+            m_new_supports_window->set_collapsed(m_new_supports_was_collapsed);
+        }
+    }
 }
 
 void SlaSupportPointsDialog::set_active_preset(int index, SlaSupportSettingsGroup group)

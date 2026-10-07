@@ -116,4 +116,20 @@ double sla_support_point_screen_radius(
     double radius_mm
 );
 
+/// @brief Picks the support point whose head is nearest to a hit on the support tree mesh.
+///
+/// Given the support points in world coordinates (already transformed by the drawing transform)
+/// and a hit position on the tree mesh (also in world coordinates), returns the index of the
+/// point whose head is nearest in 3D to the hit, preferring points whose head is ABOVE the hit
+/// (head_z >= hit_z - 0.5 mm). A click on a stem or trunk belongs to the head it carries.
+/// Returns nullopt when there are no points.
+///
+/// @param point_heads_world  Vector of support point head positions in world coordinates.
+/// @param hit_world          The hit position on the tree mesh in world coordinates.
+/// @return                   Index of the picked support point, or nullopt if no points.
+std::optional<size_t> sla_support_point_pick_from_tree_hit(
+    const std::vector<Domain::Vec3d>& point_heads_world,
+    const Domain::Vec3d& hit_world
+);
+
 } // namespace Slic3r::App::Plater

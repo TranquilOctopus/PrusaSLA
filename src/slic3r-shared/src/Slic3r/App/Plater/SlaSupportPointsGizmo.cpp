@@ -1441,6 +1441,85 @@ std::optional<SlaSupportPointTarget> SlaSupportPointsGizmo::point_at(const Domai
     return sla_support_point_click_target(markers, parts, cursor);
 }
 
+// Raycast against the real support tree mesh (from SlaSupportPreviewService) and pick the support
+// point whose head is nearest to the hit. Returns the point index and the hit position in world
+// coordinates, or nullopt if no tree mesh is available or the ray misses it.
+std::optional<std::pair<size_t, Domain::Vec3d>> SlaSupportPointsGizmo::raycast_tree_mesh(const Domain::Vec2d& cursor) const
+{
+    if (!m_edit_state.has_value() || !m_selected_object_id.valid()) {
+        return std::nullopt;
+    }
+
+    // Get the tree mesh from the preview service
+    const auto tree_mesh = m_support_preview_service.support_tree_mesh(m_selected_object_id);
+    if (!tree_mesh || tree_mesh->empty()) {
+        return std::nullopt;
+    }
+
+    // Get or build the AABBMesh for this tree mesh (lazy, cached)
+    Slic3r::AABBMesh* tree_aabb = nullptr;
+    {
+        auto it = m_tree_aabb_cache.find(tree_mesh);
+        if (it == m_tree_aabb_cache.end()) {
+            // Build the AABBMesh
+            auto [new_it, inserted] = m_tree_aabb_cache.emplace(tree_mesh, std::make_unique<Slic3r::AABBMesh>(*tree_mesh));
+            tree_aabb = new_it->second.get();
+        } else {
+            tree_aabb = it->second.get();
+        }
+    }
+    if (!tree_aabb) {
+        return std::nullopt;
+    }
+
+    // Get the camera ray (same as raycast_mouse uses)
+    const Scene::Camera& camera = m_scene_presenter.scene().camera();
+    const Scene::Ray ray = camera.ray_at(cursor.x(), cursor.y());
+
+    // The tree mesh is in world coordinates of the print pose (object_to_world without the node_trafo lift).
+    // The preview draws it with the node_trafo (lift) on top. The tool's object_drawing_trafo() is
+    // exactly instance_matrix * translation(lift), which is the same transform the preview uses for
+    // the tree node (sla_support_tree_placement, M2.34). So we raycast against the tree mesh
+    // transformed by object_drawing_trafo().
+    const Domain::Transform3d drawing_trafo = this->object_drawing_trafo();
+
+    // Get clipping plane for raycasting
+    std::optional<Biz::ClippingPlane> clipping_plane_opt;
+    if (m_clipping_plane_presenter.clipper().get_position() != 0.) {
+        clipping_plane_opt = m_clipping_plane_presenter.clipper().get_clipping_plane();
+    }
+
+    // Raycast against the tree mesh
+    const auto hit_result = Biz::Utils::MeshRaycaster::unproject_on_mesh(
+        *tree_aabb,
+        ray,
+        drawing_trafo,
+        clipping_plane_opt,
+        true // require_even_number_of_hits
+    );
+
+    if (!hit_result.has_value()) {
+        return std::nullopt;
+    }
+
+    const Domain::Vec3d hit_world = hit_result->position;
+
+    // Compute the head positions of all points in world coordinates (through the drawing transform)
+    std::vector<Domain::Vec3d> point_heads_world;
+    point_heads_world.reserve(m_edit_state->editing.points.size());
+    for (const auto& point : m_edit_state->editing.points) {
+        point_heads_world.push_back(drawing_trafo * point.pos.cast<double>());
+    }
+
+    // Pick the support point whose head is nearest to the hit, preferring heads above the hit
+    const auto picked_idx = sla_support_point_pick_from_tree_hit(point_heads_world, hit_world);
+    if (!picked_idx.has_value()) {
+        return std::nullopt;
+    }
+
+    return std::make_pair(*picked_idx, hit_world);
+}
+
 Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventContext& ctx, bool only_active)
 {
     using namespace Slic3r::App::Platform;
@@ -1481,10 +1560,18 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
     const std::optional<SlaSupportPointTarget> point_under_cursor =
         picking ? this->point_at(mouse_position) : std::nullopt;
 
+    // If no marker or drawn tree part was hit, try the real support tree mesh (M2.39a).
+    std::optional<std::pair<size_t, Domain::Vec3d>> tree_hit;
+    if (picking && !point_under_cursor.has_value()) {
+        tree_hit = this->raycast_tree_mesh(mouse_position);
+    }
+
     // Track hovered point (when not dragging or rectangle selecting)
     m_hovered_point_idx.reset();
     if (point_under_cursor.has_value()) {
         m_hovered_point_idx = point_under_cursor->index;
+    } else if (tree_hit.has_value()) {
+        m_hovered_point_idx = tree_hit->first;
     }
 
     // Handle mouse wheel for clipping plane (Ctrl + wheel)
@@ -1520,31 +1607,50 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
         const std::optional<Domain::Vec3d> surface_pos =
             has_hit ? std::optional<Domain::Vec3d>(hit_to_object_pos(*hit_opt)) : std::nullopt;
 
+        // If the click hit the real support tree mesh but no marker/part, synthesize a target for it.
+        // A tree hit selects the support (or removes/toggles with modifiers) but NEVER adds a point.
+        std::optional<SlaSupportPointTarget> effective_target = point_under_cursor;
+        bool target_from_tree = false;
+        if (!effective_target.has_value() && tree_hit.has_value()) {
+            effective_target = SlaSupportPointTarget{tree_hit->first, false};
+            target_from_tree = true;
+        }
+
         const SlaSupportClickResult result = sla_support_click_action(
             click,
-            point_under_cursor,
+            effective_target,
             m_edit_state->editing.points,
             m_edit_state->editing.lock_island_supports,
             surface_pos
         );
 
-        switch (result.action) {
+        // If the click action would be AddPoint but the hit was on the tree mesh, convert to SelectPoint.
+        // A click on the real tree must never become AddPoint (M2.39a).
+        SlaSupportClickAction final_action = result.action;
+        std::optional<size_t> final_point_index = result.point_index;
+        if (target_from_tree && final_action == SlaSupportClickAction::AddPoint) {
+            final_action = SlaSupportClickAction::SelectPoint;
+            final_point_index = tree_hit->first;
+        }
+
+        switch (final_action) {
         case SlaSupportClickAction::DeletePoint:
-            remove_point_at_index(*result.point_index);
+            remove_point_at_index(*final_point_index);
             return Scene::GizmoActivationState::Active;
 
         case SlaSupportClickAction::TogglePoint:
-            m_edit_state->editing.toggle_point(*result.point_index);
+            m_edit_state->editing.toggle_point(*final_point_index);
             update_point_visuals();
             // The selection the group shows changed, so its title and its fields follow (M2.38).
             this->update_selected_support_values();
             return Scene::GizmoActivationState::Active;
 
         case SlaSupportClickAction::SelectPoint: {
-            const size_t idx = *result.point_index;
+            const size_t idx = *final_point_index;
             clear_selection();
             select_point(idx);
-            if (result.drag_allowed) {
+            update_point_visuals(); // M2.39a: ensure selection glyph colour updates
+            if (result.drag_allowed && !target_from_tree) {
                 m_edit_state->dragged_point_idx = idx;
                 // The drag starts on the surface under the cursor when the ray hit one, and on the
                 // point itself when it did not: a support under an overhang is picked by its
