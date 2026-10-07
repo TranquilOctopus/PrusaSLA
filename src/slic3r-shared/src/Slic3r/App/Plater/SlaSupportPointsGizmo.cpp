@@ -1612,6 +1612,105 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
     // model. The pick of M2.35 and the raycast of M2.33 are what it is asked about, and the answer
     // is acted on here.
     if ((is_left_button_event || is_right_button_event) && mouse_event.type() == MouseEvent::Type::ButtonDown) {
+        // [SupportPick] Log detailed ButtonDown info for support picking diagnostics
+        {
+            // Collect point markers for logging
+            std::vector<SlaSupportPointMarker> markers;
+            collect_point_markers(markers);
+            size_t marker_count = markers.size();
+            double nearest_marker_screen_dist = -1.0;
+            double nearest_marker_drawn_radius = -1.0;
+            if (!markers.empty()) {
+                double min_dist = std::numeric_limits<double>::max();
+                for (const auto& m : markers) {
+                    const double dist = (m.screen_pos - mouse_position).norm();
+                    if (dist < min_dist) {
+                        min_dist = dist;
+                        nearest_marker_screen_dist = dist;
+                        nearest_marker_drawn_radius = m.drawn_radius_px;
+                    }
+                }
+            }
+
+            // Tree mesh info
+            bool tree_mesh_is_null = true;
+            size_t tree_triangle_count = 0;
+            Domain::Vec3d tree_bbox_min{0,0,0}, tree_bbox_max{0,0,0};
+            if (m_selected_object_id.valid()) {
+                const auto* tree_mesh = m_support_preview_service.support_tree_mesh(m_selected_object_id);
+                if (tree_mesh && !tree_mesh->triangles().indices.empty()) {
+                    tree_mesh_is_null = false;
+                    tree_triangle_count = tree_mesh->triangles().indices.size() / 3;
+                    // Compute transformed bbox using the same transform as raycast_tree_mesh
+                    const Domain::Project& project = m_project_interactor.selected_project();
+                    const Domain::ModelInstance* instance = project.find_instance_by_id(m_selected_object_id.id, m_selected_instance_id);
+                    if (instance) {
+                        const Domain::Transform3d tree_trafo = sla_support_tree_mesh_transform(instance->get_matrix(), applied_lift());
+                        const auto& indices = tree_mesh->triangles().indices;
+                        const auto& vertices = tree_mesh->triangles().vertices;
+                        bool first = true;
+                        for (size_t idx : indices) {
+                            const Domain::Vec3d v_world = tree_trafo * vertices[idx].cast<double>();
+                            if (first) {
+                                tree_bbox_min = tree_bbox_max = v_world;
+                                first = false;
+                            } else {
+                                tree_bbox_min = tree_bbox_min.cwiseMin(v_world);
+                                tree_bbox_max = tree_bbox_max.cwiseMax(v_world);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Camera ray
+            const Scene::Camera& camera = m_scene_presenter.scene().camera();
+            const Scene::Ray ray = camera.ray_at(mouse_position.x(), mouse_position.y());
+
+            // First support point head world position and applied_lift
+            Domain::Vec3d first_head_world{0,0,0};
+            bool has_first_point = false;
+            if (m_edit_state.has_value() && !m_edit_state->editing.points.empty()) {
+                first_head_world = object_drawing_trafo() * m_edit_state->editing.points[0].pos.cast<double>();
+                has_first_point = true;
+            }
+
+            SPDLOG_INFO("[SupportPick] SlaSupportPointsGizmo::on_mouse ButtonDown cursor=({}, {}) paintable_volumes={} has_hit={} hit_world=({}, {}, {}) model_hit_dist_mm={} markers={} nearest_marker_dist_px={} nearest_marker_radius_px={} point_under_cursor={} (idx={}, from_marker={}) tree_mesh_null={} tree_triangles={} tree_bbox_min=({}, {}, {}) tree_bbox_max=({}, {}, {}) ray_origin=({}, {}, {}) ray_dir=({}, {}, {}) tree_hit={} tree_hit_idx={} tree_hit_world=({}, {}, {}) tree_hit_dist_mm={} tree_wins={} click_action={} gizmo_state={} first_head_world=({}, {}, {}) applied_lift={}",
+                mouse_position.x(), mouse_position.y(),
+                m_paintable_volumes.size(),
+                has_hit,
+                has_hit ? (m_paintable_volumes[hit_opt->volume_idx].world_trafo * hit_opt->volume_hit_position).x() : 0.0,
+                has_hit ? (m_paintable_volumes[hit_opt->volume_idx].world_trafo * hit_opt->volume_hit_position).y() : 0.0,
+                has_hit ? (m_paintable_volumes[hit_opt->volume_idx].world_trafo * hit_opt->volume_hit_position).z() : 0.0,
+                has_hit ? model_hit_distance_mm.value_or(-1.0) : -1.0,
+                marker_count,
+                nearest_marker_screen_dist,
+                nearest_marker_drawn_radius,
+                point_under_cursor.has_value(),
+                point_under_cursor.has_value() ? static_cast<int>(point_under_cursor->index) : -1,
+                point_under_cursor.has_value() ? (point_under_cursor->from_marker ? 1 : 0) : -1,
+                tree_mesh_is_null,
+                tree_triangle_count,
+                tree_bbox_min.x(), tree_bbox_min.y(), tree_bbox_min.z(),
+                tree_bbox_max.x(), tree_bbox_max.y(), tree_bbox_max.z(),
+                ray.origin.x(), ray.origin.y(), ray.origin.z(),
+                ray.direction.x(), ray.direction.y(), ray.direction.z(),
+                tree_hit.has_value(),
+                tree_hit.has_value() ? static_cast<int>(tree_hit->first) : -1,
+                tree_hit.has_value() ? tree_hit->second.x() : 0.0,
+                tree_hit.has_value() ? tree_hit->second.y() : 0.0,
+                tree_hit.has_value() ? tree_hit->second.z() : 0.0,
+                tree_hit_distance_mm.value_or(-1.0),
+                tree_wins,
+                static_cast<int>(SlaSupportClickAction::None), // placeholder, will log actual after decision
+                static_cast<int>(Scene::GizmoActivationState::Inactive), // placeholder
+                has_first_point ? first_head_world.x() : 0.0,
+                has_first_point ? first_head_world.y() : 0.0,
+                has_first_point ? first_head_world.z() : 0.0,
+                applied_lift()
+            );
+        }
+
         SlaSupportClick click;
         click.button = is_left_button_event ? SlaSupportClickButton::Left : SlaSupportClickButton::Right;
         if (ctrl_down) {
@@ -1650,17 +1749,21 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
             final_point_index = tree_hit->first;
         }
 
+        // [SupportPick] Log the chosen action and returned state
+        Scene::GizmoActivationState return_state = Scene::GizmoActivationState::Inactive;
         switch (final_action) {
         case SlaSupportClickAction::DeletePoint:
             remove_point_at_index(*final_point_index);
-            return Scene::GizmoActivationState::Active;
+            return_state = Scene::GizmoActivationState::Active;
+            break;
 
         case SlaSupportClickAction::TogglePoint:
             m_edit_state->editing.toggle_point(*final_point_index);
             update_point_visuals();
             // The selection the group shows changed, so its title and its fields follow (M2.38).
             this->update_selected_support_values();
-            return Scene::GizmoActivationState::Active;
+            return_state = Scene::GizmoActivationState::Active;
+            break;
 
         case SlaSupportClickAction::SelectPoint: {
             const size_t idx = *final_point_index;
@@ -1677,7 +1780,8 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
                             : this->object_drawing_trafo() * m_edit_state->editing.points[idx].pos.cast<double>();
                 m_edit_state->drag_start_mesh_pos = m_edit_state->editing.points[idx].pos.cast<double>();
             }
-            return Scene::GizmoActivationState::Active;
+            return_state = Scene::GizmoActivationState::Active;
+            break;
         }
 
         case SlaSupportClickAction::AddPoint:
@@ -1685,27 +1789,37 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
             // point goes (M2.35 keeps M2.33 for this, the marker and the tree only come first).
             clear_selection();
             add_point_at_mesh_pos(*result.surface_pos);
-            return Scene::GizmoActivationState::Active;
+            return_state = Scene::GizmoActivationState::Active;
+            break;
 
         case SlaSupportClickAction::RectangleSelect:
             start_rectangle_selection(mouse_position, true);
-            return Scene::GizmoActivationState::Probing;
+            return_state = Scene::GizmoActivationState::Probing;
+            break;
 
         case SlaSupportClickAction::ClearSelection:
             clear_selection();
             update_point_visuals();
             // Consume the event (return Active) so the scene does not treat this as a click on empty
             // space and deselect the object. The tool stays open and the user can continue editing.
-            return Scene::GizmoActivationState::Active;
+            return_state = Scene::GizmoActivationState::Active;
+            break;
 
         case SlaSupportClickAction::Ignored:
-            return Scene::GizmoActivationState::Active;
+            return_state = Scene::GizmoActivationState::Active;
+            break;
 
         case SlaSupportClickAction::None:
             // A click that hit a support tree but picked nothing (defensive: should not happen
             // after the transform fix). Consume the event to keep the tool open.
-            return Scene::GizmoActivationState::Active;
+            return_state = Scene::GizmoActivationState::Active;
+            break;
         }
+
+        SPDLOG_INFO("[SupportPick] SlaSupportPointsGizmo::on_mouse ButtonDown final_click_action={} return_state={}",
+            static_cast<int>(final_action), static_cast<int>(return_state));
+
+        return return_state;
     }
 
     // Mouse move during drag
@@ -1748,17 +1862,24 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
 // Outside the tool only: while the tool is open the click belongs to the tool (on_mouse).
 bool SlaSupportPointsGizmo::allows_activation_by_double_click(const Scene::GizmoEventContext& ctx)
 {
-    // While the tool is open the click belongs to the tool, which picks the point of the drawn tree
-    // on its own (on_mouse), and a re-activation would not call on_activated anyway.
-    if (m_gizmo_active || !App::is_sla_active(m_project_interactor)) {
-        return false;
-    }
-
+    // [SupportPick] Log entry to allows_activation_by_double_click
     const Platform::MouseEvent& mouse_event = ctx.mouse_event();
     const bool is_double_click = mouse_event.type() == Platform::MouseEvent::Type::DoubleClick;
     const bool is_single_click = mouse_event.type() == Platform::MouseEvent::Type::ButtonUp &&
                                  mouse_event.button() == Platform::MouseButton::Left;
+    const bool is_sla_active = App::is_sla_active(m_project_interactor);
+    SPDLOG_INFO("[SupportPick] SlaSupportPointsGizmo::allows_activation_by_double_click called event_type={} is_double_click={} is_single_click={} is_sla_active={} m_gizmo_active={}",
+        static_cast<int>(mouse_event.type()), is_double_click, is_single_click, is_sla_active, m_gizmo_active);
+
+    // While the tool is open the click belongs to the tool, which picks the point of the drawn tree
+    // on its own (on_mouse), and a re-activation would not call on_activated anyway.
+    if (m_gizmo_active || !is_sla_active) {
+        SPDLOG_INFO("[SupportPick] SlaSupportPointsGizmo::allows_activation_by_double_click early return: m_gizmo_active={} is_sla_active={}", m_gizmo_active, is_sla_active);
+        return false;
+    }
+
     if (!is_double_click && !is_single_click) {
+        SPDLOG_INFO("[SupportPick] SlaSupportPointsGizmo::allows_activation_by_double_click early return: not double or single click");
         return false;
     }
 
@@ -1773,13 +1894,17 @@ bool SlaSupportPointsGizmo::allows_activation_by_double_click(const Scene::Gizmo
         std::vector<SlaSupportTreePart> parts;
         this->collect_tree_parts(parts, /* whole_plate */ true);
         picked = sla_support_tree_part_at(parts, cursor);
+        SPDLOG_INFO("[SupportPick] SlaSupportPointsGizmo::allows_activation_by_double_click double-click path: collect_tree_parts returned {} parts, picked={}", parts.size(), picked.has_value());
     } else {
         // Single click: raycast real tree meshes of all objects with preview.
         // Also raycast models to reject tree hits behind the model surface.
         picked = raycast_all_tree_meshes(ctx, cursor, tree_hit_distance_mm);
+        SPDLOG_INFO("[SupportPick] SlaSupportPointsGizmo::allows_activation_by_double_click single-click path: raycast_all_tree_meshes returned picked={} tree_hit_distance_mm={}",
+            picked.has_value(), tree_hit_distance_mm.value_or(-1.0));
     }
 
     if (!picked.has_value()) {
+        SPDLOG_INFO("[SupportPick] SlaSupportPointsGizmo::allows_activation_by_double_click no pick, returning false");
         return false;
     }
 
@@ -1790,6 +1915,9 @@ bool SlaSupportPointsGizmo::allows_activation_by_double_click(const Scene::Gizmo
         {Domain::ElementRef{picked->object.object_id, picked->object.instance_id}}
     });
     m_pending_open_pick = *picked;
+
+    SPDLOG_INFO("[SupportPick] SlaSupportPointsGizmo::allows_activation_by_double_click returning true, picked object_id={} instance_id={} point_index={}",
+        picked->object.object_id, picked->object.instance_id, picked->point_index);
 
     return true;
 }
@@ -1811,11 +1939,13 @@ std::optional<SlaSupportTreePart> SlaSupportPointsGizmo::raycast_all_tree_meshes
     const Domain::SelectionId project_id = m_project_interactor.selected_project_id();
     const Domain::SlicingId slicing_id = m_project_interactor.selected_bed_slicing_id();
     if (slicing_id.project_id != project_id) {
+        SPDLOG_INFO("[SupportPick] SlaSupportPointsGizmo::raycast_all_tree_meshes early return: slicing_id project mismatch");
         return std::nullopt;
     }
     const Domain::Project& project = m_project_interactor.project(project_id);
     const Domain::BedInstance* bed = project.find_bed_instance_by_id(slicing_id.bed_instance_id);
     if (!bed) {
+        SPDLOG_INFO("[SupportPick] SlaSupportPointsGizmo::raycast_all_tree_meshes early return: no bed");
         return std::nullopt;
     }
 
@@ -1843,7 +1973,36 @@ std::optional<SlaSupportTreePart> SlaSupportPointsGizmo::raycast_all_tree_meshes
 
         // Get the tree mesh and raycast it
         const auto* tree_mesh = m_support_preview_service.support_tree_mesh(model_object->id());
-        if (!tree_mesh || tree_mesh->triangles().indices.empty()) {
+        bool tree_mesh_is_null = !tree_mesh || tree_mesh->triangles().indices.empty();
+        size_t tree_triangle_count = 0;
+        Domain::Vec3d tree_bbox_min{0,0,0}, tree_bbox_max{0,0,0};
+        
+        if (!tree_mesh_is_null) {
+            tree_triangle_count = tree_mesh->triangles().indices.size() / 3;
+            // Compute transformed bbox
+            const double lift = m_scene_presenter.sla_lift(model_object->id());
+            const Domain::Transform3d tree_trafo = sla_support_tree_mesh_transform(instance->get_matrix(), lift);
+            const auto& indices = tree_mesh->triangles().indices;
+            const auto& vertices = tree_mesh->triangles().vertices;
+            bool first = true;
+            for (size_t idx : indices) {
+                const Domain::Vec3d v_world = tree_trafo * vertices[idx].cast<double>();
+                if (first) {
+                    tree_bbox_min = tree_bbox_max = v_world;
+                    first = false;
+                } else {
+                    tree_bbox_min = tree_bbox_min.cwiseMin(v_world);
+                    tree_bbox_max = tree_bbox_max.cwiseMax(v_world);
+                }
+            }
+        }
+
+        SPDLOG_INFO("[SupportPick] SlaSupportPointsGizmo::raycast_all_tree_meshes object_id={} instance_id={} has_preview={} tree_mesh_null={} tree_triangles={} tree_bbox_min=({}, {}, {}) tree_bbox_max=({}, {}, {})",
+            model_object->id().id, instance->id().id, true, tree_mesh_is_null, tree_triangle_count,
+            tree_bbox_min.x(), tree_bbox_min.y(), tree_bbox_min.z(),
+            tree_bbox_max.x(), tree_bbox_max.y(), tree_bbox_max.z());
+
+        if (tree_mesh_is_null) {
             continue;
         }
 
@@ -1911,7 +2070,10 @@ std::optional<SlaSupportTreePart> SlaSupportPointsGizmo::raycast_all_tree_meshes
         }
 
         // Use the pure function to decide: tree wins only if no model hit or tree is nearer by > epsilon
-        if (!sla_support_click_on_tree(tree_dist, model_hit ? std::optional<double>(model_dist) : std::nullopt)) {
+        const bool tree_wins = sla_support_click_on_tree(tree_dist, model_hit ? std::optional<double>(model_dist) : std::nullopt);
+        if (!tree_wins) {
+            SPDLOG_INFO("[SupportPick] SlaSupportPointsGizmo::raycast_all_tree_meshes object_id={} tree_dist={} model_hit={} model_dist={} tree_wins=false (model in front)",
+                model_object->id().id, tree_dist, model_hit, model_hit ? model_dist : -1.0);
             continue; // Model is in front, skip this object's tree
         }
 
@@ -1949,6 +2111,10 @@ std::optional<SlaSupportTreePart> SlaSupportPointsGizmo::raycast_all_tree_meshes
 
     if (best_picked.has_value()) {
         out_tree_hit_distance_mm = best_tree_depth_mm;
+        SPDLOG_INFO("[SupportPick] SlaSupportPointsGizmo::raycast_all_tree_meshes best_picked object_id={} instance_id={} point_index={} tree_dist={}",
+            best_picked->object.object_id, best_picked->object.instance_id, best_picked->point_index, best_tree_depth_mm);
+    } else {
+        SPDLOG_INFO("[SupportPick] SlaSupportPointsGizmo::raycast_all_tree_meshes no best_picked");
     }
     return best_picked;
 }
