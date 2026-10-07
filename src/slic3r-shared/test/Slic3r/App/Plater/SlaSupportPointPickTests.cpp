@@ -6,16 +6,20 @@
 // are picked on the screen, then the drawn tree of a point, and a click that hits neither falls back
 // to the surface of the model. No scene, no camera and no gizmo: the markers and the pieces of the
 // tree are handed in as they are on the screen.
+#define _USE_MATH_DEFINES
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <cmath>
 
 #include <optional>
 #include <vector>
 
 #include "Slic3r/App/Plater/SlaSupportPointPick.hpp"
+#include "Slic3r/App/Plater/SlaSupportPointsLift.hpp"
 
 using Catch::Approx;
 using Slic3r::App::Plater::sla_support_click_on_tree;
+using Slic3r::App::Plater::sla_support_points_drawing_trafo;
 using Slic3r::App::Plater::sla_support_point_click_radius_px;
 using Slic3r::App::Plater::sla_support_point_click_target;
 using Slic3r::App::Plater::sla_support_point_marker_at;
@@ -441,14 +445,14 @@ TEST_CASE(
     {
         const Transform3d instance_matrix = Transform3d::Identity();
         const Transform3d trafo = sla_support_tree_mesh_transform(instance_matrix, 0.);
-        CHECK(trafo.isIdentity());
+        CHECK(trafo.matrix().isIdentity());
     }
 
     SECTION("Non-zero lift returns translation only")
     {
         const Transform3d instance_matrix = Transform3d::Identity();
         const Transform3d trafo = sla_support_tree_mesh_transform(instance_matrix, 5.0);
-        CHECK(trafo.isIdentity() == false);
+        CHECK(trafo.matrix().isIdentity() == false);
         CHECK(trafo.translation().z() == Approx(5.0));
         CHECK(trafo.translation().x() == Approx(0.0));
         CHECK(trafo.translation().y() == Approx(0.0));
@@ -461,7 +465,7 @@ TEST_CASE(
         // Instance matrix with plate offset (x=10, y=20) and 90 deg rotation around Z
         Transform3d instance_matrix = Transform3d::Identity();
         instance_matrix.translate(Vec3d(10., 20., 0.));
-        instance_matrix.rotate(Eigen::AngleAxisd(Slic3r::deg2rad(90.), Vec3d::UnitZ()));
+        instance_matrix.rotate(Eigen::AngleAxisd(M_PI / 2, Vec3d::UnitZ()));
 
         const double lift = 3.0;
         const Transform3d tree_trafo = sla_support_tree_mesh_transform(instance_matrix, lift);
@@ -496,7 +500,7 @@ TEST_CASE(
         // instance_matrix with translation and rotation
         Transform3d instance_matrix = Transform3d::Identity();
         instance_matrix.translate(Vec3d(100., 50., 0.)); // plate offset
-        instance_matrix.rotate(Eigen::AngleAxisd(Slic3r::deg2rad(45.), Vec3d::UnitZ()));
+        instance_matrix.rotate(Eigen::AngleAxisd(M_PI / 4, Vec3d::UnitZ()));
 
         const double lift = 2.5;
         const Transform3d tree_trafo = sla_support_tree_mesh_transform(instance_matrix, lift);
