@@ -5,7 +5,11 @@
 #include "Slic3r/App/Scene/SceneNodeTag.hpp"
 
 #include "Slic3r/Domain/ModelVolume.hpp"
+#include "Slic3r/Domain/ObjectID.hpp"
 #include "Slic3r/Domain/Types.hpp"
+#include "Slic3r/App/Plater/SlaRotateSupported.hpp"
+#include "Slic3r/App/Plater/SlaSupportPointsClear.hpp"
+#include "Slic3r/App/IsSlaActive.hpp"
 
 #include <Slic3r/App/Render/GeometryBuilder.hpp>
 
@@ -19,6 +23,12 @@ struct POFNodeTag
 };
 
 using Slic3r::Domain::ColorRGBA;
+using Slic3r::Domain::ElementRef;
+using Slic3r::Domain::ObjectID;
+using Slic3r::Domain::ModelObject;
+using Slic3r::Domain::SLA::PointsStatus;
+using Slic3r::Biz::_u8L;
+using Slic3r::Biz::UndoSnapshotType;
 
 static const ColorRGBA PLANE_HOVERED_COLOR = ColorRGBA(0.95f, 0.95f, 0.95f, 0.5f);
 static const ColorRGBA PLANE_DEFAULT_COLOR = ColorRGBA(0.75f, 0.75f, 0.75f, 0.5f);
@@ -263,7 +273,74 @@ PlaceOnFaceGizmo::on_mouse(Scene::GizmoEventContext& ctx, bool only_active)
                 // Rotates only if the plane is facing the camera.
                 // This prevents from rotating when the user clicks on a plane which is invisible.
                 if (plane_to_world_coordinates(tag->id)[0].dot(ctx.pick_ray().direction) < 0.0) {
-                    rotate_selection(m_normals_and_points[tag->id][0], m_normals_and_points[tag->id][1]);
+                    const Domain::Vec3d direction = m_normals_and_points[tag->id][0];
+                    const Domain::Vec3d point = m_normals_and_points[tag->id][1];
+
+                    const SlaRotateSupportedCheck check = sla_rotate_supported_check(m_project_interactor);
+                    if (App::is_sla_active(m_project_interactor) && !check.empty()) {
+                        const std::string question = sla_rotate_supported_question(check);
+                        const std::vector<ObjectID> asked_for_object_ids = [&check]() {
+                            std::vector<ObjectID> ids;
+                            ids.reserve(check.objects_with_points.size());
+                            for (const ModelObject* obj : check.objects_with_points) {
+                                ids.push_back(obj->id());
+                            }
+                            return ids;
+                        }();
+
+                        AppServices::instance().dialog_manager().show_yesno_dialog(
+                            _u8L("Rotate supported part"),
+                            question,
+                            [this, direction, point, check = std::move(check),
+                             asked_for_object_ids = std::move(asked_for_object_ids)](bool answer)
+                            {
+                                if (!answer) {
+                                    return; // No: cancel rotation, keep supports
+                                }
+
+                                // Verify selection still matches (defensive).
+                                const auto& selection = m_project_interactor.scene_interactor().object_selection();
+                                bool still_matches = true;
+                                if (selection.elements.size() != asked_for_object_ids.size()) {
+                                    still_matches = false;
+                                } else {
+                                    for (std::size_t i = 0; i < selection.elements.size(); ++i) {
+                                        if (!selection.elements[i].has_object() ||
+                                            selection.elements[i].object_id != asked_for_object_ids[i].id) {
+                                            still_matches = false;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (!still_matches) {
+                                    return;
+                                }
+
+                                // Yes: apply rotation and clear supports in one undo step.
+                                const SlaSupportPointsClearPlan plan = sla_support_points_clear_plan(check.objects_with_points);
+                                if (!plan.empty()) {
+                                    m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SlaSupportPointsClear);
+                                    for (const ElementRef& object_ref : plan.object_refs) {
+                                        m_project_interactor.scene_interactor().modify_sla_support_points(
+                                            object_ref,
+                                            [](ModelObject& model_object)
+                                            {
+                                                model_object.sla_support_points.clear();
+                                                model_object.sla_points_status = PointsStatus::NoPoints;
+                                            }
+                                        );
+                                    }
+                                }
+
+                                // Now apply the rotation (it will take its own PlaceOnFace snapshot).
+                                rotate_selection_now(direction, point);
+                            }
+                        );
+                        return Scene::GizmoActivationState::Active;
+                    }
+
+                    // No supports or not SLA: apply immediately.
+                    rotate_selection_now(direction, point);
                     return Scene::GizmoActivationState::Active;
                 }
             }
@@ -303,7 +380,7 @@ void PlaceOnFaceGizmo::on_transient_mouse(Scene::GizmoEventContext& ctx)
     );
 }
 
-void PlaceOnFaceGizmo::rotate_selection(const Domain::Vec3d& direction, const Domain::Vec3d& point) const
+void PlaceOnFaceGizmo::rotate_selection_now(const Domain::Vec3d& direction, const Domain::Vec3d& point)
 {
     const std::optional<Biz::Scene::SelectionExtents> selection_bounding_box{
         m_scene_interactor.selection_bounding_box()

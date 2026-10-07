@@ -10,11 +10,15 @@
 #include "Slic3r/Domain/Color.hpp"
 #include "Slic3r/Domain/Constants.hpp"
 #include "Slic3r/Domain/Line.hpp"
+#include "Slic3r/Domain/ObjectID.hpp"
 #include "Slic3r/Domain/Transformation.hpp"
 #include "Slic3r/Domain/Types.hpp"
 #include "Slic3r/App/Plater/RotationDialog.hpp"
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/App/Plater/PlaterGizmosHelper.hpp"
+#include "Slic3r/App/Plater/SlaRotateSupported.hpp"
+#include "Slic3r/App/Plater/SlaSupportPointsClear.hpp"
+#include "Slic3r/App/IsSlaActive.hpp"
 
 #include "Slic3r/Math.hpp"
 
@@ -26,8 +30,14 @@ using Slic3r::Domain::Vec2d;
 using Slic3r::Domain::Vec3d;
 using Slic3r::Domain::X;
 using Slic3r::Domain::Y;
+using Slic3r::Domain::ElementRef;
+using Slic3r::Domain::ObjectID;
+using Slic3r::Domain::ModelObject;
+using Slic3r::Domain::SLA::PointsStatus;
 
 using Slic3r::Biz::Algorithms::Point::to_2d;
+using Slic3r::Biz::_u8L;
+using Slic3r::Biz::UndoSnapshotType;
 
 namespace Slic3r::App::Plater {
 
@@ -463,6 +473,86 @@ Scene::GizmoActivationState RotationGizmo::on_mouse(Scene::GizmoEventContext& ct
     }
 
     if (event_type == Platform::MouseEvent::Type::ButtonUp) {
+        // Check if any selected objects have SLA support points. If so, ask before committing.
+        const SlaRotateSupportedCheck check = sla_rotate_supported_check(m_project_interactor);
+        if (App::is_sla_active(m_project_interactor) && !check.empty()) {
+            const std::string question = sla_rotate_supported_question(check);
+            // The memento and check are captured for the async callback.
+            Biz::Scene::TransformMemento memento = project_context.xform_memento;
+            const std::vector<ObjectID> asked_for_object_ids = [&check]() {
+                std::vector<ObjectID> ids;
+                ids.reserve(check.objects_with_points.size());
+                for (const Domain::ModelObject* obj : check.objects_with_points) {
+                    ids.push_back(obj->id());
+                }
+                return ids;
+            }();
+            const bool was_floating = project_context.was_floating;
+
+            AppServices::instance().dialog_manager().show_yesno_dialog(
+                _u8L("Rotate supported part"),
+                question,
+                [this, memento = std::move(memento), check = std::move(check),
+                 asked_for_object_ids = std::move(asked_for_object_ids), was_floating](bool answer)
+                {
+                    // Verify selection still matches (defensive).
+                    const auto& selection = m_project_interactor.scene_interactor().object_selection();
+                    bool still_matches = true;
+                    if (selection.elements.size() != asked_for_object_ids.size()) {
+                        still_matches = false;
+                    } else {
+                        for (std::size_t i = 0; i < selection.elements.size(); ++i) {
+                            if (!selection.elements[i].has_object() ||
+                                selection.elements[i].object_id != asked_for_object_ids[i].id) {
+                                still_matches = false;
+                                break;
+                            }
+                        }
+                    }
+                    if (!still_matches) {
+                        // Selection changed; revert to be safe.
+                        m_scene_interactor.finalize_transform_selection(memento, true);
+                        return;
+                    }
+
+                    if (answer) {
+                        // Yes: finalize the rotation, clear supports in one undo step, then take Rotate snapshot.
+                        m_scene_interactor.finalize_transform_selection(memento, false);
+                        if (!was_floating) {
+                            Biz::Scene::TransformMemento place_memento;
+                            place_memento.forced_volume_mode = true;
+                            m_scene_interactor.transform_selection(
+                                Domain::SquareMatrix4d::Identity(), place_memento, true);
+                        }
+
+                        const SlaSupportPointsClearPlan plan = sla_support_points_clear_plan(check.objects_with_points);
+                        if (!plan.empty()) {
+                            m_project_interactor.undo_provider().take_snapshot(
+                                Biz::UndoSnapshotType::SlaSupportPointsClear);
+                            for (const ElementRef& object_ref : plan.object_refs) {
+                                m_project_interactor.scene_interactor().modify_sla_support_points(
+                                    object_ref,
+                                    [](Domain::ModelObject& model_object)
+                                    {
+                                        model_object.sla_support_points.clear();
+                                        model_object.sla_points_status = Domain::SLA::PointsStatus::NoPoints;
+                                    }
+                                );
+                            }
+                        }
+
+                        m_project_interactor.undo_provider().take_snapshot(Biz::UndoSnapshotType::Rotate);
+                    } else {
+                        // No: revert the rotation, keep supports.
+                        m_scene_interactor.finalize_transform_selection(memento, true);
+                    }
+                }
+            );
+            on_stop_dragging();
+            return Scene::GizmoActivationState::Done;
+        }
+
+        // No supports or not SLA: proceed normally.
         m_scene_interactor.finalize_transform_selection(
             project_context.xform_memento,
             false
