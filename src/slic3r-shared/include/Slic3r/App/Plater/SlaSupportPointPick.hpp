@@ -116,4 +116,36 @@ double sla_support_point_screen_radius(
     double radius_mm
 );
 
+/// @brief Picks the support point whose head is nearest to a hit on the support tree mesh.
+///
+/// Given the support points in world coordinates (already transformed by the drawing transform)
+/// and a hit position on the tree mesh (also in world coordinates), returns the index of the
+/// point whose head is nearest in 3D to the hit, preferring points whose head is ABOVE the hit
+/// (head_z >= hit_z - 0.5 mm). A click on a stem or trunk belongs to the head it carries.
+/// Returns nullopt when there are no points.
+///
+/// @param point_heads_world  Vector of support point head positions in world coordinates.
+/// @param hit_world          The hit position on the tree mesh in world coordinates.
+/// @return                   Index of the picked support point, or nullopt if no points.
+std::optional<size_t> sla_support_point_pick_from_tree_hit(
+    const std::vector<Domain::Vec3d>& point_heads_world,
+    const Domain::Vec3d& hit_world
+);
+
+/// @brief Decides whether a click is on the support tree rather than the model surface.
+///
+/// Compares the distance from the camera to the tree hit against the distance to the model
+/// surface hit. The tree wins only when the model was not hit, or when the tree hit is
+/// nearer by more than @p epsilon_mm (default 0.01 mm).
+///
+/// @param tree_hit_distance_mm     Distance from camera to tree hit, or nullopt if no tree hit.
+/// @param model_hit_distance_mm    Distance from camera to model surface hit, or nullopt if no model hit.
+/// @param epsilon_mm               Minimum distance advantage for the tree to win (default 0.01 mm).
+/// @return                         True when the click should be treated as on the tree.
+bool sla_support_click_on_tree(
+    const std::optional<double>& tree_hit_distance_mm,
+    const std::optional<double>& model_hit_distance_mm,
+    double epsilon_mm = 0.01
+);
+
 } // namespace Slic3r::App::Plater

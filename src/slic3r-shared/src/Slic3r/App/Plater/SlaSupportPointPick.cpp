@@ -145,4 +145,69 @@ double sla_support_point_screen_radius(
     return (on_edge - centre).norm();
 }
 
+namespace {
+
+// Whether a candidate head is a better pick than the best so far: prefer heads ABOVE the hit
+// (head_z >= hit_z - 0.5 mm), and among those (or if none are above), the nearest in 3D.
+bool is_better_tree_pick(
+    const Domain::Vec3d& candidate_head,
+    const Domain::Vec3d& hit,
+    const Domain::Vec3d& best_head,
+    double best_dist_sq
+)
+{
+    const double candidate_dist_sq = (candidate_head - hit).squaredNorm();
+    const bool candidate_above = candidate_head.z() >= hit.z() - 0.5;
+    const bool best_above = best_head.z() >= hit.z() - 0.5;
+
+    if (candidate_above != best_above) {
+        return candidate_above; // prefer above
+    }
+    return candidate_dist_sq < best_dist_sq;
+}
+
+} // namespace
+
+std::optional<size_t> sla_support_point_pick_from_tree_hit(
+    const std::vector<Domain::Vec3d>& point_heads_world,
+    const Domain::Vec3d& hit_world
+)
+{
+    if (point_heads_world.empty()) {
+        return std::nullopt;
+    }
+
+    std::optional<size_t> picked;
+    double best_dist_sq = std::numeric_limits<double>::max();
+    Domain::Vec3d best_head = Domain::Vec3d::Zero();
+
+    for (size_t i = 0; i < point_heads_world.size(); ++i) {
+        const Domain::Vec3d& head = point_heads_world[i];
+        if (!picked.has_value() || is_better_tree_pick(head, hit_world, best_head, best_dist_sq)) {
+            picked = i;
+            best_dist_sq = (head - hit_world).squaredNorm();
+            best_head = head;
+        }
+    }
+
+    return picked;
+}
+
+} // namespace Slic3r::App::Plater
+
+bool Slic3r::App::Plater::sla_support_click_on_tree(
+    const std::optional<double>& tree_hit_distance_mm,
+    const std::optional<double>& model_hit_distance_mm,
+    double epsilon_mm
+)
+{
+    if (!tree_hit_distance_mm.has_value()) {
+        return false;
+    }
+    if (!model_hit_distance_mm.has_value()) {
+        return true;
+    }
+    return *tree_hit_distance_mm + epsilon_mm < *model_hit_distance_mm;
+}
+
 } // namespace Slic3r::App::Plater

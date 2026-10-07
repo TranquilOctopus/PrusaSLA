@@ -210,6 +210,25 @@ void GizmoManager::on_scene_mouse_event(const Platform::MouseEvent& e, const Sli
         }
     }
 
+    // Single click (not drag) on a drawn support: activate the tool on that support (M2.39b).
+    // Check after on_mouse so the drag detector state is up to date.
+    const bool left_click_not_drag =
+        e.type() == Platform::MouseEvent::Type::ButtonUp &&
+        e.button() == Platform::MouseButton::Left &&
+        m_mouse_drag_detector &&
+        m_mouse_drag_detector->was_last_left_click_not_a_drag();
+    if (left_click_not_drag) {
+        auto it = std::find_if(m_tool_gizmos.begin(), m_tool_gizmos.end(),
+            [&ctx](const IToolGizmoPtr& tool) { return tool->allows_activation_by_double_click(ctx); });
+        if (it != m_tool_gizmos.end()) {
+            ToolType tool_type = (*it)->type();
+            if (tool_type != current_tool_type()) {
+                activate_tool(tool_type);
+            }
+            return;
+        }
+    }
+
     if (p.in_cycle && p.in_cycle_gizmos.empty())
         p.in_cycle = false;
 

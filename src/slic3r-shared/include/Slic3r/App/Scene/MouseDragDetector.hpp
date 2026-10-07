@@ -69,6 +69,16 @@ public:
         return m_dragging_gizmo;
     }
 
+    /**
+     * @brief Returns true if the last left mouse button up was a click (not a drag).
+     * This is true when the button went up while in StartWeWillSee state (i.e. the
+     * mouse didn't move far enough or long enough to become a drag).
+     */
+    bool was_last_left_click_not_a_drag() const
+    {
+        return m_last_left_was_click_not_drag;
+    }
+
 private:
     bool can_start_drag();
     bool on_start(const std::vector<IGizmo*>& gizmos);
@@ -112,6 +122,9 @@ private:
     // set on_start, discard on finish OR cancel
     IMouseDrag* m_dragging = nullptr;
     const IGizmo* m_dragging_gizmo = nullptr;
+
+    // True when the last left button up was a click (not a drag): button up in StartWeWillSee state.
+    bool m_last_left_was_click_not_drag = false;
 
     using Listener  = std::pair<IGizmo*, IMouseDrag*>;
     using Listeners = std::vector<Listener>;
