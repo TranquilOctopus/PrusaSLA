@@ -10,6 +10,7 @@
 #include "libslic3r/SLA/SupportIslands/SampleConfigFactory.hpp"
 #include "libslic3r/SLA/Pad.hpp"
 #include "libslic3r/SLA/JobController.hpp"
+#include "libslic3r/SLA/ToolTrace.hpp"
 #include "libslic3r/TriangleMeshSlicer.hpp"
 #include "admesh/stl.h"
 
@@ -100,13 +101,18 @@ SupportToolTree build_support_tree_for_tool(const SupportToolModelMesh& model_me
     const Domain::PartialObjectConfigSLAPtr& object_settings,
     const SupportToolStop& stop)
 {
+    using tool_trace::trace_ms;
+    auto t0 = tool_trace::start();
+
     try {
+        trace_ms("entry", t0, stop);
         if (stop && stop()) return empty_tree();
 
         const SLAPrintObjectConfigView cfg{full_config, object_settings};
 
         // Build merged mesh in world frame: the object as it prints, without the lift (M2.34).
         indexed_triangle_set its = build_object_its(model_mesh, object_to_world);
+        trace_ms("after_build_object_its", t0, stop);
 
         // The raft of a raft_type Auto is a decision about this mesh (rulebook R6, M7.8.4), and it
         // is the same pure function the slice runs (resolve_object_raft in SLAPrint.cpp), so the
@@ -117,6 +123,7 @@ SupportToolTree build_support_tree_for_tool(const SupportToolModelMesh& model_me
         };
         const std::optional<ObjectRaft> raft = resolve_object_raft(
             cfg, its, support_tool_elevation(full_config, object_settings), throw_on_cancel);
+        trace_ms("after_resolve_object_raft", t0, stop);
 
         SupportToolTree out;
         out.raft         = raft;
@@ -158,6 +165,7 @@ SupportToolTree build_support_tree_for_tool(const SupportToolModelMesh& model_me
                 sp.pos = (object_to_world * sp.pos.cast<double>()).cast<float>();
             }
         }
+        trace_ms("after_world_points_loop", t0, stop);
 
         // Create SupportableMesh (aggregate: cfg and pad_cfg have no default ctor)
         sla::SupportableMesh supportable_mesh{
@@ -167,11 +175,14 @@ SupportToolTree build_support_tree_for_tool(const SupportToolModelMesh& model_me
             .pad_cfg  = make_pad_cfg(cfg, raft),
             .zoffset  = mesh.bounding_box().min.z(),
         };
+        trace_ms("after_supportable_mesh", t0, stop);
 
         // Create support tree
         std::shared_ptr<const Domain::TriangleMesh> tree_mesh;
         if (tree_built) {
+            trace_ms("before_create_support_tree", t0, stop);
             indexed_triangle_set tree_its = sla::create_support_tree(supportable_mesh, ctl);
+            trace_ms("after_create_support_tree", t0, stop);
             if (!tree_its.empty()) {
                 Domain::TriangleMeshStats stats = Biz::Algorithms::TriangleMesh::calculate_stats(tree_its);
                 tree_mesh = std::make_shared<const Domain::TriangleMesh>(std::move(tree_its), std::move(stats));
@@ -185,9 +196,11 @@ SupportToolTree build_support_tree_for_tool(const SupportToolModelMesh& model_me
                 return out;
             }
 
+            trace_ms("before_create_pad", t0, stop);
             const indexed_triangle_set empty_its;
             const indexed_triangle_set& tree_its_for_pad = tree_mesh ? tree_mesh->its : empty_its;
             indexed_triangle_set pad_its = sla::create_pad(supportable_mesh, tree_its_for_pad, ctl);
+            trace_ms("after_create_pad", t0, stop);
             if (validate_pad(pad_its, supportable_mesh.pad_cfg)) {
                 Domain::TriangleMeshStats stats = Biz::Algorithms::TriangleMesh::calculate_stats(pad_its);
                 out.pad = std::make_shared<const Domain::TriangleMesh>(std::move(pad_its), std::move(stats));
@@ -199,6 +212,7 @@ SupportToolTree build_support_tree_for_tool(const SupportToolModelMesh& model_me
         return out;
 
     } catch (const Slic3r::RuntimeError& e) {
+        trace_ms("catch_RuntimeError", t0, stop);
         // "Support tool canceled" is expected when the stop condition triggers; log at debug only.
         std::string what = e.what();
         if (what == "Support tool canceled") {
@@ -208,9 +222,11 @@ SupportToolTree build_support_tree_for_tool(const SupportToolModelMesh& model_me
         }
         return empty_tree();
     } catch (const std::exception& e) {
+        trace_ms("catch_std_exception", t0, stop);
         SPDLOG_ERROR("Support tool: {}", e.what());
         return empty_tree();
     } catch (...) {
+        trace_ms("catch_unknown", t0, stop);
         SPDLOG_ERROR("Support tool: unknown exception");
         return empty_tree();
     }

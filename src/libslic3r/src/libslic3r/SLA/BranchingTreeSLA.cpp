@@ -22,6 +22,7 @@
 #include "libslic3r/Point.hpp"
 #include "libslic3r/SLA/SupportTree.hpp"
 #include "libslic3r/SLA/SupportTreeBuilder.hpp"
+#include "libslic3r/SLA/ToolTrace.hpp"
 #include "libslic3r/libslic3r.h"
 
 namespace Slic3r { namespace sla {
@@ -411,10 +412,17 @@ inline void build_pillars(SupportTreeBuilder &builder,
 
 void create_branching_tree(SupportTreeBuilder &builder, const SupportableMesh &sm)
 {
+    using tool_trace::trace_ms;
+    auto t0 = tool_trace::start();
+
+    trace_ms("create_branching_tree_entry", t0, [&builder](){ return builder.ctl().stopcondition(); });
+
     auto coordfn = [&sm](size_t id, size_t dim) { return sm.pts->at(id).pos(dim); };
     KDTreeIndirect<3, float, decltype (coordfn)> tree{coordfn, sm.pts->size()};
 
     auto nondup_idx = non_duplicate_suppt_indices(tree, *sm.pts, 0.1);
+    trace_ms("after_non_duplicate_suppt_indices", t0, [&builder](){ return builder.ctl().stopcondition(); });
+
     std::vector<std::optional<Head>> heads(nondup_idx.size());
     auto leafs = reserve_vector<branchingtree::Node>(nondup_idx.size());
     std::vector<size_t> leaf_pts;
@@ -430,12 +438,18 @@ void create_branching_tree(SupportTreeBuilder &builder, const SupportableMesh &s
         execution::max_concurrency(execution::ex_tbb)
     );
 
-    if (builder.ctl().stopcondition())
+    trace_ms("after_pinhead_tbb_loop", t0, [&builder](){ return builder.ctl().stopcondition(); });
+
+    if (builder.ctl().stopcondition()) {
+        trace_ms("early_return_after_pinhead_stop", t0, [&builder](){ return builder.ctl().stopcondition(); });
         return;
+    }
 
     for (size_t i = 0; i < heads.size(); ++i) {
-        if (builder.ctl().stopcondition())
+        if (builder.ctl().stopcondition()) {
+            trace_ms("early_return_in_heads_loop_stop", t0, [&builder](){ return builder.ctl().stopcondition(); });
             return; // the run is given up (M4.16)
+        }
 
         if (auto &h = heads[i]; h && h->is_valid()) {
             // The leaf carries the radius of what sits at the junction: the back
@@ -454,8 +468,11 @@ void create_branching_tree(SupportTreeBuilder &builder, const SupportableMesh &s
         }
     }
 
+    trace_ms("after_heads_loop", t0, [&builder](){ return builder.ctl().stopcondition(); });
+
     auto &its = *sm.emesh.get_triangle_mesh();
     ExPolygons bedpolys = {branchingtree::make_bed_poly(its)};
+    trace_ms("after_make_bed_poly", t0, [&builder](){ return builder.ctl().stopcondition(); });
 
     auto props = branchingtree::Properties{}
                      .bed_shape(bedpolys)
@@ -469,6 +486,14 @@ void create_branching_tree(SupportTreeBuilder &builder, const SupportableMesh &s
                        branchingtree::sample_mesh(its,
                                                   props.sampling_radius()) :
                        std::vector<branchingtree::Node>{};
+    trace_ms("after_sample_mesh", t0, [&builder](){ return builder.ctl().stopcondition(); });
+
+    if (tool_trace::enabled()) {
+        auto now = std::chrono::steady_clock::now();
+        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - t0).count();
+        bool stopped = builder.ctl().stopcondition();
+        std::fprintf(stderr, "[SLA_TOOL_TRACE] after_sample_mesh meshpts.size=%zu: %lld ms, stop=%d\n", meshpts.size(), (long long)ms, stopped);
+    }
 
     auto bedpts  = branchingtree::sample_bed(props.bed_shape(),
                                              float(props.ground_level()),
@@ -479,6 +504,7 @@ void create_branching_tree(SupportTreeBuilder &builder, const SupportableMesh &s
 
     branchingtree::PointCloud nodes{std::move(meshpts), std::move(bedpts),
                                     std::move(leafs), props};
+    trace_ms("after_pointcloud_construct", t0, [&builder](){ return builder.ctl().stopcondition(); });
 
     BranchingTreeBuilder vbuilder{builder, sm, nodes, leaf_pts};
 
@@ -490,9 +516,12 @@ void create_branching_tree(SupportTreeBuilder &builder, const SupportableMesh &s
                                                        nodes.properties().max_branch_length());
                         });
 
+    trace_ms("before_build_tree", t0, [&builder](){ return builder.ctl().stopcondition(); });
     branchingtree::build_tree(nodes, vbuilder);
+    trace_ms("after_build_tree", t0, [&builder](){ return builder.ctl().stopcondition(); });
 
     build_pillars(builder, vbuilder, sm);
+    trace_ms("after_build_pillars", t0, [&builder](){ return builder.ctl().stopcondition(); });
 
     // The leaves the tree could not route, sorted and deduplicated first, so that
     // the heads are given up in one order whatever order the traversal found them
