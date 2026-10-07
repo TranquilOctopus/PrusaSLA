@@ -93,11 +93,11 @@ SlaSupportPointsDialog::SlaSupportPointsDialog() : GizmoWindow()
         _u8L("%")
     );
     m_clipping_plane_slider->set_begin_value(0.0);
-    m_clipping_plane_slider->set_end_value(1.0);
-    m_clipping_plane_slider->set_step(0.01);
-    m_clipping_plane_slider->set_validator_precision(2);
+    m_clipping_plane_slider->set_end_value(100.0);
+    m_clipping_plane_slider->set_step(1.0);
+    m_clipping_plane_slider->set_validator_precision(0);
     m_clipping_plane_slider->callbacks().value_changed = [this](double value)
-    { m_callbacks.clipping_plane_changed(value); };
+    { m_callbacks.clipping_plane_changed(value / 100.0); };
 
     // The keyboard shortcuts of the tool (M2.28), one line each, at the end of the settings they
     // belong to. The section is closed, so the list is there for the one who looks for it without
@@ -737,7 +737,7 @@ void SlaSupportPointsDialog::set_active_preset(int index, SlaSupportSettingsGrou
 
 void SlaSupportPointsDialog::set_clipping_plane_position(double pos)
 {
-    m_clipping_plane_slider->set_value(pos);
+    m_clipping_plane_slider->set_value(pos * 100.0);
 }
 
 void SlaSupportPointsDialog::set_lock_island_supports(bool locked)
