@@ -8,6 +8,7 @@
 #include "Slic3r/App/Plater/MeasureGizmo.hpp"
 
 #include <tracy/Tracy.hpp>
+#include <spdlog/spdlog.h>
 
 #if DEBUG_GIZMO_MANAGER
 #include "Slic3r/TypeInfo.hpp"
@@ -142,6 +143,21 @@ void GizmoManager::on_scene_mouse_event(const Platform::MouseEvent& e, const Sli
     update_gizmo_activation_debug_frame_begin();
 #endif
 
+    // [SupportPick] Log button events (ButtonDown, ButtonUp, DoubleClick) for left/right buttons
+    const auto event_type = e.type();
+    const auto event_button = e.button();
+    const bool is_relevant_event =
+        (event_type == Platform::MouseEvent::Type::ButtonDown ||
+         event_type == Platform::MouseEvent::Type::ButtonUp ||
+         event_type == Platform::MouseEvent::Type::DoubleClick) &&
+        (event_button == Platform::MouseButton::Left || event_button == Platform::MouseButton::Right);
+    if (is_relevant_event) {
+        const int current_tool_type_int = static_cast<int>(current_tool_type());
+        const bool tool_active = p.active_tool != nullptr;
+        SPDLOG_INFO("[SupportPick] GizmoManager event type={} button={} current_tool_type={} tool_active={}",
+            static_cast<int>(event_type), static_cast<int>(event_button), current_tool_type_int, tool_active);
+    }
+
     GizmoEventContext ctx{m_scene_provider, e, pick_ray, pick_results, screen_info};
     if (m_mouse_drag_detector
         && m_mouse_drag_detector->mouse_event(
@@ -167,14 +183,18 @@ void GizmoManager::on_scene_mouse_event(const Platform::MouseEvent& e, const Sli
         if (e.type() == Platform::MouseEvent::Type::DoubleClick &&
             e.button() == Platform::MouseButton::Left)
         {
+            SPDLOG_INFO("[SupportPick] GizmoManager double-click activation path checked");
             auto it = std::find_if(m_tool_gizmos.begin(), m_tool_gizmos.end(),
                 [&ctx](const IToolGizmoPtr& tool) { return tool->allows_activation_by_double_click(ctx); });
             if (it != m_tool_gizmos.end()) {
+                SPDLOG_INFO("[SupportPick] GizmoManager double-click allows_activation_by_double_click returned true for tool_type={}", static_cast<int>((*it)->type()));
                 ToolType tool_type = (*it)->type();
                 if (tool_type != current_tool_type()) {
                     activate_tool(tool_type);
                 }
                 return;
+            } else {
+                SPDLOG_INFO("[SupportPick] GizmoManager double-click allows_activation_by_double_click returned false for all tools");
             }
         }
     }
@@ -193,13 +213,27 @@ void GizmoManager::on_scene_mouse_event(const Platform::MouseEvent& e, const Sli
         update_gizmo_activation_debug_data(g, ret);
 #endif
 
+            if (is_relevant_event) {
+                SPDLOG_INFO("[SupportPick] GizmoManager gizmo on_mouse returned activation_state={} gizmo_type={}",
+                    static_cast<int>(ret), static_cast<int>(g->type()));
+            }
+
             if (ret == GizmoActivationState::Inactive) {
                 it = p.in_cycle_gizmos.erase(it);
+                if (is_relevant_event) {
+                    SPDLOG_INFO("[SupportPick] GizmoManager gizmo returned Inactive, removed from cycle, continuing to next gizmo");
+                }
                 continue;
             } else if (ret == GizmoActivationState::Done) {
+                if (is_relevant_event) {
+                    SPDLOG_INFO("[SupportPick] GizmoManager gizmo returned Done, clearing cycle, event NOT passed to scene");
+                }
                 p.in_cycle_gizmos.clear();
                 break;
             } else if (ret == GizmoActivationState::Active) {
+                if (is_relevant_event) {
+                    SPDLOG_INFO("[SupportPick] GizmoManager gizmo returned Active, clearing cycle, event consumed (NOT passed to scene)");
+                }
                 p.in_cycle_gizmos.clear();
                 p.in_cycle_gizmos.push_back(g);
                 if (m_mouse_drag_detector)
@@ -218,19 +252,27 @@ void GizmoManager::on_scene_mouse_event(const Platform::MouseEvent& e, const Sli
         m_mouse_drag_detector &&
         m_mouse_drag_detector->was_last_left_click_not_a_drag();
     if (left_click_not_drag) {
+        SPDLOG_INFO("[SupportPick] GizmoManager single-click (not drag) activation path checked");
         auto it = std::find_if(m_tool_gizmos.begin(), m_tool_gizmos.end(),
             [&ctx](const IToolGizmoPtr& tool) { return tool->allows_activation_by_double_click(ctx); });
         if (it != m_tool_gizmos.end()) {
+            SPDLOG_INFO("[SupportPick] GizmoManager single-click allows_activation_by_double_click returned true for tool_type={}", static_cast<int>((*it)->type()));
             ToolType tool_type = (*it)->type();
             if (tool_type != current_tool_type()) {
                 activate_tool(tool_type);
             }
             return;
+        } else {
+            SPDLOG_INFO("[SupportPick] GizmoManager single-click allows_activation_by_double_click returned false for all tools");
         }
     }
 
     if (p.in_cycle && p.in_cycle_gizmos.empty())
         p.in_cycle = false;
+
+    if (is_relevant_event && p.in_cycle_gizmos.empty() && p.active_tool == nullptr) {
+        SPDLOG_INFO("[SupportPick] GizmoManager no gizmo handled event, event passed to scene");
+    }
 
     // process transient events
     for (auto& g : m_base_gizmos)

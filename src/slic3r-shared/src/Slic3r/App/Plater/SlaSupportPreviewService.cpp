@@ -635,6 +635,7 @@ void SlaSupportPreviewService::build_nodes(
 {
     const auto it = m_previews.find(object_id.id);
     if (it == m_previews.end()) {
+        SPDLOG_INFO("[SupportPick] SlaSupportPreviewService::build_nodes object_id={} preview not found, returning", object_id.id);
         return; // the object lost its preview while the tree was being built
     }
 
@@ -672,8 +673,45 @@ void SlaSupportPreviewService::build_nodes(
     m_support_mesh_manager.release(pad_id);
 
     if ((!tree.tree || tree.tree->empty()) && (!tree.pad || tree.pad->empty())) {
+        SPDLOG_INFO("[SupportPick] SlaSupportPreviewService::build_nodes object_id={} empty tree and pad, returning", object_id.id);
         return;
     }
+
+    // [SupportPick] Log tree rebuild info
+    // Compute raw tree mesh bbox (before node transform)
+    Domain::Vec3d tree_bbox_min{0,0,0}, tree_bbox_max{0,0,0};
+    bool has_tree_bbox = false;
+    if (tree.tree && !tree.tree->empty()) {
+        const auto& indices = tree.tree->indices;
+        const auto& vertices = tree.tree->vertices;
+        bool first = true;
+        for (size_t idx : indices) {
+            const Domain::Vec3d v = vertices[idx].cast<double>();
+            if (first) {
+                tree_bbox_min = tree_bbox_max = v;
+                first = false;
+            } else {
+                tree_bbox_min = tree_bbox_min.cwiseMin(v);
+                tree_bbox_max = tree_bbox_max.cwiseMax(v);
+            }
+        }
+        has_tree_bbox = !first;
+    }
+
+    // Node transform translation (from final_trafo)
+    Domain::Vec3d node_translation{0,0,0};
+    if (tree.elevation_mm != 0.) {
+        node_translation = Domain::Vec3d(0., 0., tree.elevation_mm);
+    }
+
+    SPDLOG_INFO("[SupportPick] SlaSupportPreviewService::build_nodes object_id={} node_translation=({}, {}, {}) lift_mm={} tree_bbox_min=({}, {}, {}) tree_bbox_max=({}, {}, {}) has_tree={} has_pad={}",
+        object_id.id,
+        node_translation.x(), node_translation.y(), node_translation.z(),
+        tree.elevation_mm,
+        has_tree_bbox ? tree_bbox_min.x() : 0.0, has_tree_bbox ? tree_bbox_min.y() : 0.0, has_tree_bbox ? tree_bbox_min.z() : 0.0,
+        has_tree_bbox ? tree_bbox_max.x() : 0.0, has_tree_bbox ? tree_bbox_max.y() : 0.0, has_tree_bbox ? tree_bbox_max.z() : 0.0,
+        tree.tree && !tree.tree->empty(), tree.pad && !tree.pad->empty()
+    );
 
     // The tree and the raft are resin too, but they have to be told apart from the model, so each
     // gets its own theme token (PLAN 2.1) instead of the model's resin colour.
@@ -698,7 +736,7 @@ void SlaSupportPreviewService::build_nodes(
     const Transform3d final_trafo = tree.elevation_mm == 0. ? Transform3d::Identity()
                                                             : Domain::translation_transform(
                                                                   Domain::Vec3d(0., 0., tree.elevation_mm)
-                                                              );
+                                                                );
 
     Scene::NodeBuilder object_builder{scene};
     object_builder.set_debug_name(fmt::format("SlaSupportPreviewService - obj {}", object_id.id));
