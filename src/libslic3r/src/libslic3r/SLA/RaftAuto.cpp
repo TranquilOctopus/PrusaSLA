@@ -1,5 +1,6 @@
 #include "libslic3r/SLA/RaftAuto.hpp"
 
+#include "Slic3r/Biz/Algorithms/Scaling.hpp"
 #include "Slic3r/Domain/ExPolygon.hpp"
 #include "Slic3r/Domain/Transformation.hpp"
 #include "libslic3r/SLA/CavityDetection.hpp"
