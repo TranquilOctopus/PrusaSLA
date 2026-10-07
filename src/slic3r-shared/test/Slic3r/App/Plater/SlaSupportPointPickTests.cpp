@@ -423,5 +423,3 @@ TEST_CASE(
         CHECK_FALSE(sla_support_click_on_tree(50., 50.05, 0.1));
     }
 }
-
-} // namespace Slic3r::App::Plater
