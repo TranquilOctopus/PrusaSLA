@@ -193,9 +193,7 @@ std::optional<size_t> sla_support_point_pick_from_tree_hit(
     return picked;
 }
 
-} // namespace Slic3r::App::Plater
-
-bool Slic3r::App::Plater::sla_support_click_on_tree(
+bool sla_support_click_on_tree(
     const std::optional<double>& tree_hit_distance_mm,
     const std::optional<double>& model_hit_distance_mm,
     double epsilon_mm
@@ -210,7 +208,7 @@ bool Slic3r::App::Plater::sla_support_click_on_tree(
     return *tree_hit_distance_mm + epsilon_mm < *model_hit_distance_mm;
 }
 
-Domain::Transform3d Slic3r::App::Plater::sla_support_tree_mesh_transform(
+Domain::Transform3d sla_support_tree_mesh_transform(
     const Domain::Transform3d& instance_matrix,
     double lift
 )
