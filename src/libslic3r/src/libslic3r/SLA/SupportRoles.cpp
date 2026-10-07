@@ -648,7 +648,7 @@ void classify_support_point_roles(
                     "ROLES_TRACE idx=%zu type=%s original=(%.3f,%.3f,%.3f) final=(%.3f,%.3f,%.3f) "
                     "lowest_island=0 anchor_z=inf anchor_top=inf around=0 is_raised_detail=0 "
                     "stuck_on_raised_detail=0 r45_moved=0 thickness=inf thickness_plane=inf "
-                    "is_fragile=0 is_detailed_region=0 role=%d\n",
+                    "thickness_vertical=inf is_fragile=0 is_detailed_region=0 role=%d\n",
                     idx, point_type,
                     original_pos.x(), original_pos.y(), original_pos.z(),
                     p.x(), p.y(), p.z(), static_cast<int>(Role::Overhang));
@@ -688,6 +688,19 @@ void classify_support_point_roles(
                 if (t > thickness_plane)
                     thickness_plane = t;
             }
+        }
+
+        // For downward-facing surfaces (n.z() < 0), also measure thickness straight up into the part
+        // (the build direction). The outward normal points down, so passing (0,0,-1) to thickness_at
+        // casts a ray upward (its convention uses the inverted normal). Use the larger of the two
+        // thicknesses for the fragile check, so a pyramid apex under a thick plate sees the full
+        // plate thickness and not just the sub-detail width.
+        double thickness_vertical = 0.;
+        const bool downward_facing = n.z() < 0.;
+        if (downward_facing) {
+            thickness_vertical = thickness_at(mesh, p, Vec3d(0., 0., -1.));
+            if (thickness_vertical > thickness_plane)
+                thickness_plane = thickness_vertical;
         }
 
         bool is_raised_detail_result = false;
@@ -761,7 +774,7 @@ void classify_support_point_roles(
                 "ROLES_TRACE idx=%zu type=%s original=(%.3f,%.3f,%.3f) final=(%.3f,%.3f,%.3f) "
                 "lowest_island=%d anchor_z=%.3f anchor_top=%.3f around=%d is_raised_detail=%d "
                 "stuck_on_raised_detail=%d r45_moved=%d thickness=%.3f thickness_plane=%.3f "
-                "is_fragile=%d is_detailed_region=%d role=%d\n",
+                "thickness_vertical=%.3f is_fragile=%d is_detailed_region=%d role=%d\n",
                 idx, point_type,
                 original_pos.x(), original_pos.y(), original_pos.z(),
                 p.x(), p.y(), p.z(),
@@ -774,6 +787,7 @@ void classify_support_point_roles(
                 r45_moved ? 1 : 0,
                 thickness == std::numeric_limits<double>::infinity() ? -1.0 : thickness,
                 thickness_plane == std::numeric_limits<double>::infinity() ? -1.0 : thickness_plane,
+                downward_facing ? (thickness_vertical == std::numeric_limits<double>::infinity() ? -1.0 : thickness_vertical) : -1.0,
                 is_fragile_result ? 1 : 0,
                 is_detailed_region_result ? 1 : 0,
                 static_cast<int>(role));
