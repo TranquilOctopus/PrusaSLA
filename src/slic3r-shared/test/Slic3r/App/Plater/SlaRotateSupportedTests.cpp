@@ -9,6 +9,7 @@
 #include "Slic3r/Domain/ModelVolume.hpp"
 #include "Slic3r/Domain/Project.hpp"
 #include "Slic3r/Domain/SLA/SupportPoint.hpp"
+#include "Slic3r/Domain/ElementRef.hpp"
 #include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
 #include "Slic3r/Biz/SecretStoreDummy.hpp"
 #include "Slic3r/Biz/Preset/IO/BundlePaths.hpp"
@@ -92,7 +93,7 @@ TEST_CASE_METHOD(
     // No objects selected
     SlaRotateSupportedCheck check = sla_rotate_supported_check(project_interactor);
     CHECK(check.empty());
-    CHECK(check.objects_with_points.empty());
+    CHECK(check.object_refs.empty());
     CHECK(check.point_count == 0);
 }
 
@@ -112,7 +113,7 @@ TEST_CASE_METHOD(
     // Check - should be empty because no supports
     SlaRotateSupportedCheck check = sla_rotate_supported_check(project_interactor);
     CHECK(check.empty());
-    CHECK(check.objects_with_points.empty());
+    CHECK(check.object_refs.empty());
     CHECK(check.point_count == 0);
 }
 
@@ -132,8 +133,8 @@ TEST_CASE_METHOD(
     // Check - should find the object with 3 points
     SlaRotateSupportedCheck check = sla_rotate_supported_check(project_interactor);
     CHECK(!check.empty());
-    CHECK(check.objects_with_points.size() == 1);
-    CHECK(check.objects_with_points.front() == obj);
+    CHECK(check.object_refs.size() == 1);
+    CHECK(check.object_refs.front().object_id == obj->id().id);
     CHECK(check.point_count == 3);
 }
 
@@ -157,11 +158,11 @@ TEST_CASE_METHOD(
     // Check - should find both objects with total 3 points
     SlaRotateSupportedCheck check = sla_rotate_supported_check(project_interactor);
     CHECK(!check.empty());
-    CHECK(check.objects_with_points.size() == 2);
+    CHECK(check.object_refs.size() == 2);
     CHECK(check.point_count == 3);
     // Order should match selection order
-    CHECK(check.objects_with_points[0] == obj1);
-    CHECK(check.objects_with_points[1] == obj2);
+    CHECK(check.object_refs[0].object_id == obj1->id().id);
+    CHECK(check.object_refs[1].object_id == obj2->id().id);
 }
 
 TEST_CASE_METHOD(
@@ -184,8 +185,8 @@ TEST_CASE_METHOD(
     // Check - should only find the first object
     SlaRotateSupportedCheck check = sla_rotate_supported_check(project_interactor);
     CHECK(!check.empty());
-    CHECK(check.objects_with_points.size() == 1);
-    CHECK(check.objects_with_points.front() == obj1);
+    CHECK(check.object_refs.size() == 1);
+    CHECK(check.object_refs.front().object_id == obj1->id().id);
     CHECK(check.point_count == 1);
 }
 
@@ -193,6 +194,7 @@ TEST_CASE("[SlaRotateSupported][M2.40] sla_rotate_supported_question formats sin
 {
     SlaRotateSupportedCheck check;
     check.point_count = 5;
+    check.object_refs.push_back(ElementRef{1}); // dummy object ref
     // We can't easily create a ModelObject with a name here, so just test the empty case
     SlaRotateSupportedCheck empty_check;
     CHECK(sla_rotate_supported_question(empty_check).empty());
@@ -202,9 +204,9 @@ TEST_CASE("[SlaRotateSupported][M2.40] sla_rotate_supported_question formats mul
 {
     SlaRotateSupportedCheck check;
     check.point_count = 10;
-    // Add two dummy pointers (not real objects, but we test the count logic)
-    check.objects_with_points.push_back(reinterpret_cast<const ModelObject*>(0x1));
-    check.objects_with_points.push_back(reinterpret_cast<const ModelObject*>(0x2));
+    // Add two dummy object refs (not real objects, but we test the count logic)
+    check.object_refs.push_back(ElementRef{1});
+    check.object_refs.push_back(ElementRef{2});
 
     std::string question = sla_rotate_supported_question(check);
     CHECK(!question.empty());

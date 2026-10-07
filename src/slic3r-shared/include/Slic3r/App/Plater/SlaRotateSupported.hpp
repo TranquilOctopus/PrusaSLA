@@ -21,12 +21,14 @@ namespace Slic3r::App::Plater {
 struct SlaRotateSupportedCheck
 {
     /// The objects from the selection that have non-empty sla_support_points.
-    std::vector<const Domain::ModelObject*> objects_with_points;
+    /// Stored as ElementRef (object IDs) to avoid keeping raw ModelObject pointers
+    /// past the async dialog callback.
+    std::vector<Domain::ElementRef> object_refs;
 
     /// Total number of support points across all those objects.
     std::size_t point_count{0};
 
-    bool empty() const { return objects_with_points.empty(); }
+    bool empty() const { return object_refs.empty(); }
 };
 
 /// Check which of the currently selected objects have support points.

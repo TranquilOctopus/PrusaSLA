@@ -279,20 +279,12 @@ PlaceOnFaceGizmo::on_mouse(Scene::GizmoEventContext& ctx, bool only_active)
                     const SlaRotateSupportedCheck check = sla_rotate_supported_check(m_project_interactor);
                     if (App::is_sla_active(m_project_interactor) && !check.empty()) {
                         const std::string question = sla_rotate_supported_question(check);
-                        const std::vector<ObjectID> asked_for_object_ids = [&check]() {
-                            std::vector<ObjectID> ids;
-                            ids.reserve(check.objects_with_points.size());
-                            for (const ModelObject* obj : check.objects_with_points) {
-                                ids.push_back(obj->id());
-                            }
-                            return ids;
-                        }();
+                        const std::vector<ElementRef> asked_for_object_refs = check.object_refs;
 
                         AppServices::instance().dialog_manager().show_yesno_dialog(
                             _u8L("Rotate supported part"),
                             question,
-                            [this, direction, point, check = std::move(check),
-                             asked_for_object_ids = std::move(asked_for_object_ids)](bool answer)
+                            [this, direction, point, asked_for_object_refs = std::move(asked_for_object_refs)](bool answer)
                             {
                                 if (!answer) {
                                     return; // No: cancel rotation, keep supports
@@ -301,12 +293,11 @@ PlaceOnFaceGizmo::on_mouse(Scene::GizmoEventContext& ctx, bool only_active)
                                 // Verify selection still matches (defensive).
                                 const auto& selection = m_project_interactor.scene_interactor().object_selection();
                                 bool still_matches = true;
-                                if (selection.elements.size() != asked_for_object_ids.size()) {
+                                if (selection.elements.size() != asked_for_object_refs.size()) {
                                     still_matches = false;
                                 } else {
                                     for (std::size_t i = 0; i < selection.elements.size(); ++i) {
-                                        if (!selection.elements[i].has_object() ||
-                                            selection.elements[i].object_id != asked_for_object_ids[i].id) {
+                                        if (selection.elements[i] != asked_for_object_refs[i]) {
                                             still_matches = false;
                                             break;
                                         }
@@ -316,8 +307,23 @@ PlaceOnFaceGizmo::on_mouse(Scene::GizmoEventContext& ctx, bool only_active)
                                     return;
                                 }
 
+                                // Look up the ModelObjects again using the stored ElementRefs.
+                                const Domain::Project& project = m_project_interactor.workbench().project(
+                                    m_project_interactor.selected_project_id()
+                                );
+                                std::vector<const ModelObject*> objects_with_points;
+                                objects_with_points.reserve(asked_for_object_refs.size());
+                                for (const ElementRef& ref : asked_for_object_refs) {
+                                    if (ref.has_object()) {
+                                        const ModelObject* obj = project.find_object_by_id(ref.object_id);
+                                        if (obj && !obj->sla_support_points.empty()) {
+                                            objects_with_points.push_back(obj);
+                                        }
+                                    }
+                                }
+
                                 // Yes: apply rotation and clear supports in one undo step.
-                                const SlaSupportPointsClearPlan plan = sla_support_points_clear_plan(check.objects_with_points);
+                                const SlaSupportPointsClearPlan plan = sla_support_points_clear_plan(objects_with_points);
                                 if (!plan.empty()) {
                                     m_project_interactor.undo_provider().take_snapshot(UndoSnapshotType::SlaSupportPointsClear);
                                     for (const ElementRef& object_ref : plan.object_refs) {
