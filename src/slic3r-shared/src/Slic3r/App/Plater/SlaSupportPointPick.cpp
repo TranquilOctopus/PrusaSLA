@@ -2,6 +2,8 @@
 
 #include "Slic3r/App/Scene/Camera.hpp"
 
+#include "Slic3r/Domain/Transformation.hpp"
+
 #include <algorithm>
 #include <limits>
 
