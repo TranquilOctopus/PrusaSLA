@@ -197,7 +197,8 @@ public:
     /// frame the preview draws it in: object_to_world from sla_support_tree_placement() without the
     /// node_trafo lift. A caller that wants to raycast against the real drawn tree uses this mesh
     /// with the same drawing transform the preview uses (object_drawing_trafo() while the tool is open).
-    [[nodiscard]] std::shared_ptr<const Domain::TriangleMesh> support_tree_mesh(Domain::ObjectID object_id) const;
+    /// Valid until the next rebuild or release of the object's preview; use it at once, do not store it.
+    [[nodiscard]] const Scene::TriangleMesh* support_tree_mesh(Domain::ObjectID object_id) const;
 
     /// @brief What the raft of this object came to when raft_type is Auto (rulebook R6, M7.8.4),
     /// as the build that drew it last decided it.

@@ -723,7 +723,7 @@ void SlaSupportPointsDialog::set_selected_support_values(const SlaSupportSelecti
     if (m_new_supports_window) {
         if (view.count > 0) {
             // Save the current state before collapsing
-            m_new_supports_was_collapsed = m_new_supports_window->is_collapsed();
+            m_new_supports_was_collapsed = m_new_supports_window->collapsed();
             m_new_supports_window->set_collapsed(true);
         } else {
             // Restore the previous state

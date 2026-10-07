@@ -209,5 +209,3 @@ bool Slic3r::App::Plater::sla_support_click_on_tree(
     }
     return *tree_hit_distance_mm + epsilon_mm < *model_hit_distance_mm;
 }
-
-} // namespace Slic3r::App::Plater

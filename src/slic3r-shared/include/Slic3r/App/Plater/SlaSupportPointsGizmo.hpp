@@ -392,19 +392,6 @@ private:
     std::deque<Domain::ObjectID> m_auto_support_queue;
     std::optional<bool> m_auto_support_keep_existing;
 
-    // Cache of AABBMesh for the support tree mesh. Keeps exactly ONE entry: the mesh pointer
-    // and its AABBMesh. Rebuilt when the mesh pointer changes. Cleared when the tool closes.
-    mutable std::shared_ptr<const Domain::TriangleMesh> m_tree_aabb_cache_key;
-    mutable std::unique_ptr<Slic3r::AABBMesh> m_tree_aabb_cache_value;
-
-    // Per-object AABB cache for activation raycasting (M2.39b). One entry per object id.
-    struct TreeAABBCacheEntry
-    {
-        std::shared_ptr<const Domain::TriangleMesh> mesh;
-        std::unique_ptr<Slic3r::AABBMesh> aabb;
-    };
-    mutable std::unordered_map<std::size_t, TreeAABBCacheEntry> m_tree_aabb_cache_per_object;
-
     // Raycast all support tree meshes on the plate and pick the nearest hit (M2.39b).
     std::optional<SlaSupportTreePart> raycast_all_tree_meshes(
         const Scene::GizmoEventContext& ctx,

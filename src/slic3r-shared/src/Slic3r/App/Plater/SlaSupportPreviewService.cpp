@@ -241,7 +241,7 @@ std::optional<Domain::sla::RaftType> SlaSupportPreviewService::auto_raft_type(
     return it->second.auto_raft;
 }
 
-std::shared_ptr<const Domain::TriangleMesh> SlaSupportPreviewService::support_tree_mesh(
+const Scene::TriangleMesh* SlaSupportPreviewService::support_tree_mesh(
     Domain::ObjectID object_id
 ) const
 {
@@ -254,7 +254,7 @@ std::shared_ptr<const Domain::TriangleMesh> SlaSupportPreviewService::support_tr
     if (!trimesh) {
         return nullptr;
     }
-    return trimesh->triangles();
+    return trimesh;
 }
 
 void SlaSupportPreviewService::on_slicing_input_changed(const Domain::BedRef& /*bed_instance*/)
