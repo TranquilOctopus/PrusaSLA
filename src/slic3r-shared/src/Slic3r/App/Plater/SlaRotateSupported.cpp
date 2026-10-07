@@ -11,6 +11,7 @@
 #include "Slic3r/App/IsSlaActive.hpp"
 #include "Slic3r/App/Plater/SlaSupportPointsClear.hpp"
 #include "Slic3r/App/AppServices.hpp"
+#include "Slic3r/App/IDialogManager.hpp"
 
 using Slic3r::Biz::_u8L;
 using Slic3r::Domain::ElementRef;

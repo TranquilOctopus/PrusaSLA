@@ -4,6 +4,7 @@
 #include "Slic3r/App/Render/Device.hpp"
 #include "Slic3r/App/Plater/PlaterScenePresenter.hpp"
 #include "Slic3r/App/AppServices.hpp"
+#include "Slic3r/App/IDialogManager.hpp"
 
 #include "Slic3r/Biz/Algorithms/Line.hpp"
 #include "Slic3r/Biz/Algorithms/Point.hpp"

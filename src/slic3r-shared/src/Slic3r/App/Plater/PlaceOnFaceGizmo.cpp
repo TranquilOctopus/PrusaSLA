@@ -4,6 +4,7 @@
 #include "Slic3r/App/Scene/NodeVisitor.hpp"
 #include "Slic3r/App/Scene/SceneNodeTag.hpp"
 #include "Slic3r/App/AppServices.hpp"
+#include "Slic3r/App/IDialogManager.hpp"
 
 #include "Slic3r/Domain/ModelVolume.hpp"
 #include "Slic3r/Domain/ObjectID.hpp"
