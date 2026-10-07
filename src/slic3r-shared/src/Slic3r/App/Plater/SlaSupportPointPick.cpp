@@ -5,6 +5,7 @@
 #include "Slic3r/Domain/Transformation.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 
 namespace Slic3r::App::Plater {
@@ -149,23 +150,35 @@ double sla_support_point_screen_radius(
 
 namespace {
 
-// Whether a candidate head is a better pick than the best so far: prefer heads ABOVE the hit
-// (head_z >= hit_z - 0.5 mm), and among those (or if none are above), the nearest in 3D.
+// Whether a candidate head is a better pick than the best so far. A head ABOVE the hit
+// (head_z >= hit_z - 0.5 mm) wins over one below it. Among the heads above, the one straight over
+// the hit wins: a stem runs down from its own head, so the head it carries is the one with the
+// smallest horizontal distance, while the nearest head in 3D is often a lower neighbour (that is
+// what picked the wrong support in the app, M2.39d). Equal horizontal distances go to the nearer
+// head in z. Without a head above the hit, the nearest in 3D wins.
 bool is_better_tree_pick(
     const Domain::Vec3d& candidate_head,
     const Domain::Vec3d& hit,
-    const Domain::Vec3d& best_head,
-    double best_dist_sq
+    const Domain::Vec3d& best_head
 )
 {
-    const double candidate_dist_sq = (candidate_head - hit).squaredNorm();
     const bool candidate_above = candidate_head.z() >= hit.z() - 0.5;
     const bool best_above = best_head.z() >= hit.z() - 0.5;
 
     if (candidate_above != best_above) {
         return candidate_above; // prefer above
     }
-    return candidate_dist_sq < best_dist_sq;
+    if (!candidate_above) {
+        return (candidate_head - hit).squaredNorm() < (best_head - hit).squaredNorm();
+    }
+
+    constexpr double same_xy_mm2 = 1e-6;
+    const double candidate_xy = (candidate_head - hit).head<2>().squaredNorm();
+    const double best_xy = (best_head - hit).head<2>().squaredNorm();
+    if (std::abs(candidate_xy - best_xy) > same_xy_mm2) {
+        return candidate_xy < best_xy;
+    }
+    return std::abs(candidate_head.z() - hit.z()) < std::abs(best_head.z() - hit.z());
 }
 
 } // namespace
@@ -180,14 +193,12 @@ std::optional<size_t> sla_support_point_pick_from_tree_hit(
     }
 
     std::optional<size_t> picked;
-    double best_dist_sq = std::numeric_limits<double>::max();
     Domain::Vec3d best_head = Domain::Vec3d::Zero();
 
     for (size_t i = 0; i < point_heads_world.size(); ++i) {
         const Domain::Vec3d& head = point_heads_world[i];
-        if (!picked.has_value() || is_better_tree_pick(head, hit_world, best_head, best_dist_sq)) {
+        if (!picked.has_value() || is_better_tree_pick(head, hit_world, best_head)) {
             picked = i;
-            best_dist_sq = (head - hit_world).squaredNorm();
             best_head = head;
         }
     }

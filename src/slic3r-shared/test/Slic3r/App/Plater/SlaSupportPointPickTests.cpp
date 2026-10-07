@@ -330,6 +330,17 @@ TEST_CASE(
         CHECK(*picked == 2u);
     }
 
+    SECTION("A stem under a high head is not taken by a lower neighbour (M2.39d)")
+    {
+        // Head 0 is 20 mm above the click on its own stem; head 1 is a lower support next to it,
+        // only 3.6 mm from the click in 3D. The stem belongs to the head straight above it.
+        const std::vector<Vec3d> heads{{10., 10., 30.}, {13., 10., 12.}};
+        const Vec3d hit{10., 10., 10.};
+        const auto picked = sla_support_point_pick_from_tree_hit(heads, hit);
+        REQUIRE(picked.has_value());
+        CHECK(*picked == 0u);
+    }
+
     SECTION("Hit above all heads: prefers heads above hit, falls back to nearest")
     {
         const std::vector<Vec3d> heads{{0., 0., 10.}, {10., 0., 5.}};

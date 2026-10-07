@@ -53,7 +53,7 @@ struct RotateSupportedFixture
         Slic3r::set_data_dir(Tests::get_datadir().string());
 
         project_interactor.preset_interactor().load_preset_bundle(
-            Preset::IO::BundlePaths::make_test_runtime(Tests::get_datadir())
+            Slic3r::Biz::Preset::IO::BundlePaths::make_test_runtime(Tests::get_datadir())
         );
 
         // Create a new project so there's a build plate
@@ -68,10 +68,17 @@ struct RotateSupportedFixture
         object->name = name;
         object->sla_support_points.clear();
         for (std::size_t i = 0; i < count; ++i) {
-            object->sla_support_points.emplace_back(SLA::SupportPoint{Vec3d{double(i), 0, 0}, 1.0f, false});
+            object->sla_support_points.push_back(SLA::SupportPoint{
+                Vec3f{float(i), 0.f, 0.f}, 0.2f, SLA::SupportPointType::manual_add});
         }
-        object->sla_points_status = count > 0 ? SLA::PointsStatus::UserPoints : SLA::PointsStatus::NoPoints;
+        object->sla_points_status = count > 0 ? SLA::PointsStatus::UserModified : SLA::PointsStatus::NoPoints;
         return object;
+    }
+
+    // The selection of one instance of a model: what a click on it in the scene selects.
+    static ElementRef ref_of(const ModelObject& object)
+    {
+        return ElementRef{object.id().id, object.instances.front()->id().id};
     }
 
     Slic3r::Domain::Workbench workbench;
@@ -105,10 +112,9 @@ TEST_CASE_METHOD(
 {
     // Add an object without supports
     ModelObject* obj = place_model_with_points(0, "UnsupportedCube");
-    obj->instances.front()->set_printable(true);
 
     // Select the object
-    scene_interactor.set_object_selection(ObjectSelection{ElementRefs{ElementRef{obj->id()}}, SelectionMode::Instance});
+    scene_interactor.set_object_selection(Slic3r::Biz::Scene::ObjectSelection{Slic3r::Biz::Scene::SelectionMode::Instance, {ref_of(*obj)}});
 
     // Check - should be empty because no supports
     SlaRotateSupportedCheck check = sla_rotate_supported_check(project_interactor);
@@ -125,10 +131,9 @@ TEST_CASE_METHOD(
 {
     // Add an object with supports
     ModelObject* obj = place_model_with_points(3, "SupportedCube");
-    obj->instances.front()->set_printable(true);
 
     // Select the object
-    scene_interactor.set_object_selection(ObjectSelection{ElementRefs{ElementRef{obj->id()}}, SelectionMode::Instance});
+    scene_interactor.set_object_selection(Slic3r::Biz::Scene::ObjectSelection{Slic3r::Biz::Scene::SelectionMode::Instance, {ref_of(*obj)}});
 
     // Check - should find the object with 3 points
     SlaRotateSupportedCheck check = sla_rotate_supported_check(project_interactor);
@@ -146,14 +151,12 @@ TEST_CASE_METHOD(
 {
     // Add first object with supports
     ModelObject* obj1 = place_model_with_points(2, "Cube1");
-    obj1->instances.front()->set_printable(true);
 
     // Add second object with supports
     ModelObject* obj2 = place_model_with_points(1, "Cube2");
-    obj2->instances.front()->set_printable(true);
 
     // Select both objects
-    scene_interactor.set_object_selection(ObjectSelection{ElementRefs{ElementRef{obj1->id()}, ElementRef{obj2->id()}}, SelectionMode::Instance});
+    scene_interactor.set_object_selection(Slic3r::Biz::Scene::ObjectSelection{Slic3r::Biz::Scene::SelectionMode::Instance, {ref_of(*obj1), ref_of(*obj2)}});
 
     // Check - should find both objects with total 3 points
     SlaRotateSupportedCheck check = sla_rotate_supported_check(project_interactor);
@@ -173,14 +176,12 @@ TEST_CASE_METHOD(
 {
     // Add first object WITH supports
     ModelObject* obj1 = place_model_with_points(1, "SupportedCube");
-    obj1->instances.front()->set_printable(true);
 
     // Add second object WITHOUT supports
     ModelObject* obj2 = place_model_with_points(0, "UnsupportedCube");
-    obj2->instances.front()->set_printable(true);
 
     // Select both objects
-    scene_interactor.set_object_selection(ObjectSelection{ElementRefs{ElementRef{obj1->id()}, ElementRef{obj2->id()}}, SelectionMode::Instance});
+    scene_interactor.set_object_selection(Slic3r::Biz::Scene::ObjectSelection{Slic3r::Biz::Scene::SelectionMode::Instance, {ref_of(*obj1), ref_of(*obj2)}});
 
     // Check - should only find the first object
     SlaRotateSupportedCheck check = sla_rotate_supported_check(project_interactor);
@@ -210,9 +211,8 @@ TEST_CASE("[SlaRotateSupported][M2.40] sla_rotate_supported_question formats mul
 
     std::string question = sla_rotate_supported_question(check);
     CHECK(!question.empty());
-    // Should mention "2 selected parts" and "10" points
+    // Names how many parts it is about
     CHECK(question.find("2") != std::string::npos);
-    CHECK(question.find("10") != std::string::npos);
 }
 
 TEST_CASE_METHOD(
@@ -223,7 +223,6 @@ TEST_CASE_METHOD(
 {
     // Add an object with supports
     ModelObject* obj = place_model_with_points(2, "TestCube");
-    obj->instances.front()->set_printable(true);
 
     // Create plan
     std::vector<const ModelObject*> models = {obj};

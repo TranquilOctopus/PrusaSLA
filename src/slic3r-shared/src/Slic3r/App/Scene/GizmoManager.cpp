@@ -192,6 +192,10 @@ void GizmoManager::on_scene_mouse_event(const Platform::MouseEvent& e, const Sli
                 if (tool_type != current_tool_type()) {
                     activate_tool(tool_type);
                 }
+                // The gizmos of this cycle were picked before the tool was active; the next event
+                // starts a cycle of its own, with the tool in it (M2.39d).
+                p.in_cycle_gizmos.clear();
+                p.in_cycle = false;
                 return;
             } else {
                 SPDLOG_INFO("[SupportPick] GizmoManager double-click allows_activation_by_double_click returned false for all tools");
@@ -261,6 +265,11 @@ void GizmoManager::on_scene_mouse_event(const Platform::MouseEvent& e, const Sli
             if (tool_type != current_tool_type()) {
                 activate_tool(tool_type);
             }
+            // As for the double click: the next event starts a cycle with the tool in it (M2.39d).
+            p.in_cycle_gizmos.clear();
+            p.in_cycle = false;
+            SPDLOG_INFO("[SupportPick] GizmoManager after single-click activation: current_tool_type={}",
+                static_cast<int>(current_tool_type()));
             return;
         } else {
             SPDLOG_INFO("[SupportPick] GizmoManager single-click allows_activation_by_double_click returned false for all tools");
@@ -323,6 +332,8 @@ void GizmoManager::on_scene_selection_changed(
         if (current_tool_type() == tool_gizmo->type()
             && !tool_gizmo->enabled())
         {
+            SPDLOG_INFO("[SupportPick] GizmoManager selection changed: {} element(s), tool {} no longer enabled, deactivating",
+                selection.elements.size(), static_cast<int>(tool_gizmo->type()));
             deactivate_current_tool();
         }
     }
@@ -375,6 +386,7 @@ void GizmoManager::deactivate_current_tool()
     auto& p = current_context();
     if (p.active_tool == nullptr)
         return;
+    SPDLOG_INFO("[SupportPick] GizmoManager deactivate_current_tool tool={}", static_cast<int>(p.active_tool->type()));
     p.active_tool->on_deactivated();
     p.active_tool = nullptr;
     invoke_listeners<IGizmoActiveToolListener>([p](auto* l) { l->active_tool_changed(p.active_tool); });
