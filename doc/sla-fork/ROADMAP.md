@@ -1140,6 +1140,8 @@ Support generation quality has its own milestone, **M7**. M4.3–M4.5 cover regr
     Result: The test fixture in `tests/sla_print/sla_support_tool_tests.cpp` now creates enough work for the stop condition to trigger during the serialised ground-connection searches, and the tool gives up within the 2 s budget.
   - [x] **M4.16-TestFix2** Batch m15 follow-up: 2000 points on a flat face with 5 mm pillars still finished too quickly; raised to 5000 points, set `branchingsupport_object_elevation` to 10 mm (matching the test's `support_object_elevation`) for taller pillars, and added INFO diagnostics for tree status and point counts. The serialised ground-connection searches now take long enough for the stop condition to trigger. S needs M4.16-TestFix
     Result: The branching tree stop test now reliably exercises the stop condition during serialised NLopt searches; the tool gives up within the 2 s budget.
+  - [x] **M4.16-FixBranchStop4** Batch m15: the stop is set while `branchingtree::sample_mesh()` runs, then the `PointCloud` constructor inserts millions of mesh points into the kd-tree without checking the stop. Added early returns in `create_branching_tree()` after `sample_mesh()`, after `sample_bed()`, and after `PointCloud` construction; made the 4-argument `PointCloud` constructor stoppable with a `const std::function<bool()> &stop = {}` parameter (default only in declaration), checking every 4096 insertions in the three kd-tree loops; the 3-argument constructor delegates unchanged. The trace lines are kept. S needs M4.16-TestFix2
+    Result: The branching tree now gives up promptly when the stop condition is triggered during mesh/bed sampling or kd-tree construction, instead of running for 50+ seconds.
 
 ## M5: Formats and inspection
 

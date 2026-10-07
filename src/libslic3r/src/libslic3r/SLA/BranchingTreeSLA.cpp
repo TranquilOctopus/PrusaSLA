@@ -495,6 +495,8 @@ void create_branching_tree(SupportTreeBuilder &builder, const SupportableMesh &s
         std::fprintf(stderr, "[SLA_TOOL_TRACE] after_sample_mesh meshpts.size=%zu: %lld ms, stop=%d\n", meshpts.size(), (long long)ms, stopped);
     }
 
+    if (builder.ctl().stopcondition()) return; // the run is given up (M4.16)
+
     auto bedpts  = branchingtree::sample_bed(props.bed_shape(),
                                              float(props.ground_level()),
                                              props.sampling_radius());
@@ -502,9 +504,14 @@ void create_branching_tree(SupportTreeBuilder &builder, const SupportableMesh &s
     for (auto &bp : bedpts)
         bp.Rmin = sm.cfg.head_back_radius_mm;
 
+    if (builder.ctl().stopcondition()) return; // the run is given up (M4.16)
+
     branchingtree::PointCloud nodes{std::move(meshpts), std::move(bedpts),
-                                    std::move(leafs), props};
+                                    std::move(leafs), props,
+                                    builder.ctl().stopcondition};
     trace_ms("after_pointcloud_construct", t0, [&builder](){ return builder.ctl().stopcondition(); });
+
+    if (builder.ctl().stopcondition()) return; // the run is given up (M4.16)
 
     BranchingTreeBuilder vbuilder{builder, sm, nodes, leaf_pts};
 

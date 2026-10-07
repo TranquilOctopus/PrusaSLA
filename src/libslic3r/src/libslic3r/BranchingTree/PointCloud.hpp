@@ -12,6 +12,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <cstddef>
+#include <functional>
 
 #include "BranchingTree.hpp"
 //#include "Slic3r/Biz/Algorithms/Execution/Execution.hpp"
@@ -138,7 +139,8 @@ public:
     PointCloud(std::vector<Node> meshpts,
                std::vector<Node> bedpts,
                std::vector<Node> support_leafs,
-               const Properties &props);
+               const Properties &props,
+               const std::function<bool()> &stop = {});
 
     PtType get_type(size_t node_id) const
     {

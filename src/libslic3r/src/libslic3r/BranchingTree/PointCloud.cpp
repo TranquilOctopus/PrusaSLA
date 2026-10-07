@@ -193,7 +193,8 @@ PointCloud::PointCloud(const indexed_triangle_set &M,
 PointCloud::PointCloud(std::vector<Node> meshpts,
                        std::vector<Node> bedpts,
                        std::vector<Node> support_leafs,
-                       const Properties &props)
+                       const Properties &props,
+                       const std::function<bool()> &stop)
     : m_leafs{std::move(support_leafs)}
     , m_meshpoints{std::move(meshpts)}
     , m_bedpoints{std::move(bedpts)}
@@ -208,17 +209,20 @@ PointCloud::PointCloud(std::vector<Node> meshpts,
     , m_reachable_cnt{JUNCTIONS_BEGIN + m_junctions.size()}
 {
     for (size_t i = 0; i < m_bedpoints.size(); ++i) {
+        if (stop && (i % 4096) == 0 && stop()) return;
         m_bedpoints[i].id = int(i);
         m_ktree.insert({m_bedpoints[i].pos, i});
     }
     
     for (size_t i = 0; i < m_meshpoints.size(); ++i) {
+        if (stop && (i % 4096) == 0 && stop()) return;
         Node &n = m_meshpoints[i];
         n.id = int(MESHPTS_BEGIN + i);
         m_ktree.insert({n.pos, n.id});
     }
     
     for (size_t i = 0; i < m_leafs.size(); ++i) {
+        if (stop && (i % 4096) == 0 && stop()) return;
         Node &n = m_leafs[i];
         n.id    = int(LEAFS_BEGIN + i);
         n.left  = Node::ID_NONE;
