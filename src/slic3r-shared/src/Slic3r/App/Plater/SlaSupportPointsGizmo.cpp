@@ -534,6 +534,9 @@ void SlaSupportPointsGizmo::on_model_reloaded(Domain::SelectionId project_id)
         return;
     }
     this->collect_paintable_volumes(m_project_id, m_selected_element);
+    // The undo also brought back the support points the model had, which the edit session takes,
+    // or the next edit would write the undone points back (M2.39d).
+    this->reload_edit_points_from_model();
 }
 
 void SlaSupportPointsGizmo::start_generation()
@@ -614,13 +617,18 @@ void SlaSupportPointsGizmo::on_generation_completed(std::optional<Domain::SLA::S
             project.find_object_by_id(m_selected_object_id.id),
             project.find_instance_by_id(m_selected_object_id.id, m_selected_instance_id)
         );
+        // The generated points go on the model right away, in one undo step, and the edit session
+        // takes them from there (M2.39d). Kept to the tool until Apply, they had no markers, could not
+        // be clicked, selected or edited, and the next edit of the session wrote its older list back
+        // over them. The session is begun first, so Discard still returns to the points the model
+        // had before the generation.
+        if (!m_edit_state.has_value()) {
+            this->begin_editing();
+        }
         m_generated_support_points = *support_points;
         m_has_generated_points = true;
+        this->apply_generated_points();
 
-        size_t count = m_generated_support_points->size();
-
-        m_dialog->set_point_count(count);
-        m_dialog->set_apply_enabled(true);
         m_dialog->set_generate_enabled(true);
         m_dialog->set_auto_support_all_enabled(true);
     } else {
@@ -672,6 +680,9 @@ void SlaSupportPointsGizmo::apply_generated_points()
     m_dialog->set_apply_enabled(false);
     m_dialog->set_point_count(model_object->sla_support_points.size());
     m_dialog->set_remove_all_points_enabled(!model_object->sla_support_points.empty());
+
+    // The supports just written are the ones the tool shows, picks and edits (M2.39d).
+    this->reload_edit_points_from_model();
 }
 
 // The points a generation produced are the tool's own until they are written on the model, so every
@@ -704,6 +715,12 @@ void SlaSupportPointsGizmo::discard_generated_points()
     // the tool: on_deactivated then finds nothing pending and writes nothing (M2.31).
     m_has_generated_points = false;
     m_generated_support_points.reset();
+    // A generation writes its points on the model at once since M2.39d, so throwing them away means
+    // putting back the points the model had when the session began, which is what the session
+    // remembers for this.
+    if (m_edit_state.has_value()) {
+        this->discard_edited_points();
+    }
     m_dialog->set_apply_enabled(false);
     m_dialog->set_generate_enabled(true);
     m_dialog->set_auto_support_all_enabled(true);
@@ -992,6 +1009,12 @@ void SlaSupportPointsGizmo::on_auto_support_completed(Domain::ObjectID obj_id, s
             // The model of the tool has its points now, so the M2.21 support preview lifts it and
             // the tool follows that lift (M2.33).
             this->refresh_tool_lift();
+
+            // The model the tool is open on got new supports from outside its edit session, which
+            // takes them, so they can be clicked and edited (M2.39d).
+            if (m_selected_object_id == obj_id) {
+                this->reload_edit_points_from_model();
+            }
         }
     } else {
         SPDLOG_WARN("Auto support all: No support points could be generated for object {}", obj_id.id);
@@ -1091,6 +1114,37 @@ void SlaSupportPointsGizmo::commit_edited_points_live()
     // dropped it for a model without points), and the lift the scene draws the model with may have
     // changed with it. The raycast and the glyphs follow that lift, not the one they had (M2.33).
     this->refresh_tool_lift();
+}
+
+// The session holds its own copy of the points of the model, and every edit writes that copy back
+// (commit_edited_points_live). A write from anywhere else - a generation, Auto support all, Apply, an
+// undo - therefore has to reach the copy as well: without it the tool showed no markers for the new
+// supports, a click on their tree found no point to select, and the next edit wrote the older list
+// back over them (measured in the app: markers=0 with a 23k triangle tree drawn, M2.39d).
+void SlaSupportPointsGizmo::reload_edit_points_from_model()
+{
+    if (!m_edit_state.has_value() || !m_selected_object_id.valid()) {
+        return;
+    }
+
+    const Domain::Project& project = m_project_interactor.selected_project();
+    const Domain::ModelObject* model_object = project.find_object_by_id(m_selected_object_id.id);
+    if (!model_object || m_edit_state->editing.points == model_object->sla_support_points) {
+        return;
+    }
+
+    // The indices of a selection, a drag and a hover name points of the list that is replaced.
+    m_edit_state->editing.points = model_object->sla_support_points;
+    m_edit_state->editing.clear_selection();
+    m_edit_state->dragged_point_idx.reset();
+    m_hovered_point_idx.reset();
+
+    update_point_visuals();
+    this->update_selected_support_values();
+
+    DialogSyncGuard guard(*this);
+    m_dialog->set_point_count(model_object->sla_support_points.size());
+    m_dialog->set_remove_all_points_enabled(!model_object->sla_support_points.empty());
 }
 
 void SlaSupportPointsGizmo::apply_edited_points()
@@ -1489,20 +1543,23 @@ std::optional<std::pair<size_t, Domain::Vec3d>> SlaSupportPointsGizmo::raycast_t
         clipping_plane_opt = m_clipping_plane_presenter.clipper().get_clipping_plane();
     }
 
-    // Raycast against the tree mesh
+    // Raycast against the tree mesh. A support tree is many overlapping solids whose tips sink into
+    // the model, so a ray through it crosses its surface an odd number of times as often as not: the
+    // even-hit test of a closed mesh would throw most real hits away (measured in the app, M2.39c).
     const auto hit_result = Biz::Utils::MeshRaycaster::unproject_on_mesh(
         tree_aabb,
         ray,
         tree_trafo,
         clipping_plane_opt,
-        true // require_even_number_of_hits
+        false // require_even_number_of_hits
     );
 
     if (!hit_result.has_value()) {
         return std::nullopt;
     }
 
-    const Domain::Vec3d hit_world = hit_result->position;
+    // unproject_on_mesh answers in the frame of the mesh; the heads below are in world coordinates.
+    const Domain::Vec3d hit_world = tree_trafo * hit_result->position;
 
     // Compute the head positions of all points in world coordinates (through the drawing transform:
     // instance_matrix once + lift, no bed_trafo). This is sla_support_points_drawing_trafo.
@@ -2021,14 +2078,15 @@ std::optional<SlaSupportTreePart> SlaSupportPointsGizmo::raycast_all_tree_meshes
             ray,
             tree_trafo,
             std::nullopt, // no clipping plane for activation pick
-            true
+            false // a support tree is not one closed mesh, see raycast_tree_mesh
         );
 
         if (!tree_hit_result.has_value()) {
             continue;
         }
 
-        const Domain::Vec3d tree_hit_world = tree_hit_result->position;
+        // unproject_on_mesh answers in the frame of the mesh.
+        const Domain::Vec3d tree_hit_world = tree_trafo * tree_hit_result->position;
         const double tree_dist = (tree_hit_world - camera_pos).norm();
 
         // Raycast the model surface for this instance to check if model is in front.
@@ -2059,7 +2117,7 @@ std::optional<SlaSupportTreePart> SlaSupportPointsGizmo::raycast_all_tree_meshes
                 true
             );
             if (model_hit_result.has_value()) {
-                const double this_model_dist = (model_hit_result->position - camera_pos).norm();
+                const double this_model_dist = (volume_trafo * model_hit_result->position - camera_pos).norm();
                 if (this_model_dist < model_dist) {
                     model_dist = this_model_dist;
                     model_hit = true;

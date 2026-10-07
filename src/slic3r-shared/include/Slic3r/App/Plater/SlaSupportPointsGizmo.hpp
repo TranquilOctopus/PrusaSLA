@@ -181,6 +181,9 @@ private:
     void apply_edited_points();
     void discard_edited_points();
     void commit_edited_points_live();
+    // The edit session takes the points of the model again when something other than the session
+    // wrote them: a generation, Auto support all, Apply, an undo (M2.39d).
+    void reload_edit_points_from_model();
     void add_point_at_mesh_pos(const Domain::Vec3d& mesh_pos);
     void remove_point_at_index(size_t idx);
     void move_point_to_mesh_pos(size_t idx, const Domain::Vec3d& mesh_pos);
