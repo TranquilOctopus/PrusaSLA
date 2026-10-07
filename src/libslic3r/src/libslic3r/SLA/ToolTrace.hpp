@@ -27,7 +27,7 @@ inline void trace_ms(const char* label,
     if (!enabled()) return;
     auto now = std::chrono::steady_clock::now();
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - t0).count();
-    bool stopped = stop ? stop() : false;
+    const bool stopped = stop();
     std::fprintf(stderr, "[SLA_TOOL_TRACE] %s: %lld ms, stop=%d\n", label, (long long)ms, stopped);
 }
 
