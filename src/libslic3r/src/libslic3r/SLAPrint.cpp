@@ -162,7 +162,7 @@ bool is_raft_auto(const SLAPrintObjectConfigView &c)
 std::optional<ObjectRaft> resolve_object_raft(const SLAPrintObjectConfigView &c,
                                               const indexed_triangle_set      &mesh_in_print_pose,
                                               double                           object_elevation_mm,
-                                              const sla::ThrowOnCancel&        throw_on_cancel = {})
+                                              const sla::ThrowOnCancel&        throw_on_cancel)
 {
     if (!is_raft_auto(c))
         return std::nullopt;
