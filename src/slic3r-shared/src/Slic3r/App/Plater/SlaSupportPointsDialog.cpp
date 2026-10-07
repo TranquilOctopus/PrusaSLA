@@ -713,22 +713,29 @@ void SlaSupportPointsDialog::set_new_support_values(const SlaSupportNewValues& v
 void SlaSupportPointsDialog::set_selected_support_values(const SlaSupportSelectionView& view)
 {
     this->show_selected_support_values(m_selected_supports, view);
+    // Whether the group was showing a selection before this call: the groups are rearranged only
+    // when a selection starts or ends, not on every update of the values of one.
+    const bool had_selection = m_selected_supports_window->is_visible();
+    const bool has_selection = view.count > 0;
     // The group is only there while points are selected, and its title names how many (M2.33).
-    m_selected_supports_window->set_visible(view.count > 0);
+    m_selected_supports_window->set_visible(has_selection);
     m_selected_supports_window->set_label(
         fmt::format("{} ({})", _u8L("Selected supports"), view.count));
 
-    // While a selection exists, collapse New supports to make Selected supports prominent.
-    // Restore New supports' previous collapsed state when the selection is cleared (M2.39a).
-    if (m_new_supports_window) {
-        if (view.count > 0) {
-            // Save the current state before collapsing
+    // While a selection exists, collapse New supports to make Selected supports prominent, and open
+    // the sections the selected support's values are in, so a click on a support always shows them
+    // (M2.39a, M2.39d). Restore New supports' previous collapsed state when the selection is cleared.
+    if (has_selection && !had_selection) {
+        if (m_settings_window) {
+            m_settings_window->set_collapsed(false);
+        }
+        m_selected_supports_window->set_collapsed(false);
+        if (m_new_supports_window) {
             m_new_supports_was_collapsed = m_new_supports_window->collapsed();
             m_new_supports_window->set_collapsed(true);
-        } else {
-            // Restore the previous state
-            m_new_supports_window->set_collapsed(m_new_supports_was_collapsed);
         }
+    } else if (!has_selection && had_selection && m_new_supports_window) {
+        m_new_supports_window->set_collapsed(m_new_supports_was_collapsed);
     }
 }
 

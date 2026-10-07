@@ -99,6 +99,11 @@ public:
     Scene::ToolType type() const override;
     bool supports_printer(Domain::PrinterTechnology pt) const override;
     bool enabled() const override;
+    // While the tool is open a click belongs to it, as in the paint tools: the scene's object
+    // selection must not take the release of a click on a support tree for a click on empty space,
+    // deselect the model and close the tool (measured in the app, M2.39d). The tool is left with its
+    // own button or Escape.
+    bool disable_object_selection() const override { return true; }
 
     void on_activated() override;
     void on_deactivated() override;
