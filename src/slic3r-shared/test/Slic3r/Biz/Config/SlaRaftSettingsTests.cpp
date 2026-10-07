@@ -38,7 +38,7 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         CHECK(def->gui_type == ConfigItemDef::GUIType::combobox);
         // The raft type turns the raft on or off and decides whether it goes around the object.
         CHECK(def->tooltip.find("The shape of the raft under the object") != std::string::npos);
-        CHECK(def->tooltip.find("None prints no raft") != std::string::npos);
+        CHECK(def->tooltip.find("None, the default, prints no raft") != std::string::npos);
         // Skate is around object with half the expansion and a 70 degree wall.
         CHECK(def->tooltip.find("half the expansion and a 70 degree wall slope") != std::string::npos);
         // The type picks the knobs, so it is shown above them.
