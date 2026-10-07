@@ -132,6 +132,22 @@ std::optional<size_t> sla_support_point_pick_from_tree_hit(
     const Domain::Vec3d& hit_world
 );
 
+/// @brief The transform to apply to the support tree mesh for raycasting.
+///
+/// The engine builds the tree with object_to_world = instance_matrix and returns it in that
+/// world frame (without the lift). The preview draws it with only the lift translation
+/// (node_trafo = translation(0, 0, lift)). This function returns that node_trafo, which is
+/// the exact transform the preview uses for the tree mesh. See sla_support_tree_placement
+/// and M2.34.
+///
+/// @param instance_matrix  The world matrix of the instance (already carries plate offset).
+/// @param lift             The support elevation the scene draws the model by.
+/// @return                 The node_trafo (lift translation only) for raycasting the tree mesh.
+Domain::Transform3d sla_support_tree_mesh_transform(
+    const Domain::Transform3d& instance_matrix,
+    double lift
+);
+
 /// @brief Decides whether a click is on the support tree rather than the model surface.
 ///
 /// Compares the distance from the camera to the tree hit against the distance to the model

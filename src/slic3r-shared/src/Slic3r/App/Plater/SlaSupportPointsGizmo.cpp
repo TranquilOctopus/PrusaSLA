@@ -1396,7 +1396,6 @@ void SlaSupportPointsGizmo::collect_tree_parts(std::vector<SlaSupportTreePart>& 
         return;
     }
 
-    const Transform3d            bed_trafo = bed->matrix();
     std::unordered_set<size_t> seen;
     for (const Domain::ModelInstance* instance : bed->model_instances) {
         if (instance == nullptr || !instance->is_printable()) {
@@ -1414,12 +1413,13 @@ void SlaSupportPointsGizmo::collect_tree_parts(std::vector<SlaSupportTreePart>& 
         if (!m_support_preview_service.has_preview(model_object->id())) {
             continue;
         }
-        // The tree is drawn with the transform of the bed and the lift the M2.21 support preview
-        // applies to that model, exactly as that service builds its nodes.
+        // The tree is drawn with the lift the M2.21 support preview applies to that model.
+        // The instance matrix already carries the plate offset (M2.34), so bed_trafo must NOT be added.
+        // Use the same drawing transform the preview uses: instance matrix once + lift.
         const Domain::Transform3d drawing = sla_support_points_drawing_trafo(
             instance->get_matrix(),
             m_scene_presenter.sla_lift(model_object->id()));
-        add_object(*model_object, *instance, model_object->sla_support_points, bed_trafo * drawing);
+        add_object(*model_object, *instance, model_object->sla_support_points, drawing);
     }
 }
 
@@ -1470,12 +1470,18 @@ std::optional<std::pair<size_t, Domain::Vec3d>> SlaSupportPointsGizmo::raycast_t
     const Scene::Camera& camera = m_scene_presenter.scene().camera();
     const Scene::Ray ray = camera.ray_at(cursor.x(), cursor.y());
 
-    // The tree mesh is in world coordinates of the print pose (object_to_world without the node_trafo lift).
-    // The preview draws it with the node_trafo (lift) on top. The tool's object_drawing_trafo() is
-    // exactly instance_matrix * translation(lift), which is the same transform the preview uses for
-    // the tree node (sla_support_tree_placement, M2.34). So we raycast against the tree mesh
-    // transformed by object_drawing_trafo().
-    const Domain::Transform3d drawing_trafo = this->object_drawing_trafo();
+    // The tree mesh is in world coordinates of the print pose (object_to_world = instance_matrix,
+    // without the node_trafo lift). The preview draws it with only the node_trafo (lift translation).
+    // Use the same transform the preview uses: sla_support_tree_placement(instance_matrix, lift).node_trafo
+    // (M2.34, M2.39c). This is lift translation only, NOT the instance matrix again.
+    const Domain::Project& project = m_project_interactor.selected_project();
+    const Domain::ModelInstance* instance =
+        project.find_instance_by_id(m_selected_object_id.id, m_selected_instance_id);
+    if (!instance) {
+        return std::nullopt;
+    }
+    const Domain::Transform3d tree_trafo =
+        sla_support_tree_mesh_transform(instance->get_matrix(), applied_lift());
 
     // Get clipping plane for raycasting
     std::optional<Biz::ClippingPlane> clipping_plane_opt;
@@ -1487,7 +1493,7 @@ std::optional<std::pair<size_t, Domain::Vec3d>> SlaSupportPointsGizmo::raycast_t
     const auto hit_result = Biz::Utils::MeshRaycaster::unproject_on_mesh(
         tree_aabb,
         ray,
-        drawing_trafo,
+        tree_trafo,
         clipping_plane_opt,
         true // require_even_number_of_hits
     );
@@ -1498,9 +1504,11 @@ std::optional<std::pair<size_t, Domain::Vec3d>> SlaSupportPointsGizmo::raycast_t
 
     const Domain::Vec3d hit_world = hit_result->position;
 
-    // Compute the head positions of all points in world coordinates (through the drawing transform)
+    // Compute the head positions of all points in world coordinates (through the drawing transform:
+    // instance_matrix once + lift, no bed_trafo). This is sla_support_points_drawing_trafo.
     std::vector<Domain::Vec3d> point_heads_world;
     point_heads_world.reserve(m_edit_state->editing.points.size());
+    const Domain::Transform3d drawing_trafo = sla_support_points_drawing_trafo(instance->get_matrix(), applied_lift());
     for (const auto& point : m_edit_state->editing.points) {
         point_heads_world.push_back(drawing_trafo * point.pos.cast<double>());
     }
@@ -1686,13 +1694,17 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
         case SlaSupportClickAction::ClearSelection:
             clear_selection();
             update_point_visuals();
-            return Scene::GizmoActivationState::Inactive;
+            // Consume the event (return Active) so the scene does not treat this as a click on empty
+            // space and deselect the object. The tool stays open and the user can continue editing.
+            return Scene::GizmoActivationState::Active;
 
         case SlaSupportClickAction::Ignored:
             return Scene::GizmoActivationState::Active;
 
         case SlaSupportClickAction::None:
-            return Scene::GizmoActivationState::Inactive;
+            // A click that hit a support tree but picked nothing (defensive: should not happen
+            // after the transform fix). Consume the event to keep the tool open.
+            return Scene::GizmoActivationState::Active;
         }
     }
 
@@ -1783,143 +1795,146 @@ bool SlaSupportPointsGizmo::allows_activation_by_double_click(const Scene::Gizmo
 }
 
 // Raycast all support tree meshes on the plate (objects with preview) and pick the nearest hit.
-    // Also raycasts the model surfaces to reject tree hits that are behind the model (M2.39b).
-    // Returns the picked tree part (with object/instance/point index) and the tree hit distance from camera.
-    std::optional<SlaSupportTreePart> SlaSupportPointsGizmo::raycast_all_tree_meshes(
-        const Scene::GizmoEventContext& ctx,
-        const Domain::Vec2d& cursor,
-        std::optional<double>& out_tree_hit_distance_mm) const
-    {
-        out_tree_hit_distance_mm.reset();
+// Also raycasts the model surfaces to reject tree hits that are behind the model (M2.39b).
+// Returns the picked tree part (with object/instance/point index) and the tree hit distance from camera.
+std::optional<SlaSupportTreePart> SlaSupportPointsGizmo::raycast_all_tree_meshes(
+    const Scene::GizmoEventContext& ctx,
+    const Domain::Vec2d& cursor,
+    std::optional<double>& out_tree_hit_distance_mm) const
+{
+    out_tree_hit_distance_mm.reset();
 
-        const Scene::Camera& camera = m_scene_presenter.scene().camera();
-        const Scene::Ray ray = camera.ray_at(cursor.x(), cursor.y());
-        const Domain::Vec3d camera_pos = camera.position();
+    const Scene::Camera& camera = m_scene_presenter.scene().camera();
+    const Scene::Ray ray = camera.ray_at(cursor.x(), cursor.y());
+    const Domain::Vec3d camera_pos = camera.position();
 
-        const Domain::SelectionId project_id = m_project_interactor.selected_project_id();
-        const Domain::SlicingId slicing_id = m_project_interactor.selected_bed_slicing_id();
-        if (slicing_id.project_id != project_id) {
-            return std::nullopt;
+    const Domain::SelectionId project_id = m_project_interactor.selected_project_id();
+    const Domain::SlicingId slicing_id = m_project_interactor.selected_bed_slicing_id();
+    if (slicing_id.project_id != project_id) {
+        return std::nullopt;
+    }
+    const Domain::Project& project = m_project_interactor.project(project_id);
+    const Domain::BedInstance* bed = project.find_bed_instance_by_id(slicing_id.bed_instance_id);
+    if (!bed) {
+        return std::nullopt;
+    }
+
+    std::unordered_set<size_t> seen_objects;
+
+    std::optional<SlaSupportTreePart> best_picked;
+    double best_tree_depth_mm = std::numeric_limits<double>::max();
+    double best_model_depth_mm = std::numeric_limits<double>::max();
+
+    // For each printable instance on the bed that has support points and a preview
+    for (const Domain::ModelInstance* instance : bed->model_instances) {
+        if (instance == nullptr || !instance->is_printable()) {
+            continue;
         }
-        const Domain::Project& project = m_project_interactor.project(project_id);
-        const Domain::BedInstance* bed = project.find_bed_instance_by_id(slicing_id.bed_instance_id);
-        if (!bed) {
-            return std::nullopt;
+        const Domain::ModelObject* model_object = instance->get_object();
+        if (model_object == nullptr || model_object->sla_support_points.empty()) {
+            continue;
+        }
+        if (!seen_objects.insert(model_object->id().id).second) {
+            continue;
+        }
+        if (!m_support_preview_service.has_preview(model_object->id())) {
+            continue;
         }
 
-        const Domain::Transform3d bed_trafo = bed->matrix();
-        std::unordered_set<size_t> seen_objects;
+        // Get the tree mesh and raycast it
+        const auto* tree_mesh = m_support_preview_service.support_tree_mesh(model_object->id());
+        if (!tree_mesh || tree_mesh->triangles().indices.empty()) {
+            continue;
+        }
 
-        std::optional<SlaSupportTreePart> best_picked;
-        double best_tree_depth_mm = std::numeric_limits<double>::max();
-        double best_model_depth_mm = std::numeric_limits<double>::max();
+        // Use the AABBMesh owned by the Scene::TriangleMesh
+        const Slic3r::AABBMesh& tree_aabb = tree_mesh->aabb_mesh();
 
-        // For each printable instance on the bed that has support points and a preview
-        for (const Domain::ModelInstance* instance : bed->model_instances) {
-            if (instance == nullptr || !instance->is_printable()) {
+        // The tree mesh is in world coordinates (object_to_world = instance_matrix, no lift).
+        // The preview draws it with only the node_trafo (lift translation). Use the same
+        // transform the preview uses: sla_support_tree_placement(instance_matrix, lift).node_trafo
+        // (M2.34). The instance matrix already carries the plate offset, so bed_trafo must NOT be added.
+        const double lift = m_scene_presenter.sla_lift(model_object->id());
+        const Domain::Transform3d tree_trafo = sla_support_tree_mesh_transform(instance->get_matrix(), lift);
+        const Domain::Transform3d drawing_trafo = sla_support_points_drawing_trafo(instance->get_matrix(), lift);
+
+        // Raycast tree mesh
+        const auto tree_hit_result = Biz::Utils::MeshRaycaster::unproject_on_mesh(
+            tree_aabb,
+            ray,
+            tree_trafo,
+            std::nullopt, // no clipping plane for activation pick
+            true
+        );
+
+        if (!tree_hit_result.has_value()) {
+            continue;
+        }
+
+        const Domain::Vec3d tree_hit_world = tree_hit_result->position;
+        const double tree_dist = (tree_hit_world - camera_pos).norm();
+
+        // Raycast the model surface for this instance to check if model is in front.
+        // Model volumes are drawn with drawing_trafo * model_volume->get_matrix() (no bed_trafo).
+        double model_dist = std::numeric_limits<double>::max();
+        bool model_hit = false;
+
+        using MeshManager = PlaterScenePresenter::MeshManager;
+        const MeshManager& mesh_manager = m_scene_presenter.model_triangle_mesh_manager(project_id);
+        for (Domain::ModelVolume* model_volume : model_object->volumes) {
+            if (!model_volume->is_model_part()) {
                 continue;
             }
-            const Domain::ModelObject* model_object = instance->get_object();
-            if (model_object == nullptr || model_object->sla_support_points.empty()) {
+            const Scene::AuxiliaryElementId volume_id{
+                Scene::AuxiliaryElementId::Type::Volume,
+                model_volume->id().id
+            };
+            const Scene::TriangleMesh* scene_mesh = mesh_manager.get(volume_id);
+            if (!scene_mesh) {
                 continue;
             }
-            if (!seen_objects.insert(model_object->id().id).second) {
-                continue;
-            }
-            if (!m_support_preview_service.has_preview(model_object->id())) {
-                continue;
-            }
-
-            // Get the tree mesh and raycast it
-            const auto* tree_mesh = m_support_preview_service.support_tree_mesh(model_object->id());
-            if (!tree_mesh || tree_mesh->triangles().indices.empty()) {
-                continue;
-            }
-
-            // Use the AABBMesh owned by the Scene::TriangleMesh
-            const Slic3r::AABBMesh& tree_aabb = tree_mesh->aabb_mesh();
-
-            // The tree is drawn with bed_trafo * drawing_trafo (same as collect_tree_parts whole_plate)
-            const double lift = m_scene_presenter.sla_lift(model_object->id());
-            const Domain::Transform3d drawing = sla_support_points_drawing_trafo(
-                instance->get_matrix(), lift);
-            const Domain::Transform3d tree_trafo = bed_trafo * drawing;
-
-            // Raycast tree mesh
-            const auto tree_hit_result = Biz::Utils::MeshRaycaster::unproject_on_mesh(
-                tree_aabb,
+            const Domain::Transform3d volume_trafo = drawing_trafo * model_volume->get_matrix();
+            const auto model_hit_result = Biz::Utils::MeshRaycaster::unproject_on_mesh(
+                scene_mesh->aabb_mesh(),
                 ray,
-                tree_trafo,
-                std::nullopt, // no clipping plane for activation pick
+                volume_trafo,
+                std::nullopt,
                 true
             );
-
-            if (!tree_hit_result.has_value()) {
-                continue;
-            }
-
-            const Domain::Vec3d tree_hit_world = tree_hit_result->position;
-            const double tree_dist = (tree_hit_world - camera_pos).norm();
-
-            // Raycast the model surface for this instance to check if model is in front
-            double model_dist = std::numeric_limits<double>::max();
-            bool model_hit = false;
-
-            using MeshManager = PlaterScenePresenter::MeshManager;
-            const MeshManager& mesh_manager = m_scene_presenter.model_triangle_mesh_manager(project_id);
-            for (Domain::ModelVolume* model_volume : model_object->volumes) {
-                if (!model_volume->is_model_part()) {
-                    continue;
-                }
-                const Scene::AuxiliaryElementId volume_id{
-                    Scene::AuxiliaryElementId::Type::Volume,
-                    model_volume->id().id
-                };
-                const Scene::TriangleMesh* scene_mesh = mesh_manager.get(volume_id);
-                if (!scene_mesh) {
-                    continue;
-                }
-                const Domain::Transform3d volume_trafo = bed_trafo * drawing * model_volume->get_matrix();
-                const auto model_hit_result = Biz::Utils::MeshRaycaster::unproject_on_mesh(
-                    scene_mesh->aabb_mesh(),
-                    ray,
-                    volume_trafo,
-                    std::nullopt,
-                    true
-                );
-                if (model_hit_result.has_value()) {
-                    const double this_model_dist = (model_hit_result->position - camera_pos).norm();
-                    if (this_model_dist < model_dist) {
-                        model_dist = this_model_dist;
-                        model_hit = true;
-                    }
+            if (model_hit_result.has_value()) {
+                const double this_model_dist = (model_hit_result->position - camera_pos).norm();
+                if (this_model_dist < model_dist) {
+                    model_dist = this_model_dist;
+                    model_hit = true;
                 }
             }
+        }
 
-            // Use the pure function to decide: tree wins only if no model hit or tree is nearer by > epsilon
-            if (!sla_support_click_on_tree(tree_dist, model_hit ? std::optional<double>(model_dist) : std::nullopt)) {
-                continue; // Model is in front, skip this object's tree
-            }
+        // Use the pure function to decide: tree wins only if no model hit or tree is nearer by > epsilon
+        if (!sla_support_click_on_tree(tree_dist, model_hit ? std::optional<double>(model_dist) : std::nullopt)) {
+            continue; // Model is in front, skip this object's tree
+        }
 
-            // Pick the support point from the tree hit
-            std::vector<Domain::Vec3d> point_heads_world;
-            point_heads_world.reserve(model_object->sla_support_points.size());
-            for (const auto& point : model_object->sla_support_points) {
-                point_heads_world.push_back(tree_trafo * point.pos.cast<double>());
-            }
-            const auto picked_idx = sla_support_point_pick_from_tree_hit(point_heads_world, tree_hit_world);
-            if (!picked_idx.has_value()) {
-                continue;
-            }
+        // Pick the support point from the tree hit.
+        // Point heads are at drawing_trafo * point.pos (instance matrix once + lift, no bed_trafo).
+        std::vector<Domain::Vec3d> point_heads_world;
+        point_heads_world.reserve(model_object->sla_support_points.size());
+        for (const auto& point : model_object->sla_support_points) {
+            point_heads_world.push_back(drawing_trafo * point.pos.cast<double>());
+        }
+        const auto picked_idx = sla_support_point_pick_from_tree_hit(point_heads_world, tree_hit_world);
+        if (!picked_idx.has_value()) {
+            continue;
+        }
 
-            // Build the tree part for this hit
-            SlaSupportTreePart part;
-            part.object.object_id   = model_object->id().id;
-            part.object.instance_id = instance->id().id;
-            part.point_index        = *picked_idx;
-            // Screen positions for the part (head to base)
+        // Build the tree part for this hit
+        SlaSupportTreePart part;
+        part.object.object_id   = model_object->id().id;
+        part.object.instance_id = instance->id().id;
+        part.point_index        = *picked_idx;
+        // Screen positions for the part (head to base)
         const Domain::Vec3d head_world = point_heads_world[*picked_idx];
-        const Domain::Vec3d base_world = tree_trafo * Domain::Vec3d{head_world.x(), head_world.y(), 0.};
+        const Domain::Vec3d base_world = drawing_trafo * Domain::Vec3d{head_world.x(), head_world.y(), 0.};
         part.screen_start = camera.project_to_screen_space(head_world);
         part.screen_end   = camera.project_to_screen_space(base_world);
         part.drawn_radius_px = 3.; // approximate

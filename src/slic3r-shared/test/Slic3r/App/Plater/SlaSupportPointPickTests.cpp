@@ -20,6 +20,7 @@ using Slic3r::App::Plater::sla_support_point_click_radius_px;
 using Slic3r::App::Plater::sla_support_point_click_target;
 using Slic3r::App::Plater::sla_support_point_marker_at;
 using Slic3r::App::Plater::sla_support_point_pick_from_tree_hit;
+using Slic3r::App::Plater::sla_support_tree_mesh_transform;
 using Slic3r::App::Plater::sla_support_tree_part_at;
 using Slic3r::App::Plater::sla_support_tree_pick_slack_px;
 using Slic3r::App::Plater::SlaSupportPointMarker;
@@ -27,6 +28,7 @@ using Slic3r::App::Plater::SlaSupportPointTarget;
 using Slic3r::App::Plater::SlaSupportTreePart;
 using Slic3r::Domain::Vec2d;
 using Slic3r::Domain::Vec3d;
+using Slic3r::Domain::Transform3d;
 
 namespace {
 
@@ -421,5 +423,101 @@ TEST_CASE(
         CHECK(sla_support_click_on_tree(50., 50.11, 0.1));
         CHECK_FALSE(sla_support_click_on_tree(50., 50.1, 0.1));
         CHECK_FALSE(sla_support_click_on_tree(50., 50.05, 0.1));
+    }
+}
+
+// M2.39c: test the transform used for raycasting the support tree mesh.
+// The engine builds the tree with object_to_world = instance_matrix (world frame, no lift).
+// The preview draws it with only the lift translation (node_trafo).
+// sla_support_tree_mesh_transform returns that node_trafo, so a tree vertex built at
+// instance_matrix * p and lifted by node_trafro lands at the same world position as
+// sla_support_points_drawing_trafo(instance_matrix, lift) * p (the point's glyph).
+TEST_CASE(
+    "Support tree mesh transform (sla_support_tree_mesh_transform)",
+    "[SlaSupportPointPick][M2.39c]"
+)
+{
+    SECTION("Zero lift returns identity")
+    {
+        const Transform3d instance_matrix = Transform3d::Identity();
+        const Transform3d trafo = sla_support_tree_mesh_transform(instance_matrix, 0.);
+        CHECK(trafo.isIdentity());
+    }
+
+    SECTION("Non-zero lift returns translation only")
+    {
+        const Transform3d instance_matrix = Transform3d::Identity();
+        const Transform3d trafo = sla_support_tree_mesh_transform(instance_matrix, 5.0);
+        CHECK(trafo.isIdentity() == false);
+        CHECK(trafo.translation().z() == Approx(5.0));
+        CHECK(trafo.translation().x() == Approx(0.0));
+        CHECK(trafo.translation().y() == Approx(0.0));
+        // Linear part should be identity (no rotation/scale)
+        CHECK(trafo.linear().isIdentity());
+    }
+
+    SECTION("Instance matrix with translation (plate offset) and rotation: tree transform is lift only")
+    {
+        // Instance matrix with plate offset (x=10, y=20) and 90 deg rotation around Z
+        Transform3d instance_matrix = Transform3d::Identity();
+        instance_matrix.translate(Vec3d(10., 20., 0.));
+        instance_matrix.rotate(Eigen::AngleAxisd(Slic3r::deg2rad(90.), Vec3d::UnitZ()));
+
+        const double lift = 3.0;
+        const Transform3d tree_trafo = sla_support_tree_mesh_transform(instance_matrix, lift);
+        const Transform3d drawing_trafo = sla_support_points_drawing_trafo(instance_matrix, lift);
+
+        // A point at local position (5, 5, 10)
+        const Vec3d local_pos(5., 5., 10.);
+
+        // Tree vertex built by engine: instance_matrix * local_pos (world, no lift)
+        const Vec3d tree_vertex_world = instance_matrix * local_pos;
+        // Preview draws it with tree_trafo (lift only): tree_trafo * tree_vertex_world
+        const Vec3d drawn_vertex = tree_trafo * tree_vertex_world;
+
+        // Point glyph drawn with drawing_trafo: drawing_trafo * local_pos
+        const Vec3d glyph_pos = drawing_trafo * local_pos;
+
+        // They must match: the tree vertex after preview's node_trafo equals the glyph position
+        CHECK(drawn_vertex.x() == Approx(glyph_pos.x()));
+        CHECK(drawn_vertex.y() == Approx(glyph_pos.y()));
+        CHECK(drawn_vertex.z() == Approx(glyph_pos.z()));
+
+        // Verify tree_trafo is lift only (no instance matrix)
+        CHECK(tree_trafo.translation().z() == Approx(lift));
+        CHECK(tree_trafo.translation().x() == Approx(0.0));
+        CHECK(tree_trafo.translation().y() == Approx(0.0));
+        CHECK(tree_trafo.linear().isIdentity());
+    }
+
+    SECTION("Tree vertex at instance_matrix * p lifted by node_trafo equals point glyph at drawing_trafo * p")
+    {
+        // This is the invariant that was broken: the raycast used instance_matrix twice.
+        // instance_matrix with translation and rotation
+        Transform3d instance_matrix = Transform3d::Identity();
+        instance_matrix.translate(Vec3d(100., 50., 0.)); // plate offset
+        instance_matrix.rotate(Eigen::AngleAxisd(Slic3r::deg2rad(45.), Vec3d::UnitZ()));
+
+        const double lift = 2.5;
+        const Transform3d tree_trafo = sla_support_tree_mesh_transform(instance_matrix, lift);
+        const Transform3d drawing_trafo = sla_support_points_drawing_trafo(instance_matrix, lift);
+
+        // Test multiple points
+        const std::vector<Vec3d> local_points = {
+            {0., 0., 0.},
+            {10., 0., 20.},
+            {-5., 15., 30.},
+            {20., -10., 5.}
+        };
+
+        for (const Vec3d& p : local_points) {
+            const Vec3d tree_vertex_world = instance_matrix * p;
+            const Vec3d drawn_vertex = tree_trafo * tree_vertex_world;
+            const Vec3d glyph_pos = drawing_trafo * p;
+
+            CHECK(drawn_vertex.x() == Approx(glyph_pos.x()));
+            CHECK(drawn_vertex.y() == Approx(glyph_pos.y()));
+            CHECK(drawn_vertex.z() == Approx(glyph_pos.z()));
+        }
     }
 }

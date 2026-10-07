@@ -209,3 +209,19 @@ bool Slic3r::App::Plater::sla_support_click_on_tree(
     }
     return *tree_hit_distance_mm + epsilon_mm < *model_hit_distance_mm;
 }
+
+Domain::Transform3d Slic3r::App::Plater::sla_support_tree_mesh_transform(
+    const Domain::Transform3d& instance_matrix,
+    double lift
+)
+{
+    // The tree mesh is built in world coordinates (object_to_world = instance_matrix, no lift).
+    // The preview draws it by adding only the lift translation (node_trafo).
+    // This is the same convention as sla_support_tree_placement (M2.34).
+    if (lift == 0.) {
+        return Domain::Transform3d::Identity();
+    }
+    return Domain::translation_transform(Domain::Vec3d(0., 0., lift));
+}
+
+} // namespace Slic3r::App::Plater
