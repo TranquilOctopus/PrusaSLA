@@ -474,7 +474,9 @@ TEST_CASE(
              {SupportPoint::Role::Island, 0.2},
              {SupportPoint::Role::SmallIsland, 0.2, false},
              {SupportPoint::Role::Overhang, 0.2},
-             {SupportPoint::Role::Fragile, 0.1}},
+             {SupportPoint::Role::Fragile, 0.1},
+             {SupportPoint::Role::Detail, 0.1, false} // R4.9: a point in a detailed region takes the minimum tip whatever the settings; the frustum's curved flank may carry one.
+            },
             lowest_z_mm,
             layer_height_mm
         );
@@ -494,7 +496,8 @@ TEST_CASE(
              {SupportPoint::Role::Island, 0.3},
              {SupportPoint::Role::SmallIsland, 0.3, false},
              {SupportPoint::Role::Overhang, 0.3},
-             {SupportPoint::Role::Fragile, 0.1}},
+             {SupportPoint::Role::Fragile, 0.1},
+             {SupportPoint::Role::Detail, 0.1, false}},
             lowest_z_mm,
             layer_height_mm
         );
@@ -514,7 +517,8 @@ TEST_CASE(
              {SupportPoint::Role::Island, 0.1},
              {SupportPoint::Role::SmallIsland, 0.1, false},
              {SupportPoint::Role::Overhang, 0.1},
-             {SupportPoint::Role::Fragile, 0.1}},
+             {SupportPoint::Role::Fragile, 0.1},
+             {SupportPoint::Role::Detail, 0.1, false}},
             lowest_z_mm,
             layer_height_mm
         );
@@ -534,7 +538,8 @@ TEST_CASE(
              {SupportPoint::Role::Island, 0.2},
              {SupportPoint::Role::SmallIsland, 0.2, false},
              {SupportPoint::Role::Overhang, 0.2},
-             {SupportPoint::Role::Fragile, 0.1}},
+             {SupportPoint::Role::Fragile, 0.1},
+             {SupportPoint::Role::Detail, 0.1, false}},
             lowest_z_mm,
             layer_height_mm
         );
