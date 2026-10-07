@@ -682,11 +682,10 @@ void SlaSupportPreviewService::build_nodes(
     Domain::Vec3d tree_bbox_min{0,0,0}, tree_bbox_max{0,0,0};
     bool has_tree_bbox = false;
     if (tree.tree && !tree.tree->empty()) {
-        const auto& indices = tree.tree->indices;
-        const auto& vertices = tree.tree->vertices;
+        const auto& vertices = tree.tree->its.vertices;
         bool first = true;
-        for (size_t idx : indices) {
-            const Domain::Vec3d v = vertices[idx].cast<double>();
+        for (const auto& vertex : vertices) {
+            const Domain::Vec3d v = vertex.cast<double>();
             if (first) {
                 tree_bbox_min = tree_bbox_max = v;
                 first = false;

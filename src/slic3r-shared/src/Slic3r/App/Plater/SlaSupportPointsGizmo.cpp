@@ -1646,11 +1646,10 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
                     const Domain::ModelInstance* instance = project.find_instance_by_id(m_selected_object_id.id, m_selected_instance_id);
                     if (instance) {
                         const Domain::Transform3d tree_trafo = sla_support_tree_mesh_transform(instance->get_matrix(), applied_lift());
-                        const auto& indices = tree_mesh->triangles().indices;
                         const auto& vertices = tree_mesh->triangles().vertices;
                         bool first = true;
-                        for (size_t idx : indices) {
-                            const Domain::Vec3d v_world = tree_trafo * vertices[idx].cast<double>();
+                        for (const auto& vertex : vertices) {
+                            const Domain::Vec3d v_world = tree_trafo * vertex.cast<double>();
                             if (first) {
                                 tree_bbox_min = tree_bbox_max = v_world;
                                 first = false;
@@ -1982,11 +1981,10 @@ std::optional<SlaSupportTreePart> SlaSupportPointsGizmo::raycast_all_tree_meshes
             // Compute transformed bbox
             const double lift = m_scene_presenter.sla_lift(model_object->id());
             const Domain::Transform3d tree_trafo = sla_support_tree_mesh_transform(instance->get_matrix(), lift);
-            const auto& indices = tree_mesh->triangles().indices;
             const auto& vertices = tree_mesh->triangles().vertices;
             bool first = true;
-            for (size_t idx : indices) {
-                const Domain::Vec3d v_world = tree_trafo * vertices[idx].cast<double>();
+            for (const auto& vertex : vertices) {
+                const Domain::Vec3d v_world = tree_trafo * vertex.cast<double>();
                 if (first) {
                     tree_bbox_min = tree_bbox_max = v_world;
                     first = false;
