@@ -156,6 +156,60 @@ public:
         return add(cone.its);
     }
 
+    /// A frustum that widens upwards, standing on its narrow end at (x, y, lift) with bottom radius
+    /// r_bottom, top radius r_top, and height h. The generator treats the gradual flare (well below
+    /// peninsula_min_width per layer) as slope points (SupportPointType::slope), which become the
+    /// Overhang role.
+    ShapeBuilder& frustum(double x, double y, double r_bottom, double r_top, double h, double lift)
+    {
+        indexed_triangle_set mesh;
+        size_t n_steps = 36;
+        double angle_step = 2. * std::numbers::pi / n_steps;
+
+        auto& vertices = mesh.vertices;
+        auto& facets = mesh.indices;
+        vertices.reserve(2 * n_steps + 2);
+        facets.reserve(4 * n_steps);
+
+        // Bottom center and top center
+        vertices.emplace_back(Slic3r::Domain::Vec3f(0.f, 0.f, 0.f));
+        vertices.emplace_back(Slic3r::Domain::Vec3f(0.f, 0.f, float(h)));
+
+        // First vertex pair
+        double angle = 0.;
+        Slic3r::Domain::Vec2f vec_bot = Eigen::Rotation2Df(angle) * Eigen::Vector2f(0, float(r_bottom));
+        Slic3r::Domain::Vec2f vec_top = Eigen::Rotation2Df(angle) * Eigen::Vector2f(0, float(r_top));
+        vertices.emplace_back(Slic3r::Domain::Vec3f(vec_bot(0), vec_bot(1), 0.f));
+        vertices.emplace_back(Slic3r::Domain::Vec3f(vec_top(0), vec_top(1), float(h)));
+
+        for (size_t i = 1; i < n_steps; ++i) {
+            angle = angle_step * i;
+            vec_bot = Eigen::Rotation2Df(angle) * Eigen::Vector2f(0, float(r_bottom));
+            vec_top = Eigen::Rotation2Df(angle) * Eigen::Vector2f(0, float(r_top));
+            vertices.emplace_back(Slic3r::Domain::Vec3f(vec_bot(0), vec_bot(1), 0.f));
+            vertices.emplace_back(Slic3r::Domain::Vec3f(vec_top(0), vec_top(1), float(h)));
+            int id = static_cast<int>(vertices.size()) - 1;
+            facets.emplace_back(Slic3r::Domain::Index3{0, id - 1, id - 3});
+            facets.emplace_back(Slic3r::Domain::Index3{id, 1, id - 2});
+            facets.emplace_back(Slic3r::Domain::Index3{id, id - 2, id - 3});
+            facets.emplace_back(Slic3r::Domain::Index3{id, id - 3, id - 1});
+        }
+        // Close the loop
+        int id = static_cast<int>(vertices.size()) - 1;
+        facets.emplace_back(Slic3r::Domain::Index3{0, 2, id - 1});
+        facets.emplace_back(Slic3r::Domain::Index3{3, 1, id});
+        facets.emplace_back(Slic3r::Domain::Index3{id, 2, 3});
+        facets.emplace_back(Slic3r::Domain::Index3{id, id - 1, 2});
+
+        // Translate to position
+        for (Slic3r::Domain::Vec3f& v : mesh.vertices) {
+            v.x() += static_cast<float>(x);
+            v.y() += static_cast<float>(y);
+            v.z() += static_cast<float>(lift);
+        }
+        return add(mesh);
+    }
+
     indexed_triangle_set build() const
     {
         return m_its;
@@ -171,25 +225,30 @@ private:
     indexed_triangle_set m_its;
 };
 
-/// The model of the flow: a slab on the plate with a mushroom and a spike beside it, so that one
-/// generation of it has every role in it.
+/// The model of the flow: a slab on the plate with a mushroom, a spike, and a gradual flare beside
+/// it, so that one generation of it has every role in it.
 ///
 /// - the slab, 24 x 24 x 4 mm, is what the model stands on. Its underside is the lowest island of
 /// the object, which takes the anchors of R4.1, and the flat part of it takes the heavy anchors of
 /// R4.2 as well;
 /// - the mushroom, a pillar of 3 mm under a cap of 10 x 10 x 2 mm that floats 8 mm above the plate,
-/// has an underside facing the plate 100 mm2 above it: the overhangs of R4.6. The bottom face of
-/// the cap is an island of its own, a big one (R4.3);
+/// has an underside facing the plate 100 mm2 above it. The bottom face of the cap is an island of
+/// its own, a big one (R4.3). The abrupt 10 x 10 mm step on a 3 mm pillar is a peninsula (R4.6 via
+/// create_peninsulas), so its points are Island, not Overhang;
 /// - the spike, a blunt tip of 0.6 mm with a cone that widens to 1 mm above it, is a feature too
-/// thin to carry anything but the minimum tip (R4.4).
+/// thin to carry anything but the minimum tip (R4.4);
+/// - the flare, a frustum at (0, 25) with a 45 degree flank (radius 2 mm at z = 0 widening to
+/// 8 mm at z = 6), grows gradually (about 0.05 mm per layer, far below peninsula_min_width), so its
+/// rim samples become slope points (SupportPointType::slope) and classify as Overhang (R4.6).
 indexed_triangle_set a_model_with_every_role()
 {
     return ShapeBuilder{}
-        .cube(0., 0., 24., 24., 4., 0.) // the slab, from z = 0 to z = 4
-        .cylinder(25., 0., 1.5, 8., 0.) // the pillar of the mushroom, from z = 0 to z = 8
-        .cube(25., 0., 10., 10., 2., 8.) // the cap of the mushroom, from z = 8 to z = 10
-        .cylinder(-25., 0., 0.3, 0.5, 0.) // the tip of the spike, from z = 0 to z = 0.5
-        .upward_cone(-25., 0., 1.0, 4.0, 0.5) // the spike, from z = 0.5 to z = 4.5
+        .cube(0., 0., 24., 24., 4., 0.)         // the slab, from z = 0 to z = 4
+        .cylinder(25., 0., 1.5, 8., 0.)         // the pillar of the mushroom, from z = 0 to z = 8
+        .cube(25., 0., 10., 10., 2., 8.)        // the cap of the mushroom, from z = 8 to z = 10
+        .cylinder(-25., 0., 0.3, 0.5, 0.)       // the tip of the spike, from z = 0 to z = 0.5
+        .upward_cone(-25., 0., 1.0, 4.0, 0.5)   // the spike, from z = 0.5 to z = 4.5
+        .frustum(0., 25., 2.0, 8.0, 6.0, 0.)    // the flare, from z = 0 to z = 6
         .build();
 }
 
@@ -303,7 +362,7 @@ void info_role_histogram(const SupportPoints& points)
             counts[idx]++;
         }
     }
-    UNSCOPED_INFO("Role histogram: Unknown=" << counts[0]
+    INFO("Role histogram: Unknown=" << counts[0]
         << " Anchor=" << counts[1]
         << " Island=" << counts[2]
         << " SmallIsland=" << counts[3]
@@ -311,12 +370,6 @@ void info_role_histogram(const SupportPoints& points)
         << " Fragile=" << counts[5]
         << " AnchorLarge=" << counts[6]
         << " Detail=" << counts[7]);
-    for (const SupportPoint& point : points) {
-        const char* type_str = point.type == SupportPointType::island ? "island" : 
-                              point.type == SupportPointType::slope ? "slope" : "other";
-        UNSCOPED_INFO("point: type=" << type_str << " role=" << static_cast<int>(point.role)
-            << " pos=(" << point.pos.x() << ", " << point.pos.y() << ", " << point.pos.z() << ")");
-    }
 }
 
 /// Everything a class puts on a generated point, one role at a time: the tip is the class itself,
