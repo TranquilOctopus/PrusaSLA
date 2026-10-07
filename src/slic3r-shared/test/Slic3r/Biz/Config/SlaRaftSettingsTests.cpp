@@ -2,6 +2,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -47,16 +48,17 @@ TEST_CASE("SLA Raft settings have correct category and option group", "[Config][
         CHECK(def->init_fn().get<Slic3r::Domain::sla::RaftType>()
               == Slic3r::Domain::sla::RaftType::None);
         CHECK(def->tooltip.find("would form a suction cup") != std::string::npos);
-        // None is the first entry of the combo, so it is the one the drop-down opens on.
+        // The entries are in the order of their enumerators, which the definitions require
+        // (check_enum_def asserts that an enum list is sorted), so Auto stays the first row even
+        // though None is the default.
         const Slic3r::Domain::EnumValueDefs& enum_values =
             def->init_fn().get<Slic3r::Domain::EnumWrapper>().def();
         REQUIRE(!enum_values.empty());
-        CHECK(enum_values.front().enum_value == int(Slic3r::Domain::sla::RaftType::None));
-        CHECK(enum_values.front().str_ui == "None");
+        CHECK(std::is_sorted(enum_values.begin(), enum_values.end()));
         // What a preset or a project stores is the name of the type and not its number, so the four
         // shapes from before Auto keep their names and every project that names one of them reads
         // what it always read.
-        const std::vector<std::string> stored_names{"none", "auto", "full", "around_object", "skate"};
+        const std::vector<std::string> stored_names{"auto", "none", "full", "around_object", "skate"};
         REQUIRE(enum_values.size() == stored_names.size());
         for (size_t i = 0; i < stored_names.size(); ++i) {
             INFO("raft type " << i);

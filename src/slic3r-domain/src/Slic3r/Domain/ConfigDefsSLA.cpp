@@ -905,7 +905,7 @@ void sla_config_init_fn(ConfigDefinitions& defs)
     def->min = 0;
     def->init_fn = init_with(0.3);
 
-def = defs.add("raft_type", typeid(EnumWrapper));
+    def = defs.add("raft_type", typeid(EnumWrapper));
     def->location = Print;
     def->overrides_in = Locations{ Object };
     def->label = L("Raft type");
@@ -917,14 +917,14 @@ def = defs.add("raft_type", typeid(EnumWrapper));
     def->tooltip = L("The shape of the raft under the object. None, the default, prints no raft. Auto prints no raft unless the underside of the object would form a suction cup against the plate, and then prints one; Full plate prints a raft over the whole build plate, Around object prints a raft that only the object sits on, and Skate is an around object raft with half the expansion and a 70 degree wall slope. The type decides which of the settings below apply, and it shows only those.");
     def->init_fn = init_with(
         sla::RaftType::None,
-        // The rows of a combobox are the entries of this list in this order. None is the default
-        // (M7.8.4b), so it is the first of them. The four shapes from before it keep
-        // their names, which is what a preset or a project stores.
-        {{int(sla::RaftType::None), "none", L("None")},
-          {int(sla::RaftType::Auto), "auto", L("Auto (raft only against suction)")},
-          {int(sla::RaftType::Full), "full", L("Full plate")},
-          {int(sla::RaftType::AroundObject), "around_object", L("Around object")},
-          {int(sla::RaftType::Skate), "skate", L("Skate")}}
+        // None is the default (M7.8.4b). The entries stay in the order of their enumerators: the
+        // definitions check that an enum list is sorted by value (check_enum_def), so None cannot
+        // simply be moved to the top. The names are what a preset or a project stores.
+        {{int(sla::RaftType::Auto), "auto", L("Auto (raft only against suction)")},
+         {int(sla::RaftType::None), "none", L("None")},
+         {int(sla::RaftType::Full), "full", L("Full plate")},
+         {int(sla::RaftType::AroundObject), "around_object", L("Around object")},
+         {int(sla::RaftType::Skate), "skate", L("Skate")}}
     );
 
     def = defs.add("raft_edge_taper", typeid(double));
