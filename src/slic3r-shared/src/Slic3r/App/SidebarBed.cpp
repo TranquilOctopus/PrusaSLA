@@ -9,9 +9,12 @@
 #include "Slic3r/App/MaterialSettingsDialog.hpp"
 #include "Slic3r/App/PrinterAddDialog.hpp"
 #include "Slic3r/App/SidebarSlaSummary.hpp"
+#include "Slic3r/App/IsSlaActive.hpp"
 
 #include "Slic3r/Biz/ProjectInteractor.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
+
+#include <fmt/format.h>
 
 #include <imgui/imgui_internal.h>
 
@@ -202,7 +205,9 @@ void SidebarBed::on_selected_bed_instances_changed(
 
     ASSERT(bed_instance);
 
-    m_bed_name->set_text(bed_instance->name());
+    const bool is_sla = is_sla_active(m_project_interactor);
+    m_bed_name->set_text(is_sla ? fmt::format(fmt::runtime(_u8L("Build plate {}")), bed_instance->label())
+                                : bed_instance->name());
 }
 
 void SidebarBed::refresh_printer_label_color()

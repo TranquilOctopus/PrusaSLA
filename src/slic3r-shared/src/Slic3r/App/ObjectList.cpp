@@ -1070,7 +1070,9 @@ bool ObjectList::render_bed_node(
     const ImGuiStyle& style = ImGui::GetStyle();
 
     const ImVec2 icon_size = ImVec2(40.f, 40.f);
-    const ImVec2 text_size = ImGui::CalcTextSize(bed->name().c_str());
+    const std::string bed_display_name =
+        is_sla_config ? fmt::format(fmt::runtime(_u8L("Build plate {}")), bed->label()) : bed->name();
+    const ImVec2 text_size = ImGui::CalcTextSize(bed_display_name.c_str());
     const ImVec2 padding   = style.ItemInnerSpacing;
 
     bool is_open{false};
@@ -1124,7 +1126,7 @@ bool ObjectList::render_bed_node(
             if (is_empty) {
                 flags |= ImGuiTreeNodeFlags_Leaf;
             }
-            is_open = tree_node(name_id.c_str(), flags, bed->name(), false, tex_id, icon_size);
+            is_open = tree_node(name_id.c_str(), flags, bed_display_name, false, tex_id, icon_size);
             ImGui::PopStyleVar();
             if (is_open) {
                 ImGui::TreePop();
