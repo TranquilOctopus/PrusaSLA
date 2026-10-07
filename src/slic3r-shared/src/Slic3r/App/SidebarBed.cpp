@@ -19,7 +19,7 @@
 #include <imgui/imgui_internal.h>
 
 using namespace Slic3r::App::Yoga;
-using Biz::_u8L;
+using Slic3r::Biz::_u8L;
 
 namespace Slic3r::App {
 
