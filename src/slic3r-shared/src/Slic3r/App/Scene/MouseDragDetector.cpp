@@ -130,6 +130,7 @@ bool MouseDragDetector::mouse_event(const GizmoEventContext& ctx, GetActiveGizmo
                 m_state      = DragState::StartWeWillSee;
                 m_start_time = std::chrono::steady_clock::now();
                 m_start.emplace(ctx);
+                m_last_left_was_click_not_drag = false; // Reset on new button down
             }
             return false;
         case Platform::MouseButton::Right:
@@ -161,6 +162,7 @@ bool MouseDragDetector::mouse_event(const GizmoEventContext& ctx, GetActiveGizmo
             switch (m_state) {
             case DragState::Dragging:
                 m_state = DragState::NoDrag;
+                m_last_left_was_click_not_drag = false;
                 if (m_dragging != nullptr) {
                     m_dragging->on_drag_finish();
                     return true;
@@ -168,6 +170,7 @@ bool MouseDragDetector::mouse_event(const GizmoEventContext& ctx, GetActiveGizmo
                 return false;
             case DragState::StartWeWillSee:
                 m_state = DragState::NoDrag;
+                m_last_left_was_click_not_drag = true; // This was a click, not a drag
             // case DragState::NoDrag: no action
             // it can appear after external cancel dragging(e.g. ESC)
             default: return false;

@@ -132,4 +132,20 @@ std::optional<size_t> sla_support_point_pick_from_tree_hit(
     const Domain::Vec3d& hit_world
 );
 
+/// @brief Decides whether a click is on the support tree rather than the model surface.
+///
+/// Compares the distance from the camera to the tree hit against the distance to the model
+/// surface hit. The tree wins only when the model was not hit, or when the tree hit is
+/// nearer by more than @p epsilon_mm (default 0.01 mm).
+///
+/// @param tree_hit_distance_mm     Distance from camera to tree hit, or nullopt if no tree hit.
+/// @param model_hit_distance_mm    Distance from camera to model surface hit, or nullopt if no model hit.
+/// @param epsilon_mm               Minimum distance advantage for the tree to win (default 0.01 mm).
+/// @return                         True when the click should be treated as on the tree.
+bool sla_support_click_on_tree(
+    const std::optional<double>& tree_hit_distance_mm,
+    const std::optional<double>& model_hit_distance_mm,
+    double epsilon_mm = 0.01
+);
+
 } // namespace Slic3r::App::Plater

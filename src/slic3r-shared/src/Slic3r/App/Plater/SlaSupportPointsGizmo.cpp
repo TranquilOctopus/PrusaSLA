@@ -290,6 +290,11 @@ void SlaSupportPointsGizmo::on_deactivated()
     }
 
     m_paintable_volumes.clear();
+    // Clear the single-entry tree AABB cache (M2.39a).
+    m_tree_aabb_cache_key.reset();
+    m_tree_aabb_cache_value.reset();
+    // Clear the per-object tree AABB cache (M2.39b).
+    m_tree_aabb_cache_per_object.clear();
     // The tool is on no object any more, so there is nothing to rebuild the volumes of (M2.33).
     m_selected_element = Domain::ElementRef{};
     m_applied_lift     = 0.;
@@ -1435,8 +1440,15 @@ std::optional<SlaSupportPointTarget> SlaSupportPointsGizmo::point_at(const Domai
     std::vector<SlaSupportPointMarker> markers;
     this->collect_point_markers(markers);
 
+    // When the real support tree mesh exists (drawn by the preview service), the tree is picked
+    // by raycast_tree_mesh in on_mouse, not by the vertical segments of collect_tree_parts.
+    // Use the vertical parts only when there is no drawn tree yet (M2.39a).
     std::vector<SlaSupportTreePart> parts;
-    this->collect_tree_parts(parts, /* whole_plate */ false);
+    const bool has_real_tree = m_selected_object_id.valid()
+        && m_support_preview_service.support_tree_mesh(m_selected_object_id) != nullptr;
+    if (!has_real_tree) {
+        this->collect_tree_parts(parts, /* whole_plate */ false);
+    }
 
     return sla_support_point_click_target(markers, parts, cursor);
 }
@@ -1456,18 +1468,13 @@ std::optional<std::pair<size_t, Domain::Vec3d>> SlaSupportPointsGizmo::raycast_t
         return std::nullopt;
     }
 
-    // Get or build the AABBMesh for this tree mesh (lazy, cached)
+    // Get or build the AABBMesh for this tree mesh (single-entry cache)
     Slic3r::AABBMesh* tree_aabb = nullptr;
-    {
-        auto it = m_tree_aabb_cache.find(tree_mesh);
-        if (it == m_tree_aabb_cache.end()) {
-            // Build the AABBMesh
-            auto [new_it, inserted] = m_tree_aabb_cache.emplace(tree_mesh, std::make_unique<Slic3r::AABBMesh>(*tree_mesh));
-            tree_aabb = new_it->second.get();
-        } else {
-            tree_aabb = it->second.get();
-        }
+    if (m_tree_aabb_cache_key != tree_mesh) {
+        m_tree_aabb_cache_key = tree_mesh;
+        m_tree_aabb_cache_value = std::make_unique<Slic3r::AABBMesh>(*tree_mesh);
     }
+    tree_aabb = m_tree_aabb_cache_value.get();
     if (!tree_aabb) {
         return std::nullopt;
     }
@@ -1562,15 +1569,29 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
 
     // If no marker or drawn tree part was hit, try the real support tree mesh (M2.39a).
     std::optional<std::pair<size_t, Domain::Vec3d>> tree_hit;
+    std::optional<double> tree_hit_distance_mm;
+    std::optional<double> model_hit_distance_mm;
     if (picking && !point_under_cursor.has_value()) {
         tree_hit = this->raycast_tree_mesh(mouse_position);
+        if (tree_hit.has_value()) {
+            tree_hit_distance_mm = (tree_hit->second - m_scene_presenter.scene().camera().position()).norm();
+        }
+        if (has_hit) {
+            const Domain::Vec3d model_hit_world =
+                m_paintable_volumes[hit_opt->volume_idx].world_trafo * hit_opt->volume_hit_position;
+            model_hit_distance_mm = (model_hit_world - m_scene_presenter.scene().camera().position()).norm();
+        }
     }
+
+    // Decide whether the tree hit wins over the model hit (M2.39a).
+    // Tree wins only when model was not hit, or tree is nearer by more than epsilon (0.01 mm).
+    const bool tree_wins = sla_support_click_on_tree(tree_hit_distance_mm, model_hit_distance_mm);
 
     // Track hovered point (when not dragging or rectangle selecting)
     m_hovered_point_idx.reset();
     if (point_under_cursor.has_value()) {
         m_hovered_point_idx = point_under_cursor->index;
-    } else if (tree_hit.has_value()) {
+    } else if (tree_hit.has_value() && tree_wins) {
         m_hovered_point_idx = tree_hit->first;
     }
 
@@ -1609,9 +1630,10 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
 
         // If the click hit the real support tree mesh but no marker/part, synthesize a target for it.
         // A tree hit selects the support (or removes/toggles with modifiers) but NEVER adds a point.
+        // Only use the tree hit if it wins over the model (M2.39a).
         std::optional<SlaSupportPointTarget> effective_target = point_under_cursor;
         bool target_from_tree = false;
-        if (!effective_target.has_value() && tree_hit.has_value()) {
+        if (!effective_target.has_value() && tree_hit.has_value() && tree_wins) {
             effective_target = SlaSupportPointTarget{tree_hit->first, false};
             target_from_tree = true;
         }
@@ -1723,9 +1745,8 @@ Scene::GizmoActivationState SlaSupportPointsGizmo::on_mouse(Scene::GizmoEventCon
 }
 
 // A double click on a drawn support opens the tool on the model of that support, with that support
-// selected (M2.35). Outside the tool only: a tree is not pickable (the M2.21 support preview draws
-// it without an AABB on purpose), so a single click on it still selects the object as it always did,
-// while a double click is the one gesture that means "this support, please".
+// selected (M2.35). A single left click (not a drag) on a drawn support does the same (M2.39b).
+// Outside the tool only: while the tool is open the click belongs to the tool (on_mouse).
 bool SlaSupportPointsGizmo::allows_activation_by_double_click(const Scene::GizmoEventContext& ctx)
 {
     // While the tool is open the click belongs to the tool, which picks the point of the drawn tree
@@ -1735,16 +1756,30 @@ bool SlaSupportPointsGizmo::allows_activation_by_double_click(const Scene::Gizmo
     }
 
     const Platform::MouseEvent& mouse_event = ctx.mouse_event();
-    if (mouse_event.type() != Platform::MouseEvent::Type::DoubleClick) {
+    const bool is_double_click = mouse_event.type() == Platform::MouseEvent::Type::DoubleClick;
+    const bool is_single_click = mouse_event.type() == Platform::MouseEvent::Type::ButtonUp &&
+                                 mouse_event.button() == Platform::MouseButton::Left;
+    if (!is_double_click && !is_single_click) {
         return false;
     }
 
     const Domain::Vec2d cursor = Domain::Vec2f(ctx.screen_mouse_x(), ctx.screen_mouse_y()).cast<double>();
 
-    std::vector<SlaSupportTreePart> parts;
-    this->collect_tree_parts(parts, /* whole_plate */ true);
+    // For double-click, use the vertical segments (collect_tree_parts) as before (M2.35).
+    // For single-click, raycast the REAL drawn support tree meshes (M2.39b).
+    std::optional<SlaSupportTreePart> picked;
+    std::optional<double> tree_hit_distance_mm;
 
-    const std::optional<SlaSupportTreePart> picked = sla_support_tree_part_at(parts, cursor);
+    if (is_double_click) {
+        std::vector<SlaSupportTreePart> parts;
+        this->collect_tree_parts(parts, /* whole_plate */ true);
+        picked = sla_support_tree_part_at(parts, cursor);
+    } else {
+        // Single click: raycast real tree meshes of all objects with preview.
+        // Also raycast models to reject tree hits behind the model surface.
+        picked = raycast_all_tree_meshes(ctx, cursor, tree_hit_distance_mm);
+    }
+
     if (!picked.has_value()) {
         return false;
     }
@@ -1758,6 +1793,171 @@ bool SlaSupportPointsGizmo::allows_activation_by_double_click(const Scene::Gizmo
     m_pending_open_pick = *picked;
 
     return true;
+}
+
+// Raycast all support tree meshes on the plate (objects with preview) and pick the nearest hit.
+// Also raycasts the model surfaces to reject tree hits that are behind the model (M2.39b).
+// Returns the picked tree part (with object/instance/point index) and the tree hit distance from camera.
+std::optional<SlaSupportTreePart> SlaSupportPointsGizmo::raycast_all_tree_meshes(
+    const Scene::GizmoEventContext& ctx,
+    const Domain::Vec2d& cursor,
+    std::optional<double>& out_tree_hit_distance_mm) const
+{
+    out_tree_hit_distance_mm.reset();
+
+    const Scene::Camera& camera = m_scene_presenter.scene().camera();
+    const Scene::Ray ray = camera.ray_at(cursor.x(), cursor.y());
+    const Domain::Vec3d camera_pos = camera.position();
+
+    const Domain::SelectionId project_id = m_project_interactor.selected_project_id();
+    const Domain::SlicingId slicing_id = m_project_interactor.selected_bed_slicing_id();
+    if (slicing_id.project_id != project_id) {
+        return std::nullopt;
+    }
+    const Domain::Project& project = m_project_interactor.project(project_id);
+    const Domain::BedInstance* bed = project.find_bed_instance_by_id(slicing_id.bed_instance_id);
+    if (!bed) {
+        return std::nullopt;
+    }
+
+    const Domain::Transform3d bed_trafo = bed->matrix();
+    std::unordered_set<size_t> seen_objects;
+
+    std::optional<SlaSupportTreePart> best_picked;
+    double best_tree_depth_mm = std::numeric_limits<double>::max();
+    double best_model_depth_mm = std::numeric_limits<double>::max();
+
+    // For each printable instance on the bed that has support points and a preview
+    for (const Domain::ModelInstance* instance : bed->model_instances) {
+        if (instance == nullptr || !instance->is_printable()) {
+            continue;
+        }
+        const Domain::ModelObject* model_object = instance->get_object();
+        if (model_object == nullptr || model_object->sla_support_points.empty()) {
+            continue;
+        }
+        if (!seen_objects.insert(model_object->id().id).second) {
+            continue;
+        }
+        if (!m_support_preview_service.has_preview(model_object->id())) {
+            continue;
+        }
+
+        // Get the tree mesh and raycast it
+        const auto tree_mesh = m_support_preview_service.support_tree_mesh(model_object->id());
+        if (!tree_mesh || tree_mesh->empty()) {
+            continue;
+        }
+
+        // Get or build AABBMesh for this tree (per-object cache)
+        Slic3r::AABBMesh* tree_aabb = nullptr;
+        auto& cache_entry = m_tree_aabb_cache_per_object[model_object->id().id];
+        if (cache_entry.mesh != tree_mesh) {
+            cache_entry.mesh = tree_mesh;
+            cache_entry.aabb = std::make_unique<Slic3r::AABBMesh>(*tree_mesh);
+        }
+        tree_aabb = cache_entry.aabb.get();
+        if (!tree_aabb) {
+            continue;
+        }
+
+        // The tree is drawn with bed_trafo * drawing_trafo (same as collect_tree_parts whole_plate)
+        const double lift = m_scene_presenter.sla_lift(model_object->id());
+        const Domain::Transform3d drawing = sla_support_points_drawing_trafo(
+            instance->get_matrix(), lift);
+        const Domain::Transform3d tree_trafo = bed_trafo * drawing;
+
+        // Raycast tree mesh
+        const auto tree_hit_result = Biz::Utils::MeshRaycaster::unproject_on_mesh(
+            *tree_aabb,
+            ray,
+            tree_trafo,
+            std::nullopt, // no clipping plane for activation pick
+            true
+        );
+
+        if (!tree_hit_result.has_value()) {
+            continue;
+        }
+
+        const Domain::Vec3d tree_hit_world = tree_hit_result->position;
+        const double tree_dist = (tree_hit_world - camera_pos).norm();
+
+        // Raycast the model surface for this instance to check if model is in front
+        double model_dist = std::numeric_limits<double>::max();
+        bool model_hit = false;
+
+        using MeshManager = PlaterScenePresenter::MeshManager;
+        const MeshManager& mesh_manager = m_scene_presenter.model_triangle_mesh_manager(project_id);
+        for (Domain::ModelVolume* model_volume : model_object->volumes) {
+            if (!model_volume->is_model_part()) {
+                continue;
+            }
+            const Scene::AuxiliaryElementId volume_id{
+                Scene::AuxiliaryElementId::Type::Volume,
+                model_volume->id().id
+            };
+            const Scene::TriangleMesh* scene_mesh = mesh_manager.get(volume_id);
+            if (!scene_mesh) {
+                continue;
+            }
+            const Domain::Transform3d volume_trafo = bed_trafo * drawing * model_volume->get_matrix();
+            const auto model_hit_result = Biz::Utils::MeshRaycaster::unproject_on_mesh(
+                scene_mesh->aabb_mesh(),
+                ray,
+                volume_trafo,
+                std::nullopt,
+                true
+            );
+            if (model_hit_result.has_value()) {
+                const double this_model_dist = (model_hit_result->position - camera_pos).norm();
+                if (this_model_dist < model_dist) {
+                    model_dist = this_model_dist;
+                    model_hit = true;
+                }
+            }
+        }
+
+        // Use the pure function to decide: tree wins only if no model hit or tree is nearer by > epsilon
+        if (!sla_support_click_on_tree(tree_dist, model_hit ? std::optional<double>(model_dist) : std::nullopt)) {
+            continue; // Model is in front, skip this object's tree
+        }
+
+        // Pick the support point from the tree hit
+        std::vector<Domain::Vec3d> point_heads_world;
+        point_heads_world.reserve(model_object->sla_support_points.size());
+        for (const auto& point : model_object->sla_support_points) {
+            point_heads_world.push_back(tree_trafo * point.pos.cast<double>());
+        }
+        const auto picked_idx = sla_support_point_pick_from_tree_hit(point_heads_world, tree_hit_world);
+        if (!picked_idx.has_value()) {
+            continue;
+        }
+
+        // Build the tree part for this hit
+        SlaSupportTreePart part;
+        part.object.object_id   = model_object->id().id;
+        part.object.instance_id = instance->id().id;
+        part.point_index        = *picked_idx;
+        // Screen positions for the part (head to base)
+        const Domain::Vec3d head_world = point_heads_world[*picked_idx];
+        const Domain::Vec3d base_world = tree_trafo * Domain::Vec3d{head_world.x(), head_world.y(), 0.};
+        part.screen_start = camera.project_to_screen_space(head_world);
+        part.screen_end   = camera.project_to_screen_space(base_world);
+        part.drawn_radius_px = 3.; // approximate
+        part.depth_mm = tree_dist;
+
+        // Keep the nearest tree hit across all objects
+        if (tree_dist < best_tree_depth_mm) {
+            best_tree_depth_mm = tree_dist;
+            best_picked = part;
+        }
+    }
+
+    if (best_picked.has_value()) {
+        out_tree_hit_distance_mm = best_tree_depth_mm;
+    }
+    return best_picked;
 }
 
 // The "Selected supports" group (M2.33) shows the tip, stem and foot values of the support the user

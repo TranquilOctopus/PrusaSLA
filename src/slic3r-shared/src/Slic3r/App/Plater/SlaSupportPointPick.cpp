@@ -194,3 +194,20 @@ std::optional<size_t> sla_support_point_pick_from_tree_hit(
 }
 
 } // namespace Slic3r::App::Plater
+
+bool Slic3r::App::Plater::sla_support_click_on_tree(
+    const std::optional<double>& tree_hit_distance_mm,
+    const std::optional<double>& model_hit_distance_mm,
+    double epsilon_mm
+)
+{
+    if (!tree_hit_distance_mm.has_value()) {
+        return false;
+    }
+    if (!model_hit_distance_mm.has_value()) {
+        return true;
+    }
+    return *tree_hit_distance_mm + epsilon_mm < *model_hit_distance_mm;
+}
+
+} // namespace Slic3r::App::Plater

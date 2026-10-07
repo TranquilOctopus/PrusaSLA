@@ -26,6 +26,7 @@
 
 #include <memory>
 #include <optional>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 #include <deque>
@@ -391,10 +392,24 @@ private:
     std::deque<Domain::ObjectID> m_auto_support_queue;
     std::optional<bool> m_auto_support_keep_existing;
 
-    // Cache of AABBMesh for the support tree mesh, keyed by the shared_ptr to the tree mesh.
-    // Built lazily on first raycast against the tree, reused for subsequent clicks.
-    // Mutable because it's built during a const raycast operation.
-    mutable std::unordered_map<std::shared_ptr<const Domain::TriangleMesh>, std::unique_ptr<Slic3r::AABBMesh>> m_tree_aabb_cache;
+    // Cache of AABBMesh for the support tree mesh. Keeps exactly ONE entry: the mesh pointer
+    // and its AABBMesh. Rebuilt when the mesh pointer changes. Cleared when the tool closes.
+    mutable std::shared_ptr<const Domain::TriangleMesh> m_tree_aabb_cache_key;
+    mutable std::unique_ptr<Slic3r::AABBMesh> m_tree_aabb_cache_value;
+
+    // Per-object AABB cache for activation raycasting (M2.39b). One entry per object id.
+    struct TreeAABBCacheEntry
+    {
+        std::shared_ptr<const Domain::TriangleMesh> mesh;
+        std::unique_ptr<Slic3r::AABBMesh> aabb;
+    };
+    mutable std::unordered_map<std::size_t, TreeAABBCacheEntry> m_tree_aabb_cache_per_object;
+
+    // Raycast all support tree meshes on the plate and pick the nearest hit (M2.39b).
+    std::optional<SlaSupportTreePart> raycast_all_tree_meshes(
+        const Scene::GizmoEventContext& ctx,
+        const Domain::Vec2d& cursor,
+        std::optional<double>& out_tree_hit_distance_mm) const;
 
     // Guard to prevent dialog setters from triggering value-change callbacks
     bool m_syncing_dialog{false};

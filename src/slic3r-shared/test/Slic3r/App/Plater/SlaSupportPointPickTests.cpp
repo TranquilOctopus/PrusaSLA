@@ -15,6 +15,7 @@
 #include "Slic3r/App/Plater/SlaSupportPointPick.hpp"
 
 using Catch::Approx;
+using Slic3r::App::Plater::sla_support_click_on_tree;
 using Slic3r::App::Plater::sla_support_point_click_radius_px;
 using Slic3r::App::Plater::sla_support_point_click_target;
 using Slic3r::App::Plater::sla_support_point_marker_at;
@@ -372,6 +373,54 @@ TEST_CASE(
         // Point 1 is above (z=10.0 >= 9.5), point 0 is not (z=9.4 < 9.5)
         // So point 1 wins even though it's farther in 3D
         CHECK(*picked == 1u);
+    }
+}
+
+// M2.39a: deciding whether a click is on the support tree vs the model surface.
+// The function compares the camera-to-hit distances and returns true only when the model
+// was not hit, or when the tree hit is nearer by more than epsilon (default 0.01 mm).
+TEST_CASE(
+    "Click on tree vs model surface (sla_support_click_on_tree)",
+    "[SlaSupportPointPick][M2.39a]"
+)
+{
+    SECTION("No tree hit -> false")
+    {
+        CHECK_FALSE(sla_support_click_on_tree(std::nullopt, 100.));
+        CHECK_FALSE(sla_support_click_on_tree(std::nullopt, std::nullopt));
+    }
+
+    SECTION("Tree hit, no model hit -> true")
+    {
+        CHECK(sla_support_click_on_tree(50., std::nullopt));
+    }
+
+    SECTION("Tree hit nearer than model by more than epsilon -> true")
+    {
+        // Tree at 50mm, model at 100mm, epsilon 0.01 -> tree wins
+        CHECK(sla_support_click_on_tree(50., 100.));
+        CHECK(sla_support_click_on_tree(50., 50.02)); // 0.02 > 0.01
+    }
+
+    SECTION("Tree hit nearer but within epsilon -> false (model wins)")
+    {
+        // Tree at 50mm, model at 50.005mm, epsilon 0.01 -> model wins (difference 0.005 < 0.01)
+        CHECK_FALSE(sla_support_click_on_tree(50., 50.005));
+        // Tree at 50mm, model at 50.01mm, epsilon 0.01 -> model wins (difference 0.01 not > 0.01)
+        CHECK_FALSE(sla_support_click_on_tree(50., 50.01));
+    }
+
+    SECTION("Model hit nearer -> false")
+    {
+        CHECK_FALSE(sla_support_click_on_tree(100., 50.));
+    }
+
+    SECTION("Custom epsilon")
+    {
+        // With epsilon 0.1, tree at 50 needs model at > 50.1 to win
+        CHECK(sla_support_click_on_tree(50., 50.11, 0.1));
+        CHECK_FALSE(sla_support_click_on_tree(50., 50.1, 0.1));
+        CHECK_FALSE(sla_support_click_on_tree(50., 50.05, 0.1));
     }
 }
 
